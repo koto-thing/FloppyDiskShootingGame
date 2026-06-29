@@ -27,21 +27,21 @@ void GameManager::Initialize() {
 void GameManager::ProcessInput() {
     float speed = 5.0f;
 
-    // Move with arrow keys or WASD
+    // WASD or 矢印キーで移動
     if (InputSystem::IsKeyPressed(VK_LEFT)  || InputSystem::IsKeyPressed('A')) m_state.player.pos.x -= speed;
     if (InputSystem::IsKeyPressed(VK_RIGHT) || InputSystem::IsKeyPressed('D')) m_state.player.pos.x += speed;
     if (InputSystem::IsKeyPressed(VK_UP)    || InputSystem::IsKeyPressed('W')) m_state.player.pos.y -= speed;
     if (InputSystem::IsKeyPressed(VK_DOWN)  || InputSystem::IsKeyPressed('S')) m_state.player.pos.y += speed;
 
-    // Clamp player position inside window
+    // ウィンドウ内でプレイヤーが移動するように座標をクランプ
     if (m_state.player.pos.x < 20.0f) m_state.player.pos.x = 20.0f;
     if (m_state.player.pos.x > 780.0f) m_state.player.pos.x = 780.0f;
     if (m_state.player.pos.y < 20.0f) m_state.player.pos.y = 20.0f;
     if (m_state.player.pos.y > 580.0f) m_state.player.pos.y = 580.0f;
 
-    // Space key to fire bullet (using GetAsyncKeyState directly for edge trigger)
+    // スペースキーで弾を発射
     if (GetAsyncKeyState(VK_SPACE) & 0x1) {
-        // Find an inactive bullet slot
+        // オブジェクトプールから非アクティブな弾を探して発射
         for (int i = 0; i < MAX_BULLETS; ++i) {
             if (!m_state.playerBullets[i].active) {
                 m_state.playerBullets[i].active = true;
@@ -55,7 +55,7 @@ void GameManager::ProcessInput() {
 }
 
 void GameManager::Update() {
-    // Move bullets and check screen bounds
+    // 弾をうごかして画面外に出たら非アクティブにする
     for (int i = 0; i < MAX_BULLETS; ++i) {
         if (m_state.playerBullets[i].active) {
             m_state.playerBullets[i].pos.y += m_state.playerBullets[i].velocity.y;
@@ -65,7 +65,7 @@ void GameManager::Update() {
         }
     }
 
-    // Move enemies and check wall collision for direction change
+    // 敵の移動と方向転換
     bool changeDirection = false;
     for (int i = 0; i < MAX_ENEMIES; ++i) {
         if (m_state.enemies[i].active) {
@@ -80,12 +80,12 @@ void GameManager::Update() {
         for (int i = 0; i < MAX_ENEMIES; ++i) {
             if (m_state.enemies[i].active) {
                 m_state.enemies[i].velocity.x *= -1.0f;
-                m_state.enemies[i].pos.y += 20.0f; // Move down
+                m_state.enemies[i].pos.y += 20.0f; // 下へ移動
             }
         }
     }
 
-    // Bullet vs Enemy collision
+    // バレットと敵の当たり判定
     for (int b = 0; b < MAX_BULLETS; ++b) {
         if (!m_state.playerBullets[b].active) continue;
 

@@ -24,11 +24,11 @@ int GamePresenter::PrepareRenderData(const GameState& state, ConstantBufferData*
         cbOffset++;
     };
 
-    // 1. Player (Green)
+    // プレイヤー（緑色）
     float playerColor[4] = { 0.0f, 1.0f, 0.4f, 1.0f };
     FormatObject(state.player, playerColor);
 
-    // 2. Bullets (Yellow)
+    // 弾（黄色）
     float bulletColor[4] = { 1.0f, 0.9f, 0.0f, 1.0f };
     for (int i = 0; i < MAX_BULLETS; ++i) {
         if (state.playerBullets[i].active) {
@@ -36,7 +36,7 @@ int GamePresenter::PrepareRenderData(const GameState& state, ConstantBufferData*
         }
     }
 
-    // 3. Enemies (Pink-Red)
+    // 敵（ピンク）
     float enemyColor[4] = { 1.0f, 0.2f, 0.4f, 1.0f };
     for (int i = 0; i < MAX_ENEMIES; ++i) {
         if (state.enemies[i].active) {

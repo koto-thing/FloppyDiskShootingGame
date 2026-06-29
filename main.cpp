@@ -8,6 +8,14 @@
 #include "Application/GameManager.h"
 #include "View/GameView.h"
 
+/**
+ * ウィンドウプロシージャ
+ * @param hwnd ウィンドウ
+ * @param uMsg メッセージ
+ * @param wParam
+ * @param lParam 
+ * @return 
+ */
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     switch (uMsg) {
         case WM_DESTROY:
@@ -17,6 +25,12 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
+/**
+ * エントリーポイント
+ * @param hInstance インスタンスハンドル
+ * @param nCmdShow 
+ * @return 
+ */
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     HWND hwnd = Win32Window::Create(
         hInstance, 800, 600, L"Floppy Disk Shooting Game - Clean Architecture", WindowProc

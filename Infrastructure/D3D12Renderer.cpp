@@ -1,13 +1,26 @@
 #include "D3D12Renderer.h"
 
+/**
+ * D3D12Renderer クラスのコンストラクタ
+ */
 D3D12Renderer::D3D12Renderer() 
     : m_width(800), m_height(600), m_fenceValue(0), m_fenceEvent(nullptr), m_frameIndex(0), m_rtvDescriptorSize(0), m_cbvCpuData(nullptr) {
 }
 
+/**
+ * D3D12Renderer クラスのデストラクタ
+ */
 D3D12Renderer::~D3D12Renderer() {
     Cleanup();
 }
 
+/**
+ * D3D12Renderer を初期化する
+ * @param hwnd ウィンドウハンドル
+ * @param width 幅
+ * @param height 高さ
+ * @return 初期化に成功した場合：true、失敗した場合：false
+ */
 bool D3D12Renderer::Initialize(HWND hwnd, int width, int height) {
     m_width = width;
     m_height = height;
@@ -18,6 +31,9 @@ bool D3D12Renderer::Initialize(HWND hwnd, int width, int height) {
     return true;
 }
 
+/**
+ * D3D12Renderer をクリーンアップする
+ */
 void D3D12Renderer::Cleanup() {
     if (m_fenceEvent) {
         CloseHandle(m_fenceEvent);
@@ -28,6 +44,13 @@ void D3D12Renderer::Cleanup() {
     }
 }
 
+/**
+ * D3D12Renderer を初期化する
+ * @param hwnd ウィンドウハンドル
+ * @param width 幅
+ * @param height 高さ
+ * @return 初期化に成功した場合：true、失敗した場合：false
+ */
 bool D3D12Renderer::InitD3D12(HWND hwnd, int width, int height) {
     ComPtr<IDXGIFactory4> factory;
     if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) return false;
@@ -76,8 +99,7 @@ bool D3D12Renderer::InitD3D12(HWND hwnd, int width, int height) {
     m_fenceValue = 1;
     m_fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
     if (m_fenceEvent == nullptr) return false;
-
-    // Hardcode elements count (1 player, 100 bullets, 20 enemies)
+    
     UINT elementCount = 1 + 100 + 20; 
     UINT bufferSize = elementCount * 256;
 
@@ -112,6 +134,10 @@ bool D3D12Renderer::InitD3D12(HWND hwnd, int width, int height) {
     return true;
 }
 
+/**
+ * D3D12 パイプラインを初期化する
+ * @return 初期化に成功した場合：true、失敗した場合：false
+ */
 bool D3D12Renderer::InitPipeline() {
     D3D12_ROOT_PARAMETER rootParameters[1] = {};
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
@@ -204,6 +230,9 @@ bool D3D12Renderer::InitPipeline() {
     return true;
 }
 
+/**
+ * フレームの描画を開始する
+ */
 void D3D12Renderer::BeginFrame() {
     m_commandAllocator->Reset();
     m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get());
@@ -232,6 +261,9 @@ void D3D12Renderer::BeginFrame() {
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 }
 
+/**
+ * フレームの描画を終了する
+ */
 void D3D12Renderer::EndFrame() {
     D3D12_RESOURCE_BARRIER barrier = {};
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
@@ -251,6 +283,9 @@ void D3D12Renderer::EndFrame() {
     SyncFrame();
 }
 
+/**
+ * フレームの同期を行う
+ */
 void D3D12Renderer::SyncFrame() {
     const UINT64 fence = m_fenceValue;
     if (FAILED(m_commandQueue->Signal(m_fence.Get(), fence))) return;
@@ -264,6 +299,10 @@ void D3D12Renderer::SyncFrame() {
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 }
 
+/**
+ * D3D12Renderer のレンダーターゲットビューの CPU ディスクリプタハンドルを取得する
+ * @return レンダーターゲットビューの CPU ディスクリプタハンドル
+ */
 D3D12_CPU_DESCRIPTOR_HANDLE D3D12Renderer::GetRtvCpuDescriptorHandle() const {
     D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
     rtvHandle.ptr += m_frameIndex * m_rtvDescriptorSize;
