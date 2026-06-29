@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="FloppyDiskShootingGame.vcxproj" Id="a20952db-394a-4ea0-b057-62888d1e400f" />
+</Solution>
