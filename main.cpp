@@ -41,7 +41,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
 
     ShowWindow(hwnd, nCmdShow);
 
-    D3D12Renderer renderer;
+    D3D12RenderingService renderer;
     if (!renderer.Initialize(hwnd, 800, 600)) {
         MessageBox(hwnd, L"DirectX 12 Initializing Failed", L"Error", MB_OK);
         return 0;

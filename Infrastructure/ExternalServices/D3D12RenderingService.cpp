@@ -1,16 +1,16 @@
-#include "D3D12Renderer.h"
+#include "D3D12RenderingService.h"
 
 /**
  * D3D12Renderer クラスのコンストラクタ
  */
-D3D12Renderer::D3D12Renderer() 
+D3D12RenderingService::D3D12RenderingService() 
     : m_width(800), m_height(600), m_fenceValue(0), m_fenceEvent(nullptr), m_frameIndex(0), m_rtvDescriptorSize(0), m_cbvCpuData(nullptr) {
 }
 
 /**
  * D3D12Renderer クラスのデストラクタ
  */
-D3D12Renderer::~D3D12Renderer() {
+D3D12RenderingService::~D3D12RenderingService() {
     Cleanup();
 }
 
@@ -21,7 +21,7 @@ D3D12Renderer::~D3D12Renderer() {
  * @param height 高さ
  * @return 初期化に成功した場合：true、失敗した場合：false
  */
-bool D3D12Renderer::Initialize(HWND hwnd, int width, int height) {
+bool D3D12RenderingService::Initialize(HWND hwnd, int width, int height) {
     m_width = width;
     m_height = height;
 
@@ -34,7 +34,7 @@ bool D3D12Renderer::Initialize(HWND hwnd, int width, int height) {
 /**
  * D3D12Renderer をクリーンアップする
  */
-void D3D12Renderer::Cleanup() {
+void D3D12RenderingService::Cleanup() {
     if (m_fenceEvent) {
         CloseHandle(m_fenceEvent);
         m_fenceEvent = nullptr;
@@ -51,7 +51,7 @@ void D3D12Renderer::Cleanup() {
  * @param height 高さ
  * @return 初期化に成功した場合：true、失敗した場合：false
  */
-bool D3D12Renderer::InitD3D12(HWND hwnd, int width, int height) {
+bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
     ComPtr<IDXGIFactory4> factory;
     if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) return false;
     if (FAILED(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_device)))) return false;
@@ -138,7 +138,7 @@ bool D3D12Renderer::InitD3D12(HWND hwnd, int width, int height) {
  * D3D12 パイプラインを初期化する
  * @return 初期化に成功した場合：true、失敗した場合：false
  */
-bool D3D12Renderer::InitPipeline() {
+bool D3D12RenderingService::InitPipeline() {
     D3D12_ROOT_PARAMETER rootParameters[1] = {};
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParameters[0].Descriptor.ShaderRegister = 0;
@@ -233,7 +233,7 @@ bool D3D12Renderer::InitPipeline() {
 /**
  * フレームの描画を開始する
  */
-void D3D12Renderer::BeginFrame() {
+void D3D12RenderingService::BeginFrame() {
     m_commandAllocator->Reset();
     m_commandList->Reset(m_commandAllocator.Get(), m_pipelineState.Get());
 
@@ -264,7 +264,7 @@ void D3D12Renderer::BeginFrame() {
 /**
  * フレームの描画を終了する
  */
-void D3D12Renderer::EndFrame() {
+void D3D12RenderingService::EndFrame() {
     D3D12_RESOURCE_BARRIER barrier = {};
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
@@ -286,7 +286,7 @@ void D3D12Renderer::EndFrame() {
 /**
  * フレームの同期を行う
  */
-void D3D12Renderer::SyncFrame() {
+void D3D12RenderingService::SyncFrame() {
     const UINT64 fence = m_fenceValue;
     if (FAILED(m_commandQueue->Signal(m_fence.Get(), fence))) return;
     m_fenceValue++;
@@ -303,7 +303,7 @@ void D3D12Renderer::SyncFrame() {
  * D3D12Renderer のレンダーターゲットビューの CPU ディスクリプタハンドルを取得する
  * @return レンダーターゲットビューの CPU ディスクリプタハンドル
  */
-D3D12_CPU_DESCRIPTOR_HANDLE D3D12Renderer::GetRtvCpuDescriptorHandle() const {
+D3D12_CPU_DESCRIPTOR_HANDLE D3D12RenderingService::GetRtvCpuDescriptorHandle() const {
     D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
     rtvHandle.ptr += m_frameIndex * m_rtvDescriptorSize;
     return rtvHandle;

@@ -1,5 +1,5 @@
 #include "GameManager.h"
-#include "../Infrastructure/InputSystem.h"
+#include "../Infrastructure/ExternalServices/InputSystemService.h"
 #include <windows.h>
 
 GameManager::GameManager() : m_state{} {
@@ -28,10 +28,10 @@ void GameManager::ProcessInput() {
     float speed = 5.0f;
 
     // WASD or 矢印キーで移動
-    if (InputSystem::IsKeyPressed(VK_LEFT)  || InputSystem::IsKeyPressed('A')) m_state.player.pos.x -= speed;
-    if (InputSystem::IsKeyPressed(VK_RIGHT) || InputSystem::IsKeyPressed('D')) m_state.player.pos.x += speed;
-    if (InputSystem::IsKeyPressed(VK_UP)    || InputSystem::IsKeyPressed('W')) m_state.player.pos.y -= speed;
-    if (InputSystem::IsKeyPressed(VK_DOWN)  || InputSystem::IsKeyPressed('S')) m_state.player.pos.y += speed;
+    if (InputSystemService::IsKeyPressed(VK_LEFT)  || InputSystemService::IsKeyPressed('A')) m_state.player.pos.x -= speed;
+    if (InputSystemService::IsKeyPressed(VK_RIGHT) || InputSystemService::IsKeyPressed('D')) m_state.player.pos.x += speed;
+    if (InputSystemService::IsKeyPressed(VK_UP)    || InputSystemService::IsKeyPressed('W')) m_state.player.pos.y -= speed;
+    if (InputSystemService::IsKeyPressed(VK_DOWN)  || InputSystemService::IsKeyPressed('S')) m_state.player.pos.y += speed;
 
     // ウィンドウ内でプレイヤーが移動するように座標をクランプ
     if (m_state.player.pos.x < 20.0f) m_state.player.pos.x = 20.0f;

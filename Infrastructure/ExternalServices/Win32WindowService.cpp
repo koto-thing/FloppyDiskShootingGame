@@ -1,4 +1,4 @@
-#include "Win32Window.h"
+#include "Win32WindowService.h"
 /**
  * ウィンドウを作成する
  * @param hInstance インスタンスハンドル
@@ -8,7 +8,7 @@
  * @param wndProc ウィンドウプロシージャ
  * @return ウィンドウハンドル
  */
-HWND Win32Window::Create(HINSTANCE hInstance, int width, int height, const wchar_t* title, WNDPROC wndProc) {
+HWND Win32WindowService::Create(HINSTANCE hInstance, int width, int height, const wchar_t* title, WNDPROC wndProc) {
     const wchar_t CLASS_NAME[] = L"DX12_Game_Window";
     WNDCLASS wc = { };
     wc.lpfnWndProc = wndProc;

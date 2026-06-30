@@ -7,10 +7,10 @@
 
 using Microsoft::WRL::ComPtr;
 
-class D3D12Renderer {
+class D3D12RenderingService {
 public:
-    D3D12Renderer();
-    ~D3D12Renderer();
+    D3D12RenderingService();
+    ~D3D12RenderingService();
 
     bool Initialize(HWND hwnd, int width, int height);
     void Cleanup();

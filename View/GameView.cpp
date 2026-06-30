@@ -14,7 +14,7 @@ GameView::~GameView() {
  * @param renderer D3D12Renderer のインスタンス
  * @param gameManager GameManager のインスタンス
  */
-void GameView::Render(D3D12Renderer& renderer, const GameManager& gameManager) {
+void GameView::Render(D3D12RenderingService& renderer, const GameManager& gameManager) {
     ID3D12GraphicsCommandList* cmdList = renderer.GetCommandList();
     ConstantBufferData* cbvCpuData = static_cast<ConstantBufferData*>(renderer.GetCbvCpuData());
     ID3D12Resource* cbResource = renderer.GetConstantBuffer();
