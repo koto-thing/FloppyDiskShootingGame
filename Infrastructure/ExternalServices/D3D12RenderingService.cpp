@@ -1,4 +1,6 @@
 #include "D3D12RenderingService.h"
+#include <stdio.h>
+#include <wchar.h>
 
 /**
  * D3D12Renderer クラスのコンストラクタ
@@ -44,6 +46,44 @@ void D3D12RenderingService::Cleanup() {
     }
 }
 
+// Embedded shader code to avoid file loading issues
+const char g_shaderCode[] = R"(
+cbuffer TransformBuffer : register(b0)
+{
+    float2 u_position; // Object center position (-1.0 to 1.0)
+    float2 u_size;     // Object size (width, height)
+    float4 u_Color;    // Object color (RGBA)
+};
+
+struct VS_OUTPUT
+{
+    float4 pos : SV_Position;
+    float4 color : COLOR;
+};
+
+VS_OUTPUT VSMain(uint vID : SV_VertexID)
+{
+    VS_OUTPUT output;
+    
+    // vID: 0 = Bottom-Left, 1 = Top-Left, 2 = Bottom-Right, 3 = Top-Right
+    float2 localPos;
+    localPos.x = (float) (vID & 2) - 1.0f;
+    localPos.y = (float) ((vID & 1) << 1) - 1.0f;
+
+    // Apply size and shift position
+    float2 finalPos = u_position + (localPos * u_size);
+    
+    output.pos = float4(finalPos, 0.0f, 1.0f);
+    output.color = u_Color;
+    return output;
+}
+
+float4 PSMain(VS_OUTPUT input) : SV_TARGET
+{
+    return input.color;
+}
+)";
+
 /**
  * D3D12Renderer を初期化する
  * @param hwnd ウィンドウハンドル
@@ -52,14 +92,57 @@ void D3D12RenderingService::Cleanup() {
  * @return 初期化に成功した場合：true、失敗した場合：false
  */
 bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
+#if defined(_DEBUG)
+    // Enable D3D12 debug layer for debug builds to catch issues early
+    ComPtr<ID3D12Debug> debugController;
+    if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
+        debugController->EnableDebugLayer();
+    }
+#endif
+
+    ComPtr<IDXGIFactory1> factory1;
     ComPtr<IDXGIFactory4> factory;
-    if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) return false;
-    if (FAILED(D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_device)))) return false;
+    HRESULT hr = S_OK;
+
+    hr = CreateDXGIFactory1(IID_PPV_ARGS(&factory1));
+    if (FAILED(hr)) {
+        MessageBox(hwnd, L"CreateDXGIFactory1 failed.", L"D3D12 Init Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
+
+    hr = factory1.As(&factory);
+    if (FAILED(hr)) {
+        MessageBox(hwnd, L"Failed to query IDXGIFactory4.", L"D3D12 Init Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
+
+    // Try to create D3D12 device using hardware adapter first
+    hr = D3D12CreateDevice(nullptr, D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_device));
+    if (FAILED(hr)) {
+        // Fallback to WARP (software renderer) if hardware creation fails
+        ComPtr<IDXGIAdapter> warpAdapter;
+        if (SUCCEEDED(factory->EnumWarpAdapter(IID_PPV_ARGS(&warpAdapter)))) {
+            hr = D3D12CreateDevice(warpAdapter.Get(), D3D_FEATURE_LEVEL_11_0, IID_PPV_ARGS(&m_device));
+        }
+        
+        if (FAILED(hr)) {
+            wchar_t msg[256];
+            swprintf_s(msg, L"D3D12CreateDevice failed (HRESULT: 0x%08X).\nYour GPU does not support Direct3D 12 Feature Level 11.0, and software fallback failed.", hr);
+            MessageBox(hwnd, msg, L"D3D12 Init Error", MB_OK | MB_ICONERROR);
+            return false;
+        }
+    }
 
     D3D12_COMMAND_QUEUE_DESC queueDesc = {};
     queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
     queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
-    if (FAILED(m_device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_commandQueue)))) return false;
+    hr = m_device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&m_commandQueue));
+    if (FAILED(hr)) {
+        wchar_t msg[256];
+        swprintf_s(msg, L"CreateCommandQueue failed. HRESULT: 0x%08X", hr);
+        MessageBox(hwnd, msg, L"D3D12 Init Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
 
     DXGI_SWAP_CHAIN_DESC swapChainDesc = {};
     swapChainDesc.BufferCount = 2;
@@ -73,32 +156,79 @@ bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
     swapChainDesc.Windowed = TRUE;
 
     ComPtr<IDXGISwapChain> swapChain;
-    if (FAILED(factory->CreateSwapChain(m_commandQueue.Get(), &swapChainDesc, &swapChain))) return false;
-    if (FAILED(swapChain.As(&m_swapChain))) return false;
+    hr = factory->CreateSwapChain(m_commandQueue.Get(), &swapChainDesc, &swapChain);
+    if (FAILED(hr)) {
+        wchar_t msg[256];
+        swprintf_s(msg, L"CreateSwapChain failed. HRESULT: 0x%08X", hr);
+        MessageBox(hwnd, msg, L"D3D12 Init Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
+
+    hr = swapChain.As(&m_swapChain);
+    if (FAILED(hr)) {
+        wchar_t msg[256];
+        swprintf_s(msg, L"SwapChain query for IDXGISwapChain3 failed. HRESULT: 0x%08X", hr);
+        MessageBox(hwnd, msg, L"D3D12 Init Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 
     D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
     rtvHeapDesc.NumDescriptors = 2;
     rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
     rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-    if (FAILED(m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap)))) return false;
+    hr = m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap));
+    if (FAILED(hr)) {
+        wchar_t msg[256];
+        swprintf_s(msg, L"CreateDescriptorHeap for RTV failed. HRESULT: 0x%08X", hr);
+        MessageBox(hwnd, msg, L"D3D12 Init Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
 
     m_rtvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
     for (UINT n = 0; n < 2; ++n) {
-        if (FAILED(m_swapChain->GetBuffer(n, IID_PPV_ARGS(&m_renderTargets[n])))) return false;
+        hr = m_swapChain->GetBuffer(n, IID_PPV_ARGS(&m_renderTargets[n]));
+        if (FAILED(hr)) {
+            wchar_t msg[256];
+            swprintf_s(msg, L"GetBuffer for swap chain failed. HRESULT: 0x%08X", hr);
+            MessageBox(hwnd, msg, L"D3D12 Init Error", MB_OK | MB_ICONERROR);
+            return false;
+        }
         m_device->CreateRenderTargetView(m_renderTargets[n].Get(), nullptr, rtvHandle);
         rtvHandle.ptr += m_rtvDescriptorSize;
     }
 
-    if (FAILED(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocator)))) return false;
-    if (FAILED(m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocator.Get(), nullptr, IID_PPV_ARGS(&m_commandList)))) return false;
+    hr = m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocator));
+    if (FAILED(hr)) {
+        wchar_t msg[256];
+        swprintf_s(msg, L"CreateCommandAllocator failed. HRESULT: 0x%08X", hr);
+        MessageBox(hwnd, msg, L"D3D12 Init Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
+
+    hr = m_device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, m_commandAllocator.Get(), nullptr, IID_PPV_ARGS(&m_commandList));
+    if (FAILED(hr)) {
+        wchar_t msg[256];
+        swprintf_s(msg, L"CreateCommandList failed. HRESULT: 0x%08X", hr);
+        MessageBox(hwnd, msg, L"D3D12 Init Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
     m_commandList->Close();
 
-    if (FAILED(m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence)))) return false;
+    hr = m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence));
+    if (FAILED(hr)) {
+        wchar_t msg[256];
+        swprintf_s(msg, L"CreateFence failed. HRESULT: 0x%08X", hr);
+        MessageBox(hwnd, msg, L"D3D12 Init Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
     m_fenceValue = 1;
     m_fenceEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
-    if (m_fenceEvent == nullptr) return false;
+    if (m_fenceEvent == nullptr) {
+        MessageBox(hwnd, L"CreateEvent for fence failed.", L"D3D12 Init Error", MB_OK | MB_ICONERROR);
+        return false;
+    }
     
     UINT elementCount = 1 + 100 + 20; 
     UINT bufferSize = elementCount * 256;
@@ -116,18 +246,26 @@ bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
     resDesc.SampleDesc.Count = 1;
     resDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
-    if (FAILED(m_device->CreateCommittedResource(
+    hr = m_device->CreateCommittedResource(
         &heapProps,
         D3D12_HEAP_FLAG_NONE,
         &resDesc,
         D3D12_RESOURCE_STATE_GENERIC_READ,
         nullptr,
-        IID_PPV_ARGS(&m_constantBuffer)))) {
+        IID_PPV_ARGS(&m_constantBuffer));
+    if (FAILED(hr)) {
+        wchar_t msg[256];
+        swprintf_s(msg, L"CreateCommittedResource for constant buffer failed. HRESULT: 0x%08X", hr);
+        MessageBox(hwnd, msg, L"D3D12 Init Error", MB_OK | MB_ICONERROR);
         return false;
     }
 
     D3D12_RANGE readRange = { 0, 0 };
-    if (FAILED(m_constantBuffer->Map(0, &readRange, reinterpret_cast<void**>(&m_cbvCpuData)))) {
+    hr = m_constantBuffer->Map(0, &readRange, reinterpret_cast<void**>(&m_cbvCpuData));
+    if (FAILED(hr)) {
+        wchar_t msg[256];
+        swprintf_s(msg, L"Mapping constant buffer failed. HRESULT: 0x%08X", hr);
+        MessageBox(hwnd, msg, L"D3D12 Init Error", MB_OK | MB_ICONERROR);
         return false;
     }
 
@@ -152,18 +290,31 @@ bool D3D12RenderingService::InitPipeline() {
 
     ComPtr<ID3DBlob> signature;
     ComPtr<ID3DBlob> error;
-    if (FAILED(D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error))) {
+    HRESULT hr = S_OK;
+
+    hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1, &signature, &error);
+    if (FAILED(hr)) {
+        wchar_t msg[256];
+        swprintf_s(msg, L"D3D12SerializeRootSignature failed. HRESULT: 0x%08X", hr);
+        MessageBox(nullptr, msg, L"Pipeline Init Error", MB_OK | MB_ICONERROR);
         return false;
     }
-    if (FAILED(m_device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignature)))) {
+    hr = m_device->CreateRootSignature(0, signature->GetBufferPointer(), signature->GetBufferSize(), IID_PPV_ARGS(&m_rootSignature));
+    if (FAILED(hr)) {
+        wchar_t msg[256];
+        swprintf_s(msg, L"CreateRootSignature failed. HRESULT: 0x%08X", hr);
+        MessageBox(nullptr, msg, L"Pipeline Init Error", MB_OK | MB_ICONERROR);
         return false;
     }
 
     ComPtr<ID3DBlob> vertexShader;
     ComPtr<ID3DBlob> pixelShader;
     
-    if (FAILED(D3DCompileFromFile(
-        L"Shader.hlsl",
+    // Compile from embedded raw string instead of Shader.hlsl file
+    hr = D3DCompile(
+        g_shaderCode,
+        sizeof(g_shaderCode) - 1,
+        "ShaderSource",
         nullptr,
         nullptr,
         "VSMain",
@@ -171,15 +322,25 @@ bool D3D12RenderingService::InitPipeline() {
         D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
         0,
         &vertexShader,
-        &error))) {
+        &error);
+    if (FAILED(hr)) {
+        wchar_t msg[1024];
         if (error) {
-            OutputDebugStringA((char*)error->GetBufferPointer());
+            char* errStr = (char*)error->GetBufferPointer();
+            wchar_t wErrStr[512] = {0};
+            MultiByteToWideChar(CP_ACP, 0, errStr, -1, wErrStr, 512);
+            swprintf_s(msg, L"D3DCompile (Vertex Shader) failed. HRESULT: 0x%08X\nError:\n%s", hr, wErrStr);
+        } else {
+            swprintf_s(msg, L"D3DCompile (Vertex Shader) failed. HRESULT: 0x%08X", hr);
         }
+        MessageBox(nullptr, msg, L"Pipeline Init Error", MB_OK | MB_ICONERROR);
         return false;
     }
 
-    if (FAILED(D3DCompileFromFile(
-        L"Shader.hlsl",
+    hr = D3DCompile(
+        g_shaderCode,
+        sizeof(g_shaderCode) - 1,
+        "ShaderSource",
         nullptr,
         nullptr,
         "PSMain",
@@ -187,10 +348,18 @@ bool D3D12RenderingService::InitPipeline() {
         D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
         0,
         &pixelShader,
-        &error))) {
+        &error);
+    if (FAILED(hr)) {
+        wchar_t msg[1024];
         if (error) {
-            OutputDebugStringA((char*)error->GetBufferPointer());
+            char* errStr = (char*)error->GetBufferPointer();
+            wchar_t wErrStr[512] = {0};
+            MultiByteToWideChar(CP_ACP, 0, errStr, -1, wErrStr, 512);
+            swprintf_s(msg, L"D3DCompile (Pixel Shader) failed. HRESULT: 0x%08X\nError:\n%s", hr, wErrStr);
+        } else {
+            swprintf_s(msg, L"D3DCompile (Pixel Shader) failed. HRESULT: 0x%08X", hr);
         }
+        MessageBox(nullptr, msg, L"Pipeline Init Error", MB_OK | MB_ICONERROR);
         return false;
     }
 
@@ -223,8 +392,12 @@ bool D3D12RenderingService::InitPipeline() {
     psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
     psoDesc.SampleDesc.Count = 1;
 
-    if (FAILED(m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState)))) {
-		return false;
+    hr = m_device->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&m_pipelineState));
+    if (FAILED(hr)) {
+        wchar_t msg[256];
+        swprintf_s(msg, L"CreateGraphicsPipelineState failed. HRESULT: 0x%08X", hr);
+        MessageBox(nullptr, msg, L"Pipeline Init Error", MB_OK | MB_ICONERROR);
+        return false;
     }
 
     return true;

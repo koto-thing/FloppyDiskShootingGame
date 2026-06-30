@@ -1,5 +1,5 @@
 #include "GameView.h"
-#include "../Infrastructure/D3D12Renderer.h"
+#include "../Infrastructure/ExternalServices/D3D12RenderingService.h"
 #include "../Application/GameManager.h"
 #include "../Presentation/GamePresenter.h"
 
