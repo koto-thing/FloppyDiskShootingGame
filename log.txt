@@ -1,0 +1,19 @@
+--- LOG START ---
+1. Creating Window
+WindowProc - Msg: 0x24
+WindowProc - Msg: 0x81
+WindowProc - Msg: 0x83
+WindowProc - Msg: 0x1
+hwnd = 013E26DA
+2.5 Declaring D3D12Renderer
+2. Showing Window
+WindowProc - Msg: 0x18
+WindowProc - Msg: 0x46
+WindowProc - Msg: 0x46
+WindowProc - Msg: 0x1C
+WindowProc - Msg: 0x86
+WindowProc - Msg: 0x7F
+WindowProc - Msg: 0x7F
+WindowProc - Msg: 0x7F
+WindowProc - Msg: 0x6
+WindowProc - Msg: 0x281

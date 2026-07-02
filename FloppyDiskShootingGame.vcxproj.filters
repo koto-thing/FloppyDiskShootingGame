@@ -18,55 +18,51 @@
     <ClCompile Include="main.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="Infrastructure\D3D12Renderer.cpp">
+    <ClCompile Include="Infrastructure\ExternalServices\D3D12Renderer.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="Infrastructure\InputSystem.cpp">
+    <ClCompile Include="Infrastructure\ExternalServices\InputSystem.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="Infrastructure\Win32Window.cpp">
+    <ClCompile Include="Infrastructure\ExternalServices\Win32Window.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="Application\GameManager.cpp">
+    <ClCompile Include="Presentation\Scenes\TestStage.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
-    <ClCompile Include="Presentation\GamePresenter.cpp">
-      <Filter>ソース ファイル</Filter>
-    </ClCompile>
-    <ClCompile Include="View\GameView.cpp">
+    <ClCompile Include="Presentation\Scenes\TitleScene.cpp">
       <Filter>ソース ファイル</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="Shader.hlsl" />
-    <None Include="GEMINI.md" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Domain\GameObject.h">
+    <ClInclude Include="Domain\ValueObjects\SceneType.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Domain\GameState.h">
+    <ClInclude Include="Domain\ValueObjects\SceneSharedData.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Infrastructure\D3D12Renderer.h">
+    <ClInclude Include="Infrastructure\ExternalServices\D3D12Renderer.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Infrastructure\InputSystem.h">
+    <ClInclude Include="Infrastructure\ExternalServices\InputSystem.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Infrastructure\Win32Window.h">
+    <ClInclude Include="Infrastructure\ExternalServices\Win32Window.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Application\GameManager.h">
+    <ClInclude Include="Application\Interfaces\IScene.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Presentation\ConstantBufferData.h">
+    <ClInclude Include="Application\UseCases\SceneManager.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="Presentation\GamePresenter.h">
+    <ClInclude Include="Presentation\Scenes\TestStage.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
-    <ClInclude Include="View\GameView.h">
+    <ClInclude Include="Presentation\Scenes\TitleScene.h">
       <Filter>ヘッダー ファイル</Filter>
     </ClInclude>
   </ItemGroup>

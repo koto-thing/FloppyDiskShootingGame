@@ -1,19 +1,25 @@
 #ifndef UNICODE
 #define UNICODE
 #endif
+#ifndef _UNICODE
+#define _UNICODE
+#endif
 
 #include <windows.h>
-#include "Infrastructure/Win32Window.h"
-#include "Infrastructure/D3D12Renderer.h"
-#include "Application/GameManager.h"
-#include "View/GameView.h"
+#include "Application/UseCases/SceneManager.h"
+#include "Domain/ValueObjects/SceneSharedData.h"
+#include "Domain/ValueObjects/SceneType.h"
+#include "Infrastructure/ExternalServices/Win32Window.h"
+#include "Infrastructure/ExternalServices/D3D12Renderer.h"
+#include "Presentation/Scenes/TitleScene.h"
+#include "Presentation/Scenes/TestStage.h"
 
 /**
  * ウィンドウプロシージャ
- * @param hwnd ウィンドウ
- * @param uMsg メッセージ
- * @param wParam
- * @param lParam 
+ * @param hwnd ウィンドウハンドル
+ * @param uMsg メッセージ識別子
+ * @param wParam メッセージの最初のパラメータ
+ * @param lParam メッセージの2番目のパラメータ
  * @return 
  */
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
@@ -28,30 +34,40 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 /**
  * エントリーポイント
  * @param hInstance インスタンスハンドル
- * @param nCmdShow 
+ * @param nCmdShow ウィンドウの表示方法
  * @return 
  */
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
+    // ウィンドウを作成
     HWND hwnd = Win32Window::Create(
         hInstance, 800, 600, L"Floppy Disk Shooting Game - Clean Architecture", WindowProc
     );
 
-    if (hwnd == nullptr)
-        return 0;
-
-    ShowWindow(hwnd, nCmdShow);
-
-    D3D12Renderer renderer;
-    if (!renderer.Initialize(hwnd, 800, 600)) {
-        MessageBox(hwnd, L"DirectX 12 Initializing Failed", L"Error", MB_OK);
+    // ウィンドウの作成に失敗した場合は終了
+    if (hwnd == nullptr) {
         return 0;
     }
 
-    GameManager gameManager;
-    gameManager.Initialize();
+    // ウィンドウを表示
+    ShowWindow(hwnd, nCmdShow);
 
-    GameView gameView;
-
+    // DirectX 12 レンダラーの初期化
+    D3D12Renderer renderer;
+    if (!renderer.Initialize(hwnd, 800, 600)) {
+        MessageBox(NULL, L"DirectX 12 Initializing Failed", L"Error", MB_OK);
+        return 0;
+    }
+    
+    // シーンマネージャを作成
+    SceneManager<SceneType, SceneSharedData> app;
+    
+    // シーンを登録
+    app.addScene<TitleScene>(SceneType::Title);
+    app.addScene<TestStage>(SceneType::TestStage);
+    
+    // 初期シーンの設定
+    app.init(SceneType::Title);
+    
     MSG msg = { };
     while (msg.message != WM_QUIT) {
         if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
@@ -59,16 +75,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
             DispatchMessage(&msg);
         }
         else {
-            gameManager.ProcessInput();
-            gameManager.Update();
+            app.ProcessInput();
+            app.Tick();
             
             renderer.BeginFrame();
-            gameView.Render(renderer, gameManager);
+            app.Render(renderer);
             renderer.EndFrame();
         }
     }
 
     renderer.Cleanup();
-
     return 0;
 }

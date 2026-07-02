@@ -74,9 +74,9 @@
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode>
+      <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -93,9 +93,9 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode>
+      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -110,9 +110,9 @@
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_DEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode>
+      <PreprocessorDefinitions>_DEBUG;_CONSOLE;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -129,9 +129,9 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
-      <ConformanceMode>true</ConformanceMode>
+      <PreprocessorDefinitions>NDEBUG;_CONSOLE;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
+      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -144,34 +144,42 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="Infrastructure\D3D12Renderer.cpp" />
-    <ClCompile Include="Infrastructure\InputSystem.cpp" />
-    <ClCompile Include="Infrastructure\Win32Window.cpp" />
-    <ClCompile Include="Application\GameManager.cpp" />
-    <ClCompile Include="Presentation\GamePresenter.cpp" />
-    <ClCompile Include="View\GameView.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\D3D12Renderer.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\InputSystem.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\Win32Window.cpp" />
+    <ClCompile Include="Presentation\Scenes\TestStage.cpp" />
+    <ClCompile Include="Presentation\Scenes\TitleScene.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Domain\GameObject.h" />
-    <ClInclude Include="Domain\GameState.h" />
-    <ClInclude Include="Infrastructure\D3D12Renderer.h" />
-    <ClInclude Include="Infrastructure\InputSystem.h" />
-    <ClInclude Include="Infrastructure\Win32Window.h" />
-    <ClInclude Include="Application\GameManager.h" />
-    <ClInclude Include="Presentation\ConstantBufferData.h" />
-    <ClInclude Include="Presentation\GamePresenter.h" />
-    <ClInclude Include="View\GameView.h" />
+    <ClInclude Include="Domain\ValueObjects\SceneType.h" />
+    <ClInclude Include="Domain\ValueObjects\SceneSharedData.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\D3D12Renderer.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\InputSystem.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\Win32Window.h" />
+    <ClInclude Include="Application\Interfaces\IScene.h" />
+    <ClInclude Include="Application\UseCases\SceneManager.h" />
+    <ClInclude Include="Presentation\Scenes\TestStage.h" />
+    <ClInclude Include="Presentation\Scenes\TitleScene.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include=".agents\AGENTS.md" />
-    <None Include="Shader.hlsl">
+    <None Include="Shaders\ObjectShader.hlsl">
+      <ExcludedFromBuild>true</ExcludedFromBuild>
+    </None>
+    <None Include="Shaders\BackgroundShader.hlsl">
+      <ExcludedFromBuild>true</ExcludedFromBuild>
+    </None>
+    <None Include="Shaders\SpellCircleShader.hlsl">
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </None>
   </ItemGroup>
   <ItemGroup>
-    <Content Include=".agents\skills\architecture-refactoring.md" />
+    <Folder Include="View\" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
+  <Target Name="CopyShaders" AfterTargets="AfterBuild">
+    <Copy SourceFiles="Shaders\ObjectShader.hlsl;Shaders\BackgroundShader.hlsl;Shaders\SpellCircleShader.hlsl" DestinationFolder="$(OutDir)Shaders" SkipUnchangedFiles="true" />
+  </Target>
 </Project>
