@@ -28,5 +28,5 @@ public:
      * @brief タイトルシーンの描画処理を行います。
      * @param renderer DirectX 12 レンダラーの参照
      */
-    void Render(D3D12Renderer& renderer) override;
+    void Render(D3D12RenderingService& renderer) override;
 };

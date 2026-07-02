@@ -1,6 +1,6 @@
 #pragma once
 
-class InputSystem {
+class InputService {
 public:
     static bool IsKeyPressed(int vKey);
 };

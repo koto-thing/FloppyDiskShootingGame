@@ -17,7 +17,7 @@ public:
     void Initialize() override;
     void ProcessInput() override;
     void Tick() override;
-    void Render(D3D12Renderer& renderer) override;
+    void Render(D3D12RenderingService& renderer) override;
 
 private:
     //std::unique_ptr<ShootingGame> m_game;

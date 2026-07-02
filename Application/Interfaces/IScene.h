@@ -38,7 +38,7 @@ public:
      * ゲームループの毎フレーム呼ばれる
      * @param renderer DirectX 12 レンダラーの参照
      */
-    virtual void Render(class D3D12Renderer& renderer) = 0;
+    virtual void Render(class D3D12RenderingService& renderer) = 0;
     
 protected:
     /**

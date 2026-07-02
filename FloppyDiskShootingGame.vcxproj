@@ -144,18 +144,18 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="Infrastructure\ExternalServices\D3D12Renderer.cpp" />
-    <ClCompile Include="Infrastructure\ExternalServices\InputSystem.cpp" />
-    <ClCompile Include="Infrastructure\ExternalServices\Win32Window.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\D3D12RenderingService.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\InputService.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\Win32WindowService.cpp" />
     <ClCompile Include="Presentation\Scenes\TestStage.cpp" />
     <ClCompile Include="Presentation\Scenes\TitleScene.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Domain\ValueObjects\SceneType.h" />
     <ClInclude Include="Domain\ValueObjects\SceneSharedData.h" />
-    <ClInclude Include="Infrastructure\ExternalServices\D3D12Renderer.h" />
-    <ClInclude Include="Infrastructure\ExternalServices\InputSystem.h" />
-    <ClInclude Include="Infrastructure\ExternalServices\Win32Window.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\D3D12RenderingService.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\InputService.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\Win32WindowService.h" />
     <ClInclude Include="Application\Interfaces\IScene.h" />
     <ClInclude Include="Application\UseCases\SceneManager.h" />
     <ClInclude Include="Presentation\Scenes\TestStage.h" />

@@ -1,4 +1,4 @@
-#include "D3D12Renderer.h"
+#include "D3D12RenderingService.h"
 #include <cstdio>
 
 // .exeが存在する絶対パスを基準にシェーダーファイルへのフルパスを解決する
@@ -15,14 +15,14 @@ std::wstring GetShaderFilePath(const wchar_t* fileName) {
 /**
  * D3D12Renderer クラスのコンストラクタ
  */
-D3D12Renderer::D3D12Renderer() 
+D3D12RenderingService::D3D12RenderingService() 
     : m_width(800), m_height(600), m_fenceValue(0), m_fenceEvent(nullptr), m_frameIndex(0), m_rtvDescriptorSize(0), m_cbvCpuData(nullptr) {
 }
 
 /**
  * D3D12Renderer クラスのデストラクタ
  */
-D3D12Renderer::~D3D12Renderer() {
+D3D12RenderingService::~D3D12RenderingService() {
     Cleanup();
 }
 
@@ -33,7 +33,7 @@ D3D12Renderer::~D3D12Renderer() {
  * @param height 高さ
  * @return 初期化に成功した場合：true、失敗した場合：false
  */
-bool D3D12Renderer::Initialize(HWND hwnd, int width, int height) {
+bool D3D12RenderingService::Initialize(HWND hwnd, int width, int height) {
     m_width = width;
     m_height = height;
 
@@ -52,7 +52,7 @@ bool D3D12Renderer::Initialize(HWND hwnd, int width, int height) {
 /**
  * D3D12Renderer をクリーンアップする
  */
-void D3D12Renderer::Cleanup() {
+void D3D12RenderingService::Cleanup() {
     if (m_fenceEvent) {
         CloseHandle(m_fenceEvent);
         m_fenceEvent = nullptr;
@@ -62,6 +62,44 @@ void D3D12Renderer::Cleanup() {
     }
 }
 
+// Embedded shader code to avoid file loading issues
+const char g_shaderCode[] = R"(
+cbuffer TransformBuffer : register(b0)
+{
+    float2 u_position; // Object center position (-1.0 to 1.0)
+    float2 u_size;     // Object size (width, height)
+    float4 u_Color;    // Object color (RGBA)
+};
+
+struct VS_OUTPUT
+{
+    float4 pos : SV_Position;
+    float4 color : COLOR;
+};
+
+VS_OUTPUT VSMain(uint vID : SV_VertexID)
+{
+    VS_OUTPUT output;
+    
+    // vID: 0 = Bottom-Left, 1 = Top-Left, 2 = Bottom-Right, 3 = Top-Right
+    float2 localPos;
+    localPos.x = (float) (vID & 2) - 1.0f;
+    localPos.y = (float) ((vID & 1) << 1) - 1.0f;
+
+    // Apply size and shift position
+    float2 finalPos = u_position + (localPos * u_size);
+    
+    output.pos = float4(finalPos, 0.0f, 1.0f);
+    output.color = u_Color;
+    return output;
+}
+
+float4 PSMain(VS_OUTPUT input) : SV_TARGET
+{
+    return input.color;
+}
+)";
+
 /**
  * D3D12Renderer を初期化する
  * @param hwnd ウィンドウハンドル
@@ -69,7 +107,15 @@ void D3D12Renderer::Cleanup() {
  * @param height 高さ
  * @return 初期化に成功した場合：true、失敗した場合：false
  */
-bool D3D12Renderer::InitD3D12(HWND hwnd, int width, int height) {
+bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
+#if defined(_DEBUG)
+    // Enable D3D12 debug layer for debug builds to catch issues early
+    ComPtr<ID3D12Debug> debugController;
+    if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)))) {
+        debugController->EnableDebugLayer();
+    }
+#endif
+
     ComPtr<IDXGIFactory4> factory;
     if (FAILED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
         MessageBoxA(NULL, "CreateDXGIFactory1 Failed", "Error", MB_OK);
@@ -139,7 +185,6 @@ bool D3D12Renderer::InitD3D12(HWND hwnd, int width, int height) {
         m_device->CreateRenderTargetView(m_renderTargets[n].Get(), nullptr, rtvHandle);
         rtvHandle.ptr += m_rtvDescriptorSize;
     }
-
     if (FAILED(m_device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&m_commandAllocator)))) {
         MessageBoxA(NULL, "CreateCommandAllocator Failed", "Error", MB_OK);
         return false;
@@ -149,7 +194,7 @@ bool D3D12Renderer::InitD3D12(HWND hwnd, int width, int height) {
         return false;
     }
     m_commandList->Close();
-
+    
     if (FAILED(m_device->CreateFence(0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&m_fence)))) {
         MessageBoxA(NULL, "CreateFence Failed", "Error", MB_OK);
         return false;
@@ -177,13 +222,16 @@ bool D3D12Renderer::InitD3D12(HWND hwnd, int width, int height) {
     resDesc.SampleDesc.Count = 1;
     resDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
 
-    if (FAILED(m_device->CreateCommittedResource(
+    // 【修正】末尾の余分な閉じ括弧 ')' を削除
+    hr = m_device->CreateCommittedResource(
         &heapProps,
         D3D12_HEAP_FLAG_NONE,
         &resDesc,
         D3D12_RESOURCE_STATE_GENERIC_READ,
         nullptr,
-        IID_PPV_ARGS(&m_constantBuffer)))) {
+        IID_PPV_ARGS(&m_constantBuffer));
+        
+    if (FAILED(hr)) {
         MessageBoxA(NULL, "CreateCommittedResource (ConstantBuffer) Failed", "Error", MB_OK);
         return false;
     }
@@ -201,7 +249,7 @@ bool D3D12Renderer::InitD3D12(HWND hwnd, int width, int height) {
  * D3D12 パイプラインを初期化する
  * @return 初期化に成功した場合：true、失敗した場合：false
  */
-bool D3D12Renderer::InitPipeline() {
+bool D3D12RenderingService::InitPipeline() {
     D3D12_ROOT_PARAMETER rootParameters[1] = {};
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParameters[0].Descriptor.ShaderRegister = 0;
@@ -252,9 +300,10 @@ bool D3D12Renderer::InitPipeline() {
             sprintf_s(buf, "D3DCompileFromFile (VS) Failed with HRESULT: 0x%08X", hrVS);
             MessageBoxA(NULL, buf, "Shader Compile Error", MB_OK);
         }
+        // 【修正】未定義の `msg` を使わず、上で整形した `buf` などを使ってエラーを表示するように統一
         return false;
     }
-
+    
     // --- 各ピクセルシェーダーのコンパイルとPSO作成 ---
 
     D3D12_GRAPHICS_PIPELINE_STATE_DESC psoDesc = {};
@@ -271,7 +320,7 @@ bool D3D12Renderer::InitPipeline() {
     psoDesc.NumRenderTargets = 1;
     psoDesc.RTVFormats[0] = DXGI_FORMAT_R8G8B8A8_UNORM;
     psoDesc.SampleDesc.Count = 1;
-
+    
     // 半透明ブレンドステート定義 (Object と SpellCircle 用)
     const D3D12_RENDER_TARGET_BLEND_DESC alphaBlendDesc = {
         TRUE, FALSE,
@@ -395,7 +444,7 @@ bool D3D12Renderer::InitPipeline() {
 /**
  * フレームの描画を開始する
  */
-void D3D12Renderer::BeginFrame() {
+void D3D12RenderingService::BeginFrame() {
     m_commandAllocator->Reset();
     m_commandList->Reset(m_commandAllocator.Get(), m_pipelineStateObject.Get());
 
@@ -426,7 +475,7 @@ void D3D12Renderer::BeginFrame() {
 /**
  * フレームの描画を終了する
  */
-void D3D12Renderer::EndFrame() {
+void D3D12RenderingService::EndFrame() {
     D3D12_RESOURCE_BARRIER barrier = {};
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
@@ -448,7 +497,7 @@ void D3D12Renderer::EndFrame() {
 /**
  * フレームの同期を行う
  */
-void D3D12Renderer::SyncFrame() {
+void D3D12RenderingService::SyncFrame() {
     const UINT64 fence = m_fenceValue;
     if (FAILED(m_commandQueue->Signal(m_fence.Get(), fence))) return;
     m_fenceValue++;
@@ -465,7 +514,7 @@ void D3D12Renderer::SyncFrame() {
  * D3D12Renderer のレンダーターゲットビューの CPU ディスクリプタハンドルを取得する
  * @return レンダーターゲットビュー of CPU descriptor handle
  */
-D3D12_CPU_DESCRIPTOR_HANDLE D3D12Renderer::GetRtvCpuDescriptorHandle() const {
+D3D12_CPU_DESCRIPTOR_HANDLE D3D12RenderingService::GetRtvCpuDescriptorHandle() const {
     D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
     rtvHandle.ptr += m_frameIndex * m_rtvDescriptorSize;
     return rtvHandle;
@@ -474,7 +523,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE D3D12Renderer::GetRtvCpuDescriptorHandle() const {
 /**
  * パイプラインステートを切り替える (0: Object, 1: Background, 2: SpellCircle)
  */
-void D3D12Renderer::SetPipelineState(int type) {
+void D3D12RenderingService::SetPipelineState(int type) {
     if (type == 0) {
         m_commandList->SetPipelineState(m_pipelineStateObject.Get());
     } else if (type == 1) {

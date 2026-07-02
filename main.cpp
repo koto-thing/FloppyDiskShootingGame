@@ -9,8 +9,8 @@
 #include "Application/UseCases/SceneManager.h"
 #include "Domain/ValueObjects/SceneSharedData.h"
 #include "Domain/ValueObjects/SceneType.h"
-#include "Infrastructure/ExternalServices/Win32Window.h"
-#include "Infrastructure/ExternalServices/D3D12Renderer.h"
+#include "Infrastructure/ExternalServices/Win32WindowService.h"
+#include "Infrastructure/ExternalServices/D3D12RenderingService.h"
 #include "Presentation/Scenes/TitleScene.h"
 #include "Presentation/Scenes/TestStage.h"
 
@@ -39,7 +39,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
  */
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     // ウィンドウを作成
-    HWND hwnd = Win32Window::Create(
+    HWND hwnd = Win32WindowService::Create(
         hInstance, 800, 600, L"Floppy Disk Shooting Game - Clean Architecture", WindowProc
     );
 
@@ -52,7 +52,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     ShowWindow(hwnd, nCmdShow);
 
     // DirectX 12 レンダラーの初期化
-    D3D12Renderer renderer;
+    D3D12RenderingService renderer;
     if (!renderer.Initialize(hwnd, 800, 600)) {
         MessageBox(NULL, L"DirectX 12 Initializing Failed", L"Error", MB_OK);
         return 0;

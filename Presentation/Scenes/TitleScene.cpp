@@ -1,5 +1,5 @@
 #include "TitleScene.h"
-#include "../../Infrastructure/ExternalServices/D3D12Renderer.h"
+#include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
 
 /**
  * @brief タイトルシーンの初期化処理
@@ -24,6 +24,6 @@ void TitleScene::Tick() {
 /**
  * @brief タイトルシーンの描画処理
  */
-void TitleScene::Render(D3D12Renderer& renderer) {
+void TitleScene::Render(D3D12RenderingService& renderer) {
     // TODO: タイトル画面の背景やUIの描画をここに実装します
 }

@@ -2,7 +2,7 @@
 #include <windows.h>
 #include <vector>
 #include "Bullet.h"
-#include "../Infrastructure/ExternalServices/InputSystem.h"
+#include "../Infrastructure/ExternalServices/InputService.h"
 
 /**
  * @brief 自機 (Arwing) クラス (スターフォックス風 3D)
@@ -43,10 +43,10 @@ public:
         float dy = 0.0f;
 
         // 左右上下移動
-        if (InputSystem::IsKeyPressed(VK_LEFT))  dx -= 1.0f;
-        if (InputSystem::IsKeyPressed(VK_RIGHT)) dx += 1.0f;
-        if (InputSystem::IsKeyPressed(VK_UP))    dy += 1.0f;  // 3D空間なのでUPはYプラス方向
-        if (InputSystem::IsKeyPressed(VK_DOWN))  dy -= 1.0f;
+        if (InputService::IsKeyPressed(VK_LEFT))  dx -= 1.0f;
+        if (InputService::IsKeyPressed(VK_RIGHT)) dx += 1.0f;
+        if (InputService::IsKeyPressed(VK_UP))    dy += 1.0f;  // 3D空間なのでUPはYプラス方向
+        if (InputService::IsKeyPressed(VK_DOWN))  dy -= 1.0f;
 
         // 移動時のロール傾き演出 (スターフォックスらしさ)
         if (dx < 0.0f) {
@@ -75,7 +75,7 @@ public:
         if (y > 35.0f) y = 35.0f;
 
         // ショット発射 (Zキー)
-        if (InputSystem::IsKeyPressed('Z') && shootCooldown == 0) {
+        if (InputService::IsKeyPressed('Z') && shootCooldown == 0) {
             Fire(bullets);
             shootCooldown = 6;
         }

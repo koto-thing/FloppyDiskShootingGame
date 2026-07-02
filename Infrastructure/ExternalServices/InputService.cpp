@@ -1,4 +1,4 @@
-#include "InputSystem.h"
+#include "InputService.h"
 #include <windows.h>
 
 /**
@@ -6,6 +6,6 @@
  * @param vKey 仮想キーコード
  * @return 押されている場合：true、押されていない場合：false
  */
-bool InputSystem::IsKeyPressed(int vKey) {
+bool InputService::IsKeyPressed(int vKey) {
     return (GetAsyncKeyState(vKey) & 0x8000) != 0;
 }

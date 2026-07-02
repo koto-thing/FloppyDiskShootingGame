@@ -5,7 +5,7 @@
 #include "Player.h"
 #include "Enemy.h"
 #include "Bullet.h"
-#include "../Infrastructure/ExternalServices/D3D12Renderer.h"
+#include "../Infrastructure/ExternalServices/D3D12RenderingService.h"
 
 // 3D空間のアイテムクラス
 struct Item3D {
@@ -77,7 +77,7 @@ public:
     void Update() {
         if (gameStatus != 0) {
             // ゲームオーバーかクリア時は、Rキーでリセット
-            if (InputSystem::IsKeyPressed('R')) {
+            if (InputService::IsKeyPressed('R')) {
                 Reset();
             }
             return;
@@ -124,7 +124,7 @@ public:
         }
     }
 
-    void Render(D3D12Renderer& renderer) {
+    void Render(D3D12RenderingService& renderer) {
         int drawCount = 0;
 
         // A. 宇宙空間の星空背景描画 (PSO: 1: Background)
@@ -553,7 +553,7 @@ private:
     }
 
     // 3D 空間オブジェクト描画ヘルパー
-    void DrawObject3D(D3D12Renderer& renderer, float x, float y, float z, float w, float h, float d, const float color[4], int index, int shapeType, int vertexCount) {
+    void DrawObject3D(D3D12RenderingService& renderer, float x, float y, float z, float w, float h, float d, const float color[4], int index, int shapeType, int vertexCount) {
         ID3D12GraphicsCommandList* cmdList = renderer.GetCommandList();
         
         char* cbvCpuData = reinterpret_cast<char*>(renderer.GetCbvCpuData());
@@ -590,7 +590,7 @@ private:
     }
 
     // UI (手前の2D平面) 描画ヘルパー (透視投影を回避して直接NDCで描く)
-    void DrawObjectUI(D3D12Renderer& renderer, float ndcX, float ndcY, float ndcW, float ndcH, const float color[4], int index) {
+    void DrawObjectUI(D3D12RenderingService& renderer, float ndcX, float ndcY, float ndcW, float ndcH, const float color[4], int index) {
         ID3D12GraphicsCommandList* cmdList = renderer.GetCommandList();
         
         char* cbvCpuData = reinterpret_cast<char*>(renderer.GetCbvCpuData());

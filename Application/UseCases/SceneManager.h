@@ -4,7 +4,7 @@
 #include <map>
 #include <functional>
 #include "../Interfaces/IScene.h"
-#include "../../Infrastructure/ExternalServices/D3D12Renderer.h"
+#include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
 
 /**
  * @brief シーン管理を行うクラス
@@ -70,7 +70,7 @@ public:
      * @brief 現在実行中のシーンの描画処理を呼び出す
      * @param renderer DirectX 12 レンダラーの参照
      */
-    void Render(D3D12Renderer& renderer) {
+    void Render(D3D12RenderingService& renderer) {
         if (m_currentScene)
             m_currentScene->Render(renderer);
     }

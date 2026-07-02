@@ -1,6 +1,6 @@
 #include "TestStage.h"
 #include "../../Temp/ShootingGame.h"
-#include "../../Infrastructure/ExternalServices/D3D12Renderer.h"
+#include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
 
 TestStage::TestStage() {
 }
@@ -19,6 +19,6 @@ void TestStage::Tick() {
     //m_game->Update();
 }
 
-void TestStage::Render(D3D12Renderer& renderer) {
+void TestStage::Render(D3D12RenderingService& renderer) {
     //m_game->Render(renderer);
 }
