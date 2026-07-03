@@ -2,23 +2,22 @@
 #include "../../Temp/ShootingGame.h"
 #include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
 
-TestStage::TestStage() {
+TestStage::TestStage() : m_game(std::make_unique<ShootingGame>()) {
 }
 
 TestStage::~TestStage() = default;
 
 void TestStage::Initialize() {
-    //m_game->Initialize();
+    m_game->Reset();
 }
 
 void TestStage::ProcessInput() {
-    // 入力は ShootingGame 内で InputSystem を直接参照するため、ここでは特になし
 }
 
 void TestStage::Tick() {
-    //m_game->Update();
+    m_game->Update();
 }
 
 void TestStage::Render(D3D12RenderingService& renderer) {
-    //m_game->Render(renderer);
+    m_game->Render(renderer);
 }

@@ -66,8 +66,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     app.addScene<TestStage>(SceneType::TestStage);
     
     // 初期シーンの設定
-    app.init(SceneType::Title);
+    app.init(SceneType::TestStage);
     
+    // メインループ
     MSG msg = { };
     while (msg.message != WM_QUIT) {
         if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
