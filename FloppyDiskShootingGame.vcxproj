@@ -143,6 +143,7 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Infrastructure\ExternalServices\TextRenderingService.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\D3D12RenderingService.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\InputService.cpp" />
@@ -151,10 +152,12 @@
     <ClCompile Include="Presentation\Scenes\TitleScene.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Domain\ValueObjects\CharacterASCIIData.h" />
     <ClInclude Include="Domain\ValueObjects\SceneType.h" />
     <ClInclude Include="Domain\ValueObjects\SceneSharedData.h" />
     <ClInclude Include="Infrastructure\ExternalServices\D3D12RenderingService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\InputService.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\TextRenderingService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\Win32WindowService.h" />
     <ClInclude Include="Application\Interfaces\IScene.h" />
     <ClInclude Include="Application\UseCases\SceneManager.h" />
@@ -172,6 +175,9 @@
     <None Include="Shaders\SpellCircleShader.hlsl">
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </None>
+    <None Include="Shaders\TextShader.hlsl">
+      <ExcludedFromBuild>true</ExcludedFromBuild>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Folder Include="View\" />
@@ -180,6 +186,6 @@
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
   <Target Name="CopyShaders" AfterTargets="AfterBuild">
-    <Copy SourceFiles="Shaders\ObjectShader.hlsl;Shaders\BackgroundShader.hlsl;Shaders\SpellCircleShader.hlsl" DestinationFolder="$(OutDir)Shaders" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="Shaders\ObjectShader.hlsl;Shaders\BackgroundShader.hlsl;Shaders\SpellCircleShader.hlsl;Shaders\TextShader.hlsl" DestinationFolder="$(OutDir)Shaders" SkipUnchangedFiles="true" />
   </Target>
 </Project>

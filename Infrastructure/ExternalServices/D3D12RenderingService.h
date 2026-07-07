@@ -6,6 +6,8 @@
 #include <d3dcompiler.h>
 #include <string>
 
+#include "TextRenderingService.h"
+
 using Microsoft::WRL::ComPtr;
 
 class D3D12RenderingService {
@@ -33,6 +35,9 @@ public:
     // パイプラインステートの切り替え (0: Object, 1: Background, 2: SpellCircle)
     void SetPipelineState(int type);
 
+    TextRenderingService& GetTextRenderer() { return m_textRenderer; }
+    const TextRenderingService& GetTextRenderer() const { return m_textRenderer; }
+
 private:
     bool InitD3D12(HWND hwnd, int width, int height);
     bool InitPipeline();
@@ -59,7 +64,11 @@ private:
     HANDLE m_fenceEvent;
     UINT m_frameIndex;
     UINT m_rtvDescriptorSize;
+    
+    // フォントレンダラー
+    TextRenderingService m_textRenderer;
 
     ComPtr<ID3D12Resource> m_constantBuffer;
     void* m_cbvCpuData;
 };
+

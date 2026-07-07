@@ -1,5 +1,6 @@
 #include "D3D12RenderingService.h"
 #include <cstdio>
+#include <vector>
 
 // .exeが存在する絶対パスを基準にシェーダーファイルへのフルパスを解決する
 std::wstring GetShaderFilePath(const wchar_t* fileName) {
@@ -43,6 +44,17 @@ bool D3D12RenderingService::Initialize(HWND hwnd, int width, int height) {
     }
     if (!InitPipeline()) {
         MessageBoxA(NULL, "D3D12Renderer::Initialize - InitPipeline Failed!", "Error", MB_OK);
+        return false;
+    }
+
+    // スワップチェーン（バックバッファ）の実際のフォーマットを取得して渡す
+    DXGI_FORMAT rtvFormat = DXGI_FORMAT_R8G8B8A8_UNORM;
+    if (m_renderTargets[0]) {
+        rtvFormat = m_renderTargets[0]->GetDesc().Format;
+    }
+
+    if (!m_textRenderer.Initialize(m_device.Get(), rtvFormat)) {
+        MessageBoxA(NULL, "D3D12Renderer::Initialize - m_textRenderer.Initialize Failed!", "Error", MB_OK);
         return false;
     }
 
@@ -250,17 +262,44 @@ bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
  * @return 初期化に成功した場合：true、失敗した場合：false
  */
 bool D3D12RenderingService::InitPipeline() {
-    D3D12_ROOT_PARAMETER rootParameters[1] = {};
+    // ルートパラメータの定義 (CBVとSRV)
+    D3D12_ROOT_PARAMETER rootParameters[2] = {};
     rootParameters[0].ParameterType = D3D12_ROOT_PARAMETER_TYPE_CBV;
     rootParameters[0].Descriptor.ShaderRegister = 0;
-    rootParameters[0].Descriptor.RegisterSpace = 0;
     rootParameters[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
 
-    D3D12_ROOT_SIGNATURE_DESC rootSigDesc = {};
+    // SRV用
+    D3D12_DESCRIPTOR_RANGE descRange = { };
+    descRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+    descRange.NumDescriptors = 1;
+    descRange.BaseShaderRegister = 0;
+    
+    rootParameters[1].ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+    rootParameters[1].DescriptorTable.NumDescriptorRanges = 1;
+    rootParameters[1].DescriptorTable.pDescriptorRanges = &descRange;
+    rootParameters[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    
+    // 文字がボケないようにポイントサンプラーを定義
+    D3D12_STATIC_SAMPLER_DESC samplerDesc = {};
+    samplerDesc.Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+    samplerDesc.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    samplerDesc.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    samplerDesc.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    samplerDesc.MipLODBias = 0.0f;
+    samplerDesc.MaxAnisotropy = 1;
+    samplerDesc.ComparisonFunc = D3D12_COMPARISON_FUNC_NEVER;
+    samplerDesc.BorderColor = D3D12_STATIC_BORDER_COLOR_TRANSPARENT_BLACK;
+    samplerDesc.MinLOD = 0.0f;
+    samplerDesc.MaxLOD = D3D12_FLOAT32_MAX;
+    samplerDesc.ShaderRegister = 0;
+    samplerDesc.RegisterSpace = 0;
+    samplerDesc.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    
+    D3D12_ROOT_SIGNATURE_DESC rootSigDesc = { };
     rootSigDesc.NumParameters = _countof(rootParameters);
     rootSigDesc.pParameters = rootParameters;
-    rootSigDesc.NumStaticSamplers = 0;
-    rootSigDesc.pStaticSamplers = nullptr;
+    rootSigDesc.NumStaticSamplers = 1;
+    rootSigDesc.pStaticSamplers = &samplerDesc;
     rootSigDesc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
     ComPtr<ID3DBlob> signature;
