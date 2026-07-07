@@ -74,7 +74,6 @@ void D3D12RenderingService::Cleanup() {
     }
 }
 
-// Embedded shader code to avoid file loading issues
 const char g_shaderCode[] = R"(
 cbuffer TransformBuffer : register(b0)
 {
@@ -318,7 +317,7 @@ bool D3D12RenderingService::InitPipeline() {
     std::wstring pathBackground = GetShaderFilePath(L"Shaders\\BackgroundShader.hlsl");
     std::wstring pathSpellCircle = GetShaderFilePath(L"Shaders\\SpellCircleShader.hlsl");
 
-    // 1. 共通頂点シェーダーのコンパイル (ObjectShader.hlsl からコンパイル)
+    // 共通頂点シェーダーのコンパイル
     ComPtr<ID3DBlob> vertexShader;
     error.Reset();
     HRESULT hrVS = D3DCompileFromFile(
@@ -339,7 +338,7 @@ bool D3D12RenderingService::InitPipeline() {
             sprintf_s(buf, "D3DCompileFromFile (VS) Failed with HRESULT: 0x%08X", hrVS);
             MessageBoxA(NULL, buf, "Shader Compile Error", MB_OK);
         }
-        // 【修正】未定義の `msg` を使わず、上で整形した `buf` などを使ってエラーを表示するように統一
+        
         return false;
     }
     
@@ -570,4 +569,26 @@ void D3D12RenderingService::SetPipelineState(int type) {
     } else if (type == 2) {
         m_commandList->SetPipelineState(m_pipelineStateSpellCircle.Get());
     }
+}
+
+/**
+ * Siv3D風の簡易テキスト描画インターフェース
+ */
+void D3D12RenderingService::RenderText(const char* text, DirectX::XMFLOAT2 position, float size, DirectX::XMFLOAT4 color, int index) {
+    if (!text) return;
+    
+    // 引数 index に基づいて定数バッファ領域を算出
+    D3D12_GPU_VIRTUAL_ADDRESS cbvGpuAddress = m_constantBuffer->GetGPUVirtualAddress() + index * 256;
+    void* cbvCpuPtr = reinterpret_cast<char*>(m_cbvCpuData) + index * 256;
+    
+    m_textRenderer.RenderText(
+        m_commandList.Get(),
+        cbvGpuAddress,
+        cbvCpuPtr,
+        text,
+        position.x, position.y,
+        size,
+        color,
+        m_width, m_height
+    );
 }

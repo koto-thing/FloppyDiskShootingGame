@@ -54,6 +54,12 @@ float4 PSTextMain(VS_OUTPUT input) : SV_TARGET {
 }
 )";
 
+/**
+ * @brief TextRenderingService を初期化する
+ * @param device 
+ * @param rtvFormat 
+ * @return 
+ */
 bool TextRenderingService::Initialize(ID3D12Device* device, DXGI_FORMAT rtvFormat) {
     if (!InitFontTexture(device))
         return false;
@@ -64,6 +70,11 @@ bool TextRenderingService::Initialize(ID3D12Device* device, DXGI_FORMAT rtvForma
     return true;
 }
 
+/**
+ * @brief フォントテクスチャを初期化する
+ * @param device 
+ * @return 
+ */
 bool TextRenderingService::InitFontTexture(ID3D12Device* device) {
     const int bufferSize = 1024;
     std::vector<unsigned char> fontData(bufferSize);
@@ -120,6 +131,12 @@ bool TextRenderingService::InitFontTexture(ID3D12Device* device) {
     return true;
 }
 
+/**
+ * @brief パイプラインを初期化する
+ * @param device 
+ * @param rtvFormat 
+ * @return 
+ */
 bool TextRenderingService::InitPipeline(ID3D12Device* device, DXGI_FORMAT rtvFormat) {
     // SRV範囲の定義 (ByteAddressBufferもSRVテーブルとしてバインドできる)
     D3D12_DESCRIPTOR_RANGE descRange = {};
@@ -242,6 +259,19 @@ bool TextRenderingService::InitPipeline(ID3D12Device* device, DXGI_FORMAT rtvFor
     return true;
 }
 
+/**
+ * @brief テキストを描画する
+ * @param commandList 
+ * @param cbvGpuAddress 
+ * @param cbvCpuPtr 
+ * @param text 
+ * @param startX 
+ * @param startY 
+ * @param size 
+ * @param color 
+ * @param screenWidth 
+ * @param screenHeight 
+ */
 void TextRenderingService::RenderText(
     ID3D12GraphicsCommandList* commandList,
     D3D12_GPU_VIRTUAL_ADDRESS cbvGpuAddress,

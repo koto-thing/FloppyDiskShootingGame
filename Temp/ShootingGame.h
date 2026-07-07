@@ -301,24 +301,9 @@ public:
             float filter[4] = { 0.8f, 0.1f, 0.1f, 0.35f };
             DrawObjectUI(renderer, 0.0f, 0.0f, 2.0f, 2.0f, filter, drawCount++);
 
-            // テスト表示: "GAME OVER" の文字描画
-            const char* gameOverText = "GAME OVER";
-            int textLength = lstrlenA(gameOverText);
-            
-            D3D12_GPU_VIRTUAL_ADDRESS cbvGpuAddress = renderer.GetConstantBuffer()->GetGPUVirtualAddress() + drawCount * 256;
-            void* cbvCpuPtr = reinterpret_cast<char*>(renderer.GetCbvCpuData()) + drawCount * 256;
-            
-            renderer.GetTextRenderer().RenderText(
-                renderer.GetCommandList(),
-                cbvGpuAddress,
-                cbvCpuPtr,
-                gameOverText,
-                -0.35f, 0.0f, // 画面中央付近
-                0.08f, // 文字の大きさ
-                { 1.0f, 1.0f, 1.0f, 1.0f }, // 白色
-                800, 600
-            );
-            drawCount += textLength;
+            // Siv3D風の簡易テキスト描画インターフェース
+            renderer.RenderText("GAME OVER", { -0.35f, 0.0f }, 0.08f, { 1.0f, 1.0f, 1.0f, 1.0f }, drawCount);
+            drawCount += 9;
         } else if (gameStatus == 2) {
             float filter[4] = { 0.9f, 0.8f, 0.1f, 0.25f };
             DrawObjectUI(renderer, 0.0f, 0.0f, 2.0f, 2.0f, filter, drawCount++);

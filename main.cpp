@@ -40,7 +40,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     // ウィンドウを作成
     HWND hwnd = Win32WindowService::Create(
-        hInstance, 800, 600, L"Floppy Disk Shooting Game - Clean Architecture", WindowProc
+        hInstance, 1920, 1080, L"Floppy Disk Shooting Game - Clean Architecture", WindowProc
     );
 
     // ウィンドウの作成に失敗した場合は終了
@@ -53,7 +53,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
 
     // DirectX 12 レンダラーの初期化
     D3D12RenderingService renderer;
-    if (!renderer.Initialize(hwnd, 800, 600)) {
+    if (!renderer.Initialize(hwnd, 1920, 1080)) {
         MessageBox(NULL, L"DirectX 12 Initializing Failed", L"Error", MB_OK);
         return 0;
     }
@@ -66,7 +66,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     app.addScene<TestStage>(SceneType::TestStage);
     
     // 初期シーンの設定
-    app.init(SceneType::TestStage);
+    app.init(SceneType::Title);
     
     // メインループ
     MSG msg = { };

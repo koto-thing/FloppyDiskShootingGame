@@ -38,6 +38,9 @@ public:
     TextRenderingService& GetTextRenderer() { return m_textRenderer; }
     const TextRenderingService& GetTextRenderer() const { return m_textRenderer; }
 
+    // Siv3D風の簡易テキスト描画インターフェース
+    void RenderText(const char* text, DirectX::XMFLOAT2 position, float size, DirectX::XMFLOAT4 color, int index);
+
 private:
     bool InitD3D12(HWND hwnd, int width, int height);
     bool InitPipeline();
@@ -71,4 +74,3 @@ private:
     ComPtr<ID3D12Resource> m_constantBuffer;
     void* m_cbvCpuData;
 };
-
