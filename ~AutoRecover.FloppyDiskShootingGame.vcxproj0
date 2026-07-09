@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="utf-8"?>
+﻿<?xml version="1.0" encoding="utf-8"?>
 <Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup Label="ProjectConfigurations">
     <ProjectConfiguration Include="Debug|Win32">
@@ -144,7 +144,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Infrastructure\ExternalServices\TextRenderingService.cpp" />
-    <ClCompile Include="Infrastructure\ExternalServices\AudioService.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\ソース.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\D3D12RenderingService.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\InputService.cpp" />

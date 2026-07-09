@@ -10,6 +10,7 @@
 #include "Domain/ValueObjects/SceneSharedData.h"
 #include "Domain/ValueObjects/SceneType.h"
 #include "Infrastructure/ExternalServices/Win32WindowService.h"
+#include "Infrastructure/ExternalServices/AudioService.h"
 #include "Infrastructure/ExternalServices/D3D12RenderingService.h"
 #include "Presentation/Scenes/TitleScene.h"
 #include "Presentation/Scenes/TestStage.h"
@@ -57,6 +58,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         MessageBox(NULL, L"DirectX 12 Initializing Failed", L"Error", MB_OK);
         return 0;
     }
+
+    // Audio初期化
+	AudioService audio;
+	if (!audio.Initialize()) {
+		MessageBox(NULL, L"Audio Initializing Failed", L"Error", MB_OK);
+		return 0;
+	}
+
+	audio.Play440HzSound(); //テスト
     
     // シーンマネージャを作成
     SceneManager<SceneType, SceneSharedData> app;
