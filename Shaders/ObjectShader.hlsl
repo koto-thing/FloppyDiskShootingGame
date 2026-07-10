@@ -8,13 +8,12 @@ struct VS_OUTPUT
 
 cbuffer TransformBuffer : register(b0)
 {
-    float3 u_position;
-    float u_pad1;
-    float3 u_size;
-    float u_pad2;
+    float4x4 u_wvpMatrix;
     float4 u_Color;
     float u_time;
-    float u_shapeType; // 0: Plate (XZ面), 1: Cube, 2: Pyramid (戦闘機), 3: Sprite2D (XY面/UI)
+    float u_shapeType;
+    float u_rotAngle;
+    float u_pad1;
 };
 
 // 単位立方体の36頂点 (Triangle List)
@@ -108,28 +107,23 @@ VS_OUTPUT VSMain(uint vID : SV_VertexID)
         normal = float3(0, 0, -1);
     }
 
-    // 3Dスケール
-    float3 worldPos = u_position + localPos * u_size;
+    // 自転処理 (u_rotAngle が有効な場合)
+    if (u_rotAngle > 0.0f) {
+        float s = sin(u_rotAngle);
+        float c = cos(u_rotAngle);
+        float3 rotatedPos = localPos;
+        rotatedPos.x = localPos.x * c - localPos.z * s;
+        rotatedPos.z = localPos.x * s + localPos.z * c;
+        localPos = rotatedPos;
 
-    // C++側ですでにカメラ相対 (View空間) に変換されていることを前提とする
-    float3 viewPos = worldPos;
-
-    float fov = 1.35f;
-    float aspect = 800.0f / 600.0f;
-    float zNear = 0.5f;
-
-    if (viewPos.z <= zNear) {
-        // クリッピング
-        output.pos = float4(0, 0, -10.0, 1.0);
-        output.color = float4(0, 0, 0, 0);
-        return output;
+        float3 rotatedNormal = normal;
+        rotatedNormal.x = normal.x * c - normal.z * s;
+        rotatedNormal.z = normal.x * s + normal.z * c;
+        normal = rotatedNormal;
     }
 
-    // 透視投影
-    output.pos.x = (viewPos.x / viewPos.z) * fov / aspect;
-    output.pos.y = (viewPos.y / viewPos.z) * fov;
-    output.pos.z = saturate((viewPos.z - zNear) / 800.0f);
-    output.pos.w = 1.0f;
+    // WVP行列による座標変換
+    output.pos = mul(float4(localPos, 1.0f), u_wvpMatrix);
 
     // ライト計算 (フラットシェーディング平行光源)
     float3 lightDir = normalize(float3(0.4, 0.8, -0.4));

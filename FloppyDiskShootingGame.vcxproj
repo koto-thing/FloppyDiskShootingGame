@@ -143,6 +143,8 @@
     </Manifest>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Domain\Entities\GameObject.cpp" />
+    <ClCompile Include="Domain\Entities\MeshRenderer.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\TextRenderingService.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\D3D12RenderingService.cpp" />
@@ -150,11 +152,17 @@
     <ClCompile Include="Infrastructure\ExternalServices\Win32WindowService.cpp" />
     <ClCompile Include="Presentation\Scenes\TestStage.cpp" />
     <ClCompile Include="Presentation\Scenes\TitleScene.cpp" />
+    <ClCompile Include="Presentation\TitleScene\TitleSceneColumn.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Domain\Entities\GameObject.h" />
+    <ClInclude Include="Domain\Entities\Component.h" />
+    <ClInclude Include="Domain\Entities\Mesh.h" />
+    <ClInclude Include="Domain\Entities\MeshRenderer.h" />
     <ClInclude Include="Domain\ValueObjects\CharacterASCIIData.h" />
     <ClInclude Include="Domain\ValueObjects\SceneType.h" />
     <ClInclude Include="Domain\ValueObjects\SceneSharedData.h" />
+    <ClInclude Include="Domain\ValueObjects\TransformUtils.h" />
     <ClInclude Include="Infrastructure\ExternalServices\D3D12RenderingService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\InputService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\TextRenderingService.h" />
@@ -163,6 +171,7 @@
     <ClInclude Include="Application\UseCases\SceneManager.h" />
     <ClInclude Include="Presentation\Scenes\TestStage.h" />
     <ClInclude Include="Presentation\Scenes\TitleScene.h" />
+    <ClInclude Include="Presentation\TitleScene\TitleSceneColumn.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include=".agents\AGENTS.md" />
