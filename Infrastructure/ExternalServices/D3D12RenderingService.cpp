@@ -483,6 +483,9 @@ bool D3D12RenderingService::InitPipeline() {
  * フレームの描画を開始する
  */
 void D3D12RenderingService::BeginFrame() {
+    // フレームごとに定数バッファのインデックスをリセット
+    m_constantBufferCursor = 0;
+    
     m_commandAllocator->Reset();
     m_commandList->Reset(m_commandAllocator.Get(), m_pipelineStateObject.Get());
 
@@ -574,21 +577,45 @@ void D3D12RenderingService::SetPipelineState(int type) {
 /**
  * Siv3D風の簡易テキスト描画インターフェース
  */
-void D3D12RenderingService::RenderText(const char* text, DirectX::XMFLOAT2 position, float size, DirectX::XMFLOAT4 color, int index) {
-    if (!text) return;
+void D3D12RenderingService::RenderText(const char* text, DirectX::XMFLOAT2 position, float size, DirectX::XMFLOAT4 color) {
+    if (text == nullptr || text[0] == '\0') {
+        return;
+    }
     
-    // 引数 index に基づいて定数バッファ領域を算出
-    D3D12_GPU_VIRTUAL_ADDRESS cbvGpuAddress = m_constantBuffer->GetGPUVirtualAddress() + index * 256;
-    void* cbvCpuPtr = reinterpret_cast<char*>(m_cbvCpuData) + index * 256;
+    const size_t length = std::strlen(text);
+    
+    // 定数バッファの範囲外アクセスを防止する
+    if (length > MAX_CONSTANT_BUFFER_ELEMENTS - m_constantBufferCursor) {
+        OutputDebugStringA(
+            "RenderText: constant buffer capacity exceeded.\n"
+        );
+        
+        return;
+    }
+    
+    const UINT startIndex = m_constantBufferCursor;
+    
+    D3D12_GPU_VIRTUAL_ADDRESS cbvGpuAddress = 
+        m_constantBuffer->GetGPUVirtualAddress() +
+            static_cast<UINT64>(startIndex) * 256;
+    
+    void* cbvCpuPtr = 
+        reinterpret_cast<char*>(m_cbvCpuData) + 
+            static_cast<size_t>(startIndex) * 256;
     
     m_textRenderer.RenderText(
         m_commandList.Get(),
         cbvGpuAddress,
         cbvCpuPtr,
         text,
-        position.x, position.y,
+        position.x,
+        position.y,
         size,
         color,
-        m_width, m_height
+        m_width,
+        m_height
     );
+    
+    // 次のテキストが使用する位置を自動更新
+    m_constantBufferCursor += static_cast<UINT>(length);
 }

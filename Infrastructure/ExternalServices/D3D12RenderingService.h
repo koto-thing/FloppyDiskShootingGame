@@ -39,7 +39,7 @@ public:
     const TextRenderingService& GetTextRenderer() const { return m_textRenderer; }
 
     // Siv3D風の簡易テキスト描画インターフェース
-    void RenderText(const char* text, DirectX::XMFLOAT2 position, float size, DirectX::XMFLOAT4 color, int index);
+    void RenderText(const char* text, DirectX::XMFLOAT2 position, float size, DirectX::XMFLOAT4 color);
 
 private:
     bool InitD3D12(HWND hwnd, int width, int height);
@@ -68,9 +68,11 @@ private:
     UINT m_frameIndex;
     UINT m_rtvDescriptorSize;
     
-    // フォントレンダラー
+    // --- フォントレンダラー ---
     TextRenderingService m_textRenderer;
 
+    static constexpr UINT MAX_CONSTANT_BUFFER_ELEMENTS = 2048;
+    UINT m_constantBufferCursor = 0;                           // 現在のフレームで次に使用する定数バッファ番号
     ComPtr<ID3D12Resource> m_constantBuffer;
     void* m_cbvCpuData;
 };

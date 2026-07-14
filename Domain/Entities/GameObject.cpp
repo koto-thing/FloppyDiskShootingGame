@@ -1,5 +1,7 @@
 #include "GameObject.h"
 
+#include "../Interfaces/ICollisionReceiver.h"
+
 GameObject::GameObject() 
     : m_position(0.0f, 0.0f, 0.0f),
       m_rotation(0.0f, 0.0f, 0.0f),
@@ -36,6 +38,33 @@ void GameObject::RenderObject(D3D12RenderingService& renderer, const DirectX::XM
     // すべてのコンポーネントの描画処理を呼び出す
     for (auto& component : m_components) {
         component->Render(renderer, viewMatrix, projMatrix);
+    }
+}
+
+void GameObject::NotifyCollisionEnter(Collider& self, Collider& other) {
+    for (auto& component : m_components) {
+        auto* receiver = dynamic_cast<ICollisionReceiver*>(component.get());
+        if (receiver != nullptr) {
+            receiver->OnCollisionEnter(self, other);
+        }
+    }
+}
+
+void GameObject::NotifyCollisionStay(Collider& self, Collider& other) {
+    for (auto& component : m_components) {
+        auto* receiver = dynamic_cast<ICollisionReceiver*>(component.get());
+        if (receiver != nullptr) {
+            receiver->OnCollisionStay(self, other);
+        }
+    }
+}
+
+void GameObject::NotifyCollisionExit(Collider& self, Collider& other) {
+    for (auto& component : m_components) {
+        auto* receiver = dynamic_cast<ICollisionReceiver*>(component.get());
+        if (receiver != nullptr) {
+            receiver->OnCollisionExit(self, other);
+        }
     }
 }
 

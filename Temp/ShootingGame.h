@@ -467,12 +467,12 @@ public:
         if (gameStatus == 1) {
             float filter[4] = { 0.8f, 0.1f, 0.1f, 0.35f };
             DrawObjectUI(renderer, 0.0f, 0.0f, 0.05f, 2.0f, 2.0f, filter, drawCount++);
-            renderer.RenderText("GAME OVER", { -0.35f, 0.0f }, 0.08f, { 1.0f, 1.0f, 1.0f, 1.0f }, drawCount);
+            renderer.RenderText("GAME OVER", { -0.35f, 0.0f }, 0.08f, { 1.0f, 1.0f, 1.0f, 1.0f });
             drawCount += 9;
         } else if (gameStatus == 2) {
             float filter[4] = { 0.9f, 0.8f, 0.1f, 0.25f };
             DrawObjectUI(renderer, 0.0f, 0.0f, 0.05f, 2.0f, 2.0f, filter, drawCount++);
-            renderer.RenderText("STAGE CLEAR!", { -0.4f, 0.0f }, 0.08f, { 1.0f, 1.0f, 1.0f, 1.0f }, drawCount);
+            renderer.RenderText("STAGE CLEAR!", { -0.4f, 0.0f }, 0.08f, { 1.0f, 1.0f, 1.0f, 1.0f });
             drawCount += 12;
         }
 
@@ -481,7 +481,7 @@ public:
             float blink = sin(spawnTimer * 0.3f) * 0.5f + 0.5f;
             DirectX::XMFLOAT4 alertCol = { 1.0f, 0.1f, 0.1f, blink };
             
-            renderer.RenderText("WARNING: DIMENSION SHIFT DETECTED", { -0.55f, 0.3f }, 0.035f, alertCol, drawCount);
+            renderer.RenderText("WARNING: DIMENSION SHIFT DETECTED", { -0.55f, 0.3f }, 0.035f, alertCol);
             drawCount += 35;
 
             const char* modeStr = "PREPARING MODE CHANGE...";
@@ -489,7 +489,7 @@ public:
             else if (nextDimensionMode == 1) modeStr = "PREPARING 2D VERTICAL MODE";
             else if (nextDimensionMode == 2) modeStr = "PREPARING 2D HORIZONTAL MODE";
             
-            renderer.RenderText(modeStr, { -0.35f, 0.1f }, 0.025f, { 1.0f, 1.0f, 1.0f, 1.0f }, drawCount);
+            renderer.RenderText(modeStr, { -0.35f, 0.1f }, 0.025f, { 1.0f, 1.0f, 1.0f, 1.0f });
             drawCount += 25;
         }
     }

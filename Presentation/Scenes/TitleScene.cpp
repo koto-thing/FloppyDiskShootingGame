@@ -29,13 +29,19 @@ void TitleScene::Tick() {
  * @brief タイトルシーンの描画処理
  */
 void TitleScene::Render(D3D12RenderingService& renderer) {
-    int drawCount = 0;
-    
     // 画面上部に "TITLE" と表示
-    renderer.RenderText("FLOPPY DISK SHOOTING GAME", { -0.7f, 0.6f }, 0.04f, { 1.0f, 1.0f, 1.0f, 1.0f }, drawCount);
-    drawCount += 25;
+    renderer.RenderText(
+        "FLOPPY DISK SHOOTING GAME",
+        { -0.7f, 0.6f },
+        0.04f,
+        { 1.0f, 1.0f, 1.0f, 1.0f }
+    );
     
     // 画面下部に "PRESS ENTER TO START" と表示
-    renderer.RenderText("PRESS ENTER TO START", { -0.3f, 0.0f}, 0.02f, { 1.0f, 1.0f, 1.0f, 1.0f }, drawCount);
-    drawCount += 20; 
+    renderer.RenderText(
+        "PRESS ENTER TO START",
+        { -0.3f, 0.0f},
+        0.02f,
+        { 1.0f, 1.0f, 1.0f, 1.0f }
+    );
 }

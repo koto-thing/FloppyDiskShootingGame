@@ -2,6 +2,8 @@
 #include <DirectXMath.h>
 #include <memory>
 #include <vector>
+
+#include "Collider.h"
 #include "Component.h"
 
 class D3D12RenderingService;
@@ -22,6 +24,11 @@ public:
     
     // 描画処理
     virtual void RenderObject(D3D12RenderingService& renderer, const DirectX::XMMATRIX& viewMatrix, const DirectX::XMMATRIX& projMatrix);
+    
+    // 衝突判定
+    void NotifyCollisionEnter(Collider& self, Collider& other);
+    void NotifyCollisionStay(Collider& self, Collider& other);
+    void NotifyCollisionExit(Collider& self, Collider& other);
     
     // セッター
     void SetPosition(const DirectX::XMFLOAT3& position) { m_position = position; m_isDirty = true; }
