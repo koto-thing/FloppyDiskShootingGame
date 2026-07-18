@@ -1,5 +1,8 @@
 ﻿#include "CollisionService.h"
 
+#include <algorithm>
+#include <cmath>
+
 void CollisionService::RegisterCollider(const std::shared_ptr<Collider>& collider) {
     if (!collider) {
         return;
@@ -87,34 +90,90 @@ bool CollisionService::CheckCollision(const Collider& a,const Collider& b) const
     if (a.GetColliderType() == ColliderType::CIRCLE &&
         b.GetColliderType() == ColliderType::CIRCLE) {
         return CheckCircleCircle(
-            static_cast<const CircleColliderComponent&>(a),
-            static_cast<const CircleColliderComponent&>(b)
+            static_cast<const CircleCollider&>(a),
+            static_cast<const CircleCollider&>(b)
         );
     }
 
     if (a.GetColliderType() == ColliderType::AABB &&
         b.GetColliderType() == ColliderType::AABB) {
         return CheckAABBAABB(
-            static_cast<const AABBColliderComponent&>(a),
-            static_cast<const AABBColliderComponent&>(b)
+            static_cast<const AABBCollider&>(a),
+            static_cast<const AABBCollider&>(b)
         );
     }
 
     if (a.GetColliderType() == ColliderType::CIRCLE &&
         b.GetColliderType() == ColliderType::AABB) {
         return CheckCircleAABB(
-            static_cast<const CircleColliderComponent&>(a),
-            static_cast<const AABBColliderComponent&>(b)
+            static_cast<const CircleCollider&>(a),
+            static_cast<const AABBCollider&>(b)
         );
     }
 
     if (a.GetColliderType() == ColliderType::AABB &&
         b.GetColliderType() == ColliderType::CIRCLE) {
         return CheckCircleAABB(
-            static_cast<const CircleColliderComponent&>(b),
-            static_cast<const AABBColliderComponent&>(a)
+            static_cast<const CircleCollider&>(b),
+            static_cast<const AABBCollider&>(a)
         );
     }
 
     return false;
+}
+
+bool CollisionService::CheckCircleCircle(
+    const CircleCollider& a,
+    const CircleCollider& b
+) const {
+    const auto aPosition = a.GetWorldPosition();
+    const auto bPosition = b.GetWorldPosition();
+    const float deltaX = aPosition.x - bPosition.x;
+    const float deltaY = aPosition.y - bPosition.y;
+    const float radiusSum = std::abs(a.GetWorldRadius()) +
+                            std::abs(b.GetWorldRadius());
+
+    return deltaX * deltaX + deltaY * deltaY <= radiusSum * radiusSum;
+}
+
+bool CollisionService::CheckAABBAABB(
+    const AABBCollider& a,
+    const AABBCollider& b
+) const {
+    const auto aPosition = a.GetWorldPosition();
+    const auto bPosition = b.GetWorldPosition();
+    const auto aHalfSize = a.GetWorldHalfSize();
+    const auto bHalfSize = b.GetWorldHalfSize();
+
+    return std::abs(aPosition.x - bPosition.x) <=
+               std::abs(aHalfSize.x) + std::abs(bHalfSize.x) &&
+           std::abs(aPosition.y - bPosition.y) <=
+               std::abs(aHalfSize.y) + std::abs(bHalfSize.y);
+}
+
+bool CollisionService::CheckCircleAABB(
+    const CircleCollider& circle,
+    const AABBCollider& aabb
+) const {
+    const auto circlePosition = circle.GetWorldPosition();
+    const auto boxPosition = aabb.GetWorldPosition();
+    const auto halfSize = aabb.GetWorldHalfSize();
+    const float halfWidth = std::abs(halfSize.x);
+    const float halfHeight = std::abs(halfSize.y);
+    const float radius = std::abs(circle.GetWorldRadius());
+
+    const float closestX = std::clamp(
+        circlePosition.x,
+        boxPosition.x - halfWidth,
+        boxPosition.x + halfWidth
+    );
+    const float closestY = std::clamp(
+        circlePosition.y,
+        boxPosition.y - halfHeight,
+        boxPosition.y + halfHeight
+    );
+    const float deltaX = circlePosition.x - closestX;
+    const float deltaY = circlePosition.y - closestY;
+
+    return deltaX * deltaX + deltaY * deltaY <= radius * radius;
 }

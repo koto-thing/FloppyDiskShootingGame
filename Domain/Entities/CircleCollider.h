@@ -22,7 +22,7 @@ public:
      * @brief コライダーの半径を取得する
      * @return 半径
      */
-    float GetRadius() {
+    float GetRadius() const {
         return m_radius;
     }
 

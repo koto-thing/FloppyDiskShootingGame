@@ -3,5 +3,6 @@
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>
+  <Project Path="FloppyEngine.vcxproj" Id="f74a5c71-516b-4f98-a533-c663e20e93de" />
   <Project Path="FloppyDiskShootingGame.vcxproj" Id="a20952db-394a-4ea0-b057-62888d1e400f" />
 </Solution>

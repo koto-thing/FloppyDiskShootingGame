@@ -7,7 +7,7 @@
 
 class Collider : public Component {
 public:
-    explicit Collider(CollisionType type)
+    explicit Collider(ColliderType type)
         : m_type(type) {
         
     }

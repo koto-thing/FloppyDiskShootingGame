@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{7045BEEB-D8BE-49B5-9A61-3597FEC97D3D}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{27782FC1-AF71-4FC6-B4F1-D63CB024F793}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;inl</Extensions>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Domain\Entities\GameObject.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Domain\Entities\MeshRenderer.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Domain\ValueObjects\CollisionLayer.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Infrastructure\ExternalServices\D3D12RenderingService.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Infrastructure\ExternalServices\InputService.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Infrastructure\ExternalServices\TextRenderingService.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Infrastructure\ExternalServices\Win32WindowService.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Infrastructure\Services\CollisionService.cpp"><Filter>Source Files</Filter></ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Application\Interfaces\IScene.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Application\UseCases\SceneManager.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Domain\Entities\AABBCollider.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Domain\Entities\CircleCollider.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Domain\Entities\Collider.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Domain\Entities\Component.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Domain\Entities\GameObject.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Domain\Entities\Mesh.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Domain\Entities\MeshRenderer.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Domain\Interfaces\ICollisionReceiver.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Domain\ValueObjects\CharacterASCIIData.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Domain\ValueObjects\ColliderType.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Domain\ValueObjects\CollisionLayer.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Domain\ValueObjects\TransformUtils.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Infrastructure\ExternalServices\D3D12RenderingService.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Infrastructure\ExternalServices\InputService.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Infrastructure\ExternalServices\TextRenderingService.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Infrastructure\ExternalServices\Win32WindowService.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Infrastructure\Services\CollisionService.h"><Filter>Header Files</Filter></ClInclude>
+  </ItemGroup>
+</Project>

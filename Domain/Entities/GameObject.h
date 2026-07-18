@@ -3,10 +3,10 @@
 #include <memory>
 #include <vector>
 
-#include "Collider.h"
 #include "Component.h"
 
 class D3D12RenderingService;
+class Collider;
 
 /**
  * @brief ゲームオブジェクトの基底クラス (Unity風コンポーネントシステム)

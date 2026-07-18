@@ -4,6 +4,8 @@
 #include <vector>
 
 #include "../../Domain/Entities/Collider.h"
+#include "../../Domain/Entities/CircleCollider.h"
+#include "../../Domain/Entities/AABBCollider.h"
 
 class CollisionService {
 public:
@@ -16,6 +18,9 @@ public:
 private:
     bool CanCollide(const Collider& a, const Collider& b) const;
     bool CheckCollision(const Collider& a, const Collider& b) const;
+    bool CheckCircleCircle(const CircleCollider& a, const CircleCollider& b) const;
+    bool CheckAABBAABB(const AABBCollider& a, const AABBCollider& b) const;
+    bool CheckCircleAABB(const CircleCollider& circle, const AABBCollider& aabb) const;
     
     std::vector<std::weak_ptr<Collider>> m_colliders;
 };
