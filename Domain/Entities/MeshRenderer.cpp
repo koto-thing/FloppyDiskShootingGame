@@ -24,10 +24,14 @@ MeshRenderer::~MeshRenderer() {
     }
 }
 
+/**
+ * @brief MeshRenderer を初期化する
+ * @param renderer D3D12RenderingService の参照
+ */
 void MeshRenderer::Initialize(D3D12RenderingService& renderer) {
     ID3D12Device* device = renderer.GetDevice();
     if (!device) return;
-
+    
     D3D12_HEAP_PROPERTIES heapProps = {};
     heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
 

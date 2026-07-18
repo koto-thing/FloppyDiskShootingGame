@@ -10,11 +10,19 @@ public:
           m_halfSize(halfSize) {
         
     }
-    
+
+    /**
+     * @brief コライダーの半サイズを設定する
+     * @param halfSize 半サイズ (X方向, Y方向)
+     */
     void SetHalfSize(const DirectX::XMFLOAT2& halfSize) {
         m_halfSize = halfSize;
     }
     
+    /**
+     * @brief ワールド空間におけるコライダーの半サイズを取得する
+     * @return ワールド空間における半サイズ (X方向, Y方向)
+     */
     DirectX::XMFLOAT2 GetWorldHalfSize() const {
         if (m_gameObject == nullptr) {
             return m_halfSize;

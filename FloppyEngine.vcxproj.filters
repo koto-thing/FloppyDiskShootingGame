@@ -11,6 +11,7 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="Engine\Diagnostics\Debug.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="Domain\Entities\GameObject.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="Domain\Entities\MeshRenderer.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="Domain\ValueObjects\CollisionLayer.cpp"><Filter>Source Files</Filter></ClCompile>
@@ -21,6 +22,7 @@
     <ClCompile Include="Infrastructure\Services\CollisionService.cpp"><Filter>Source Files</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Engine\Diagnostics\Debug.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="Application\Interfaces\IScene.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="Application\UseCases\SceneManager.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="Domain\Entities\AABBCollider.h"><Filter>Header Files</Filter></ClInclude>

@@ -6,6 +6,7 @@
 #endif
 
 #include <windows.h>
+#include "Engine/Diagnostics/Debug.h"
 #include "Application/UseCases/SceneManager.h"
 #include "Domain/ValueObjects/SceneSharedData.h"
 #include "Domain/ValueObjects/SceneType.h"
@@ -38,6 +39,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
  * @return 
  */
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
+    Debug::Initialize();
+    Debug::Log("Application starting");
+
     // ウィンドウを作成
     HWND hwnd = Win32WindowService::Create(
         hInstance, 1920, 1080, L"Floppy Disk Shooting Game - Clean Architecture", WindowProc
@@ -45,6 +49,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
 
     // ウィンドウの作成に失敗した場合は終了
     if (hwnd == nullptr) {
+        Debug::LogError("Window creation failed");
+        Debug::Shutdown();
         return 0;
     }
 
@@ -54,7 +60,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     // DirectX 12 レンダラーの初期化
     D3D12RenderingService renderer;
     if (!renderer.Initialize(hwnd, 1920, 1080)) {
+        Debug::LogError("DirectX 12 initialization failed");
         MessageBox(NULL, L"DirectX 12 Initializing Failed", L"Error", MB_OK);
+        Debug::Shutdown();
         return 0;
     }
     
@@ -86,5 +94,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     }
 
     renderer.Cleanup();
+    Debug::Log("Application shutting down");
+    Debug::Shutdown();
     return 0;
 }

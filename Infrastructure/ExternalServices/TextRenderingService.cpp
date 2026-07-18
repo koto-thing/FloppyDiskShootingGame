@@ -3,6 +3,7 @@
 #include <string>
 
 #include "TextRenderingService.h"
+#include "../../Engine/Diagnostics/Debug.h"
 #include "../../Domain/ValueObjects/CharacterASCIIData.h"
 
 // 埋め込みシェーダーコード (Typed Bufferからフォントを読み込む)
@@ -173,7 +174,7 @@ bool TextRenderingService::InitPipeline(ID3D12Device* device, DXGI_FORMAT rtvFor
     ComPtr<ID3DBlob> errorBlob;
     if (FAILED(D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1, &serializedRootSig, &errorBlob))) {
         if (errorBlob) {
-            OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+            Debug::LogError(static_cast<const char*>(errorBlob->GetBufferPointer()));
         }
         return false;
     }

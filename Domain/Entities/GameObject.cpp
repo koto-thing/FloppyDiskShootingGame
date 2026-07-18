@@ -15,6 +15,10 @@ GameObject::~GameObject() {
     m_components.clear();
 }
 
+/**
+ * @brief GameObject とそのコンポーネントを初期化する
+ * @param renderer D3D12RenderingService の参照
+ */
 void GameObject::Initialize(D3D12RenderingService& renderer) {
     m_renderer = &renderer;
     
@@ -24,6 +28,9 @@ void GameObject::Initialize(D3D12RenderingService& renderer) {
     }
 }
 
+/**
+ * @brief GameObject とそのコンポーネントを更新する
+ */
 void GameObject::UpdateObject() {
     // ワールド行列の更新を確定
     GetWorldMatrix();
@@ -34,6 +41,12 @@ void GameObject::UpdateObject() {
     }
 }
 
+/**
+ * @brief GameObject とそのコンポーネントを描画する
+ * @param renderer D3D12RenderingService の参照
+ * @param viewMatrix ビュー行列
+ * @param projMatrix プロジェクション行列
+ */
 void GameObject::RenderObject(D3D12RenderingService& renderer, const DirectX::XMMATRIX& viewMatrix, const DirectX::XMMATRIX& projMatrix) {
     // すべてのコンポーネントの描画処理を呼び出す
     for (auto& component : m_components) {
@@ -41,6 +54,11 @@ void GameObject::RenderObject(D3D12RenderingService& renderer, const DirectX::XM
     }
 }
 
+/**
+ * @brief 衝突イベントをコンポーネントに通知する
+ * @param self 衝突したコライダー自身
+ * @param other 衝突した相手のコライダー
+ */
 void GameObject::NotifyCollisionEnter(Collider& self, Collider& other) {
     for (auto& component : m_components) {
         auto* receiver = dynamic_cast<ICollisionReceiver*>(component.get());
@@ -50,6 +68,11 @@ void GameObject::NotifyCollisionEnter(Collider& self, Collider& other) {
     }
 }
 
+/**
+ * @brief 衝突中のイベントをコンポーネントに通知する
+ * @param self 衝突中のコライダー自身
+ * @param other 衝突中の相手のコライダー
+ */
 void GameObject::NotifyCollisionStay(Collider& self, Collider& other) {
     for (auto& component : m_components) {
         auto* receiver = dynamic_cast<ICollisionReceiver*>(component.get());
@@ -59,6 +82,11 @@ void GameObject::NotifyCollisionStay(Collider& self, Collider& other) {
     }
 }
 
+/**
+ * @brief 衝突終了のイベントをコンポーネントに通知する
+ * @param self 衝突終了したコライダー自身
+ * @param other 衝突終了した相手のコライダー
+ */
 void GameObject::NotifyCollisionExit(Collider& self, Collider& other) {
     for (auto& component : m_components) {
         auto* receiver = dynamic_cast<ICollisionReceiver*>(component.get());
@@ -68,6 +96,10 @@ void GameObject::NotifyCollisionExit(Collider& self, Collider& other) {
     }
 }
 
+/**
+ * @brief ワールド行列を取得する。必要に応じて更新される。
+ * @return ワールド行列 (DirectX::XMMATRIX)
+ */
 const DirectX::XMMATRIX& GameObject::GetWorldMatrix() {
     if (m_isDirty) {
         UpdateWorldMatrix();
@@ -75,6 +107,9 @@ const DirectX::XMMATRIX& GameObject::GetWorldMatrix() {
     return m_worldMatrix;
 }
 
+/**
+ * @brief ワールド行列を更新する。位置、回転、スケールの変更があった場合に呼び出される。
+ */
 void GameObject::UpdateWorldMatrix() {
     DirectX::XMMATRIX translation = DirectX::XMMatrixTranslation(m_position.x, m_position.y, m_position.z);
     

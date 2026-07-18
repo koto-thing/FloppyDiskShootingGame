@@ -1,4 +1,5 @@
 #include "D3D12RenderingService.h"
+#include "../../Engine/Diagnostics/Debug.h"
 #include <cstdio>
 #include <vector>
 
@@ -39,10 +40,12 @@ bool D3D12RenderingService::Initialize(HWND hwnd, int width, int height) {
     m_height = height;
 
     if (!InitD3D12(hwnd, width, height)) {
+        Debug::LogError("D3D12RenderingService::InitD3D12 failed");
         MessageBoxA(NULL, "D3D12Renderer::Initialize - InitD3D12 Failed!", "Error", MB_OK);
         return false;
     }
     if (!InitPipeline()) {
+        Debug::LogError("D3D12RenderingService::InitPipeline failed");
         MessageBoxA(NULL, "D3D12Renderer::Initialize - InitPipeline Failed!", "Error", MB_OK);
         return false;
     }
@@ -54,6 +57,7 @@ bool D3D12RenderingService::Initialize(HWND hwnd, int width, int height) {
     }
 
     if (!m_textRenderer.Initialize(m_device.Get(), rtvFormat)) {
+        Debug::LogError("TextRenderingService::Initialize failed");
         MessageBoxA(NULL, "D3D12Renderer::Initialize - m_textRenderer.Initialize Failed!", "Error", MB_OK);
         return false;
     }
@@ -143,6 +147,7 @@ bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
         }
     }
     if (FAILED(hr)) {
+        Debug::LogHResult("D3D12CreateDevice failed for hardware and WARP adapters", hr);
         MessageBoxA(NULL, "D3D12CreateDevice Failed (Hardware & WARP)", "Error", MB_OK);
         return false;
     }
@@ -586,9 +591,7 @@ void D3D12RenderingService::RenderText(const char* text, DirectX::XMFLOAT2 posit
     
     // 定数バッファの範囲外アクセスを防止する
     if (length > MAX_CONSTANT_BUFFER_ELEMENTS - m_constantBufferCursor) {
-        OutputDebugStringA(
-            "RenderText: constant buffer capacity exceeded.\n"
-        );
+        Debug::LogWarning("RenderText: constant buffer capacity exceeded");
         
         return;
     }

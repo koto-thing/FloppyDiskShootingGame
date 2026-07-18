@@ -82,6 +82,7 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Engine\Diagnostics\Debug.cpp" />
     <ClCompile Include="Domain\Entities\GameObject.cpp" />
     <ClCompile Include="Domain\Entities\MeshRenderer.cpp" />
     <ClCompile Include="Domain\ValueObjects\CollisionLayer.cpp" />
@@ -92,6 +93,7 @@
     <ClCompile Include="Infrastructure\Services\CollisionService.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Engine\Diagnostics\Debug.h" />
     <ClInclude Include="Application\Interfaces\IScene.h" />
     <ClInclude Include="Application\UseCases\SceneManager.h" />
     <ClInclude Include="Domain\Entities\AABBCollider.h" />
