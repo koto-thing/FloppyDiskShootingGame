@@ -7,6 +7,7 @@
 
 #include <windows.h>
 #include "Engine/Diagnostics/Debug.h"
+#include "Engine/Time/Time.h"
 #include "Application/UseCases/SceneManager.h"
 #include "Domain/ValueObjects/SceneSharedData.h"
 #include "Domain/ValueObjects/SceneType.h"
@@ -75,22 +76,44 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     
     // 初期シーンの設定
     app.init(SceneType::Title);
+
+    // 初期化処理にかかった時間をゲーム時間へ含めない
+    Time::Initialize();
     
     // メインループ
     MSG msg = { };
     while (msg.message != WM_QUIT) {
-        if (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
-        else {
-            app.ProcessInput();
-            app.Tick();
-            
-            renderer.BeginFrame();
-            app.Render(renderer);
-            renderer.EndFrame();
+
+        if (msg.message == WM_QUIT) {
+            break;
         }
+
+        Time::BeginFrame();
+
+        app.ProcessInput();
+
+        constexpr int maxFixedStepsPerFrame = 8;
+        int fixedStepCount = 0;
+
+        while (Time::HasFixedStep() &&
+               fixedStepCount < maxFixedStepsPerFrame) {
+            Time::ConsumeFixedStep();
+            app.Tick();
+            ++fixedStepCount;
+        }
+
+        if (fixedStepCount >= maxFixedStepsPerFrame &&
+            Time::HasFixedStep()) {
+            Time::DiscardExcessFixedTime();
+        }
+
+        renderer.BeginFrame();
+        app.Render(renderer);
+        renderer.EndFrame();
     }
 
     renderer.Cleanup();
