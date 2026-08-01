@@ -18,7 +18,7 @@
   * ValueObjects：ゲーム内の座標や速度などの値を定義
 
 ### Infrastructureレイヤー
-`* 外部APIやゲームの動作に直接関係ないGraphicsAPIなどを実装する。
+* 外部APIやゲームの動作に直接関係ないGraphicsAPIなどを実装する。
   * Repositories：データの永続化や取得を行う
   * ExternalServices：外部APIの呼び出し
 
