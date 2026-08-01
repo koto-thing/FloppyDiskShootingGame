@@ -56,6 +56,7 @@ bool D3D12RenderingService::Initialize(HWND hwnd, int width, int height) {
         rtvFormat = m_renderTargets[0]->GetDesc().Format;
     }
 
+    // テキストレンダリングサービスの初期化
     if (!m_textRenderer.Initialize(m_device.Get(), rtvFormat)) {
         Debug::LogError("TextRenderingService::Initialize failed");
         MessageBoxA(NULL, "D3D12Renderer::Initialize - m_textRenderer.Initialize Failed!", "Error", MB_OK);
@@ -622,3 +623,4 @@ void D3D12RenderingService::RenderText(const char* text, DirectX::XMFLOAT2 posit
     // 次のテキストが使用する位置を自動更新
     m_constantBufferCursor += static_cast<UINT>(length);
 }
+
