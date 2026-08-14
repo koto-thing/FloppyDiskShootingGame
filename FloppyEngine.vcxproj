@@ -86,6 +86,8 @@
     <ClCompile Include="Domain\Entities\GameObject.cpp" />
     <ClCompile Include="Domain\Entities\MeshRenderer.cpp" />
     <ClCompile Include="Domain\ValueObjects\CollisionLayer.cpp" />
+    <ClCompile Include="Engine\Input\Input.cpp" />
+    <ClCompile Include="Engine\Input\WindowsInputBackend.cpp" />
     <ClCompile Include="Engine\Time\Time.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\D3D12RenderingService.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\InputService.cpp" />
@@ -109,6 +111,11 @@
     <ClInclude Include="Domain\ValueObjects\ColliderType.h" />
     <ClInclude Include="Domain\ValueObjects\CollisionLayer.h" />
     <ClInclude Include="Domain\ValueObjects\TransformUtils.h" />
+    <ClInclude Include="Engine\Input\Input.h" />
+    <ClInclude Include="Engine\Input\KeyCode.h" />
+    <ClInclude Include="Engine\Input\MouseButton.h" />
+    <ClInclude Include="Engine\Input\Vector2.h" />
+    <ClInclude Include="Engine\Input\WindowsInputBackend.h" />
     <ClInclude Include="Engine\Time\Time.h" />
     <ClInclude Include="Infrastructure\ExternalServices\D3D12RenderingService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\InputService.h" />

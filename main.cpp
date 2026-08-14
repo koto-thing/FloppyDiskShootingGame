@@ -7,6 +7,7 @@
 
 #include <windows.h>
 #include "Engine/Diagnostics/Debug.h"
+#include "Engine/Input/Input.h"
 #include "Engine/Time/Time.h"
 #include "Application/UseCases/SceneManager.h"
 #include "Domain/ValueObjects/SceneSharedData.h"
@@ -25,6 +26,9 @@
  * @return 
  */
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
+    // すべてのウィンドウメッセージを入力システムへ通知する
+    Input::ProcessMessage(uMsg, wParam, lParam);
+
     switch (uMsg) {
         case WM_DESTROY:
             PostQuitMessage(0);
@@ -51,6 +55,14 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     // ウィンドウの作成に失敗した場合は終了
     if (hwnd == nullptr) {
         Debug::LogError("Window creation failed");
+        Debug::Shutdown();
+        return 0;
+    }
+
+    // ウィンドウへキーボードとマウスのRaw Inputを登録する
+    if (!Input::Initialize(hwnd)) {
+        Debug::LogError("Input initialization failed");
+        DestroyWindow(hwnd);
         Debug::Shutdown();
         return 0;
     }
@@ -83,6 +95,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     // メインループ
     MSG msg = { };
     while (msg.message != WM_QUIT) {
+        // 前フレームの状態を保存して新しい入力の受付を開始する
+        Input::Update();
+
         while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
             DispatchMessage(&msg);
