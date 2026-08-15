@@ -6,7 +6,7 @@
 
 #include "KeyCode.h"
 #include "MouseButton.h"
-#include "Vector2.h"
+#include "../Math/Vector2.h"
 
 class WindowsInputBackend;
 

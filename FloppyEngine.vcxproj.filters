@@ -42,8 +42,13 @@
     <ClInclude Include="Engine\Input\Input.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="Engine\Input\KeyCode.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="Engine\Input\MouseButton.h"><Filter>Header Files</Filter></ClInclude>
-    <ClInclude Include="Engine\Input\Vector2.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="Engine\Input\WindowsInputBackend.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Engine\Math\Math.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Engine\Math\Matrix4x4.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Engine\Math\Quaternion.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Engine\Math\Vector2.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Engine\Math\Vector3.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Engine\Math\Vector4.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="Infrastructure\ExternalServices\D3D12RenderingService.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="Infrastructure\ExternalServices\InputService.h"><Filter>Header Files</Filter></ClInclude>
     <ClInclude Include="Infrastructure\ExternalServices\TextRenderingService.h"><Filter>Header Files</Filter></ClInclude>
