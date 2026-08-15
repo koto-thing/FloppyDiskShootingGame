@@ -1,4 +1,5 @@
 #include "../Engine/Time/Time.h"
+#include "../Engine/Math/Quaternion.h"
 
 #include <chrono>
 #include <cmath>
@@ -105,6 +106,58 @@ void FixedStepConsumesAccumulatedTime()
             "Interpolation alpha must be in the range [0, 1]");
 }
 
+/**
+ * @brief ベクトルの基本演算とゼロベクトルの正規化を検証する
+ */
+void VectorOperationsProduceExpectedResults()
+{
+    const Vector3 a{1.0f, 2.0f, 3.0f};
+    const Vector3 b{4.0f, 5.0f, 6.0f};
+
+    Require(Vector3::Dot(a, b) == 32.0f, "Vector3 dot product must match");
+    Require(Vector3::Cross(Vector3::Right, Vector3::Up) == Vector3::Forward,
+            "Vector3 cross product must follow the right-handed rule");
+    Require(Vector3::Zero.Normalized() == Vector3::Zero,
+            "Normalizing zero must remain zero");
+}
+
+/**
+ * @brief 行列の座標変換と逆行列を検証する
+ */
+void MatrixOperationsProduceExpectedResults()
+{
+    const Matrix4x4 transform =
+        Matrix4x4::Translation({2.0f, 3.0f, 4.0f}) *
+        Matrix4x4::Scale({2.0f, 2.0f, 2.0f});
+    const Vector3 transformed = transform.TransformPoint({1.0f, 1.0f, 1.0f});
+
+    RequireNear(transformed.x, 4.0f, 0.0001f, "Matrix transform x must match");
+    RequireNear(transformed.y, 5.0f, 0.0001f, "Matrix transform y must match");
+    RequireNear(transformed.z, 6.0f, 0.0001f, "Matrix transform z must match");
+
+    Matrix4x4 inverse;
+    Require(transform.TryInverse(inverse), "Invertible matrix must produce an inverse");
+    const Vector3 restored = inverse.TransformPoint(transformed);
+    RequireNear(restored.x, 1.0f, 0.0001f, "Inverse transform x must match");
+    RequireNear(restored.y, 1.0f, 0.0001f, "Inverse transform y must match");
+    RequireNear(restored.z, 1.0f, 0.0001f, "Inverse transform z must match");
+}
+
+/**
+ * @brief クォータニオンの回転と球面線形補間を検証する
+ */
+void QuaternionOperationsProduceExpectedResults()
+{
+    const Quaternion rotation = Quaternion::FromAxisAngle(Vector3::Up, Math::HalfPi);
+    const Vector3 rotated = rotation.Rotate(Vector3::Forward);
+
+    RequireNear(rotated.x, 1.0f, 0.0001f, "Quaternion rotation x must match");
+    RequireNear(rotated.z, 0.0f, 0.0001f, "Quaternion rotation z must match");
+
+    const Quaternion halfway = Quaternion::Slerp(Quaternion::Identity, rotation, 0.5f);
+    RequireNear(halfway.Length(), 1.0f, 0.0001f, "Slerp result must remain normalized");
+}
+
 } // namespace
 
 int main()
@@ -114,6 +167,9 @@ int main()
         BeginFrameUpdatesScaledAndUnscaledTime();
         PauseStopsScaledTimeButNotUnscaledTime();
         FixedStepConsumesAccumulatedTime();
+        VectorOperationsProduceExpectedResults();
+        MatrixOperationsProduceExpectedResults();
+        QuaternionOperationsProduceExpectedResults();
     } catch (const std::exception& exception) {
         std::cerr << "TimeTests failed: " << exception.what() << '\n';
         return 1;

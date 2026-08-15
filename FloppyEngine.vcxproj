@@ -114,8 +114,13 @@
     <ClInclude Include="Engine\Input\Input.h" />
     <ClInclude Include="Engine\Input\KeyCode.h" />
     <ClInclude Include="Engine\Input\MouseButton.h" />
-    <ClInclude Include="Engine\Input\Vector2.h" />
     <ClInclude Include="Engine\Input\WindowsInputBackend.h" />
+    <ClInclude Include="Engine\Math\Math.h" />
+    <ClInclude Include="Engine\Math\Matrix4x4.h" />
+    <ClInclude Include="Engine\Math\Quaternion.h" />
+    <ClInclude Include="Engine\Math\Vector2.h" />
+    <ClInclude Include="Engine\Math\Vector3.h" />
+    <ClInclude Include="Engine\Math\Vector4.h" />
     <ClInclude Include="Engine\Time\Time.h" />
     <ClInclude Include="Infrastructure\ExternalServices\D3D12RenderingService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\InputService.h" />
