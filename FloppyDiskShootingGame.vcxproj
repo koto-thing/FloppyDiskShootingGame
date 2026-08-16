@@ -145,6 +145,8 @@
   <ItemGroup>
     <ClCompile Include="Infrastructure\ExternalServices\TextRenderingService.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\AudioService.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\MMLParser.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\SynthWaveGenerator.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\D3D12RenderingService.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\InputService.cpp" />
@@ -157,6 +159,8 @@
     <ClInclude Include="Domain\ValueObjects\SceneType.h" />
     <ClInclude Include="Domain\ValueObjects\SceneSharedData.h" />
     <ClInclude Include="Infrastructure\ExternalServices\AudioService.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\MMLParser.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\SynthWaveGenerator.h" />
     <ClInclude Include="Infrastructure\ExternalServices\D3D12RenderingService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\InputService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\TextRenderingService.h" />
@@ -189,5 +193,9 @@
   </ImportGroup>
   <Target Name="CopyShaders" AfterTargets="AfterBuild">
     <Copy SourceFiles="Shaders\ObjectShader.hlsl;Shaders\BackgroundShader.hlsl;Shaders\SpellCircleShader.hlsl;Shaders\TextShader.hlsl" DestinationFolder="$(OutDir)Shaders" SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyMML" AfterTargets="AfterBuild">
+    <Copy SourceFiles="u.n.owen.mml" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('u.n.owen.mml')" />
+    <Copy SourceFiles="test.mml" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('test.mml')" />
   </Target>
 </Project>
