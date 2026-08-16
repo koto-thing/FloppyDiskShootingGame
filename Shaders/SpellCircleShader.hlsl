@@ -7,13 +7,12 @@ struct VS_OUTPUT
 
 cbuffer TransformBuffer : register(b0)
 {
-    float3 u_position;
-    float u_pad1;
-    float3 u_size;
-    float u_pad2;
+    float4x4 u_wvpMatrix;
     float4 u_Color;
     float u_time;
     float u_shapeType;
+    float u_rotAngle;
+    float u_pad1;
 };
 
 // SFレトロレーダー / 照準HUDエフェクト

@@ -7,13 +7,12 @@ struct VS_OUTPUT
 
 cbuffer TransformBuffer : register(b0)
 {
-    float3 u_position;
-    float u_pad1;
-    float3 u_size;
-    float u_pad2;
+    float4x4 u_wvpMatrix;
     float4 u_Color;
     float u_time;
     float u_shapeType;
+    float u_rotAngle;
+    float u_pad1;
 };
 
 float hash(float2 p)
@@ -37,7 +36,7 @@ float4 PSBackground(VS_OUTPUT input) : SV_TARGET
     {
         float2 starUV = uv * (layer * 4.0);
         // カメラの左右移動 (u_position.x 等で間接的にスクロールさせる)
-        starUV.x += u_position.x * 0.0005 * layer; // 視差効果
+        starUV.x += u_Color.r * 0.0005 * layer; // 視差効果
         starUV.y += u_time * 0.002 * layer; // ゆっくり流れる
         
         float2 ipos = floor(starUV);

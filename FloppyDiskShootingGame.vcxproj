@@ -70,6 +70,9 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup>
+    <IntDir>$(Platform)\$(Configuration)\$(ProjectName)\</IntDir>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -148,16 +151,13 @@
     <ClCompile Include="Infrastructure\ExternalServices\MMLParser.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\SynthWaveGenerator.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="Infrastructure\ExternalServices\D3D12RenderingService.cpp" />
-    <ClCompile Include="Infrastructure\ExternalServices\InputService.cpp" />
-    <ClCompile Include="Infrastructure\ExternalServices\Win32WindowService.cpp" />
     <ClCompile Include="Presentation\Scenes\TestStage.cpp" />
     <ClCompile Include="Presentation\Scenes\TitleScene.cpp" />
+    <ClCompile Include="Presentation\TitleScene\TitleSceneColumn.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Domain\ValueObjects\CharacterASCIIData.h" />
-    <ClInclude Include="Domain\ValueObjects\SceneType.h" />
     <ClInclude Include="Domain\ValueObjects\SceneSharedData.h" />
+    <ClInclude Include="Domain\ValueObjects\SceneType.h" />
     <ClInclude Include="Infrastructure\ExternalServices\AudioService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\MMLParser.h" />
     <ClInclude Include="Infrastructure\ExternalServices\SynthWaveGenerator.h" />
@@ -169,6 +169,16 @@
     <ClInclude Include="Application\UseCases\SceneManager.h" />
     <ClInclude Include="Presentation\Scenes\TestStage.h" />
     <ClInclude Include="Presentation\Scenes\TitleScene.h" />
+    <ClInclude Include="Presentation\TitleScene\TitleSceneColumn.h" />
+    <ClInclude Include="Temp\Bullet.h" />
+    <ClInclude Include="Temp\Enemy.h" />
+    <ClInclude Include="Temp\Player.h" />
+    <ClInclude Include="Temp\ShootingGame.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="FloppyEngine.vcxproj">
+      <Project>{f74a5c71-516b-4f98-a533-c663e20e93de}</Project>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <None Include=".agents\AGENTS.md" />
@@ -195,7 +205,6 @@
     <Copy SourceFiles="Shaders\ObjectShader.hlsl;Shaders\BackgroundShader.hlsl;Shaders\SpellCircleShader.hlsl;Shaders\TextShader.hlsl" DestinationFolder="$(OutDir)Shaders" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="CopyMML" AfterTargets="AfterBuild">
-    <Copy SourceFiles="u.n.owen.mml" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('u.n.owen.mml')" />
     <Copy SourceFiles="test.mml" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('test.mml')" />
   </Target>
 </Project>

@@ -3,6 +3,7 @@
 #include <string>
 
 #include "TextRenderingService.h"
+#include "../../Engine/Diagnostics/Debug.h"
 #include "../../Domain/ValueObjects/CharacterASCIIData.h"
 
 // 埋め込みシェーダーコード (Typed Bufferからフォントを読み込む)
@@ -173,7 +174,7 @@ bool TextRenderingService::InitPipeline(ID3D12Device* device, DXGI_FORMAT rtvFor
     ComPtr<ID3DBlob> errorBlob;
     if (FAILED(D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1, &serializedRootSig, &errorBlob))) {
         if (errorBlob) {
-            OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+            Debug::LogError(static_cast<const char*>(errorBlob->GetBufferPointer()));
         }
         return false;
     }
@@ -291,6 +292,7 @@ void TextRenderingService::RenderText(
     commandList->SetGraphicsRootDescriptorTable(1, m_fontSrvHeap->GetGPUDescriptorHandleForHeapStart());
     
     float currentX = startX;
+    float currentY = startY;
     int length = lstrlenA(text);
     
     // 外部から渡された定数バッファのポインタを扱いやすい型にキャスト
@@ -298,10 +300,25 @@ void TextRenderingService::RenderText(
     D3D12_GPU_VIRTUAL_ADDRESS currentCbGpu = cbvGpuAddress;
     
     for (int i = 0 ; i < length ; ++i) {
-        unsigned char c = text[i];
+        unsigned char c = static_cast<unsigned char>(text[i]);
+        
+        if (c == '\n') {
+            currentX = startX;
+            currentY -= size * 2.0f;
+            continue;
+        }
+        
+        if (c >= 128) {
+            c = '?';
+        }
         
         // 定数バッファデータ書き込み (16バイトアラインされた u_posSize へパック)
-        currentCbCpu->u_posSize = { currentX, startY, size, size * (float)screenWidth / screenHeight };
+        currentCbCpu->u_posSize = {
+            currentX,
+            currentY,
+            size,
+            size * static_cast<float>(screenWidth) / screenHeight
+        };
         currentCbCpu->u_color = color;
         currentCbCpu->u_uvOffsetScale = { (float)c, 0.0f, 0.0f, 0.0f }; // x に文字コードを格納
         
