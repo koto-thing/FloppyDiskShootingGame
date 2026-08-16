@@ -11,20 +11,104 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp"><Filter>Source Files</Filter></ClCompile>
-    <ClCompile Include="Presentation\Scenes\TestStage.cpp"><Filter>Source Files</Filter></ClCompile>
-    <ClCompile Include="Presentation\Scenes\TitleScene.cpp"><Filter>Source Files</Filter></ClCompile>
-    <ClCompile Include="Presentation\TitleScene\TitleSceneColumn.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\Scenes\TestStage.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\Scenes\TitleScene.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\TitleScene\TitleSceneColumn.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Infrastructure\ExternalServices\TextRenderingService.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Infrastructure\ExternalServices\D3D12RenderingService.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Infrastructure\ExternalServices\InputService.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Infrastructure\ExternalServices\Win32WindowService.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Infrastructure\ExternalServices\AudioService.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Infrastructure\ExternalServices\MMLParser.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Infrastructure\ExternalServices\SynthWaveGenerator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Domain\ValueObjects\SceneSharedData.h"><Filter>Header Files</Filter></ClInclude>
-    <ClInclude Include="Domain\ValueObjects\SceneType.h"><Filter>Header Files</Filter></ClInclude>
-    <ClInclude Include="Presentation\Scenes\TestStage.h"><Filter>Header Files</Filter></ClInclude>
-    <ClInclude Include="Presentation\Scenes\TitleScene.h"><Filter>Header Files</Filter></ClInclude>
-    <ClInclude Include="Presentation\TitleScene\TitleSceneColumn.h"><Filter>Header Files</Filter></ClInclude>
-    <ClInclude Include="Temp\Bullet.h"><Filter>Header Files</Filter></ClInclude>
-    <ClInclude Include="Temp\Enemy.h"><Filter>Header Files</Filter></ClInclude>
-    <ClInclude Include="Temp\Player.h"><Filter>Header Files</Filter></ClInclude>
-    <ClInclude Include="Temp\ShootingGame.h"><Filter>Header Files</Filter></ClInclude>
+    <None Include=".agents\AGENTS.md" />
+    <None Include="Shaders\ObjectShader.hlsl" />
+    <None Include="Shaders\BackgroundShader.hlsl" />
+    <None Include="Shaders\SpellCircleShader.hlsl" />
+    <None Include="Shaders\TextShader.hlsl" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Domain\ValueObjects\SceneType.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Domain\ValueObjects\SceneSharedData.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Application\Interfaces\IScene.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Application\UseCases\SceneManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Scenes\TestStage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Scenes\TitleScene.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\TitleScene\TitleSceneColumn.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Domain\ValueObjects\CharacterASCIIData.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Infrastructure\ExternalServices\D3D12RenderingService.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Infrastructure\ExternalServices\InputService.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Infrastructure\ExternalServices\TextRenderingService.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Infrastructure\ExternalServices\Win32WindowService.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Infrastructure\ExternalServices\AudioService.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Infrastructure\ExternalServices\MMLParser.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Infrastructure\ExternalServices\SynthWaveGenerator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Temp\Bullet.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Temp\Enemy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Temp\Player.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Temp\ShootingGame.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

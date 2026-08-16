@@ -13,6 +13,7 @@
 #include "Domain/ValueObjects/SceneSharedData.h"
 #include "Domain/ValueObjects/SceneType.h"
 #include "Infrastructure/ExternalServices/Win32WindowService.h"
+#include "Infrastructure/ExternalServices/AudioService.h"
 #include "Infrastructure/ExternalServices/D3D12RenderingService.h"
 #include "Presentation/Scenes/TitleScene.h"
 #include "Presentation/Scenes/TestStage.h"
@@ -77,6 +78,21 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         MessageBox(NULL, L"DirectX 12 Initializing Failed", L"Error", MB_OK);
         Debug::Shutdown();
         return 0;
+    }
+
+    AudioService audio;
+    if (!audio.Initialize()) {
+        MessageBox(NULL, L"Audio Initializing Failed", L"Error", MB_OK);
+        return 0;
+    }
+
+    if (!audio.PlayMMLBGMFromFile("test.mml", true)) {
+        std::string sampleBGM = 
+            "t140 o5 l8 @0 v12 c e g o6 c r g e c ; "
+            "t140 o4 l8 @1 v9  e g o5 c e r c g e ; "
+            "t140 o3 l4 @3 v14 c g c g ; "
+            "t140 o4 l8 @5 v8  c r c r c c r r";
+        audio.PlayMMLBGM(sampleBGM, true);
     }
     
     // シーンマネージャを作成
