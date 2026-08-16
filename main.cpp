@@ -86,7 +86,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         return 0;
     }
 
-    if (!audio.PlayMMLBGMFromFile("test.mml", true)) {
+    if (!audio.PlayMMLBGMFromFile("mml/test.mml", true) && 
+        !audio.PlayMMLBGMFromFile("test.mml", true)) {
         std::string sampleBGM = 
             "t140 o5 l8 @0 v12 c e g o6 c r g e c ; "
             "t140 o4 l8 @1 v9  e g o5 c e r c g e ; "

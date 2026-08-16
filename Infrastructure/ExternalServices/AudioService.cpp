@@ -146,6 +146,9 @@ bool AudioService::PlayMMLBGMFromFile(const std::string& filePath, bool loop) {
 		file.open("../" + filePath);
 	}
 	if (!file.is_open()) {
+		file.open("mml/" + filePath);
+	}
+	if (!file.is_open()) {
 		return false;
 	}
 	std::string mml((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
@@ -163,6 +166,9 @@ bool AudioService::PlayMMLSEFromFile(const std::string& filePath) {
 	std::ifstream file(filePath);
 	if (!file.is_open()) {
 		file.open("../" + filePath);
+	}
+	if (!file.is_open()) {
+		file.open("mml/" + filePath);
 	}
 	if (!file.is_open()) {
 		return false;
