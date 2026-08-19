@@ -70,6 +70,125 @@ static const float3 pyramidNormals[18] = {
     float3( 0.894, 0.447, 0), float3( 0.894, 0.447, 0), float3( 0.894, 0.447, 0)
 };
 
+// 三角柱 (Triangular Prism: 24頂点)
+static const float3 prismVertices[24] =
+{
+    float3(-0.5, 0.5, -0.5), float3(0.0, 0.5, 0.5), float3(0.5, 0.5, -0.5),
+    float3(-0.5, -0.5, -0.5), float3(0.5, -0.5, -0.5), float3(0.0, -0.5, 0.5),
+    float3(-0.5, -0.5, -0.5), float3(-0.5, 0.5, -0.5), float3(0.5, 0.5, -0.5),
+    float3(-0.5, -0.5, -0.5), float3(0.5, 0.5, -0.5), float3(0.5, -0.5, -0.5),
+    float3(0.0, -0.5, 0.5), float3(0.0, 0.5, 0.5), float3(-0.5, 0.5, -0.5),
+    float3(0.0, -0.5, 0.5), float3(-0.5, 0.5, -0.5), float3(-0.5, -0.5, -0.5),
+    float3(0.5, -0.5, -0.5), float3(0.5, 0.5, -0.5), float3(0.0, 0.5, 0.5),
+    float3(0.5, -0.5, -0.5), float3(0.0, 0.5, 0.5), float3(0.0, -0.5, 0.5)
+};
+
+static const float3 prismNormals[24] =
+{
+    float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0),
+    float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0),
+    float3(0, 0, -1), float3(0, 0, -1), float3(0, 0, -1),
+    float3(0, 0, -1), float3(0, 0, -1), float3(0, 0, -1),
+    float3(-0.8944, 0, 0.4472), float3(-0.8944, 0, 0.4472), float3(-0.8944, 0, 0.4472),
+    float3(-0.8944, 0, 0.4472), float3(-0.8944, 0, 0.4472), float3(-0.8944, 0, 0.4472),
+    float3(0.8944, 0, 0.4472), float3(0.8944, 0, 0.4472), float3(0.8944, 0, 0.4472),
+    float3(0.8944, 0, 0.4472), float3(0.8944, 0, 0.4472), float3(0.8944, 0, 0.4472)
+};
+// 円柱 (Cylinder: 96頂点 = 側面48 + 上面24 + 底面24)
+static const float3 cylinderVertices[96] =
+{
+    // --- 側面 (48頂点 / 16三角形) ---
+    float3(0.5000, -0.5, 0.0000), float3(0.5000, 0.5, 0.0000), float3(0.3536, 0.5, 0.3536),
+    float3(0.5000, -0.5, 0.0000), float3(0.3536, 0.5, 0.3536), float3(0.3536, -0.5, 0.3536),
+    float3(0.3536, -0.5, 0.3536), float3(0.3536, 0.5, 0.3536), float3(0.0000, 0.5, 0.5000),
+    float3(0.3536, -0.5, 0.3536), float3(0.0000, 0.5, 0.5000), float3(0.0000, -0.5, 0.5000),
+    float3(0.0000, -0.5, 0.5000), float3(0.0000, 0.5, 0.5000), float3(-0.3536, 0.5, 0.3536),
+    float3(0.0000, -0.5, 0.5000), float3(-0.3536, 0.5, 0.3536), float3(-0.3536, -0.5, 0.3536),
+    float3(-0.3536, -0.5, 0.3536), float3(-0.3536, 0.5, 0.3536), float3(-0.5000, 0.5, 0.0000),
+    float3(-0.3536, -0.5, 0.3536), float3(-0.5000, 0.5, 0.0000), float3(-0.5000, -0.5, 0.0000),
+    float3(-0.5000, -0.5, 0.0000), float3(-0.5000, 0.5, 0.0000), float3(-0.3536, 0.5, -0.3536),
+    float3(-0.5000, -0.5, 0.0000), float3(-0.3536, 0.5, -0.3536), float3(-0.3536, -0.5, -0.3536),
+    float3(-0.3536, -0.5, -0.3536), float3(-0.3536, 0.5, -0.3536), float3(0.0000, 0.5, -0.5000),
+    float3(-0.3536, -0.5, -0.3536), float3(0.0000, 0.5, -0.5000), float3(0.0000, -0.5, -0.5000),
+    float3(0.0000, -0.5, -0.5000), float3(0.0000, 0.5, -0.5000), float3(0.3536, 0.5, -0.3536),
+    float3(0.0000, -0.5, -0.5000), float3(0.3536, 0.5, -0.3536), float3(0.3536, -0.5, -0.3536),
+    float3(0.3536, -0.5, -0.3536), float3(0.3536, 0.5, -0.3536), float3(0.5000, 0.5, 0.0000),
+    float3(0.3536, -0.5, -0.3536), float3(0.5000, 0.5, 0.0000), float3(0.5000, -0.5, 0.0000),
+
+    // --- 上面 (24頂点 / 8三角形: 全周360度) ---
+    float3(0, 0.5, 0), float3(0.5000, 0.5, 0.0000), float3(0.3536, 0.5, 0.3536),
+    float3(0, 0.5, 0), float3(0.3536, 0.5, 0.3536), float3(0.0000, 0.5, 0.5000),
+    float3(0, 0.5, 0), float3(0.0000, 0.5, 0.5000), float3(-0.3536, 0.5, 0.3536),
+    float3(0, 0.5, 0), float3(-0.3536, 0.5, 0.3536), float3(-0.5000, 0.5, 0.0000),
+    float3(0, 0.5, 0), float3(-0.5000, 0.5, 0.0000), float3(-0.3536, 0.5, -0.3536),
+    float3(0, 0.5, 0), float3(-0.3536, 0.5, -0.3536), float3(0.0000, 0.5, -0.5000),
+    float3(0, 0.5, 0), float3(0.0000, 0.5, -0.5000), float3(0.3536, 0.5, -0.3536),
+    float3(0, 0.5, 0), float3(0.3536, 0.5, -0.3536), float3(0.5000, 0.5, 0.0000),
+
+    // --- 底面 (24頂点 / 8三角形: 全周360度) ---
+    float3(0, -0.5, 0), float3(0.3536, -0.5, 0.3536), float3(0.5000, -0.5, 0.0000),
+    float3(0, -0.5, 0), float3(0.0000, -0.5, 0.5000), float3(0.3536, -0.5, 0.3536),
+    float3(0, -0.5, 0), float3(-0.3536, -0.5, 0.3536), float3(0.0000, -0.5, 0.5000),
+    float3(0, -0.5, 0), float3(-0.5000, -0.5, 0.0000), float3(-0.3536, -0.5, 0.3536),
+    float3(0, -0.5, 0), float3(-0.3536, -0.5, -0.3536), float3(-0.5000, -0.5, 0.0000),
+    float3(0, -0.5, 0), float3(0.0000, -0.5, -0.5000), float3(-0.3536, -0.5, -0.3536),
+    float3(0, -0.5, 0), float3(0.3536, -0.5, -0.3536), float3(0.0000, -0.5, -0.5000),
+    float3(0, -0.5, 0), float3(0.5000, -0.5, 0.0000), float3(0.3536, -0.5, -0.3536)
+};
+
+static const float3 cylinderNormals[96] =
+{
+    // 側面 48頂点の法線
+    float3(1.0000, 0.0, 0.0000), float3(1.0000, 0.0, 0.0000), float3(0.7071, 0.0, 0.7071),
+    float3(1.0000, 0.0, 0.0000), float3(0.7071, 0.0, 0.7071), float3(0.7071, 0.0, 0.7071),
+    float3(0.7071, 0.0, 0.7071), float3(0.7071, 0.0, 0.7071), float3(0.0000, 0.0, 1.0000),
+    float3(0.7071, 0.0, 0.7071), float3(0.0000, 0.0, 1.0000), float3(0.0000, 0.0, 1.0000),
+    float3(0.0000, 0.0, 1.0000), float3(0.0000, 0.0, 1.0000), float3(-0.7071, 0.0, 0.7071),
+    float3(0.0000, 0.0, 1.0000), float3(-0.7071, 0.0, 0.7071), float3(-0.7071, 0.0, 0.7071),
+    float3(-0.7071, 0.0, 0.7071), float3(-0.7071, 0.0, 0.7071), float3(-1.0000, 0.0, 0.0000),
+    float3(-0.7071, 0.0, 0.7071), float3(-1.0000, 0.0, 0.0000), float3(-1.0000, 0.0, 0.0000),
+    float3(-1.0000, 0.0, 0.0000), float3(-1.0000, 0.0, 0.0000), float3(-0.7071, 0.0, -0.7071),
+    float3(-1.0000, 0.0, 0.0000), float3(-0.7071, 0.0, -0.7071), float3(-0.7071, 0.0, -0.7071),
+    float3(-0.7071, 0.0, -0.7071), float3(-0.7071, 0.0, -0.7071), float3(0.0000, 0.0, -1.0000),
+    float3(-0.7071, 0.0, -0.7071), float3(0.0000, 0.0, -1.0000), float3(0.0000, 0.0, -1.0000),
+    float3(0.0000, 0.0, -1.0000), float3(0.0000, 0.0, -1.0000), float3(0.7071, 0.0, -0.7071),
+    float3(0.0000, 0.0, -1.0000), float3(0.7071, 0.0, -0.7071), float3(0.7071, 0.0, -0.7071),
+    float3(0.7071, 0.0, -0.7071), float3(0.7071, 0.0, -0.7071), float3(1.0000, 0.0, 0.0000),
+    float3(0.7071, 0.0, -0.7071), float3(1.0000, 0.0, 0.0000), float3(1.0000, 0.0, 0.0000),
+
+    // 上面 24頂点の法線 (すべて上向き +Y)
+    float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0),
+    float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0),
+    float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0),
+    float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0), float3(0, 1, 0),
+
+    // 底面 24頂点の法線 (すべて下向き -Y)
+    float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0),
+    float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0),
+    float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0),
+    float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0)
+};
+// 円錐 (Cone: 48頂点)
+static const float3 coneVertices[48] =
+{
+    float3(0.5000, -0.5, 0.0000), float3(0.0, 0.5, 0.0), float3(0.3536, -0.5, 0.3536),
+    float3(0.3536, -0.5, 0.3536), float3(0.0, 0.5, 0.0), float3(0.0000, -0.5, 0.5000),
+    float3(0.0000, -0.5, 0.5000), float3(0.0, 0.5, 0.0), float3(-0.3536, -0.5, 0.3536),
+    float3(-0.3536, -0.5, 0.3536), float3(0.0, 0.5, 0.0), float3(-0.5000, -0.5, 0.0000),
+    float3(-0.5000, -0.5, 0.0000), float3(0.0, 0.5, 0.0), float3(-0.3536, -0.5, -0.3536),
+    float3(-0.3536, -0.5, -0.3536), float3(0.0, 0.5, 0.0), float3(0.0000, -0.5, -0.5000),
+    float3(0.0000, -0.5, -0.5000), float3(0.0, 0.5, 0.0), float3(0.3536, -0.5, -0.3536),
+    float3(0.3536, -0.5, -0.3536), float3(0.0, 0.5, 0.0), float3(0.5000, -0.5, 0.0000),
+    float3(0, -0.5, 0), float3(0.3536, -0.5, 0.3536), float3(0.5000, -0.5, 0.0000),
+    float3(0, -0.5, 0), float3(0.0000, -0.5, 0.5000), float3(0.3536, -0.5, 0.3536),
+    float3(0, -0.5, 0), float3(-0.3536, -0.5, 0.3536), float3(0.0000, -0.5, 0.5000),
+    float3(0, -0.5, 0), float3(-0.5000, -0.5, 0.0000), float3(-0.3536, -0.5, 0.3536),
+    float3(0, -0.5, 0), float3(-0.3536, -0.5, -0.3536), float3(-0.5000, -0.5, 0.0000),
+    float3(0, -0.5, 0), float3(0.0000, -0.5, -0.5000), float3(-0.3536, -0.5, -0.3536),
+    float3(0, -0.5, 0), float3(0.3536, -0.5, -0.3536), float3(0.0000, -0.5, -0.5000),
+    float3(0, -0.5, 0), float3(0.5000, -0.5, 0.0000), float3(0.3536, -0.5, -0.3536)
+};
+
 VS_OUTPUT VSMain(uint vID : SV_VertexID)
 {
     VS_OUTPUT output;
@@ -92,13 +211,46 @@ VS_OUTPUT VSMain(uint vID : SV_VertexID)
         output.localPos = localPos.xy;
     }
     else if (u_shapeType < 2.5) {
-        // 2: Pyramid (Arwing/敵機など)
+        // 2: Pyramid
         localPos = pyramidVertices[vID % 18];
         normal = pyramidNormals[vID % 18];
         output.localPos = localPos.xy;
     }
+    else if (u_shapeType < 3.5)
+    {
+        // 3: Cylinder (96頂点)
+        localPos = cylinderVertices[vID % 96];
+        normal = cylinderNormals[vID % 96];
+        output.localPos = localPos.xz;
+    }
+    else if (u_shapeType < 4.5)
+    {
+        // 4: Cone (48頂点) - 先端は (0, 0.5, 0) [+Y方向]
+        uint idx = vID % 48;
+        localPos = coneVertices[idx];
+
+        if (idx < 24)
+        {
+            // Y軸を高さ方向とする側面法線
+            float2 dirXZ = normalize(localPos.xz);
+            normal = normalize(float3(dirXZ.x * 1.0f, 0.5f, dirXZ.y * 1.0f));
+        }
+        else
+        {
+            // 底面法線 (-Y方向)
+            normal = float3(0.0f, -1.0f, 0.0f);
+        }
+        output.localPos = localPos.xz;
+    }
+    else if (u_shapeType < 5.5)
+    {
+        // 5: 三角柱 (24頂点)
+        localPos = prismVertices[vID % 24];
+        normal = prismNormals[vID % 24];
+        output.localPos = localPos.xy;
+    }
     else {
-        // 3: Sprite2D (XY平面、UIや爆発スプライトなど)
+        // 6: Sprite2D (XY平面、UIや爆発スプライトなど)
         float2 rawPos;
         rawPos.x = float(vID & 2) - 1.0f;
         rawPos.y = float((vID & 1) << 1) - 1.0f;
@@ -106,22 +258,7 @@ VS_OUTPUT VSMain(uint vID : SV_VertexID)
         output.localPos = rawPos;
         normal = float3(0, 0, -1);
     }
-
-    // 自転処理 (u_rotAngle が有効な場合)
-    if (u_rotAngle > 0.0f) {
-        float s = sin(u_rotAngle);
-        float c = cos(u_rotAngle);
-        float3 rotatedPos = localPos;
-        rotatedPos.x = localPos.x * c - localPos.z * s;
-        rotatedPos.z = localPos.x * s + localPos.z * c;
-        localPos = rotatedPos;
-
-        float3 rotatedNormal = normal;
-        rotatedNormal.x = normal.x * c - normal.z * s;
-        rotatedNormal.z = normal.x * s + normal.z * c;
-        normal = rotatedNormal;
-    }
-
+    
     // WVP行列による座標変換
     output.pos = mul(float4(localPos, 1.0f), u_wvpMatrix);
 
