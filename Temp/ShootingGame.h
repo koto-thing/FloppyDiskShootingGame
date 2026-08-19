@@ -398,10 +398,10 @@ public:
                 DrawObject3D(renderer, player.x, player.y, player.z + 5.5f, 1.6f, 1.6f, 4.0f, noseCol, drawCount++, 4, 48);
 
                 // B. メインボディ (円柱: shapeType=3 / w=2.4, h=2.4, d=5.0 [奥行き5.0])
-                DrawObject3D(renderer, player.x, player.y, player.z + 1.0f, 2.4f, 2.4f, 5.0f, pCol, drawCount++, 3, 72);
+                DrawObject3D(renderer, player.x, player.y, player.z + 1.0f, 2.4f, 2.4f, 5.0f, pCol, drawCount++, 3, 96);
 
                 // C. 後方メインボディ (円柱: shapeType=3 / w=1.8, h=1.8, d=4.0 [奥行き4.0])
-                DrawObject3D(renderer, player.x, player.y, player.z - 3.0f, 1.8f, 1.8f, 4.0f, rearCol, drawCount++, 3, 72);
+                DrawObject3D(renderer, player.x, player.y, player.z - 3.0f, 1.8f, 1.8f, 4.0f, rearCol, drawCount++, 3, 96);
 
                 // D. 左右主翼 (三角柱: shapeType=5)
                 float leftWingX = player.x - 4.5f;
