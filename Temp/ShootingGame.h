@@ -370,7 +370,7 @@ public:
             }
         }
 
-        // 6. プレイヤーの描画 (主翼ロールは3Dのみ)
+        // 6. プレイヤーの描画 (主翼・尾翼の傾きは3D/遷移時のみ)
         if (player.lives >= 0) {
             bool drawPlayer = true;
             if (player.invincibleFrames > 0 && (player.invincibleFrames % 4 < 2)) {
@@ -378,35 +378,52 @@ public:
             }
 
             if (drawPlayer) {
-                float pCol[4] = { 0.8f, 0.8f, 0.85f, 1.0f };
-                float wingCol[4] = { 0.2f, 0.4f, 0.8f, 1.0f };
-                float noseCol[4] = { 0.9f, 0.1f, 0.1f, 1.0f };
+                float pCol[4] = { 0.8f, 0.8f, 0.85f, 1.0f }; // メインボディ（シルバー白）
+                float rearCol[4] = { 0.6f, 0.6f, 0.65f, 1.0f }; // 後方ボディ（ダークグレー）
+                float wingCol[4] = { 0.2f, 0.4f, 0.8f,  1.0f }; // 主翼（ブルー）
+                float tailCol[4] = { 0.15f,0.3f, 0.7f,  1.0f }; // 尾翼（ダークブルー）
+                float noseCol[4] = { 0.9f, 0.1f, 0.1f,  1.0f }; // 機首ノーズ（レッド）
 
                 float rollFactor = 0.0f;
                 if (dimensionMode == 0 && nextDimensionMode == 0) {
                     rollFactor = player.rollAngle;
-                } else if (transitionTimer > 0 && nextDimensionMode == 0) {
+                }
+                else if (transitionTimer > 0 && nextDimensionMode == 0) {
                     rollFactor = player.rollAngle * transitionProgress;
-                } else if (transitionTimer > 0 && dimensionMode == 0) {
+                }
+                else if (transitionTimer > 0 && dimensionMode == 0) {
                     rollFactor = player.rollAngle * (1.0f - transitionProgress);
                 }
+                // A. 機首ノーズ (円錐: shapeType=4 / w=1.6, h=1.6, d=4.0 [奥行き4.0])
+                DrawObject3D(renderer, player.x, player.y, player.z + 5.5f, 1.6f, 1.6f, 4.0f, noseCol, drawCount++, 4, 48);
 
-                // A. メインボディ
-                DrawObject3D(renderer, player.x, player.y, player.z, 3.0f, 2.5f, 9.0f, pCol, drawCount++, 2, 18);
+                // B. メインボディ (円柱: shapeType=3 / w=2.4, h=2.4, d=5.0 [奥行き5.0])
+                DrawObject3D(renderer, player.x, player.y, player.z + 1.0f, 2.4f, 2.4f, 5.0f, pCol, drawCount++, 3, 72);
 
-                // B. 機首ノーズ (進行方向は3D/2D共にZプラス方向)
-                DrawObject3D(renderer, player.x, player.y, player.z + 5.0f, 1.2f, 1.0f, 4.0f, noseCol, drawCount++, 2, 18);
+                // C. 後方メインボディ (円柱: shapeType=3 / w=1.8, h=1.8, d=4.0 [奥行き4.0])
+                DrawObject3D(renderer, player.x, player.y, player.z - 3.0f, 1.8f, 1.8f, 4.0f, rearCol, drawCount++, 3, 72);
 
-                // C. 左主翼 (主翼の傾きは位置をずらすことで表現)
+                // D. 左右主翼 (三角柱: shapeType=5)
                 float leftWingX = player.x - 4.5f;
                 float leftWingY = player.y + rollFactor * 4.0f;
-                DrawObject3D(renderer, leftWingX, leftWingY, player.z - 1.0f, 6.0f, 0.4f, 3.0f, wingCol, drawCount++, 1, 36);
+                DrawObject3D(renderer, leftWingX, leftWingY, player.z - 0.5f, 6.0f, 0.4f, 3.5f, wingCol, drawCount++, 5, 24);
 
-                // D. 右主翼
                 float rightWingX = player.x + 4.5f;
                 float rightWingY = player.y - rollFactor * 4.0f;
-                DrawObject3D(renderer, rightWingX, rightWingY, player.z - 1.0f, 6.0f, 0.4f, 3.0f, wingCol, drawCount++, 1, 36);
-            }
+                DrawObject3D(renderer, rightWingX, rightWingY, player.z - 0.5f, 6.0f, 0.4f, 3.5f, wingCol, drawCount++, 5, 24);
+
+                // E. 左右昇降舵 (三角柱: shapeType=5)
+                float leftElevatorX = player.x - 2.6f;
+                float leftElevatorY = player.y + rollFactor * 2.2f;
+                DrawObject3D(renderer, leftElevatorX, leftElevatorY, player.z - 4.5f, 3.2f, 0.25f, 2.0f, tailCol, drawCount++, 5, 24);
+
+                float rightElevatorX = player.x + 2.6f;
+                float rightElevatorY = player.y - rollFactor * 2.2f;
+                DrawObject3D(renderer, rightElevatorX, rightElevatorY, player.z - 4.5f, 3.2f, 0.25f, 2.0f, tailCol, drawCount++, 5, 24);
+
+                // F. 方向舵 (三角柱: shapeType=5)
+                DrawObject3D(renderer, player.x, player.y + 1.8f, player.z - 4.0f, 0.25f, 2.8f, 2.2f, tailCol, drawCount++, 5, 24);
+           }
         }
 
         // 7. 3D照準HUDの描画 (3Dモード中のみ、アルファブレンド出現)
@@ -857,9 +874,23 @@ private:
         // 1. ワールド行列の構築 (平行移動 と スケーリング)
         DirectX::XMMATRIX worldMatrix = DirectX::XMMatrixScaling(w, h, d);
 
+        // A. 円柱 (shapeType=3) および 円錐 (shapeType=4) の横倒し (+Z軸向き) 処理
+        if (shapeType == 3 || shapeType == 4) {
+            // HLSL内ではY軸方向 (+Y: -0.5～+0.5) を高さとしているため、
+            // X軸周りに+90度回転させて+Z方向（進行方向）に向ける。
+            // スケーリングを (w: X幅, d: Y高さ, h: Z長さ) とすることで、
+            // 引数 (w, h, d) が直感的な (幅_X, 高さ_Y, 奥行き/長さ_Z) に一致します。
+            worldMatrix = DirectX::XMMatrixScaling(w, d, h) *
+                DirectX::XMMatrixRotationX(DirectX::XMConvertToRadians(90.0f));
+        }
+        else {
+            worldMatrix = DirectX::XMMatrixScaling(w, h, d);
+        }
+
         // 2D縦・横モード時の Sprite2D(shapeType=3) をカメラに正対させる回転処理
+        // ※ HLSLの定義に合わせて shapeType == 6 に修正
         int activeMode = (transitionProgress < 0.5f) ? dimensionMode : nextDimensionMode;
-        if (shapeType == 3) {
+        if (shapeType == 6) {
             if (activeMode == 1) {
                 // 2D縦: 真上から見下ろすので、X軸周りに90度回転させて XZ平面に向ける
                 worldMatrix = worldMatrix * DirectX::XMMatrixRotationX(DirectX::XMConvertToRadians(90.0f));
