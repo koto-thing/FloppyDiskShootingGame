@@ -188,6 +188,29 @@ static const float3 coneVertices[48] =
     float3(0, -0.5, 0), float3(0.3536, -0.5, -0.3536), float3(0.0000, -0.5, -0.5000),
     float3(0, -0.5, 0), float3(0.5000, -0.5, 0.0000), float3(0.3536, -0.5, -0.3536)
 };
+// 円錐 (Cone: 48頂点) の法線データ
+static const float3 coneNormals[48] =
+{
+    // --- 側面 (24頂点 / 8三角形) ---
+    float3(0.8944, 0.4472, 0.0000), float3(0.8944, 0.4472, 0.0000), float3(0.8944, 0.4472, 0.0000),
+    float3(0.6325, 0.4472, 0.6325), float3(0.6325, 0.4472, 0.6325), float3(0.6325, 0.4472, 0.6325),
+    float3(0.0000, 0.4472, 0.8944), float3(0.0000, 0.4472, 0.8944), float3(0.0000, 0.4472, 0.8944),
+    float3(-0.6325, 0.4472, 0.6325), float3(-0.6325, 0.4472, 0.6325), float3(-0.6325, 0.4472, 0.6325),
+    float3(-0.8944, 0.4472, 0.0000), float3(-0.8944, 0.4472, 0.0000), float3(-0.8944, 0.4472, 0.0000),
+    float3(-0.6325, 0.4472, -0.6325), float3(-0.6325, 0.4472, -0.6325), float3(-0.6325, 0.4472, -0.6325),
+    float3(0.0000, 0.4472, -0.8944), float3(0.0000, 0.4472, -0.8944), float3(0.0000, 0.4472, -0.8944),
+    float3(0.6325, 0.4472, -0.6325), float3(0.6325, 0.4472, -0.6325), float3(0.6325, 0.4472, -0.6325),
+
+    // --- 底面 (24頂点 / 8三角形: すべて下向き -Y) ---
+    float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0),
+    float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0),
+    float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0),
+    float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0),
+    float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0),
+    float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0),
+    float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0),
+    float3(0, -1, 0), float3(0, -1, 0), float3(0, -1, 0)
+};
 
 VS_OUTPUT VSMain(uint vID : SV_VertexID)
 {
@@ -221,26 +244,14 @@ VS_OUTPUT VSMain(uint vID : SV_VertexID)
         // 3: Cylinder (96頂点)
         localPos = cylinderVertices[vID % 96];
         normal = cylinderNormals[vID % 96];
-        output.localPos = localPos.xz;
+        output.localPos = localPos.xy;
     }
     else if (u_shapeType < 4.5)
     {
-        // 4: Cone (48頂点) - 先端は (0, 0.5, 0) [+Y方向]
-        uint idx = vID % 48;
-        localPos = coneVertices[idx];
-
-        if (idx < 24)
-        {
-            // Y軸を高さ方向とする側面法線
-            float2 dirXZ = normalize(localPos.xz);
-            normal = normalize(float3(dirXZ.x * 1.0f, 0.5f, dirXZ.y * 1.0f));
-        }
-        else
-        {
-            // 底面法線 (-Y方向)
-            normal = float3(0.0f, -1.0f, 0.0f);
-        }
-        output.localPos = localPos.xz;
+        // 4: Cone (48頂点) 
+        localPos = coneVertices[vID % 48];
+        normal = coneNormals[vID % 48];
+        output.localPos = localPos.xy;
     }
     else if (u_shapeType < 5.5)
     {
