@@ -326,9 +326,68 @@ public:
         for (auto& e : enemies) {
             if (e.active) {
                 if (e.type == 2) {
-                    DrawObject3D(renderer, e.x, e.y, e.z, e.scaleX, e.scaleY, e.scaleZ, e.color, drawCount++, 1, 36, e.rotAngle);
-                } else {
-                    DrawObject3D(renderer, e.x, e.y, e.z, e.scaleX, e.scaleY, e.scaleZ, e.color, drawCount++, 2, 18, e.rotAngle);
+                    float eCol[4] = { 0.2f, 0.4f, 0.8f,  1.0f }; // 敵機のカラー（blue）
+                    // A. 機首ノーズ (円錐)
+                    DrawObject3DEx(renderer, e.x, e.y, e.z - 4.0f, 1.6f, 1.6f, 4.0f, 270.0f, 0, 0, eCol, drawCount++, 4, 48);
+
+                    // B. メインボディ (円柱)
+                    DrawObject3D(renderer, e.x, e.y, e.z - 1.0f, 2.4f, 2.4f, 5.0f, eCol, drawCount++, 3, 96);
+
+                    // C. 後方メインボディ (円柱)
+                    DrawObject3D(renderer, e.x, e.y, e.z + 3.0f, 1.8f, 1.8f, 4.0f, eCol, drawCount++, 3, 96);
+
+                    // D. 左右主翼 (三角柱)
+                    float eleftWingX = e.x - 3.5f;
+                    float eleftWingY = e.y;
+                    DrawObject3DEx(renderer, eleftWingX, eleftWingY, e.z + 0.5f, 6.0f, 0.4f, 3.5f, 180.0f, 0, 0, eCol, drawCount++, 5, 24);
+
+                    float erightWingX = e.x + 3.5f;
+                    float erightWingY = e.y;
+                    DrawObject3DEx(renderer, erightWingX, erightWingY, e.z + 0.5f, 6.0f, 0.4f, 3.5f, 180.0f, 0, 0, eCol, drawCount++, 5, 24);
+
+                    // E. 左右昇降舵 (三角柱)
+                    float eleftElevatorX = e.x - 1.5f;
+                    float eleftElevatorY = e.y;
+                    DrawObject3DEx(renderer, eleftElevatorX, eleftElevatorY, e.z + 4.5f, 3.2f, 0.25f, 2.0f, 180.0f, 0, 0, eCol, drawCount++, 5, 24);
+
+                    float erightElevatorX = e.x + 1.5f;
+                    float erightElevatorY = e.y;
+                    DrawObject3DEx(renderer, erightElevatorX, erightElevatorY, e.z + 4.5f, 3.2f, 0.25f, 2.0f, 180.0f, 0, 0, eCol, drawCount++, 5, 24);
+
+                    // F. 方向舵 (三角柱)
+                    DrawObject3D(renderer, e.x, e.y + 1.8f, e.z + 4.0f, 0.25f, 2.8f, 2.2f, eCol, drawCount++, 5, 24);
+                }
+                else {
+                    float eCol[4] = { 0.9f, 0.1f, 0.1f, 1.0f }; // 敵機のカラー（レッド）
+                    // A. 機首ノーズ (円錐)
+                    DrawObject3DEx(renderer, e.x, e.y, e.z - 4.0f, 1.6f, 1.6f, 4.0f, 270.0f, 0, 0, eCol, drawCount++, 4, 48);
+
+                    // B. メインボディ (円柱)
+                    DrawObject3D(renderer, e.x, e.y, e.z - 1.0f, 2.4f, 2.4f, 5.0f, eCol, drawCount++, 3, 96);
+
+                    // C. 後方メインボディ (円柱)
+                    DrawObject3D(renderer, e.x, e.y, e.z + 3.0f, 1.8f, 1.8f, 4.0f, eCol, drawCount++, 3, 96);
+
+                    // D. 左右主翼 (三角柱)
+                    float eleftWingX = e.x - 3.5f;
+                    float eleftWingY = e.y;
+                    DrawObject3DEx(renderer, eleftWingX, eleftWingY, e.z + 0.5f, 6.0f, 0.4f, 3.5f, 180.0f, 0, 0, eCol, drawCount++, 5, 24);
+
+                    float erightWingX = e.x + 3.5f;
+                    float erightWingY = e.y;
+                    DrawObject3DEx(renderer, erightWingX, erightWingY, e.z + 0.5f, 6.0f, 0.4f, 3.5f, 180.0f, 0, 0, eCol, drawCount++, 5, 24);
+
+                    // E. 左右昇降舵 (三角柱)
+                    float eleftElevatorX = e.x - 1.5f;
+                    float eleftElevatorY = e.y;
+                    DrawObject3DEx(renderer, eleftElevatorX, eleftElevatorY, e.z + 4.5f, 3.2f, 0.25f, 2.0f, 180.0f, 0, 0, eCol, drawCount++, 5, 24);
+
+                    float erightElevatorX = e.x + 1.5f;
+                    float erightElevatorY = e.y;
+                    DrawObject3DEx(renderer, erightElevatorX, erightElevatorY, e.z + 4.5f, 3.2f, 0.25f, 2.0f, 180.0f, 0, 0, eCol, drawCount++, 5, 24);
+
+                    // F. 方向舵 (三角柱)
+                    DrawObject3D(renderer, e.x, e.y + 1.8f, e.z + 4.0f, 0.25f, 2.8f, 2.2f, eCol, drawCount++, 5, 24);
                 }
                 if (drawCount >= 2000) break;
             }
@@ -918,6 +977,79 @@ private:
         cmdList->DrawInstanced(vertexCount, 1, 0, 0);
     }
 
+    // 3D 空間オブジェクト描画ヘルパー (自由なXYZ回転対応版)
+    void DrawObject3DEx(
+        D3D12RenderingService& renderer,
+        float x, float y, float z,           // 位置
+        float w, float h, float d,           // スケーリング（幅, 高さ, 奥行き）
+        float rotX, float rotY, float rotZ,  // 自由な回転角（度数法: Degree）
+        const float color[4],
+        int index,
+        int shapeType,
+        int vertexCount
+    ) {
+        ID3D12GraphicsCommandList* cmdList = renderer.GetCommandList();
+
+        char* cbvCpuData = reinterpret_cast<char*>(renderer.GetCbvCpuData());
+        TransformBufferData* cbData = reinterpret_cast<TransformBufferData*>(cbvCpuData + index * 256);
+
+        // -------------------------------------------------------------
+        // 1. スケーリング（拡大縮小）
+        // -------------------------------------------------------------
+        DirectX::XMMATRIX worldMatrix = DirectX::XMMatrixScaling(w, h, d);
+
+        // -------------------------------------------------------------
+        // 2. 自由なXYZ軸の回転 (オイラー角: Pitch, Yaw, Roll)
+        // -------------------------------------------------------------
+        // Z軸(Roll) -> X軸(Pitch) -> Y軸(Yaw) の順に回転行列を作成して適用
+        // 引数 (rotX, rotY, rotZ) の角度数値をラジアンに変換して回転行列を作成
+        DirectX::XMMATRIX rotMatrix = DirectX::XMMatrixRotationRollPitchYaw(
+            DirectX::XMConvertToRadians(rotX), // X軸回転 (ピッチ)
+            DirectX::XMConvertToRadians(rotY), // Y軸回転 (ヨー)
+            DirectX::XMConvertToRadians(rotZ)  // Z軸回転 (ロール)
+        );
+        worldMatrix = worldMatrix * rotMatrix;
+
+        // -------------------------------------------------------------
+        // 3. 2D縦・横モード時の Sprite2D (shapeType=6) カメラ正対回転補正
+        // -------------------------------------------------------------
+        int activeMode = (transitionProgress < 0.5f) ? dimensionMode : nextDimensionMode;
+        if (shapeType == 6) {
+            if (activeMode == 1) {
+                // 2D縦: 真上から見下ろすので X軸周りに90度回転
+                worldMatrix = worldMatrix * DirectX::XMMatrixRotationX(DirectX::XMConvertToRadians(90.0f));
+            }
+            else if (activeMode == 2) {
+                // 2D横: 真横から見るので Y軸周りに90度回転
+                worldMatrix = worldMatrix * DirectX::XMMatrixRotationY(DirectX::XMConvertToRadians(90.0f));
+            }
+        }
+
+        // -------------------------------------------------------------
+        // 4. 平行移動 (位置の設定)
+        // -------------------------------------------------------------
+        worldMatrix = worldMatrix * DirectX::XMMatrixTranslation(x, y, z);
+
+        // -------------------------------------------------------------
+        // 5. WVPの合成と定数バッファへの書き込み
+        // -------------------------------------------------------------
+        DirectX::XMMATRIX wvpMatrix = worldMatrix * m_viewMatrix * m_projMatrix;
+
+        // HLSL用に転置して転送
+        DirectX::XMStoreFloat4x4(&cbData->u_wvpMatrix, DirectX::XMMatrixTranspose(wvpMatrix));
+        cbData->u_Color = DirectX::XMFLOAT4(color[0], color[1], color[2], color[3]);
+        cbData->u_time = (float)spawnTimer;
+        cbData->u_shapeType = (float)shapeType;
+        cbData->u_rotAngle = 0.0f; // 行列側で回転処理したため0（必要に応じて特定の角度を渡す）
+
+        // -------------------------------------------------------------
+        // 6. GPU描画命令
+        // -------------------------------------------------------------
+        D3D12_GPU_VIRTUAL_ADDRESS cbvGpuAddress = renderer.GetConstantBuffer()->GetGPUVirtualAddress() + index * 256;
+        cmdList->SetGraphicsRootConstantBufferView(0, cbvGpuAddress);
+
+        cmdList->DrawInstanced(vertexCount, 1, 0, 0);
+    }
     // UI 描画ヘルパー (ビュー・プロジェクション行列を適用せずNDC空間に直接スケーリング・配置)
     void DrawObjectUI(D3D12RenderingService& renderer, float ndcX, float ndcY, float ndcZ, float ndcW, float ndcH, const float color[4], int index) {
         ID3D12GraphicsCommandList* cmdList = renderer.GetCommandList();
