@@ -23,10 +23,11 @@ public:
      * @brief タイトルシーンの状態更新処理を行います。
      */
     void Tick() override;
+    void Shutdown() override;
 
     /**
      * @brief タイトルシーンの描画処理を行います。
-     * @param renderer DirectX 12 レンダラーの参照
+     * @param renderer Rendererの参照
      */
-    void Render(D3D12RenderingService& renderer) override;
+    void Render(Renderer& renderer) override;
 };

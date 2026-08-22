@@ -12,8 +12,8 @@ public:
      * @param other 衝突した相手のコライダー
      */
     virtual void OnCollisionEnter(
-        Collider& self,
-        Collider& other
+        Collider&,
+        Collider&
     ) {
         
     }
@@ -24,8 +24,8 @@ public:
      * @param other 衝突した相手のコライダー
      */
     virtual void OnCollisionStay(
-        Collider& self,
-        Collider& other
+        Collider&,
+        Collider&
     ) {
         
     }
@@ -36,8 +36,8 @@ public:
      * @param other 衝突した相手のコライダー
      */
     virtual void OnCollisionExit(
-        Collider& self,
-        Collider& other
+        Collider&,
+        Collider&
     ) {
         
     }

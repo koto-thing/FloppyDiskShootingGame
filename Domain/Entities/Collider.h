@@ -74,7 +74,7 @@ public:
      * @brief コライダーのオフセットを設定する
      * @param offset オフセット値 (XMFLOAT2)
      */
-    void SetOffset(const DirectX::XMFLOAT2& offset) {
+    void SetOffset(const Vector2& offset) {
         m_offset = offset;
     }
 
@@ -82,9 +82,9 @@ public:
      * @brief コライダーのオフセットを取得する
      * @return DirectX::XMFLOAT2 オフセット値
      */
-    DirectX::XMFLOAT2 GetWorldPosition() const {
+    Vector3 GetWorldPosition() const {
         if (m_gameObject == nullptr) {
-            return m_offset;
+            return {m_offset, 0.0f};
         } 
         
         const auto& position = m_gameObject->GetPosition();
@@ -92,6 +92,7 @@ public:
         return {
         position.x + m_offset.x,
         position.y + m_offset.y,
+        position.z,
         };
     }
     
@@ -99,6 +100,6 @@ private:
     ColliderType m_type;
     CollisionLayer m_layer = CollisionLayer::NONE;
     std::uint32_t m_collisionMask = 0;
-    DirectX::XMFLOAT2 m_offset = { 0.0f, 0.0f };
+    Vector2 m_offset = { 0.0f, 0.0f };
     bool m_enabled = true;
 };

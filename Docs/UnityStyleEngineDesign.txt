@@ -1,0 +1,582 @@
+Floppy Disk Shooting Game
+Unity風ゲームエンジン基盤 設計案
+
+更新日: 2026-08-22
+
+======================================================================
+1. 方針
+======================================================================
+
+UnityのGameObject／Component構造や操作感を参考にするが、API名は本プロジェクトの
+C++エンジンに合わせる。Unity固有の名称をそのままコピーしない。
+
+用語対応:
+
+- UnityのAwake／Start相当       -> Initialize
+- UnityのFixedUpdate相当        -> FixedTick
+- UnityのUpdate相当             -> Tick
+- UnityのLateUpdate相当         -> LateTick
+- UnityのOnDestroy相当          -> Shutdown
+- UnityのOnEnable相当           -> OnEnabled
+- UnityのOnDisable相当          -> OnDisabled
+- UnityのMonoBehaviour相当      -> Behaviour
+- UnityのInstantiate相当        -> Instantiate（一般的な語なので採用）
+- UnityのDestroy相当            -> Destroy
+
+GameObjectへComponentを追加して機能を組み立てること、Transformの親子階層、
+生成と遅延破棄、タグ、レイヤー、シーン管理などの操作感はUnityへ寄せる。
+
+
+======================================================================
+2. 利用イメージ
+======================================================================
+
+class PlayerController final : public Behaviour {
+public:
+    void Initialize() override {
+        m_collider = GetComponent<CircleCollider>();
+    }
+
+    void Tick() override {
+        Vector3 movement {};
+
+        if (Input::GetKey(KeyCode::A)) movement.x -= 1.0f;
+        if (Input::GetKey(KeyCode::D)) movement.x += 1.0f;
+
+        transform().Translate(movement * moveSpeed * Time::deltaTime);
+
+        if (Input::GetKeyDown(KeyCode::Space)) {
+            GameObject& bullet = Instantiate(
+                PrefabId::PlayerBullet,
+                transform().Position()
+            );
+        }
+    }
+
+    void OnCollisionEnter(const Collision& collision) override {
+        if (collision.Other().CompareTag(Tag::Enemy)) {
+            Destroy(gameObject());
+        }
+    }
+
+private:
+    float moveSpeed = 12.0f;
+    CircleCollider* m_collider = nullptr;
+};
+
+GameObject& player = world.CreateGameObject("Player");
+player.SetTag(Tag::Player);
+player.SetLayer(Layer::Player);
+player.Transform().SetPosition({ 0.0f, 0.0f, 0.0f });
+player.AddComponent<PlayerController>();
+player.AddComponent<MeshRenderer>();
+player.AddComponent<CircleCollider>();
+
+
+======================================================================
+3. 全体構成
+======================================================================
+
+EngineContext
+  Time
+  Input
+  GameWorld
+    Scene
+      GameObject
+        Transform
+        Component
+          Behaviour
+          Renderer
+          Collider
+          Camera
+          AudioSource
+  CollisionSystem
+  RenderSystem
+  AudioSystem
+  ResourceManager
+
+依存方針:
+
+- GameObjectとComponentはDirectX 12の具象型を知らない
+- RenderSystemのみがD3D12RenderingServiceを使用する
+- CollisionSystemがColliderの登録と衝突ペアを管理する
+- GameWorldがGameObjectの所有、生成、破棄、Tickを管理する
+- ゲーム固有のPlayer、Enemy、BulletはBehaviourとして実装する
+
+
+======================================================================
+4. GameObject
+======================================================================
+
+GameObjectはシーン内の実体であり、Componentの所有者とする。
+
+保持情報:
+
+- ObjectId
+- 名前
+- Tag
+- Layer
+- Active状態
+- Transform
+- std::vector<std::unique_ptr<Component>>
+- 所属GameWorldへの非所有参照
+- 破棄予約状態
+
+主なAPI:
+
+- Transform& Transform()
+- template<class T> T& AddComponent(...)
+- template<class T> T* GetComponent()
+- template<class T> std::vector<T*> GetComponents()
+- template<class T> T* GetComponentInChildren()
+- template<class T> T* GetComponentInParent()
+- void SetActive(bool active)
+- bool ActiveSelf() const
+- bool ActiveInHierarchy() const
+- void SetTag(Tag tag)
+- bool CompareTag(Tag tag) const
+- void SetLayer(Layer layer)
+
+規則:
+
+- Transformは全GameObjectが必ず持ち、削除できない
+- GameObjectはComponentをunique_ptrで所有する
+- ComponentからGameObjectへの参照は非所有とする
+- Destroyは即時削除せず、フレーム末尾まで予約する
+- 破棄予約後のGameObjectへComponentを追加できない
+
+
+======================================================================
+5. ComponentとBehaviour
+======================================================================
+
+ComponentはGameObjectへ付加される機能の基底クラスとする。
+
+主なAPI:
+
+- GameObject& gameObject()
+- Transform& transform()
+- template<class T> T* GetComponent()
+- void SetEnabled(bool enabled)
+- bool Enabled() const
+- bool IsActiveAndEnabled() const
+
+Behaviourはゲームロジック用Componentとする。
+
+コールバック:
+
+- Initialize()
+- FixedTick()
+- Tick()
+- LateTick()
+- OnEnabled()
+- OnDisabled()
+- Shutdown()
+- OnCollisionEnter(const Collision&)
+- OnCollisionStay(const Collision&)
+- OnCollisionExit(const Collision&)
+- OnTriggerEnter(const Collision&)
+- OnTriggerStay(const Collision&)
+- OnTriggerExit(const Collision&)
+
+Initializeの規則:
+
+- ComponentがGameWorldへ正式登録された時点で一度だけ呼ぶ
+- GameObjectが非Activeでも初期化自体は一度行う
+- 再度ActiveになってもInitializeは呼び直さない
+- DirectXレンダラーを引数として渡さない
+- 描画初期化はRenderSystemへの登録時にRenderer側で行う
+
+
+======================================================================
+6. Transform
+======================================================================
+
+保持情報:
+
+- localPosition
+- localRotation（Quaternion）
+- localScale
+- parent
+- children
+- localMatrix
+- worldMatrix
+- Dirtyフラグ
+
+主なAPI:
+
+- Position()／SetPosition()
+- LocalPosition()／SetLocalPosition()
+- Rotation()／SetRotation()
+- LocalRotation()／SetLocalRotation()
+- LocalScale()／SetLocalScale()
+- Forward()、Right()、Up()
+- Translate()
+- Rotate()
+- LookAt()
+- SetParent(Transform*, bool worldPositionStays = true)
+- ChildCount()
+- GetChild(index)
+- Find("Body/Weapon/Muzzle")
+- WorldMatrix()
+
+親Transformの変更時は子孫もDirtyとして扱う。行列は必要になった時点で遅延更新し、
+変更されていないTransformを毎Tick再計算しない。
+
+
+======================================================================
+7. GameWorld
+======================================================================
+
+GameWorldはエンジン実行中のGameObjectを所有・管理する中核クラスとする。
+
+主なAPI:
+
+- GameObject& CreateGameObject(std::string_view name)
+- GameObject& Instantiate(PrefabId prefab)
+- GameObject& Instantiate(PrefabId prefab, Vector3 position)
+- void Destroy(Object& object)
+- GameObject* Find(std::string_view name)
+- GameObject* FindWithTag(Tag tag)
+- std::vector<GameObject*> FindGameObjectsWithTag(Tag tag)
+- void FixedTick()
+- void Tick()
+- void LateTick()
+- void FlushPendingChanges()
+- void Clear()
+
+予約キュー:
+
+- 生成予約
+- Component追加予約
+- Active変更予約
+- 破棄予約
+
+BehaviourのTick中にGameObjectを生成・破棄しても、現在の反復処理を壊さない構造にする。
+
+
+======================================================================
+8. 1フレームの処理順
+======================================================================
+
+1. Input::BeginFrame
+2. WindowsメッセージをInputへ反映
+3. Time::BeginFrame
+4. GameWorld::FlushPendingChanges
+5. 未初期化ComponentのInitialize
+6. ActiveになったComponentのOnEnabled
+7. 固定時間が蓄積している間Behaviour::FixedTick
+8. CollisionSystem::Tick
+9. Behaviour::Tick
+10. Behaviour::LateTick
+11. Transformの確定
+12. RenderSystem::Render
+13. 破棄対象のOnDisabledとShutdown
+14. GameWorld::FlushPendingChanges
+
+用途:
+
+- FixedTick: 移動、速度、衝突に関係するゲームロジック
+- Tick: 入力、通常の状態更新、UI、時間ベースの演出
+- LateTick: 追従カメラ、他オブジェクト更新後に必要な処理
+
+既存ISceneも将来的に以下へ統一する。
+
+- Initialize()
+- ProcessInput()
+- FixedTick()
+- Tick()
+- LateTick()
+- Render()
+- Shutdown()
+
+
+======================================================================
+9. SceneとSceneManager
+======================================================================
+
+SceneはGameWorldを所有し、シーン内GameObjectの生存期間を定める。
+
+SceneManagerの責務:
+
+- Sceneファクトリの登録
+- 初期Sceneの生成
+- Scene切り替え予約
+- 現在SceneのTick呼び出し
+- Scene切り替え時のShutdown
+- 共有データの受け渡し
+
+Scene切り替えはTick途中に即時実行せず、フレーム境界で行う。
+DontDestroyOnLoad相当が必要になった場合は、永続GameWorldへGameObjectを移動する。
+
+
+======================================================================
+10. 衝突システム
+======================================================================
+
+現在のCollisionServiceは形状判定を利用できるが、衝突中も毎回Enterを通知している。
+次の構造へ拡張する。
+
+- previousPairs: 前回の衝突ペア
+- currentPairs: 今回の衝突ペア
+- currentだけに存在: Enter
+- 両方に存在: Stay
+- previousだけに存在: Exit
+
+Collider設定:
+
+- enabled
+- isTrigger
+- layer
+- collisionMask
+- offset
+
+形状:
+
+- CircleCollider2D
+- BoxCollider2D
+- SphereCollider
+- BoxCollider
+
+現在のCircleColliderとAABBColliderはXY平面の2D判定なので、2D型として明示する。
+3Dシューティング用にはSphereColliderとBoxColliderを別途追加する。
+
+衝突判定はFixedTickの後に実行する。高速弾には前回位置から現在位置までの
+線分判定を追加する。弾数が増えたらUniform Gridによる空間分割を導入する。
+
+
+======================================================================
+11. 描画システム
+======================================================================
+
+ゲームコードから定数バッファやDrawInstancedを直接操作しない。
+
+Component:
+
+- Camera
+- MeshRenderer
+- SpriteRenderer
+- TextRenderer
+
+RenderSystem:
+
+1. ActiveなCameraを列挙
+2. ActiveなRendererを収集
+3. CameraのcullingMaskで対象を絞る
+4. 不透明、半透明、UIへ分類
+5. Material単位で並べ替える
+6. 定数バッファを割り当てる
+7. D3D12RenderingServiceへ描画命令を発行する
+
+SetPipelineState(0)のような数値指定は廃止し、PipelineIdを使用する。
+画面のアスペクト比はレンダラーの実際の幅と高さから計算する。
+
+
+======================================================================
+12. PrefabとObjectPool
+======================================================================
+
+容量制約を考慮し、第一段階ではJSONなどのPrefabファイルを作らず、
+C++のPrefabRegistryを使用する。
+
+enum class PrefabId : uint16_t {
+    Player,
+    PlayerBullet,
+    BasicEnemy,
+    EnemyBullet,
+    ScoreItem
+};
+
+PrefabRegistryへGameObject構築関数を登録し、Instantiate時に呼び出す。
+
+弾、敵、エフェクトにはObjectPoolを使用する。
+
+- Spawn(PrefabId, position)
+- Despawn(GameObject&)
+- IPoolable::OnSpawned()
+- IPoolable::OnDespawned()
+
+頻繁な動的確保を避け、PlayerBulletなどは初期容量と最大容量を設定する。
+
+
+======================================================================
+13. タグとレイヤー
+======================================================================
+
+実行時の文字列比較と容量を抑えるためenumを使う。
+
+enum class Tag : uint8_t {
+    Untagged,
+    Player,
+    Enemy,
+    PlayerBullet,
+    EnemyBullet,
+    Item,
+    MainCamera
+};
+
+enum class Layer : uint8_t {
+    Default,
+    Player,
+    Enemy,
+    PlayerBullet,
+    EnemyBullet,
+    Item,
+    UI
+};
+
+CollisionSystemとCameraのcullingMaskはLayerのビットマスクを使用する。
+
+
+======================================================================
+14. 配置案
+======================================================================
+
+Engine/
+  Core/
+    Object.h
+    ObjectHandle.h
+    EngineContext.h
+  Scene/
+    GameWorld.h/.cpp
+    GameObject.h/.cpp
+    Component.h
+    Behaviour.h
+    Transform.h/.cpp
+    PrefabRegistry.h/.cpp
+    ObjectPool.h
+  Physics/
+    CollisionSystem.h/.cpp
+    Collision.h
+  Rendering/
+    RenderSystem.h/.cpp
+    Renderer.h
+    Camera.h/.cpp
+  Audio/
+    AudioSystem.h/.cpp
+    AudioSource.h/.cpp
+
+既存のDomain/Entities/GameObjectはエンジン共通基盤に当たるため、最終的には
+Engine/Sceneへ移す。ただし最初から大規模なファイル移動は行わず、機能を完成させてから
+プロジェクトファイルとincludeを段階的に整理する。
+
+
+======================================================================
+15. 実装順
+======================================================================
+
+Phase 1: Transform
+
+- 既存GameObject内のposition、rotation、scale、worldMatrixをTransformへ移す
+- 親子階層を実装する
+- Dirty伝播と遅延行列更新を実装する
+- Transform単体テストを追加する
+
+Phase 2: GameWorldと遅延Destroy
+
+- GameObjectの所有をGameWorldへ集約する
+- CreateGameObject、Find、Destroyを実装する
+- Tick中の生成と破棄を予約処理にする
+- Active状態を実装する
+
+Phase 3: Componentライフサイクル
+
+- enabledを追加する
+- Behaviourを追加する
+- Initialize、FixedTick、Tick、LateTick、Shutdownを実装する
+- OnEnabled、OnDisabledを実装する
+- 呼び出し順のテストを追加する
+
+Phase 4: CollisionSystem完成
+
+- Colliderの自動登録と解除
+- Enter、Stay、Exit
+- Trigger
+- レイヤー衝突表
+- 3D Collider
+
+Phase 5: RenderSystem分離
+
+- Camera
+- Renderer登録
+- MaterialId、PipelineId
+- 画面サイズとアスペクト比
+- ゲームコードからDirectX 12直接操作を除去する
+
+Phase 6: PrefabとObjectPool
+
+- PrefabRegistry
+- Instantiate
+- Spawn、Despawn
+- Player、Enemy、BulletをTemp/ShootingGame.hから移行する
+
+
+======================================================================
+16. 次に実装する機能
+======================================================================
+
+次に実装するのはTransformである。
+
+理由:
+
+- GameObject、Collider、MeshRenderer、CameraのすべてがTransformへ依存する
+- 現在GameObjectが座標と行列計算を直接抱えている
+- GameWorldより小さい変更単位で、安全にテストできる
+- 親子階層がPrefab、カメラ追従、複合敵、UI階層の土台になる
+- Transform完成後にGameWorldへGameObject管理を移しやすい
+
+第一版Transformの実装範囲:
+
+- localPosition
+- localRotation
+- localScale
+- PositionとSetPosition
+- RotationとSetRotation
+- Local系アクセサー
+- SetParent
+- GetParent
+- GetChild
+- ChildCount
+- Translate
+- WorldMatrix
+- Dirty伝播
+
+第一版ではLookAt、Find(path)、TransformPointなどは後回しでよい。
+
+完了条件:
+
+- 親を移動すると子のWorldMatrixへ反映される
+- worldPositionStays=trueで親を変更してもワールド座標が維持される
+- 同じWorldMatrixを繰り返し取得しても不要な再計算が起きない
+- 親子循環を作れない
+- 親破棄時に子の扱いが明確である
+- 既存GameObject、MeshRenderer、ColliderがTransform経由で位置を取得する
+
+
+======================================================================
+17. テスト方針
+======================================================================
+
+- Transformの初期値がposition 0、rotation identity、scale 1である
+- localPositionからWorldMatrixが正しく生成される
+- 親の移動、回転、拡縮が子へ反映される
+- SetParent(nullptr)でルートへ戻せる
+- 自分自身や自分の子を親に指定できない
+- GameObjectのInitializeが一度だけ呼ばれる
+- enabled=falseのBehaviourはTickされない
+- Destroy予約がTick中の反復を壊さない
+- Collision Enter、Stay、Exitが正しい順で呼ばれる
+
+DirectXのウィンドウを必要としないEngine Testsとして作成する。
+
+
+======================================================================
+18. 結論
+======================================================================
+
+構造はUnity風にするが、ライフサイクル名はInitialize、FixedTick、Tick、LateTick、
+Shutdownへ統一する。
+
+次の実装対象はTransformとする。Transformを既存GameObjectから分離して親子階層と
+Dirty伝播を完成させた後、GameWorldと遅延Destroyを実装する。この順序なら既存の
+MeshRendererとColliderを壊す範囲を抑えながら、エンジン基盤を段階的に強化できる。

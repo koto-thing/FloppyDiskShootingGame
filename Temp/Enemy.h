@@ -2,6 +2,7 @@
 #include <vector>
 #include <cmath>
 #include "Bullet.h"
+#include "../Engine/Scene/ObjectPool.h"
 
 /**
  * @brief 敵機クラス (シームレス2D/3D対応)
@@ -93,7 +94,7 @@ public:
         }
     }
 
-    void Update(std::vector<Bullet>& bullets, float playerX, float playerY, float playerZ, int dimMode, int nextDimMode, float progress) {
+    void Tick(ObjectPool<Bullet>& bullets, float playerX, float playerY, float playerZ, int dimMode, int nextDimMode, float progress) {
         if (!active) return;
 
         patternTimer++;
@@ -128,6 +129,7 @@ public:
 
 private:
     void GetMovementDelta(int mode, float px, float py, float pz, float& outDx, float& outDy, float& outDz) {
+        (void)pz;
         if (mode == 0) {
             // 3Dレールモード
             if (type == 0) {
@@ -176,6 +178,7 @@ private:
     }
 
     void CheckActiveBounds(int dimMode, int nextDimMode, float progress) {
+        (void)progress;
         // 3D用のZ手前限界
         if (dimMode == 0 || nextDimMode == 0) {
             if (z < -15.0f) active = false;
@@ -187,7 +190,7 @@ private:
         }
     }
 
-    void FireDanmaku(std::vector<Bullet>& bullets, float px, float py, float pz, int activeMode) {
+    void FireDanmaku(ObjectPool<Bullet>& bullets, float px, float py, float pz, int activeMode) {
         if (activeMode == 0) {
             // 3D弾幕
             if (type == 0 && patternTimer % 80 == 0) {
@@ -243,7 +246,7 @@ private:
         }
     }
 
-    void TargetShot(std::vector<Bullet>& bullets, float px, float py, float pz, float speed, int activeMode) {
+    void TargetShot(ObjectPool<Bullet>& bullets, float px, float py, float pz, float speed, int activeMode) {
         if (activeMode == 0) {
             float dx = px - x;
             float dy = py - y;
@@ -280,21 +283,18 @@ private:
         }
     }
 
-    void CreateBullet(std::vector<Bullet>& bullets, float sx, float sy, float sz, float bulVx, float bulVy, float bulVz, float bulletSize, float r, float g, float b) {
-        for (auto& bul : bullets) {
-            if (!bul.active) {
-                bul.active = true;
-                bul.isEnemyBullet = true;
-                bul.x = sx;
-                bul.y = sy;
-                bul.z = sz;
-                bul.vx = bulVx;
-                bul.vy = bulVy;
-                bul.vz = bulVz;
-                bul.size = bulletSize;
-                bul.color[0] = r; bul.color[1] = g; bul.color[2] = b; bul.color[3] = 1.0f;
-                break;
-            }
-        }
+    void CreateBullet(ObjectPool<Bullet>& bullets, float sx, float sy, float sz, float bulVx, float bulVy, float bulVz, float bulletSize, float r, float g, float b) {
+        Bullet* bullet = bullets.Spawn();
+        if (bullet == nullptr) return;
+        bullet->active = true;
+        bullet->isEnemyBullet = true;
+        bullet->x = sx;
+        bullet->y = sy;
+        bullet->z = sz;
+        bullet->vx = bulVx;
+        bullet->vy = bulVy;
+        bullet->vz = bulVz;
+        bullet->size = bulletSize;
+        bullet->color[0] = r; bullet->color[1] = g; bullet->color[2] = b; bullet->color[3] = 1.0f;
     }
 };

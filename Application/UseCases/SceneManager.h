@@ -4,7 +4,8 @@
 #include <map>
 #include <functional>
 #include "../Interfaces/IScene.h"
-#include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
+
+class Renderer;
 
 /**
  * @brief シーン管理を行うクラス
@@ -30,17 +31,22 @@ public:
      * @param key シーンを識別するためのキー
      */
     template <typename SceneType>
-    void addScene(const Key& key) {
+    void AddScene(const Key& key) {
         m_factories[key] = []() { return std::make_unique<SceneType>(); };
     }
+
+    template <typename SceneType>
+    void addScene(const Key& key) { AddScene<SceneType>(key); }
     
     /**
      * @brief 初期シーンを設定し、シーンの実行を開始する
      * @param firstSceneKey 最初のシーンの識別キー
      */
-    void init(const Key& firstSceneKey) {
-        changeScene(firstSceneKey);
+    void Initialize(const Key& firstSceneKey) {
+        ApplyScene(firstSceneKey);
     }
+
+    void init(const Key& firstSceneKey) { Initialize(firstSceneKey); }
     
     /**
      * @brief 現在実行中のシーンの入力処理を呼び出す
@@ -59,20 +65,30 @@ public:
         
         m_currentScene->Tick();
         
-        // シーン遷移の要求があれば、次のシーンへ遷移
         if (m_currentScene->m_nextSceneRequest.has_value()) {
-            Key nextKey = m_currentScene->m_nextSceneRequest.value();
-            changeScene(nextKey);
+            m_pendingSceneRequest = m_currentScene->m_nextSceneRequest;
+            m_currentScene->m_nextSceneRequest.reset();
         }
     }
+
+    /** @brief フレーム境界で保留中のシーン遷移を反映する */
+    void CommitTransitions() {
+        if (!m_pendingSceneRequest.has_value()) return;
+        const Key nextKey = *m_pendingSceneRequest;
+        m_pendingSceneRequest.reset();
+        ApplyScene(nextKey);
+    }
     
-    /**
-     * @brief 現在実行中のシーンの描画処理を呼び出す
-     * @param renderer DirectX 12 レンダラーの参照
-     */
-    void Render(D3D12RenderingService& renderer) {
-        if (m_currentScene)
-            m_currentScene->Render(renderer);
+    /** @brief 現在実行中のシーンをRenderer経由で描画する */
+    void Render(Renderer& renderer) {
+        if (m_currentScene) m_currentScene->Render(renderer);
+    }
+
+    /** @brief 現在のシーンを終了する */
+    void Shutdown() {
+        if (m_currentScene) m_currentScene->Shutdown();
+        m_currentScene.reset();
+        m_pendingSceneRequest.reset();
     }
     
     /**
@@ -86,12 +102,12 @@ private:
      * @brief 指定されたシーンへ遷移する
      * @param nextKey 遷移先シーンの識別キー
      */
-    void changeScene(const Key& nextKey) {
+    void ApplyScene(const Key& nextKey) {
         auto it = m_factories.find(nextKey);
         if (it == m_factories.end())
             return;
         
-        // 現在のシーンを破棄
+        if (m_currentScene) m_currentScene->Shutdown();
         m_currentScene.reset();
         
         // 新しいシーンを生成して初期化
@@ -103,4 +119,5 @@ private:
     SharedData m_sharedData;                                                              //　シーン間で共有されるデータ
     std::unique_ptr<IScene<Key, SharedData>> m_currentScene;                              // 現在のアクティブなシーン
     std::map<Key, std::function<std::unique_ptr<IScene<Key, SharedData>>()>> m_factories; // シーンファクトリのマップ
+    std::optional<Key> m_pendingSceneRequest;
 };
