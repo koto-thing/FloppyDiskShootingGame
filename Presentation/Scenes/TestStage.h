@@ -4,10 +4,10 @@
 #include "../../Application/Interfaces/IScene.h"
 #include <memory>
 
-class ShootingGame;
+class SideScrollingShooter;
 
 /**
- * @brief テスト用のゲームプレイシーン (スターフォックス風 3D シューティングゲーム)
+ * @brief 横スクロールシューティングのゲームプレイシーン
  */
 class TestStage : public IScene<SceneType, SceneSharedData> {
 public:
@@ -20,6 +20,6 @@ public:
     void Render(D3D12RenderingService& renderer) override;
 
 private:
-    std::unique_ptr<ShootingGame> m_game;
+    std::unique_ptr<SideScrollingShooter> m_game;
 };
 

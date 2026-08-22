@@ -98,6 +98,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     
     // シーンマネージャを作成
     SceneManager<SceneType, SceneSharedData> app;
+    app.getSharedData().audio = &audio;
     
     // シーンを登録
     app.addScene<TitleScene>(SceneType::Title);

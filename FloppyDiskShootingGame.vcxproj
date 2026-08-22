@@ -99,6 +99,7 @@
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -135,6 +136,7 @@
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -151,6 +153,7 @@
     <ClCompile Include="Infrastructure\ExternalServices\MMLParser.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\SynthWaveGenerator.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Presentation\Gameplay\SideScrollingShooter.cpp" />
     <ClCompile Include="Presentation\Scenes\TestStage.cpp" />
     <ClCompile Include="Presentation\Scenes\TitleScene.cpp" />
     <ClCompile Include="Presentation\TitleScene\TitleSceneColumn.cpp" />
@@ -168,6 +171,7 @@
     <ClInclude Include="Application\Interfaces\IScene.h" />
     <ClInclude Include="Application\UseCases\SceneManager.h" />
     <ClInclude Include="Presentation\Scenes\TestStage.h" />
+    <ClInclude Include="Presentation\Gameplay\SideScrollingShooter.h" />
     <ClInclude Include="Presentation\Scenes\TitleScene.h" />
     <ClInclude Include="Presentation\TitleScene\TitleSceneColumn.h" />
     <ClInclude Include="Temp\Bullet.h" />
@@ -205,7 +209,6 @@
     <Copy SourceFiles="Shaders\ObjectShader.hlsl;Shaders\BackgroundShader.hlsl;Shaders\SpellCircleShader.hlsl;Shaders\TextShader.hlsl" DestinationFolder="$(OutDir)Shaders" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="CopyMML" AfterTargets="AfterBuild">
-    <Copy SourceFiles="mml\test.mml" DestinationFolder="$(OutDir)mml" SkipUnchangedFiles="true" Condition="Exists('mml\test.mml')" />
     <Copy SourceFiles="mml\test.mml" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('mml\test.mml')" />
     <Copy SourceFiles="test.mml" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('test.mml')" />
   </Target>
