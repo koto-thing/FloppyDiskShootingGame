@@ -5,6 +5,15 @@
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
+
+void RunTransformTests();
+void RunGeometryTests();
+void RunRendererTests();
+void RunObjectPoolTests();
+void RunCollisionServiceTests();
+void RunSceneManagerTests();
+void RunCameraTests();
+void RunGeometry3DTests();
 #include <thread>
 
 namespace {
@@ -170,6 +179,14 @@ int main()
         VectorOperationsProduceExpectedResults();
         MatrixOperationsProduceExpectedResults();
         QuaternionOperationsProduceExpectedResults();
+        RunTransformTests();
+        RunGeometryTests();
+        RunRendererTests();
+        RunObjectPoolTests();
+        RunCollisionServiceTests();
+        RunSceneManagerTests();
+        RunCameraTests();
+        RunGeometry3DTests();
     } catch (const std::exception& exception) {
         std::cerr << "TimeTests failed: " << exception.what() << '\n';
         return 1;

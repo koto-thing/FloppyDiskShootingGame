@@ -1,4 +1,16 @@
 #include "D3D12RenderingService.h"
+
+namespace {
+/** @brief 2D描画でも共有する256バイト定数バッファの先頭部分 */
+struct RendererTransformBufferData {
+    DirectX::XMFLOAT4X4 u_wvpMatrix;
+    DirectX::XMFLOAT4 u_Color;
+    float u_time;
+    float u_shapeType;
+    float u_rotAngle;
+    float u_pad[41];
+};
+}
 #include "../../Engine/Diagnostics/Debug.h"
 #include <cstdio>
 #include <vector>
@@ -581,6 +593,126 @@ void D3D12RenderingService::SetPipelineState(int type) {
 }
 
 /**
+ * @brief Rendererのパイプライン識別子を既存のD3D12パイプラインへ変換する
+ */
+void D3D12RenderingService::SetPipeline(PipelineId pipeline) {
+    SetPipelineState(static_cast<int>(pipeline));
+}
+
+void D3D12RenderingService::SetCamera(const CameraMatrices& matrices, const Viewport& viewport) {
+    m_cameraMatrices = matrices;
+    m_cameraViewport = viewport;
+    m_hasCamera = viewport.IsValid();
+    if (m_hasCamera) {
+        D3D12_VIEWPORT d3dViewport{static_cast<float>(viewport.x), static_cast<float>(viewport.y), static_cast<float>(viewport.width), static_cast<float>(viewport.height), 0.0f, 1.0f};
+        D3D12_RECT scissor{viewport.x, viewport.y, viewport.x + viewport.width, viewport.y + viewport.height};
+        m_commandList->RSSetViewports(1, &d3dViewport);
+        m_commandList->RSSetScissorRects(1, &scissor);
+    }
+}
+
+void D3D12RenderingService::ResetCamera() {
+    m_hasCamera = false;
+    D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height), 0.0f, 1.0f};
+    D3D12_RECT scissor{0, 0, m_width, m_height};
+    m_commandList->RSSetViewports(1, &viewport);
+    m_commandList->RSSetScissorRects(1, &scissor);
+}
+
+/**
+ * @brief 2D描画用の定数バッファを書き込み、プロシージャル形状を描画する
+ */
+void D3D12RenderingService::DrawUiPrimitive(
+    float x,
+    float y,
+    float width,
+    float height,
+    float z,
+    const ColorF& color,
+    float shapeType,
+    UINT vertexCount) {
+    if (m_constantBufferCursor >= MAX_CONSTANT_BUFFER_ELEMENTS) return;
+
+    // NDC上の中心、サイズを既存シェーダーの単位形状へ変換する
+    auto* cbData = reinterpret_cast<RendererTransformBufferData*>(
+        reinterpret_cast<char*>(m_cbvCpuData) + static_cast<size_t>(m_constantBufferCursor) * 256);
+    DirectX::XMMATRIX matrix = DirectX::XMMatrixScaling(width, height, 1.0f) *
+        DirectX::XMMatrixTranslation(x, y, z);
+    DirectX::XMStoreFloat4x4(&cbData->u_wvpMatrix, DirectX::XMMatrixTranspose(matrix));
+    cbData->u_Color = {color.r, color.g, color.b, color.a};
+    cbData->u_time = 0.0f;
+    cbData->u_shapeType = shapeType;
+    cbData->u_rotAngle = 0.0f;
+
+    // 定数バッファをバインドして、形状に応じた頂点数を発行する
+    const D3D12_GPU_VIRTUAL_ADDRESS address = m_constantBuffer->GetGPUVirtualAddress() +
+        static_cast<UINT64>(m_constantBufferCursor) * 256;
+    m_commandList->SetGraphicsRootConstantBufferView(0, address);
+    m_commandList->DrawInstanced(vertexCount, 1, 0, 0);
+    ++m_constantBufferCursor;
+}
+
+/**
+ * @brief NDC矩形を描画する
+ */
+void D3D12RenderingService::DrawRect(const Rect& rect, const ColorF& color) {
+    DrawUiPrimitive(rect.position.x, rect.position.y, rect.size.x, rect.size.y, 0.0f,
+                    color, 6.0f, 4);
+}
+
+void D3D12RenderingService::DrawPrimitive3D(const Primitive3D& primitive) {
+    if (m_constantBufferCursor >= MAX_CONSTANT_BUFFER_ELEMENTS) return;
+
+    struct PrimitiveBuffer {
+        DirectX::XMFLOAT4X4 wvp;
+        DirectX::XMFLOAT4 color;
+        float time;
+        float shapeType;
+        float rotationAngle;
+        float padding[41];
+    };
+
+    float shapeType = 1.0f;
+    UINT vertexCount = 36;
+    switch (primitive.shape) {
+    case PrimitiveShape::Plate: shapeType = 0.0f; vertexCount = 4; break;
+    case PrimitiveShape::Box: shapeType = 1.0f; vertexCount = 36; break;
+    case PrimitiveShape::Sphere: shapeType = 1.0f; vertexCount = 36; break;
+    case PrimitiveShape::Cylinder: shapeType = 3.0f; vertexCount = 96; break;
+    case PrimitiveShape::Cone: shapeType = 4.0f; vertexCount = 48; break;
+    case PrimitiveShape::Prism: shapeType = 5.0f; vertexCount = 24; break;
+    case PrimitiveShape::Sprite2D: shapeType = 6.0f; vertexCount = 4; break;
+    }
+
+    auto* cbData = reinterpret_cast<PrimitiveBuffer*>(
+        reinterpret_cast<char*>(m_cbvCpuData) + static_cast<size_t>(m_constantBufferCursor) * 256);
+    for (int row = 0; row < 4; ++row) {
+        for (int column = 0; column < 4; ++column) {
+            cbData->wvp.m[row][column] = primitive.wvpMatrix.m[row][column];
+        }
+    }
+    cbData->color = {primitive.color.r, primitive.color.g, primitive.color.b, primitive.color.a};
+    cbData->time = 0.0f;
+    cbData->shapeType = shapeType;
+    cbData->rotationAngle = primitive.rotationAngle;
+    const auto address = m_constantBuffer->GetGPUVirtualAddress() +
+        static_cast<UINT64>(m_constantBufferCursor) * 256;
+    m_commandList->SetGraphicsRootConstantBufferView(0, address);
+    m_commandList->DrawInstanced(vertexCount, 1, 0, 0);
+    ++m_constantBufferCursor;
+}
+
+/**
+ * @brief NDC円を照準用プロシージャルシェーダーで描画する
+ */
+void D3D12RenderingService::DrawCircle(const Circle& circle, const ColorF& color) {
+    SetPipeline(PipelineId::SpellCircle);
+    const float diameter = circle.radius < 0.0f ? -circle.radius * 2.0f : circle.radius * 2.0f;
+    DrawUiPrimitive(circle.center.x, circle.center.y, diameter, diameter, 0.0f,
+                    color, 6.0f, 4);
+}
+
+/**
  * Siv3D風の簡易テキスト描画インターフェース
  */
 void D3D12RenderingService::RenderText(const char* text, DirectX::XMFLOAT2 position, float size, DirectX::XMFLOAT4 color) {
@@ -622,5 +754,17 @@ void D3D12RenderingService::RenderText(const char* text, DirectX::XMFLOAT2 posit
     
     // 次のテキストが使用する位置を自動更新
     m_constantBufferCursor += static_cast<UINT>(length);
+}
+
+/**
+ * @brief Rendererの文字コマンドを既存の文字描画処理へ転送する
+ */
+void D3D12RenderingService::DrawTextCommand(
+    std::string_view text,
+    const Vector2& position,
+    float size,
+    const ColorF& color) {
+    std::string ownedText(text);
+    RenderText(ownedText.c_str(), {position.x, position.y}, size, {color.r, color.g, color.b, color.a});
 }
 

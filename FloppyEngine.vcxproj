@@ -82,8 +82,19 @@
     </ClCompile>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Domain\Entities\Component.cpp" />
     <ClCompile Include="Engine\Diagnostics\Debug.cpp" />
+    <ClCompile Include="Engine\Scene\Transform.cpp" />
     <ClCompile Include="Domain\Entities\GameObject.cpp" />
+    <ClCompile Include="Engine\Scene\GameWorld.cpp" />
+    <ClCompile Include="Engine\Geometry\Circle.cpp" />
+    <ClCompile Include="Engine\Geometry\Rect.cpp" />
+    <ClCompile Include="Engine\Geometry\Sphere.cpp" />
+    <ClCompile Include="Engine\Geometry\Box.cpp" />
+    <ClCompile Include="Engine\Geometry\Ray.cpp" />
+    <ClCompile Include="Engine\Graphics\Camera2D.cpp" />
+    <ClCompile Include="Engine\Graphics\Camera3D.cpp" />
+    <ClCompile Include="Engine\Graphics\Renderer.cpp" />
     <ClCompile Include="Domain\Entities\MeshRenderer.cpp" />
     <ClCompile Include="Domain\ValueObjects\CollisionLayer.cpp" />
     <ClCompile Include="Engine\Input\Input.cpp" />
@@ -103,6 +114,20 @@
     <ClInclude Include="Domain\Entities\CircleCollider.h" />
     <ClInclude Include="Domain\Entities\Collider.h" />
     <ClInclude Include="Domain\Entities\Component.h" />
+    <ClInclude Include="Engine\Scene\Transform.h" />
+    <ClInclude Include="Engine\Geometry\Circle.h" />
+    <ClInclude Include="Engine\Geometry\Rect.h" />
+    <ClInclude Include="Engine\Geometry\Sphere.h" />
+    <ClInclude Include="Engine\Geometry\Box.h" />
+    <ClInclude Include="Engine\Geometry\Ray.h" />
+    <ClInclude Include="Engine\Geometry\RayHit.h" />
+    <ClInclude Include="Engine\Graphics\Color.h" />
+    <ClInclude Include="Engine\Graphics\Renderer.h" />
+    <ClInclude Include="Engine\Graphics\IRenderBackend.h" />
+    <ClInclude Include="Engine\Graphics\Viewport.h" />
+    <ClInclude Include="Engine\Graphics\CameraMatrices.h" />
+    <ClInclude Include="Engine\Graphics\Camera2D.h" />
+    <ClInclude Include="Engine\Graphics\Camera3D.h" />
     <ClInclude Include="Domain\Entities\GameObject.h" />
     <ClInclude Include="Domain\Entities\Mesh.h" />
     <ClInclude Include="Domain\Entities\MeshRenderer.h" />
@@ -122,6 +147,9 @@
     <ClInclude Include="Engine\Math\Vector3.h" />
     <ClInclude Include="Engine\Math\Vector4.h" />
     <ClInclude Include="Engine\Time\Time.h" />
+    <ClInclude Include="Engine\Scene\GameWorld.h" />
+    <ClInclude Include="Engine\Scene\Tag.h" />
+    <ClInclude Include="Engine\Scene\ObjectPool.h" />
     <ClInclude Include="Infrastructure\ExternalServices\D3D12RenderingService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\InputService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\TextRenderingService.h" />

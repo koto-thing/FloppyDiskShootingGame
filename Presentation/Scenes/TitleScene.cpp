@@ -1,5 +1,6 @@
 #include "TitleScene.h"
-#include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
+#include <windows.h>
+#include "../../Engine/Graphics/Renderer.h"
 #include "../../Infrastructure/ExternalServices/InputService.h"
 
 /**
@@ -25,12 +26,15 @@ void TitleScene::Tick() {
     }
 }
 
+void TitleScene::Shutdown() {
+}
+
 /**
  * @brief タイトルシーンの描画処理
  */
-void TitleScene::Render(D3D12RenderingService& renderer) {
+void TitleScene::Render(Renderer& renderer) {
     // 画面上部に "TITLE" と表示
-    renderer.RenderText(
+    renderer.DrawText(
         "FLOPPY DISK SHOOTING GAME",
         { -0.7f, 0.6f },
         0.04f,
@@ -38,7 +42,7 @@ void TitleScene::Render(D3D12RenderingService& renderer) {
     );
     
     // 画面下部に "PRESS ENTER TO START" と表示
-    renderer.RenderText(
+    renderer.DrawText(
         "PRESS ENTER TO START",
         { -0.3f, 0.0f},
         0.02f,

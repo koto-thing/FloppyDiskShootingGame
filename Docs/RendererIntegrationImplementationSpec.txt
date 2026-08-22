@@ -1,0 +1,594 @@
+Floppy Disk Shooting Game
+Siv3D風Renderer統合 実装仕様書
+
+対象実装者: Luna
+作成日: 2026-08-22
+
+======================================================================
+1. 目的
+======================================================================
+
+現在追加されているSiv3D風Renderer APIを、記録だけの仮実装から実際に画面へ描画できる
+完成した経路へ発展させる。
+
+本仕様の最終状態:
+
+- Renderer::Draw()で登録した描画コマンドがGPUへ送信される
+- Circle、Rect、Textが同じ遅延描画方式で処理される
+- ISceneとSceneManagerがD3D12RenderingServiceではなくRendererを受け取る
+- ゲームコードからDirectX 12バックエンドへの依存を段階的に除去できる
+- テストプロジェクトがビルド・リンク・実行できる
+- 既存ゲームの見た目と動作を壊さない
+
+この作業はRenderer経路の完成を目的とする。Camera、ResourceManager、すべての3D描画の
+全面移行は本仕様の対象外とする。
+
+
+======================================================================
+2. 作業開始前のルール
+======================================================================
+
+1. このファイルを最初から最後まで読んでから変更すること
+2. git statusとgit diffを確認すること
+3. ユーザーの既存変更をgit reset、checkout、restoreで破棄しないこと
+4. 既存差分へ上書きする場合は内容を理解してから編集すること
+5. Doxygen形式のコメントを使用すること
+6. コメント末尾に句点を付けないこと
+7. 公開APIへID3D12系、DXGI系、DirectX::XMFLOAT系を新たに露出させないこと
+8. Renderer利用側へ定数バッファ番号、頂点数、パイプライン整数を渡さないこと
+9. 各Phaseの終了時にビルドとテストを実施すること
+10. 本仕様の対象外機能をついでに大規模実装しないこと
+
+
+======================================================================
+3. 現状と問題点
+======================================================================
+
+Engine/Graphics/Renderer.h/.cpp:
+
+- Circle、RectはRenderCommandへ記録するだけで実行されない
+- Textは記録と同時にD3D12RenderingService::RenderTextを呼んでいる
+- Pipelineも記録と同時にバックエンドを操作している
+- EndFrameはD3D12RenderingService::EndFrameを呼ぶだけである
+- 遅延描画と即時描画が混在している
+- コマンド上限超過が無言で捨てられる
+
+main.cpp:
+
+- Renderer renderFacadeを作成している
+- BeginFrameとEndFrameだけはRendererへ渡している
+- app.Renderには生のD3D12RenderingServiceを渡している
+
+Application/Interfaces/IScene.h:
+
+- Render(D3D12RenderingService&)になっている
+
+Application/UseCases/SceneManager.h:
+
+- Render(D3D12RenderingService&)になっている
+
+Temp/ShootingGame.h:
+
+- ID3D12GraphicsCommandListを直接操作している
+- 定数バッファを直接書き換えている
+- SetPipelineState(int)を使用している
+- DrawInstancedを直接呼んでいる
+- アスペクト比が800.0f / 600.0fで固定されている
+
+FloppyEngine.Tests.vcxproj:
+
+- コンパイルは完了する
+- D3D12、DXGI、D3DCompilerのリンクシンボル不足で失敗する
+
+
+======================================================================
+4. 実装範囲
+======================================================================
+
+必須:
+
+- テストリンク構成の修正
+- RenderCommandの実行機構
+- Renderer::Flush
+- Circle、Rect、Text、Pipelineの遅延実行統一
+- コマンド容量超過の検出
+- IScene::Render(Renderer&)への移行
+- SceneManager::Render(Renderer&)への移行
+- TitleSceneとTestStageのRenderer対応
+- main.cppのRenderer経路統一
+- Rendererの単体テスト拡張
+- 最低一つの実画面用描画経路をRenderer経由にする
+
+可能なら実施:
+
+- バックエンドの描画実行を小さな内部インターフェースへ分離
+- HeadlessなFakeRenderBackendを使用したテスト
+- D3D12バックエンドの画面サイズ取得API
+
+対象外:
+
+- Camera2D／Camera3Dの本実装
+- Texture／Material／Meshのリソース管理
+- ShootingGame.h全体の一括書き換え
+- Player／Enemy／Bulletの再設計
+- シェーダー全面刷新
+- ECS
+- Unity風GameObject機能の追加
+
+
+======================================================================
+5. 目標フレーム処理
+======================================================================
+
+最終的なmain.cppの描画部分は概ね以下とする。
+
+renderer.BeginFrame();
+app.Render(renderer);
+renderer.EndFrame();
+
+処理順:
+
+1. Renderer::BeginFrame
+2. バックエンドのBeginFrame
+3. コマンド領域をリセット
+4. SceneがRenderer::Draw／DrawText／SetPipelineを呼ぶ
+5. Renderer::EndFrame
+6. Renderer::Flush
+7. 記録順にコマンドをバックエンドへ実行
+8. バックエンドのEndFrame
+
+EndFrame内でFlushする。
+必要ならFlushをpublicにしてもよいが、通常利用ではEndFrameだけで完結させる。
+
+
+======================================================================
+6. Renderer公開API
+======================================================================
+
+最低限、以下を提供する。
+
+class Renderer {
+public:
+    static constexpr std::size_t MaxCommands = 4096;
+
+    void BeginFrame();
+    void Draw(const Circle& circle, const ColorF& color);
+    void Draw(const Rect& rect, const ColorF& color);
+    void DrawText(std::string_view text,
+                  const Vector2& position,
+                  float size,
+                  const ColorF& color);
+    void SetPipeline(PipelineId pipeline);
+    void Flush();
+    void EndFrame();
+
+    std::size_t CommandCount() const;
+    std::size_t DroppedCommandCount() const;
+    bool HasOverflowed() const;
+};
+
+規則:
+
+- Draw系はバックエンドを即時操作しない
+- SetPipelineもバックエンドを即時操作しない
+- Flushだけが記録済みコマンドを実行する
+- Flush後に同じコマンドを再実行しない
+- EndFrameは未FlushならFlushしてからPresent相当を行う
+- バックエンドなしのRendererでもコマンド記録テストができる
+- MaxCommands超過時はクラッシュせず、超過数を記録する
+- デバッグビルドではフレームごとに一度だけ警告してよい
+
+
+======================================================================
+7. RenderCommand
+======================================================================
+
+現在の固定容量設計を維持してよい。
+
+必須Type:
+
+- Circle
+- Rect
+- Text
+- Pipeline
+
+保持情報:
+
+- Type
+- 図形データ
+- ColorF
+- Textの位置、サイズ、文字列
+- PipelineId
+
+規則:
+
+- Command生成時は以前のデータを残さない
+- Textは終端NULLを保証する
+- 長すぎるTextは固定容量へ安全に切り詰める
+- 切り詰めたことをテスト可能にする
+- RenderCommandからD3D12型を参照しない
+
+std::variantは使用してもよいが、バイナリサイズとコンパイルコストを考慮し、現在の単純な
+固定構造を維持してもよい。
+
+
+======================================================================
+8. バックエンド境界
+======================================================================
+
+推奨案:
+
+Engine/Graphics/IRenderBackend.hを追加する。
+
+class IRenderBackend {
+public:
+    virtual ~IRenderBackend() = default;
+    virtual void BeginFrame() = 0;
+    virtual void DrawCircle(const Circle&, const ColorF&) = 0;
+    virtual void DrawRect(const Rect&, const ColorF&) = 0;
+    virtual void DrawText(std::string_view,
+                          const Vector2&,
+                          float,
+                          const ColorF&) = 0;
+    virtual void SetPipeline(PipelineId) = 0;
+    virtual void EndFrame() = 0;
+};
+
+D3D12RenderBackendまたはD3D12RenderingService Adapterがこれを実装する。
+
+ただし、既存コードへの変更量が大きすぎる場合は、第一段階ではRenderer.cpp内部に
+D3D12RenderingServiceへの変換処理を置いてよい。その場合でもRenderer.hと
+RenderCommandへDirectX 12型を露出させないこと。
+
+テスト容易性を優先し、可能ならFakeRenderBackendを作ること。
+
+FakeRenderBackendで検証するもの:
+
+- BeginFrameが最初に呼ばれる
+- コマンドが登録順に実行される
+- TextがFlush前に実行されない
+- PipelineがFlush前に変更されない
+- EndFrameが最後に呼ばれる
+- Flushを二回呼んでも二重実行されない
+
+
+======================================================================
+9. CircleとRectの実描画
+======================================================================
+
+CircleとRectは最終的に画面へ描画されなければならない。
+
+第一版では既存のプロシージャル形状シェーダーを利用してよい。
+
+Circle:
+
+- centerを2D位置として扱う
+- radiusから幅と高さを生成する
+- ColorFを定数バッファへ転送する
+- 円形用shapeTypeまたは専用Pipelineを使用する
+
+Rect:
+
+- positionの意味を既存Geometry定義と一致させる
+- sizeから幅と高さを生成する
+- ColorFを定数バッファへ転送する
+
+座標系:
+
+- 第一版は既存の描画座標系へ合わせてよい
+- ピクセル座標かNDCかをRenderer.hのDoxygenへ明記する
+- CircleとRectで異なる座標系を使わない
+- 将来の仮想画面対応を妨げない変換関数へ集約する
+
+重要:
+
+単体テストが通るだけでなく、実行時にCircleとRectが見えることを確認する。
+
+
+======================================================================
+10. Scene API移行
+======================================================================
+
+Application/Interfaces/IScene.h:
+
+変更前:
+
+virtual void Render(D3D12RenderingService& renderer) = 0;
+
+変更後:
+
+virtual void Render(Renderer& renderer) = 0;
+
+Application/UseCases/SceneManager.h:
+
+void Render(Renderer& renderer);
+
+Presentation/Scenes/TitleScene:
+
+- Render(Renderer&)へ変更
+- タイトル文字はRenderer::DrawTextを使用する
+- 動作確認用にCircleまたはRectを一つ描画してもよい
+- 確認用図形を残す場合はタイトル画面の正式な装飾として意味を持たせる
+
+Presentation/Scenes/TestStage:
+
+- Render(Renderer&)へ変更
+- ShootingGameの移行が完了していない間だけ、Rendererから互換バックエンドを得る
+  逃げ道を作らず、明示的なLegacyRenderContextを渡す方式を検討する
+- 公開APIにD3D12RenderingService&を戻さない
+
+推奨移行方法:
+
+Rendererへ一時的なLegacyDrawコールバックまたは限定された3D描画APIを追加し、
+ShootingGameが必要な描画命令をRendererへ依頼する。
+
+禁止:
+
+- Renderer::GetD3D12Backend()
+- Renderer::GetCommandList()
+- Renderer::GetConstantBufferData()
+
+これらを追加すると抽象化が無意味になるため禁止する。
+
+
+======================================================================
+11. 既存3D描画の段階移行
+======================================================================
+
+本仕様ではShootingGame.h全体を一度に移行しない。
+
+最低限の移行対象:
+
+1. 背景またはUI矩形のどちらか一種類
+2. TitleSceneのText
+3. 動作確認用CircleまたはRect
+
+追加してよい最小3D API:
+
+struct Primitive3D {
+    PrimitiveShape shape;
+    Transform transform;
+    ColorF color;
+};
+
+void Renderer::Draw(const Primitive3D& primitive);
+
+または:
+
+- DrawBox
+- DrawSphere
+- DrawCylinder
+- DrawCone
+- DrawPlate
+
+ただし、ゲーム側へshapeType整数、vertexCount、定数バッファindexを渡してはいけない。
+
+Renderer内部で以下を決める。
+
+- Pipeline
+- shapeType
+- vertexCount
+- 定数バッファ割り当て
+
+既存ShootingGameの描画を移行する際は、一種類ずつ置き換えて見た目を比較する。
+
+
+======================================================================
+12. 画面サイズとアスペクト比
+======================================================================
+
+本仕様ではCameraの完成までは要求しないが、800.0f / 600.0fの固定値は解消する。
+
+D3D12RenderingServiceまたはRendererから以下を取得可能にする。
+
+- Width()
+- Height()
+- AspectRatio()
+
+規則:
+
+- Heightが0の場合の除算を防ぐ
+- 初期化時の1920×1080を正しく返す
+- 将来のWM_SIZE対応時に更新可能な設計にする
+- ShootingGameのProjection行列はAspectRatio()を使用する
+
+
+======================================================================
+13. テストプロジェクト修正
+======================================================================
+
+現在のリンクエラー:
+
+- D3D12SerializeRootSignature
+- D3D12CreateDevice
+- D3D12GetDebugInterface
+- CreateDXGIFactory1
+- D3DCompileFromFile
+- D3DCompile
+
+最小修正案:
+
+FloppyEngine.Tests.vcxprojへ以下を追加する。
+
+- d3d12.lib
+- dxgi.lib
+- d3dcompiler.lib
+
+推奨修正案:
+
+RendererテストがD3D12RenderingServiceをリンクしなくても実行できるよう、IRenderBackendと
+FakeRenderBackendを利用する。FloppyEngine本体がD3D12実装を含むため最終リンクで必要に
+なる場合は、上記ライブラリ追加も行う。
+
+注意:
+
+- テストが偶然リンクしただけで終わらせず、実行結果も確認する
+- Debug x64を最低限検証する
+- 可能ならRelease x64もビルドする
+
+
+======================================================================
+14. RendererTestsの必須ケース
+======================================================================
+
+既存Tests/RendererTests.cppを拡張する。
+
+必須:
+
+1. BeginFrameで前フレームのコマンドが消える
+2. Circleが正しい値で記録される
+3. Rectが正しい値で記録される
+4. Textが正しく終端される
+5. 長いTextがバッファを越えない
+6. Pipelineが正しく記録される
+7. Flushで登録順に実行される
+8. Flush前にはバックエンドが呼ばれない
+9. Flush二回で二重実行されない
+10. EndFrameが未実行コマンドをFlushする
+11. MaxCommandsを越えてもクラッシュしない
+12. DroppedCommandCountが正しい
+13. BeginFrameでoverflow状態がリセットされる
+14. バックエンドなしでも記録操作が安全である
+
+FakeRenderBackendを使う場合、実行されたイベントをvectorへ記録して順序を検証する。
+
+
+======================================================================
+15. その他の警告修正
+======================================================================
+
+本作業中に確認されている警告は、影響範囲が小さいため修正する。
+
+Domain/ValueObjects/ColliderType.h:
+
+- ファイル先頭または末尾の不正なセミコロン／改行を修正する
+
+Domain/Interfaces/ICollisionReceiver.h:
+
+- デフォルト空実装の未使用引数を名前なし引数にするか(void)で明示する
+
+Engine/Scene/ObjectPool.h:
+
+- 到達不能コード警告C4702の原因を修正する
+
+Domain/ValueObjects/CharacterASCIIData.h:
+
+- 単一行コメント末尾の行連結文字を修正する
+
+警告を隠すためにプロジェクト全体の警告レベルを下げてはいけない。
+
+
+======================================================================
+16. 完了条件
+======================================================================
+
+以下をすべて満たしたら完了とする。
+
+- FloppyEngine Debug x64がビルド成功する
+- FloppyEngine.Tests Debug x64がリンク成功する
+- FloppyEngine.Tests.exeが全テスト成功で終了コード0を返す
+- FloppyDiskShootingGame Debug x64がビルド成功する
+- ISceneとSceneManagerにD3D12RenderingServiceが露出していない
+- main.cppがRendererだけをSceneへ渡している
+- DrawTextがFlush前にバックエンドを呼ばない
+- CircleとRectが実画面へ描画される
+- コマンド上限超過が検出可能である
+- 800.0f / 600.0fの固定アスペクト比がなくなっている
+- 既存タイトル画面とゲーム画面が起動する
+- 既存3Dゲームの描画が大きく崩れていない
+- 新しいコンパイル警告を増やしていない
+
+
+======================================================================
+17. 受け入れ確認コマンド
+======================================================================
+
+環境に合わせたMSBuildパスを使用する。
+
+Debug x64 Tests:
+
+MSBuild.exe FloppyEngine.Tests.vcxproj /p:Configuration=Debug /p:Platform=x64 /m
+bin\x64\Debug\FloppyEngine.Tests.exe
+
+Debug x64 Game:
+
+MSBuild.exe FloppyDiskShootingGame.vcxproj /p:Configuration=Debug /p:Platform=x64 /m
+
+旧依存の検索:
+
+rg -n "Render\(D3D12RenderingService&|app\.Render\(renderer\)|800\.0f / 600\.0f" \
+  Application Presentation Temp main.cpp
+
+Renderer抽象化漏れの検索:
+
+rg -n "GetCommandList|GetCbvCpuData|SetGraphicsRootConstantBufferView|DrawInstanced" \
+  Application Presentation Domain Engine/Graphics
+
+Temp以外のゲーム公開層では0件を目標とする。
+
+
+======================================================================
+18. Lunaへ渡す実行指示
+======================================================================
+
+以下をLunaへそのまま渡してよい。
+
+--- ここから ---
+
+Docs/RendererIntegrationImplementationSpec.txtを最初から最後まで読み、記載された仕様に
+従って実装してください。
+
+最初にgit status、git diff、追加ファイルを確認し、ユーザーの既存変更を保存してください。
+git reset、git checkout、git restoreによる既存変更の破棄は禁止です。
+
+実装の優先順は次のとおりです。
+
+1. 現在のビルド・テスト結果を再現
+2. FloppyEngine.Testsのリンクを修正
+3. Renderer::Flushとコマンド遅延実行を実装
+4. FakeRenderBackendまたは同等手段で実行順をテスト
+5. IScene／SceneManager／TitleScene／TestStageをRenderer&へ移行
+6. main.cppからSceneへRendererだけを渡す
+7. Circle、Rect、Textの実描画を確認
+8. 固定アスペクト比を実画面サイズへ置換
+9. 仕様記載の警告を修正
+10. Testsとゲーム本体をビルドして動作確認
+
+ShootingGame.h全体、Camera、ResourceManager、Player／Enemy／Bulletの大規模再設計は今回の
+対象外です。既存3D描画を維持するための最小互換経路だけを実装してください。
+
+RendererからD3D12RenderingService、CommandList、定数バッファポインタを取得できる公開APIを
+追加してはいけません。バックエンド依存はRenderer内部またはIRenderBackend実装へ閉じ込めて
+ください。
+
+完了時は以下を報告してください。
+
+- 変更ファイル一覧
+- Rendererのフレーム処理順
+- バックエンド境界の設計
+- 旧D3D12依存を除去した範囲
+- 残したLegacy描画範囲と理由
+- Debug x64のビルド結果
+- テスト件数と結果
+- 実画面確認結果
+- 未解決事項
+
+--- ここまで ---
+
+
+======================================================================
+19. 次フェーズ
+======================================================================
+
+本仕様完了後に、別仕様として以下へ進む。
+
+1. Camera2D／Camera3D
+2. Sphere／Box／Rayの3D Geometry
+3. Random API
+4. MeshHandle／MaterialHandle／FontHandle
+5. ResourceManager
+6. 仮想画面とウィンドウリサイズ
+7. ShootingGameの3D描画全面移行
+8. Tempから正式なEntityへの移動
+
+Renderer統合が完了するまでは次フェーズへ進まないこと。

@@ -7,10 +7,11 @@
 #include <string>
 
 #include "TextRenderingService.h"
+#include "../../Engine/Graphics/IRenderBackend.h"
 
 using Microsoft::WRL::ComPtr;
 
-class D3D12RenderingService {
+class D3D12RenderingService : public IRenderBackend {
 public:
     D3D12RenderingService();
     ~D3D12RenderingService();
@@ -18,8 +19,8 @@ public:
     bool Initialize(HWND hwnd, int width, int height);
     void Cleanup();
 
-    void BeginFrame();
-    void EndFrame();
+    void BeginFrame() override;
+    void EndFrame() override;
     void SyncFrame();
 
     ID3D12Device* GetDevice() const { return m_device.Get(); }
@@ -32,6 +33,22 @@ public:
     UINT GetDescriptorHandleIncrementSize() const { return m_rtvDescriptorSize; }
     D3D12_CPU_DESCRIPTOR_HANDLE GetRtvCpuDescriptorHandle() const;
 
+    /** @brief 2D円を既存のプロシージャルシェーダーで描画する */
+    void DrawCircle(const Circle& circle, const ColorF& color) override;
+    /** @brief 2D矩形を既存のプロシージャルシェーダーで描画する */
+    void DrawRect(const Rect& rect, const ColorF& color) override;
+    void DrawPrimitive3D(const Primitive3D& primitive) override;
+    /** @brief Rendererのパイプライン識別子をD3D12ステートへ変換する */
+    void SetPipeline(PipelineId pipeline) override;
+    void SetCamera(const CameraMatrices& matrices, const Viewport& viewport) override;
+    void ResetCamera() override;
+    /** @brief 画面幅を取得する */
+    int Width() const override { return m_width; }
+    /** @brief 画面高さを取得する */
+    int Height() const override { return m_height; }
+    /** @brief 画面のアスペクト比を取得する */
+    float AspectRatio() const override { return m_height == 0 ? 1.0f : static_cast<float>(m_width) / static_cast<float>(m_height); }
+
     // パイプラインステートの切り替え (0: Object, 1: Background, 2: SpellCircle)
     void SetPipelineState(int type);
 
@@ -39,9 +56,12 @@ public:
     const TextRenderingService& GetTextRenderer() const { return m_textRenderer; }
 
     // Siv3D風の簡易テキスト描画インターフェース
+    void DrawTextCommand(std::string_view text, const Vector2& position, float size, const ColorF& color) override;
     void RenderText(const char* text, DirectX::XMFLOAT2 position, float size, DirectX::XMFLOAT4 color);
 
 private:
+    void DrawUiPrimitive(float x, float y, float width, float height, float z, const ColorF& color, float shapeType, UINT vertexCount);
+
     bool InitD3D12(HWND hwnd, int width, int height);
     bool InitPipeline();
 
@@ -75,4 +95,7 @@ private:
     UINT m_constantBufferCursor = 0;                           // 現在のフレームで次に使用する定数バッファ番号
     ComPtr<ID3D12Resource> m_constantBuffer;
     void* m_cbvCpuData;
+    CameraMatrices m_cameraMatrices {};
+    Viewport m_cameraViewport {};
+    bool m_hasCamera = false;
 };

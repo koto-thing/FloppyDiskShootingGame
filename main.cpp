@@ -15,6 +15,7 @@
 #include "Infrastructure/ExternalServices/Win32WindowService.h"
 #include "Infrastructure/ExternalServices/AudioService.h"
 #include "Infrastructure/ExternalServices/D3D12RenderingService.h"
+#include "Engine/Graphics/Renderer.h"
 #include "Presentation/Scenes/TitleScene.h"
 #include "Presentation/Scenes/TestStage.h"
 
@@ -79,6 +80,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         Debug::Shutdown();
         return 0;
     }
+    Renderer renderFacade(renderer);
 
     AudioService audio;
     if (!audio.Initialize()) {
@@ -100,11 +102,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     SceneManager<SceneType, SceneSharedData> app;
     
     // シーンを登録
-    app.addScene<TitleScene>(SceneType::Title);
-    app.addScene<TestStage>(SceneType::TestStage);
+    app.AddScene<TitleScene>(SceneType::Title);
+    app.AddScene<TestStage>(SceneType::TestStage);
     
     // 初期シーンの設定
-    app.init(SceneType::Title);
+    app.Initialize(SceneType::Title);
 
     // 初期化処理にかかった時間をゲーム時間へ含めない
     Time::Initialize();
@@ -113,7 +115,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     MSG msg = { };
     while (msg.message != WM_QUIT) {
         // 前フレームの状態を保存して新しい入力の受付を開始する
-        Input::Update();
+        Input::BeginFrame();
 
         while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
             TranslateMessage(&msg);
@@ -143,12 +145,15 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
             Time::DiscardExcessFixedTime();
         }
 
-        renderer.BeginFrame();
-        app.Render(renderer);
-        renderer.EndFrame();
+        app.CommitTransitions();
+
+        renderFacade.BeginFrame();
+        app.Render(renderFacade);
+        renderFacade.EndFrame();
     }
 
     renderer.Cleanup();
+    app.Shutdown();
     Debug::Log("Application shutting down");
     Debug::Shutdown();
     return 0;

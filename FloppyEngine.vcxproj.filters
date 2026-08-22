@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
+    <ClCompile Include="Engine\Scene\Transform.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Engine\Geometry\Circle.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Engine\Geometry\Rect.cpp"><Filter>Source Files</Filter></ClCompile>
+    <ClCompile Include="Engine\Graphics\Renderer.cpp"><Filter>Source Files</Filter></ClCompile>
     <Filter Include="Source Files">
       <UniqueIdentifier>{7045BEEB-D8BE-49B5-9A61-3597FEC97D3D}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;c++;cppm;ixx</Extensions>
@@ -11,6 +15,13 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Engine\Scene\Transform.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Engine\Scene\ObjectPool.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Engine\Geometry\Circle.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Engine\Geometry\Rect.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Engine\Graphics\Color.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Engine\Graphics\Renderer.h"><Filter>Header Files</Filter></ClInclude>
+    <ClInclude Include="Engine\Graphics\IRenderBackend.h"><Filter>Header Files</Filter></ClInclude>
     <ClCompile Include="Engine\Diagnostics\Debug.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="Domain\Entities\GameObject.cpp"><Filter>Source Files</Filter></ClCompile>
     <ClCompile Include="Domain\Entities\MeshRenderer.cpp"><Filter>Source Files</Filter></ClCompile>
