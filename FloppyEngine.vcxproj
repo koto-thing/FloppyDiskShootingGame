@@ -100,6 +100,8 @@
     <ClCompile Include="Engine\Input\Input.cpp" />
     <ClCompile Include="Engine\Input\WindowsInputBackend.cpp" />
     <ClCompile Include="Engine\Time\Time.cpp" />
+    <ClCompile Include="Engine\UI\Button.cpp" />
+    <ClCompile Include="Engine\UI\Slider.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\D3D12RenderingService.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\InputService.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\TextRenderingService.cpp" />
@@ -147,6 +149,9 @@
     <ClInclude Include="Engine\Math\Vector3.h" />
     <ClInclude Include="Engine\Math\Vector4.h" />
     <ClInclude Include="Engine\Time\Time.h" />
+    <ClInclude Include="Engine\UI\Button.h" />
+    <ClInclude Include="Engine\UI\Slider.h" />
+    <ClInclude Include="Engine\UI\UIInput.h" />
     <ClInclude Include="Engine\Scene\GameWorld.h" />
     <ClInclude Include="Engine\Scene\Tag.h" />
     <ClInclude Include="Engine\Scene\ObjectPool.h" />

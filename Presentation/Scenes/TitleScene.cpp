@@ -7,13 +7,22 @@
  * @brief タイトルシーンの初期化処理
  */
 void TitleScene::Initialize() {
+    // 左下にクレジットシーンへ移動するボタンを配置する
+    m_creditButton = std::make_unique<Button>(
+        Rect { { -0.95f, -0.90f }, { 0.35f, 0.10f } },
+        "CREDITS"
+    );
+    m_creditButton->SetOnClick([this]() { changeScene(SceneType::Credit); });
 }
 
 /**
  * @brief タイトルシーンの入力処理
  */
 void TitleScene::ProcessInput() {
-    // TODO: キー入力によるメニュー選択や、ゲーム本編への遷移要求などをここに実装します
+    // 左下のクレジットボタンにマウス入力を渡す
+    if (m_creditButton != nullptr) {
+        m_creditButton->Update(UIInput::Current(1920, 1080));
+    }
 }
 
 /**
@@ -26,7 +35,8 @@ void TitleScene::Tick() {
     }
 }
 
-void TitleScene::Shutdown() {
+void TitleScene::Dispose() {
+    m_creditButton.reset();
 }
 
 /**
@@ -48,4 +58,9 @@ void TitleScene::Render(Renderer& renderer) {
         0.02f,
         { 1.0f, 1.0f, 1.0f, 1.0f }
     );
+
+    // 左下のクレジットボタンを描画する
+    if (m_creditButton != nullptr) {
+        m_creditButton->Render(renderer);
+    }
 }

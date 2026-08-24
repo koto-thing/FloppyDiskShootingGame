@@ -1,3 +1,4 @@
+#include "Presentation/Scenes/CreditScene.h"
 #ifndef UNICODE
 #define UNICODE
 #endif
@@ -49,9 +50,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     Debug::Initialize();
     Debug::Log("Application starting");
 
-    // ウィンドウを作成
+    // プライマリモニターの解像度を取得する
+    const int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    const int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+
+    // 画面全体を覆うボーダーレスウィンドウを作成する
     HWND hwnd = Win32WindowService::Create(
-        hInstance, 1920, 1080, L"Floppy Disk Shooting Game - Clean Architecture", WindowProc
+        hInstance, screenWidth, screenHeight, L"Floppy Disk Shooting Game - Clean Architecture", WindowProc
     );
 
     // ウィンドウの作成に失敗した場合は終了
@@ -74,7 +79,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
 
     // DirectX 12 レンダラーの初期化
     D3D12RenderingService renderer;
-    if (!renderer.Initialize(hwnd, 1920, 1080)) {
+    if (!renderer.Initialize(hwnd, screenWidth, screenHeight)) {
         Debug::LogError("DirectX 12 initialization failed");
         MessageBox(NULL, L"DirectX 12 Initializing Failed", L"Error", MB_OK);
         Debug::Shutdown();
@@ -104,6 +109,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     // シーンを登録
     app.AddScene<TitleScene>(SceneType::Title);
     app.AddScene<TestStage>(SceneType::TestStage);
+    app.AddScene<CreditScene>(SceneType::Credit);
     
     // 初期シーンの設定
     app.Initialize(SceneType::Title);
@@ -153,7 +159,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     }
 
     renderer.Cleanup();
-    app.Shutdown();
+    app.Dispose();
     Debug::Log("Application shutting down");
     Debug::Shutdown();
     return 0;

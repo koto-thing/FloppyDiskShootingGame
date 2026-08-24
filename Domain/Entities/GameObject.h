@@ -52,8 +52,8 @@ public:
     
     // 毎フレーム更新
     virtual void Tick();
-    /** @brief Componentの終了処理を実行する */
-    void Shutdown();
+    /** @brief Componentが保持するリソースを解放する */
+    void Dispose();
     
     // 描画処理
     virtual void RenderObject(D3D12RenderingService& renderer, const DirectX::XMMATRIX& viewMatrix, const DirectX::XMMATRIX& projMatrix);
