@@ -15,11 +15,15 @@ void Require(bool condition, const char* message) {
 class FakeRenderBackend final : public IRenderBackend {
 public:
     std::vector<std::string> events;
+    float lastCharacterSpacing = 0.0f;
 
     void BeginFrame() override { events.emplace_back("begin"); }
     void DrawCircle(const Circle&, const ColorF&) override { events.emplace_back("circle"); }
     void DrawRect(const Rect&, const ColorF&) override { events.emplace_back("rect"); }
-    void DrawTextCommand(std::string_view, const Vector2&, float, const ColorF&) override { events.emplace_back("text"); }
+    void DrawTextCommand(std::string_view, const Vector2&, float, const ColorF&, float characterSpacing) override {
+        lastCharacterSpacing = characterSpacing;
+        events.emplace_back("text");
+    }
     void SetPipeline(PipelineId) override { events.emplace_back("pipeline"); }
     void EndFrame() override { events.emplace_back("end"); }
 };
@@ -40,6 +44,22 @@ void RecordsAndResetsCommands() {
 
     renderer.BeginFrame();
     Require(renderer.CommandCount() == 0, "BeginFrame must clear previous commands");
+}
+
+void RecordsCharacterSpacing() {
+    Renderer renderer;
+    renderer.BeginFrame();
+    renderer.DrawText("SPACED", {}, 0.1f, ColorF::White(), 0.025f);
+    Require(renderer.Command(0).characterSpacing == 0.025f, "Text command must preserve character spacing");
+}
+
+void SendsCharacterSpacingToBackend() {
+    FakeRenderBackend backend;
+    Renderer renderer(backend);
+    renderer.BeginFrame();
+    renderer.DrawText("SPACED", {}, 0.1f, ColorF::White(), 0.025f);
+    renderer.Flush();
+    Require(backend.lastCharacterSpacing == 0.025f, "Renderer must send character spacing to backend");
 }
 
 void HandlesTextAndOverflow() {
@@ -101,6 +121,8 @@ void EndFrameFlushesAndBackendIsOptional() {
 
 void RunRendererTests() {
     RecordsAndResetsCommands();
+    RecordsCharacterSpacing();
+    SendsCharacterSpacingToBackend();
     HandlesTextAndOverflow();
     ExecutesOnlyOnFlush();
     EndFrameFlushesAndBackendIsOptional();

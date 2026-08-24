@@ -18,7 +18,7 @@ void TestStage::Tick() {
     m_game->Tick();
 }
 
-void TestStage::Shutdown() {
+void TestStage::Dispose() {
     m_game.reset();
 }
 

@@ -25,8 +25,8 @@ public:
     void SetEnabled(bool enabled);
     /** @brief 所属GameObject上で更新可能か取得する */
     bool IsActiveAndEnabled() const;
-    /** @brief 終了処理を行う */
-    virtual void Shutdown() {}
+    /** @brief コンポーネントが保持するリソースを解放する */
+    virtual void Dispose() {}
     
     // 描画処理
     virtual void Render(D3D12RenderingService& renderer, const DirectX::XMMATRIX& viewMatrix, const DirectX::XMMATRIX& projMatrix) {

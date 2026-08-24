@@ -1,4 +1,6 @@
-# FloppyDiskShootingGame GEMINI.md
+# FloppyDiskShootingGame Agents.md
+
+これはDirectX12を使用したプロジェクトです。
 
 ## 1. ファイルサイズの制約
 * The final build size should be 1.44MB, which is the size of a floppy disk, including the resources required for the game

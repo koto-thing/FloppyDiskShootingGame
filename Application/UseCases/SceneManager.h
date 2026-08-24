@@ -84,9 +84,9 @@ public:
         if (m_currentScene) m_currentScene->Render(renderer);
     }
 
-    /** @brief 現在のシーンを終了する */
-    void Shutdown() {
-        if (m_currentScene) m_currentScene->Shutdown();
+    /** @brief 現在のシーンが保持するリソースを解放する */
+    void Dispose() {
+        if (m_currentScene) m_currentScene->Dispose();
         m_currentScene.reset();
         m_pendingSceneRequest.reset();
     }
@@ -107,7 +107,7 @@ private:
         if (it == m_factories.end())
             return;
         
-        if (m_currentScene) m_currentScene->Shutdown();
+        if (m_currentScene) m_currentScene->Dispose();
         m_currentScene.reset();
         
         // 新しいシーンを生成して初期化

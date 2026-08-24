@@ -21,6 +21,7 @@ public:
         float startX, float startY,
         float size,
         DirectX::XMFLOAT4 color,
+        float characterSpacing,
         int screenWidth, int screenHeight
     );
     

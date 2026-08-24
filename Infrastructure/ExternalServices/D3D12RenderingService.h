@@ -56,8 +56,10 @@ public:
     const TextRenderingService& GetTextRenderer() const { return m_textRenderer; }
 
     // Siv3D風の簡易テキスト描画インターフェース
-    void DrawTextCommand(std::string_view text, const Vector2& position, float size, const ColorF& color) override;
-    void RenderText(const char* text, DirectX::XMFLOAT2 position, float size, DirectX::XMFLOAT4 color);
+    void DrawTextCommand(std::string_view text, const Vector2& position, float size, const ColorF& color,
+                         float characterSpacing) override;
+    void RenderText(const char* text, DirectX::XMFLOAT2 position, float size, DirectX::XMFLOAT4 color,
+                    float characterSpacing = 0.0f);
 
 private:
     void DrawUiPrimitive(float x, float y, float width, float height, float z, const ColorF& color, float shapeType, UINT vertexCount);
