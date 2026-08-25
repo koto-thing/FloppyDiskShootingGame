@@ -32,6 +32,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     Input::ProcessMessage(uMsg, wParam, lParam);
 
     switch (uMsg) {
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            return 0;
         case WM_DESTROY:
             PostQuitMessage(0);
             return 0;
@@ -46,6 +49,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
  * @return 
  */
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     Debug::Initialize();
     Debug::Log("Application starting");
 
@@ -113,16 +117,21 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     
     // メインループ
     MSG msg = { };
-    while (msg.message != WM_QUIT) {
+    bool isRunning = true;
+    while (isRunning) {
         // 前フレームの状態を保存して新しい入力の受付を開始する
         Input::BeginFrame();
 
         while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                isRunning = false;
+                break;
+            }
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
 
-        if (msg.message == WM_QUIT) {
+        if (!isRunning) {
             break;
         }
 
@@ -152,9 +161,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         renderFacade.EndFrame();
     }
 
+    audio.Shutdown();
     renderer.Cleanup();
     app.Shutdown();
     Debug::Log("Application shutting down");
     Debug::Shutdown();
+    CoUninitialize();
     return 0;
 }
