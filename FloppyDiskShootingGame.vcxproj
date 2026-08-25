@@ -150,6 +150,7 @@
     <ClCompile Include="Infrastructure\ExternalServices\AudioService.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\MMLParser.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\SynthWaveGenerator.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\SfxrGenerator.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Presentation\Scenes\TestStage.cpp" />
     <ClCompile Include="Presentation\Scenes\TitleScene.cpp" />
@@ -161,6 +162,7 @@
     <ClInclude Include="Infrastructure\ExternalServices\AudioService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\MMLParser.h" />
     <ClInclude Include="Infrastructure\ExternalServices\SynthWaveGenerator.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\SfxrGenerator.h" />
     <ClInclude Include="Infrastructure\ExternalServices\D3D12RenderingService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\InputService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\TextRenderingService.h" />

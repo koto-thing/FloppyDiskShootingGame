@@ -5,6 +5,7 @@
 #include "Bullet.h"
 #include "../Engine/Scene/ObjectPool.h"
 #include "../Infrastructure/ExternalServices/InputService.h"
+#include "../Infrastructure/ExternalServices/AudioService.h"
 
 /**
  * @brief 自機（プレイヤー）クラス (シームレス2D/3D対応)
@@ -116,6 +117,7 @@ public:
 
 private:
     void Fire(ObjectPool<Bullet>& bullets, int dimMode, int nextDimMode, float progress) {
+        AudioService::Get().PlaySE(Audio::SfxrPreset::LaserShoot);
         int fired = 0;
         for (; fired < 2; ++fired) {
             Bullet* bullet = bullets.Spawn();

@@ -155,6 +155,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         }
 
         app.CommitTransitions();
+        audio.Update();
 
         renderFacade.BeginFrame();
         app.Render(renderFacade);

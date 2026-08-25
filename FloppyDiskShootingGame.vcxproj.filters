@@ -44,6 +44,9 @@
     <ClCompile Include="Infrastructure\ExternalServices\SynthWaveGenerator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Infrastructure\ExternalServices\SfxrGenerator.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include=".agents\AGENTS.md" />
@@ -96,6 +99,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Infrastructure\ExternalServices\SynthWaveGenerator.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Infrastructure\ExternalServices\SfxrGenerator.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Temp\Bullet.h">

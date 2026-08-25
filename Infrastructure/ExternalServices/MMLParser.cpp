@@ -438,11 +438,7 @@ MMLTrack MMLParser::ParseTrack(const std::string& rawTrackMml, const std::map<do
             int val = parseNumber(i);
             if (val >= 0) {
                 customWaveId = static_cast<uint8_t>(val);
-                if (val <= 6) {
-                    waveType = static_cast<WaveformType>(val);
-                } else {
-                    waveType = WaveformType::Custom;
-                }
+                waveType = WaveformType::Custom;
             }
         }
         else {
