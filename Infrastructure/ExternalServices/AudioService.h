@@ -84,6 +84,12 @@ public:
     void PlayMMLBGM(const std::string& mml, bool loop = true);
 
     /**
+     * @brief MMLによるSEワンショット再生
+     * @param mml MML文字列
+     */
+    void PlayMMLSE(const std::string& mml);
+
+    /**
      * @brief ファイルからのMML BGM再生
      * @param filePath MMLファイルパス
      * @param loop ループ再生するかどうか

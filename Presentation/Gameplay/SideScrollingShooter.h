@@ -3,7 +3,7 @@
 #include <array>
 
 class AudioService;
-class D3D12RenderingService;
+class Renderer;
 
 /**
  * @brief 固定長プールで動作する横スクロールシューティングのゲーム本体
@@ -13,7 +13,7 @@ public:
     void Initialize(AudioService* audio);
     void ProcessInput();
     void Tick();
-    void Render(D3D12RenderingService& renderer) const;
+    void Render(Renderer& renderer) const;
 
 private:
     struct Shot {
@@ -50,7 +50,7 @@ private:
     void PlayShotSound();
     void PlayHitSound();
     static bool Hit(float ax, float ay, float ar, float bx, float by, float br);
-    static void DrawShape(D3D12RenderingService& renderer, int& index,
+    static void DrawShape(Renderer& renderer,
         float x, float y, float w, float h, const float color[4]);
 
     std::array<Shot, ShotCapacity> m_shots {};

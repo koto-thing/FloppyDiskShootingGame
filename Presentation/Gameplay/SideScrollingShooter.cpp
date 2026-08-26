@@ -3,23 +3,13 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
-#include <DirectXMath.h>
 
+#include "../../Engine/Graphics/Renderer.h"
 #include "../../Engine/Input/Input.h"
 #include "../../Engine/Input/KeyCode.h"
 #include "../../Infrastructure/ExternalServices/AudioService.h"
-#include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
 
 namespace {
-struct alignas(256) DrawConstants {
-    DirectX::XMFLOAT4X4 wvp;
-    DirectX::XMFLOAT4 color;
-    float time;
-    float shape;
-    float rotation;
-    float padding[41];
-};
-
 constexpr float PlayerColor[4] = { 0.80f, 0.80f, 0.85f, 1.0f };
 constexpr float PlayerAccent[4] = { 0.10f, 0.90f, 0.90f, 1.0f };
 constexpr float EnemyColor[4] = { 0.90f, 0.12f, 0.12f, 1.0f };
@@ -278,70 +268,55 @@ bool SideScrollingShooter::Hit(float ax, float ay, float ar, float bx, float by,
     return dx * dx + dy * dy <= radius * radius;
 }
 
-void SideScrollingShooter::DrawShape(D3D12RenderingService& renderer, int& index,
+void SideScrollingShooter::DrawShape(Renderer& renderer,
     float x, float y, float w, float h, const float color[4]) {
-    auto* constants = reinterpret_cast<DrawConstants*>(
-        static_cast<char*>(renderer.GetCbvCpuData()) + index * 256);
-    const auto matrix = DirectX::XMMatrixScaling(w, h, 1.0f) * DirectX::XMMatrixTranslation(x, y, 0.1f);
-    DirectX::XMStoreFloat4x4(&constants->wvp, DirectX::XMMatrixTranspose(matrix));
-    constants->color = { color[0], color[1], color[2], color[3] };
-    constants->time = 0.0f;
-    // ObjectShaderの6番はTriangleStrip用のXYスプライト
-    constants->shape = 6.0f;
-    constants->rotation = 0.0f;
-    auto* commandList = renderer.GetCommandList();
-    commandList->SetGraphicsRootConstantBufferView(0,
-        renderer.GetConstantBuffer()->GetGPUVirtualAddress() + index * 256);
-    commandList->DrawInstanced(4, 1, 0, 0);
-    ++index;
+    // 描画ファサードへ矩形コマンドとして記録する
+    renderer.Draw(Rect { { x, y }, { w, h } }, { color[0], color[1], color[2], color[3] });
 }
 
-void SideScrollingShooter::Render(D3D12RenderingService& renderer) const {
-    renderer.SetPipelineState(0);
-    // 0番台はRenderTextが使用するため図形用の定数バッファ領域を分離する
-    int drawIndex = 512;
+void SideScrollingShooter::Render(Renderer& renderer) const {
 
     for (int i = 0; i < 18; ++i) {
         float x = WrapNdcX(i * 0.137f - m_scroll * (0.6f + (i % 3) * 0.3f));
         float y = -0.82f + static_cast<float>((i * 47) % 164) / 100.0f;
-        DrawShape(renderer, drawIndex, x, y, 0.006f, 0.010f, StarColor);
+        DrawShape(renderer, x, y, 0.006f, 0.010f, StarColor);
     }
     for (int i = 0; i < 7; ++i) {
         float x = WrapNdcX(i * 0.34f - m_scroll * 0.55f);
-        DrawShape(renderer, drawIndex, x, -0.80f, 0.008f, 1.55f, GridColor);
+        DrawShape(renderer, x, -0.80f, 0.008f, 1.55f, GridColor);
     }
     for (int i = 0; i < 5; ++i) {
-        DrawShape(renderer, drawIndex, 0.0f, -0.80f + i * 0.40f, 2.0f, 0.006f, GridColor);
+        DrawShape(renderer, 0.0f, -0.80f + i * 0.40f, 2.0f, 0.006f, GridColor);
     }
 
     if (m_invincible == 0 || (m_invincible / 5) % 2 == 0) {
-        DrawShape(renderer, drawIndex, m_playerX, m_playerY, 0.16f, 0.055f, PlayerColor);
-        DrawShape(renderer, drawIndex, m_playerX - 0.035f, m_playerY + 0.055f, 0.075f, 0.045f, PlayerAccent);
-        DrawShape(renderer, drawIndex, m_playerX - 0.035f, m_playerY - 0.055f, 0.075f, 0.045f, PlayerAccent);
+        DrawShape(renderer, m_playerX, m_playerY, 0.16f, 0.055f, PlayerColor);
+        DrawShape(renderer, m_playerX - 0.035f, m_playerY + 0.055f, 0.075f, 0.045f, PlayerAccent);
+        DrawShape(renderer, m_playerX - 0.035f, m_playerY - 0.055f, 0.075f, 0.045f, PlayerAccent);
     }
 
     for (const auto& enemy : m_enemies) {
         if (!enemy.active) continue;
         if (enemy.type == 2) {
             // ボスは複数の矩形を組み合わせて通常敵と識別できる外見にする
-            DrawShape(renderer, drawIndex, enemy.x, enemy.y, 0.28f, 0.23f, BossColor);
-            DrawShape(renderer, drawIndex, enemy.x - 0.12f, enemy.y + 0.20f,
+            DrawShape(renderer, enemy.x, enemy.y, 0.28f, 0.23f, BossColor);
+            DrawShape(renderer, enemy.x - 0.12f, enemy.y + 0.20f,
                 0.17f, 0.075f, BossAccent);
-            DrawShape(renderer, drawIndex, enemy.x - 0.12f, enemy.y - 0.20f,
+            DrawShape(renderer, enemy.x - 0.12f, enemy.y - 0.20f,
                 0.17f, 0.075f, BossAccent);
-            DrawShape(renderer, drawIndex, enemy.x - 0.23f, enemy.y,
+            DrawShape(renderer, enemy.x - 0.23f, enemy.y,
                 0.065f, 0.10f, EnemyAccent);
         } else {
-            DrawShape(renderer, drawIndex, enemy.x, enemy.y,
+            DrawShape(renderer, enemy.x, enemy.y,
                 enemy.type == 0 ? 0.12f : 0.17f,
                 enemy.type == 0 ? 0.10f : 0.15f, EnemyColor);
-            DrawShape(renderer, drawIndex, enemy.x + 0.025f, enemy.y,
+            DrawShape(renderer, enemy.x + 0.025f, enemy.y,
                 0.035f, 0.045f, EnemyAccent);
         }
     }
     for (const auto& shot : m_shots) {
         if (!shot.active) continue;
-        DrawShape(renderer, drawIndex, shot.x, shot.y, shot.enemy ? 0.025f : 0.060f,
+        DrawShape(renderer, shot.x, shot.y, shot.enemy ? 0.025f : 0.060f,
             shot.enemy ? 0.025f : 0.016f, shot.enemy ? EnemyShotColor : PlayerShotColor);
     }
 
@@ -350,24 +325,24 @@ void SideScrollingShooter::Render(D3D12RenderingService& renderer) const {
         static_cast<int>(m_scroll / BossStartDistance * 100.0f));
     std::snprintf(status, sizeof(status), "SCORE %06d   LIVES %d   DIST %03d%%",
         m_score, m_lives, progress);
-    renderer.RenderText(status, { -0.92f, 0.86f }, 0.018f, { 0.75f, 0.95f, 0.85f, 1.0f });
-    renderer.RenderText("MOVE: ARROWS/WASD  SHOT: Z/SPACE", { -0.92f, -0.92f }, 0.012f,
+    renderer.DrawText(status, { -0.92f, 0.86f }, 0.018f, { 0.75f, 0.95f, 0.85f, 1.0f });
+    renderer.DrawText("MOVE: ARROWS/WASD  SHOT: Z/SPACE", { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
     if (m_bossBattle && !m_clear) {
         constexpr float BossBarBack[4] = { 0.20f, 0.08f, 0.22f, 1.0f };
         constexpr float BossBarFill[4] = { 0.95f, 0.15f, 0.45f, 1.0f };
         const float hpRate = static_cast<float>(m_bossHp) / BossMaxHp;
-        DrawShape(renderer, drawIndex, 0.0f, 0.76f, 0.62f, 0.025f, BossBarBack);
-        DrawShape(renderer, drawIndex, -0.62f * (1.0f - hpRate), 0.76f,
+        DrawShape(renderer, 0.0f, 0.76f, 0.62f, 0.025f, BossBarBack);
+        DrawShape(renderer, -0.62f * (1.0f - hpRate), 0.76f,
             0.62f * hpRate, 0.018f, BossBarFill);
-        renderer.RenderText("BOSS", { 0.02f, 0.86f }, 0.014f,
+        renderer.DrawText("BOSS", { 0.02f, 0.86f }, 0.014f,
             { 1.0f, 0.45f, 0.65f, 1.0f });
     }
     if (m_gameOver) {
-        renderer.RenderText("GAME OVER", { -0.20f, 0.12f }, 0.045f, { 1.0f, 0.2f, 0.2f, 1.0f });
-        renderer.RenderText("PRESS R TO RETRY", { -0.22f, -0.05f }, 0.020f, { 1, 1, 1, 1 });
+        renderer.DrawText("GAME OVER", { -0.20f, 0.12f }, 0.045f, { 1.0f, 0.2f, 0.2f, 1.0f });
+        renderer.DrawText("PRESS R TO RETRY", { -0.22f, -0.05f }, 0.020f, { 1, 1, 1, 1 });
     } else if (m_clear) {
-        renderer.RenderText("STAGE CLEAR", { -0.23f, 0.12f }, 0.045f, { 0.2f, 1.0f, 0.5f, 1.0f });
-        renderer.RenderText("PRESS R TO REPLAY", { -0.23f, -0.05f }, 0.020f, { 1, 1, 1, 1 });
+        renderer.DrawText("STAGE CLEAR", { -0.23f, 0.12f }, 0.045f, { 0.2f, 1.0f, 0.5f, 1.0f });
+        renderer.DrawText("PRESS R TO REPLAY", { -0.23f, -0.05f }, 0.020f, { 1, 1, 1, 1 });
     }
 }

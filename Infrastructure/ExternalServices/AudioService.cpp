@@ -353,3 +353,11 @@ void AudioService::StopAllSE() {
         }
     }
 }
+
+void AudioService::PlayMMLSE(const std::string& mml) {
+    // MMLを一度だけPCMへ合成してSEボイスプールから再生する
+    Audio::MMLParser parser;
+    const Audio::MMLSequence sequence = parser.Parse(mml);
+    Audio::SynthWaveGenerator generator;
+    PlaySE(generator.GeneratePCM(sequence, 44100));
+}
