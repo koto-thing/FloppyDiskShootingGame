@@ -1,4 +1,3 @@
-#include "Presentation/Scenes/CreditScene.h"
 #ifndef UNICODE
 #define UNICODE
 #endif
@@ -19,6 +18,7 @@
 #include "Engine/Graphics/Renderer.h"
 #include "Presentation/Scenes/TitleScene.h"
 #include "Presentation/Scenes/TestStage.h"
+#include "Presentation/Scenes/CreditScene.h"
 
 /**
  * ウィンドウプロシージャ
@@ -60,7 +60,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
 
     // 画面全体を覆うボーダーレスウィンドウを作成する
     HWND hwnd = Win32WindowService::Create(
-        hInstance, screenWidth, screenHeight, L"Floppy Disk Shooting Game - Clean Architecture", WindowProc
+        hInstance, screenWidth, screenHeight, L"Space Yankees", WindowProc
     );
 
     // ウィンドウの作成に失敗した場合は終了
