@@ -14,8 +14,13 @@
 class Button {
 public:
     explicit Button(Rect bounds = {}, std::string text = {});
+    Button(Vector2 size, RectAlign alignment, std::string text = {}, Vector2 offset = Vector2::Zero);
 
     void SetBounds(const Rect& bounds) { m_bounds = bounds; }
+    /** @brief 画面内の配置基準とサイズからボタン境界を設定する */
+    void SetBounds(const Vector2& size, RectAlign alignment, const Vector2& offset = Vector2::Zero) {
+        m_bounds = Renderer::CreateAlignedRect(size, alignment, offset);
+    }
     const Rect& Bounds() const { return m_bounds; }
     void SetText(std::string text) { m_text = std::move(text); }
     const std::string& Text() const { return m_text; }

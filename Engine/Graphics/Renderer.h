@@ -19,6 +19,28 @@
 #endif
 
 /**
+ * @brief テキストを画面内の代表的な位置へ配置する基準点
+ *
+ * Centerは画面中央、BottomCenterは画面下中央を表す
+ */
+enum class ScreenAlign {
+    TopLeft,
+    TopCenter,
+    TopRight,
+    CenterLeft,
+    Center,
+    CenterRight,
+    BottomLeft,
+    BottomCenter,
+    BottomRight
+};
+
+/** @brief テキスト用の画面内配置基準 */
+using TextAlign = ScreenAlign;
+/** @brief 矩形用の画面内配置基準 */
+using RectAlign = ScreenAlign;
+
+/**
  * @brief Rendererがフレーム内に記録する描画コマンド
  */
 struct RenderCommand {
@@ -66,6 +88,20 @@ public:
     void Draw(const Circle& circle, const ColorF& color);
     /** @brief 矩形を描画コマンドとして記録する */
     void Draw(const Rect& rect, const ColorF& color);
+    /**
+     * @brief 矩形を画面内の代表的な位置へ描画コマンドとして記録する
+     * @param rect sizeは矩形の大きさ、positionは配置位置からのNDC座標オフセット
+     * @param alignment 矩形全体を配置する画面上の位置
+     */
+    void Draw(const Rect& rect, RectAlign alignment, const ColorF& color);
+    /**
+     * @brief 画面内の配置基準から矩形の境界を生成する
+     * @param size 矩形のNDC座標上の大きさ
+     * @param alignment 矩形全体を配置する画面上の位置
+     * @param offset 配置位置からのNDC座標オフセット
+     */
+    static Rect CreateAlignedRect(const Vector2& size, RectAlign alignment,
+                                  const Vector2& offset = Vector2::Zero);
     /** @brief 型付き3Dプリミティブを描画コマンドとして記録する */
     void Draw(const Primitive3D& primitive);
     /**
@@ -74,6 +110,14 @@ public:
      */
     void DrawText(std::string_view text, const Vector2& position, float size, const ColorF& color,
                   float characterSpacing = 0.0f);
+    /**
+     * @brief テキストを画面内の代表的な位置へ描画コマンドとして記録する
+     * @param alignment テキスト全体を配置する画面上の位置
+     * @param offset 配置位置からのNDC座標オフセット
+     * @param characterSpacing 文字ごとに追加する字間
+     */
+    void DrawText(std::string_view text, TextAlign alignment, float size, const ColorF& color,
+                  const Vector2& offset = Vector2::Zero, float characterSpacing = 0.0f);
     /** @brief 型付きパイプライン切り替えを記録する */
     void SetPipeline(PipelineId pipeline);
     /** @brief 2Dカメラを遅延設定する */
@@ -104,6 +148,8 @@ public:
 
 private:
     RenderCommand* TryAppend(RenderCommand::Type type);
+    Vector2 CalculateTextPosition(std::string_view text, TextAlign alignment, float size,
+                                  float characterSpacing) const;
 
     IRenderBackend* m_backend = nullptr;
     std::unique_ptr<RenderCommand[]> m_commands = std::make_unique<RenderCommand[]>(MaxCommands);

@@ -12,8 +12,14 @@
 class Slider {
 public:
     explicit Slider(Rect bounds = {}, float minimum = 0.0f, float maximum = 1.0f, float value = 0.0f);
+    Slider(Vector2 size, RectAlign alignment, float minimum = 0.0f, float maximum = 1.0f,
+           float value = 0.0f, Vector2 offset = Vector2::Zero);
 
     void SetBounds(const Rect& bounds) { m_bounds = bounds; }
+    /** @brief 画面内の配置基準とサイズからスライダー境界を設定する */
+    void SetBounds(const Vector2& size, RectAlign alignment, const Vector2& offset = Vector2::Zero) {
+        m_bounds = Renderer::CreateAlignedRect(size, alignment, offset);
+    }
     const Rect& Bounds() const { return m_bounds; }
     void SetRange(float minimum, float maximum);
     float Minimum() const { return m_minimum; }

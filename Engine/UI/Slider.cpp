@@ -8,6 +8,9 @@ Slider::Slider(Rect bounds, float minimum, float maximum, float value) : m_bound
     SetValue(value);
 }
 
+Slider::Slider(Vector2 size, RectAlign alignment, float minimum, float maximum, float value, Vector2 offset)
+    : Slider(Renderer::CreateAlignedRect(size, alignment, offset), minimum, maximum, value) {}
+
 void Slider::SetRange(float minimum, float maximum) {
     m_minimum = (std::min)(minimum, maximum);
     m_maximum = (std::max)(minimum, maximum);

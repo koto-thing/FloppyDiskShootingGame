@@ -5,6 +5,9 @@
 Button::Button(Rect bounds, std::string text)
     : m_bounds(bounds), m_text(std::move(text)) {}
 
+Button::Button(Vector2 size, RectAlign alignment, std::string text, Vector2 offset)
+    : Button(Renderer::CreateAlignedRect(size, alignment, offset), std::move(text)) {}
+
 void Button::Update(const UIInputState& input) {
     m_hovered = m_enabled && m_bounds.Contains(input.position);
     if (!m_enabled) return;
