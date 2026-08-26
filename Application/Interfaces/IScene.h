@@ -40,8 +40,8 @@ public:
      */
     virtual void Render(Renderer& renderer) = 0;
 
-    /** @brief シーンの終了処理を行う */
-    virtual void Shutdown() {}
+    /** @brief シーンが保持するリソースを解放する */
+    virtual void Dispose() {}
     
 protected:
     /**

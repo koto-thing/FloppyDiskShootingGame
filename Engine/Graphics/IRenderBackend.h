@@ -48,8 +48,12 @@ public:
     virtual void DrawRect(const Rect& rect, const ColorF& color) = 0;
     /** @brief 型付き3Dプリミティブを描画する */
     virtual void DrawPrimitive3D(const Primitive3D& primitive) { (void)primitive; }
-    /** @brief 文字をNDC座標系へ描画する */
-    virtual void DrawTextCommand(std::string_view text, const Vector2& position, float size, const ColorF& color) = 0;
+    /**
+     * @brief 文字をNDC座標系へ描画する
+     * @param characterSpacing 文字ごとに追加する字間
+     */
+    virtual void DrawTextCommand(std::string_view text, const Vector2& position, float size, const ColorF& color,
+                                 float characterSpacing) = 0;
     /** @brief パイプラインを切り替える */
     virtual void SetPipeline(PipelineId pipeline) = 0;
     /** @brief カメラ行列とViewportを描画状態へ設定する */

@@ -7,7 +7,7 @@ GameObject::GameObject()
       m_activeSelf(true), m_pendingDestroy(false) {
 }
 
-GameObject::~GameObject() { Shutdown(); }
+GameObject::~GameObject() { Dispose(); }
 
 void GameObject::Initialize(D3D12RenderingService& renderer) {
     m_renderer = &renderer;
@@ -29,9 +29,9 @@ void GameObject::Tick() {
     for (auto& component : m_components) if (component->IsActiveAndEnabled()) component->Tick();
 }
 
-void GameObject::Shutdown() {
+void GameObject::Dispose() {
     for (auto& component : m_components) {
-        component->Shutdown();
+        component->Dispose();
     }
     m_components.clear();
 }

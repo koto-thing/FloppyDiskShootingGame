@@ -23,6 +23,15 @@
     <ClCompile Include="Presentation\TitleScene\TitleSceneColumn.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Presentation\CreditScene\CreditSceneContent.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\CreditScene\CreditContentController.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\CreditScene\CreditContentPresenter.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="Infrastructure\ExternalServices\TextRenderingService.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -75,6 +84,18 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Presentation\TitleScene\TitleSceneColumn.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\CreditScene\CreditSceneColumn.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\CreditScene\CreditSceneContent.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\CreditScene\CreditContentController.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\CreditScene\CreditContentPresenter.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Domain\ValueObjects\CharacterASCIIData.h">

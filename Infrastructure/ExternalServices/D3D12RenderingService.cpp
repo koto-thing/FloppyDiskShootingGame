@@ -715,7 +715,8 @@ void D3D12RenderingService::DrawCircle(const Circle& circle, const ColorF& color
 /**
  * Siv3D風の簡易テキスト描画インターフェース
  */
-void D3D12RenderingService::RenderText(const char* text, DirectX::XMFLOAT2 position, float size, DirectX::XMFLOAT4 color) {
+void D3D12RenderingService::RenderText(const char* text, DirectX::XMFLOAT2 position, float size,
+                                        DirectX::XMFLOAT4 color, float characterSpacing) {
     if (text == nullptr || text[0] == '\0') {
         return;
     }
@@ -748,6 +749,7 @@ void D3D12RenderingService::RenderText(const char* text, DirectX::XMFLOAT2 posit
         position.y,
         size,
         color,
+        characterSpacing,
         m_width,
         m_height
     );
@@ -763,8 +765,10 @@ void D3D12RenderingService::DrawTextCommand(
     std::string_view text,
     const Vector2& position,
     float size,
-    const ColorF& color) {
+    const ColorF& color,
+    float characterSpacing) {
     std::string ownedText(text);
-    RenderText(ownedText.c_str(), {position.x, position.y}, size, {color.r, color.g, color.b, color.a});
+    RenderText(ownedText.c_str(), {position.x, position.y}, size, {color.r, color.g, color.b, color.a},
+               characterSpacing);
 }
 

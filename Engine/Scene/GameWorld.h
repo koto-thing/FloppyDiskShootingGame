@@ -18,8 +18,8 @@ public:
     GameObject* Find(std::string_view name) const;
     /** @brief 所有オブジェクトを更新する */
     void Tick();
-    /** @brief 破棄待ちオブジェクトを解放する */
-    void Shutdown();
+    /** @brief 破棄待ちオブジェクトが保持するリソースを解放する */
+    void Dispose();
     /** @brief 予約された生成・破棄を反映する */
     void FlushPendingChanges();
 

@@ -43,11 +43,13 @@ void Renderer::Draw(const Primitive3D& primitive) {
     command->primitive = primitive;
 }
 
-void Renderer::DrawText(std::string_view text, const Vector2& position, float size, const ColorF& color) {
+void Renderer::DrawText(std::string_view text, const Vector2& position, float size, const ColorF& color,
+                        float characterSpacing) {
     RenderCommand* command = TryAppend(RenderCommand::Type::Text);
     if (command == nullptr) return;
     command->position = position;
     command->size = size;
+    command->characterSpacing = characterSpacing;
     command->color = color;
     command->textLength = std::min(text.size(), command->text.size() - 1);
     std::memcpy(command->text.data(), text.data(), command->textLength);
@@ -94,7 +96,7 @@ void Renderer::Flush() {
             break;
         case RenderCommand::Type::Text:
             m_backend->DrawTextCommand(std::string_view(command.text.data(), command.textLength),
-                                command.position, command.size, command.color);
+                                command.position, command.size, command.color, command.characterSpacing);
             break;
         case RenderCommand::Type::Pipeline:
             m_backend->SetPipeline(command.pipeline);

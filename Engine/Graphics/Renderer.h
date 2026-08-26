@@ -38,6 +38,7 @@ struct RenderCommand {
     Primitive3D primitive {};
     Vector2 position {};
     float size = 0.0f;
+    float characterSpacing = 0.0f;
     ColorF color = ColorF::White();
     PipelineId pipeline = PipelineId::Object;
     CameraMatrices cameraMatrices {};
@@ -67,8 +68,12 @@ public:
     void Draw(const Rect& rect, const ColorF& color);
     /** @brief 型付き3Dプリミティブを描画コマンドとして記録する */
     void Draw(const Primitive3D& primitive);
-    /** @brief 文字を描画コマンドとして記録する */
-    void DrawText(std::string_view text, const Vector2& position, float size, const ColorF& color);
+    /**
+     * @brief 文字を描画コマンドとして記録する
+     * @param characterSpacing 文字ごとに追加する字間
+     */
+    void DrawText(std::string_view text, const Vector2& position, float size, const ColorF& color,
+                  float characterSpacing = 0.0f);
     /** @brief 型付きパイプライン切り替えを記録する */
     void SetPipeline(PipelineId pipeline);
     /** @brief 2Dカメラを遅延設定する */

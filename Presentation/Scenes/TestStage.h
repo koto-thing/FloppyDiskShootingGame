@@ -17,7 +17,7 @@ public:
     void Initialize() override;
     void ProcessInput() override;
     void Tick() override;
-    void Shutdown() override;
+    void Dispose() override;
     void Render(Renderer& renderer) override;
 
 private:

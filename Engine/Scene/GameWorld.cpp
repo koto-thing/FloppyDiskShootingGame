@@ -25,12 +25,12 @@ GameObject* GameWorld::Find(std::string_view name) const {
 }
 
 void GameWorld::Tick() { for (auto& object : m_objects) object->Tick(); FlushPendingChanges(); }
-void GameWorld::Shutdown() { m_objects.clear(); m_pendingDestroy.clear(); }
+void GameWorld::Dispose() { m_objects.clear(); m_pendingDestroy.clear(); }
 
 void GameWorld::FlushPendingChanges() {
     m_objects.erase(std::remove_if(m_objects.begin(), m_objects.end(), [this](const auto& object) {
         if (!object->IsPendingDestroy()) return false;
-        object->Shutdown();
+        object->Dispose();
         return true;
     }), m_objects.end());
     m_pendingDestroy.clear();

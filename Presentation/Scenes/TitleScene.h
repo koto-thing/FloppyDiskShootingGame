@@ -2,6 +2,9 @@
 #include "../../Domain/ValueObjects/SceneSharedData.h"
 #include "../../Domain/ValueObjects/SceneType.h"
 #include "../../Application/Interfaces/IScene.h"
+#include "../../Engine/UI/Button.h"
+
+#include <memory>
 
 /**
  * @brief タイトル画面のシーンクラス
@@ -23,11 +26,14 @@ public:
      * @brief タイトルシーンの状態更新処理を行います。
      */
     void Tick() override;
-    void Shutdown() override;
+    void Dispose() override;
 
     /**
      * @brief タイトルシーンの描画処理を行います。
      * @param renderer Rendererの参照
      */
     void Render(Renderer& renderer) override;
+
+private:
+    std::unique_ptr<Button> m_creditButton;
 };
