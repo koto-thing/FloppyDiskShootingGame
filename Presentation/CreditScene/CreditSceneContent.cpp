@@ -12,7 +12,7 @@ CreditSceneContent CreditSceneContent::CreateDefault() {
     // タイトルと制作チームを追加する
     content.AddColumn({
         {
-            { "FLOPPY DISK SHOOTING GAME", 0.012f, CreditTextAlignment::Center },
+            { "SPACE YANKEES", 0.012f, CreditTextAlignment::Center },
             { "Crazy Game Developers", 0.009f, CreditTextAlignment::Center }
         },
         0.08f

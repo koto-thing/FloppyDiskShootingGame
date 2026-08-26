@@ -1,4 +1,3 @@
-#include "Presentation/Scenes/CreditScene.h"
 #ifndef UNICODE
 #define UNICODE
 #endif
@@ -19,6 +18,7 @@
 #include "Engine/Graphics/Renderer.h"
 #include "Presentation/Scenes/TitleScene.h"
 #include "Presentation/Scenes/TestStage.h"
+#include "Presentation/Scenes/CreditScene.h"
 
 /**
  * ウィンドウプロシージャ
