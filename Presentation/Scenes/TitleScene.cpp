@@ -1,4 +1,7 @@
 #include "TitleScene.h"
+#include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
+#include "../../Engine/Input/Input.h"
+#include "../../Engine/Input/KeyCode.h"
 #include <windows.h>
 #include <cstdio>
 #include <algorithm>
@@ -69,6 +72,12 @@ void TitleScene::Initialize() {
  * @brief タイトルシーンの入力処理
  */
 void TitleScene::ProcessInput() {
+    // TODO: キー入力によるメニュー選択や、ゲーム本編への遷移要求などをここに実装します
+
+    // Enterキーの押下をフレーム単位で受け取りゲームシーンへ遷移する
+    if (Input::GetKeyDown(KeyCode::Enter)) {
+        changeScene(SceneType::TestStage);
+    }
     HWND hwnd = GetForegroundWindow();
 
     int w = 1280;
