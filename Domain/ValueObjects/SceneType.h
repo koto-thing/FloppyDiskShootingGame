@@ -8,5 +8,6 @@ enum class SceneType {
     Option,
     Credit,
     TestStage,
+    ModelTest,
     Ending,
 };

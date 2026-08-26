@@ -16,16 +16,25 @@ void TitleScene::Initialize() {
         Vector2 { 0.35f, 0.10f },
         RectAlign::Center,
         "START GAME",
-        Vector2 { 0.0f, 0.05f }
+        Vector2 { 0.0f, 0.20f }
     );
     m_startButton->SetOnClick([this]() { changeScene(SceneType::TestStage); });
+
+    /** @brief ゲーム開始ボタンの下に3Dモデルテスト用ボタンを配置する */
+    m_modelTestButton = std::make_unique<Button>(
+        Vector2 { 0.35f, 0.10f },
+        RectAlign::Center,
+        "MODEL TEST",
+        Vector2 { 0.0f, 0.00f }
+    );
+    m_modelTestButton->SetOnClick([this]() { changeScene(SceneType::ModelTest); });
 
     /** @brief 画面中央の少し下にオプションボタンを配置する */
     m_optionButton = std::make_unique<Button>(
         Vector2 { 0.35f, 0.10f },
         RectAlign::Center,
         "OPTIONS",
-        Vector2 { 0.0f, -0.15f }
+        Vector2 { 0.0f, -0.20f }
     );
     m_optionButton->SetOnClick([this]() { changeScene(SceneType::Option); });
 
@@ -34,7 +43,7 @@ void TitleScene::Initialize() {
         Vector2 { 0.35f, 0.10f },
         RectAlign::Center,
         "EXIT GAME",
-        Vector2 { 0.0f, -0.35f }
+        Vector2 { 0.0f, -0.40f }
     );
     m_exitButton->SetOnClick([]() { PostQuitMessage(0); });
     
@@ -78,6 +87,11 @@ void TitleScene::ProcessInput() {
         m_startButton->Update(inputState);
     }
 
+    /** @brief 3Dモデルテストボタンにマウス入力を渡す */
+    if (m_modelTestButton != nullptr) {
+        m_modelTestButton->Update(inputState);
+    }
+
     /** @brief ゲーム終了ボタンにマウス入力を渡す */
     if (m_exitButton != nullptr) {
         m_exitButton->Update(inputState);
@@ -103,6 +117,7 @@ void TitleScene::Tick() {
 
 void TitleScene::Dispose() {
     m_startButton.reset();
+    m_modelTestButton.reset();
     m_exitButton.reset();
     m_creditButton.reset();
     m_optionButton.reset();
@@ -129,6 +144,11 @@ void TitleScene::Render(Renderer& renderer) {
     /** @brief ゲーム開始ボタンを描画する */
     if (m_startButton != nullptr) {
         m_startButton->Render(renderer);
+    }
+
+    /** @brief 3Dモデルテストボタンを描画する */
+    if (m_modelTestButton != nullptr) {
+        m_modelTestButton->Render(renderer);
     }
 
     /** @brief オプションボタンを描画する */
