@@ -656,8 +656,18 @@ void D3D12RenderingService::DrawUiPrimitive(
  * @brief NDC矩形を描画する
  */
 void D3D12RenderingService::DrawRect(const Rect& rect, const ColorF& color) {
-    DrawUiPrimitive(rect.position.x, rect.position.y, rect.size.x, rect.size.y, 0.0f,
-                    color, 6.0f, 4);
+    SetPipeline(PipelineId::Object);
+
+    DrawUiPrimitive(
+        rect.position.x,
+        rect.position.y,
+        rect.size.x,
+        rect.size.y,
+        0.0f,
+        color,
+        6.0f,
+        4
+    );
 }
 
 void D3D12RenderingService::DrawPrimitive3D(const Primitive3D& primitive) {
