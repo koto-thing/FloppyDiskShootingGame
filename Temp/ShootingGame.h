@@ -6,17 +6,9 @@
 #include "Player.h"
 #include "Enemy.h"
 #include "Bullet.h"
-#include "../Infrastructure/ExternalServices/D3D12RenderingService.h"
-
-// 256バイトにアライメントされた定数バッファ構造体 (HLSL側の TransformBuffer と完全一致させる)
-struct TransformBufferData {
-    DirectX::XMFLOAT4X4 u_wvpMatrix; // 64バイト
-    DirectX::XMFLOAT4 u_Color;       // 16バイト
-    float u_time;                    // 4バイト
-    float u_shapeType;               // 4バイト
-    float u_rotAngle;                // 4バイト (自転回転角)
-    float u_pad[41];                 // 164バイト (計256バイト)
-};
+#include "../Engine/Scene/ObjectPool.h"
+#include "../Engine/Graphics/Renderer.h"
+#include "../Engine/Math/Matrix4x4.h"
 
 // 3D空間のアイテムクラス
 struct Item3D {
@@ -42,7 +34,7 @@ class ShootingGame {
 public:
     Player player;
     std::vector<Enemy> enemies;
-    std::vector<Bullet> bullets;
+    ObjectPool<Bullet> bullets{500};
     std::vector<Item3D> items;
     std::vector<Obstacle3D> obstacles;
 
@@ -58,6 +50,7 @@ public:
     int transitionTimer;        // 次元シフト移行タイマー
     const int maxTransitionFrames = 90; // トランジション時間 (1.5秒)
     float transitionProgress;   // 0.0f (旧モード) ~ 1.0f (新モード) への移行度
+    float aspectRatio = 16.0f / 9.0f;
     
     // カメラ行列 (DirectXMath)
     DirectX::XMMATRIX m_viewMatrix;
@@ -73,12 +66,11 @@ public:
     void Reset() {
         player.Reset();
         enemies.clear();
-        bullets.clear();
+        bullets.Reset();
         items.clear();
         obstacles.clear();
 
         enemies.resize(12);    // 最大同時出現敵
-        bullets.resize(500);   // 最大同時出現弾
         items.resize(40);      // 最大同時出現アイテム
         obstacles.resize(25);  // 同時出現障害物
 
@@ -101,7 +93,7 @@ public:
         SpawnObstacles();
     }
 
-    void Update() {
+    void Tick() {
         if (gameStatus != 0) {
             // ゲームオーバーかクリア時は、Rキーでリセット
             if (InputService::IsKeyPressed('R')) {
@@ -146,7 +138,7 @@ public:
         }
 
         // プレイヤー更新 (入力移動軸の処理は Player 側で優勢な activeMode に従って決定される)
-        player.Update(bullets, dimensionMode, nextDimensionMode, transitionProgress);
+        player.Tick(bullets, dimensionMode, nextDimensionMode, transitionProgress);
 
         // --- プレイヤー固定軸（次元制約）の滑らかな吸い寄せと強制適用 ---
         if (transitionTimer > 0) {
@@ -182,8 +174,7 @@ public:
         m_viewMatrix = DirectX::XMMatrixLookAtLH(camPos, camTarget, camUp);
 
         // プロジェクション行列の構築 (Fovブレンドによる望遠効果)
-        float aspect = 800.0f / 600.0f;
-        m_projMatrix = DirectX::XMMatrixPerspectiveFovLH(DirectX::XMConvertToRadians(fov), aspect, 0.5f, 1500.0f);
+        m_projMatrix = DirectX::XMMatrixPerspectiveFovLH(DirectX::XMConvertToRadians(fov), aspectRatio, 0.5f, 1500.0f);
 
         // --- 星空背景の位置をスクロール ---
         float bgX1 = 0, bgY1 = 0;
@@ -209,13 +200,13 @@ public:
         // 敵の更新
         for (auto& e : enemies) {
             if (e.active) {
-                e.Update(bullets, player.x, player.y, player.z, dimensionMode, nextDimensionMode, transitionProgress);
+                e.Tick(bullets, player.x, player.y, player.z, dimensionMode, nextDimensionMode, transitionProgress);
             }
         }
 
         // 弾の更新
         for (auto& b : bullets) {
-            b.Update(dimensionMode, nextDimensionMode, transitionProgress);
+            b.Tick(dimensionMode, nextDimensionMode, transitionProgress);
         }
 
         // アイテムの更新 (モードごとにスクロール方向をブレンド)
@@ -230,17 +221,17 @@ public:
         }
     }
 
-    void Render(D3D12RenderingService& renderer) {
+    void Render(Renderer& renderer) {
         int drawCount = 0;
 
         // A. 宇宙空間の星空背景描画 (PSO: 1: Background)
         // ビュー・プロジェクションを適用せず、NDC空間全体 (Z=0.99) に直接描くことでカメラ回転に追従させる
-        renderer.SetPipelineState(1);
+        renderer.SetPipeline(PipelineId::Background);
         float bgCol[4] = { backgroundPos[0], backgroundPos[1], 0.0f, 1.0f };
         DrawObjectUI(renderer, 0.0f, 0.0f, 0.99f, 2.0f, 2.0f, bgCol, drawCount++);
 
         // B. 以降のすべての3Dオブジェクトは通常スプライト/3Dポリゴン (PSO: 0: Object)
-        renderer.SetPipelineState(0);
+        renderer.SetPipeline(PipelineId::Object);
 
         // 1. 地面グリッドの描画 (次元モードに応じてクロスフェード)
         float gridCol[4] = { 0.15f, 0.75f, 0.25f, 1.0f }; // レトロネオングリーン
@@ -489,13 +480,13 @@ public:
         float hudAlpha = (dimensionMode == 0 && nextDimensionMode == 0) ? 1.0f : 
                          ((nextDimensionMode == 0) ? transitionProgress : 1.0f - transitionProgress);
         if (hudAlpha > 0.01f && player.lives >= 0) {
-            renderer.SetPipelineState(2);
+            renderer.SetPipeline(PipelineId::SpellCircle);
             float hudCol[4] = { 0.2f, 0.9f, 0.2f, 0.8f * hudAlpha };
             DrawObject3D(renderer, player.x, player.y, player.z + 65.0f, 8.0f, 8.0f, 1.0f, hudCol, drawCount++, 3, 4);
         }
 
         // 8. UIの描画 (2Dスプライトとして一番手前に描画)
-        renderer.SetPipelineState(0);
+        renderer.SetPipeline(PipelineId::Object);
         float grayCol[4] = { 0.15f, 0.15f, 0.2f, 1.0f };
 
         // シールドゲージ
@@ -543,12 +534,12 @@ public:
         if (gameStatus == 1) {
             float filter[4] = { 0.8f, 0.1f, 0.1f, 0.35f };
             DrawObjectUI(renderer, 0.0f, 0.0f, 0.05f, 2.0f, 2.0f, filter, drawCount++);
-            renderer.RenderText("GAME OVER", { -0.35f, 0.0f }, 0.08f, { 1.0f, 1.0f, 1.0f, 1.0f });
+            renderer.DrawText("GAME OVER", { -0.35f, 0.0f }, 0.08f, { 1.0f, 1.0f, 1.0f, 1.0f });
             drawCount += 9;
         } else if (gameStatus == 2) {
             float filter[4] = { 0.9f, 0.8f, 0.1f, 0.25f };
             DrawObjectUI(renderer, 0.0f, 0.0f, 0.05f, 2.0f, 2.0f, filter, drawCount++);
-            renderer.RenderText("STAGE CLEAR!", { -0.4f, 0.0f }, 0.08f, { 1.0f, 1.0f, 1.0f, 1.0f });
+            renderer.DrawText("STAGE CLEAR!", { -0.4f, 0.0f }, 0.08f, { 1.0f, 1.0f, 1.0f, 1.0f });
             drawCount += 12;
         }
 
@@ -557,7 +548,7 @@ public:
             float blink = sin(spawnTimer * 0.3f) * 0.5f + 0.5f;
             DirectX::XMFLOAT4 alertCol = { 1.0f, 0.1f, 0.1f, blink };
             
-            renderer.RenderText("WARNING: DIMENSION SHIFT DETECTED", { -0.55f, 0.3f }, 0.035f, alertCol);
+            renderer.DrawText("WARNING: DIMENSION SHIFT DETECTED", { -0.55f, 0.3f }, 0.035f, {alertCol.x, alertCol.y, alertCol.z, alertCol.w});
             drawCount += 35;
 
             const char* modeStr = "PREPARING MODE CHANGE...";
@@ -565,7 +556,7 @@ public:
             else if (nextDimensionMode == 1) modeStr = "PREPARING 2D VERTICAL MODE";
             else if (nextDimensionMode == 2) modeStr = "PREPARING 2D HORIZONTAL MODE";
             
-            renderer.RenderText(modeStr, { -0.35f, 0.1f }, 0.025f, { 1.0f, 1.0f, 1.0f, 1.0f });
+            renderer.DrawText(modeStr, { -0.35f, 0.1f }, 0.025f, { 1.0f, 1.0f, 1.0f, 1.0f });
             drawCount += 25;
         }
     }
@@ -805,6 +796,7 @@ private:
     }
 
     void CheckItemBounds(Item3D& it, float progress) {
+        (void)progress;
         float limitZ = -10.0f;
         if (dimensionMode == 1 || nextDimensionMode == 1 || dimensionMode == 2 || nextDimensionMode == 2) {
             limitZ = 15.0f; // 2D画面端境界
@@ -835,6 +827,7 @@ private:
                                 e.active = false;
                                 enemyKillCount++;
                                 player.score += (e.type == 2) ? 10000 : 200;
+                                AudioService::Get().PlaySE(Audio::SfxrPreset::Explosion);
 
                                 if (e.type == 2) {
                                     gameStatus = 2;
@@ -902,10 +895,12 @@ private:
         player.shield -= amount;
         if (player.shield <= 0) {
             player.lives--;
+            AudioService::Get().PlaySE(Audio::SfxrPreset::Explosion);
             if (player.lives >= 0) {
                 player.Reset();
             }
         } else {
+            AudioService::Get().PlaySE(Audio::SfxrPreset::HitHurt);
             player.invincibleFrames = 30;
         }
     }
@@ -924,7 +919,31 @@ private:
     }
 
     // 3D 空間オブジェクト描画ヘルパー (WVP行列と自転角を転送、かつ2D正対回転を処理)
-    void DrawObject3D(D3D12RenderingService& renderer, float x, float y, float z, float w, float h, float d, const float color[4], int index, int shapeType, int vertexCount, float rotAngle = 0.0f) {
+    void DrawObject3D(Renderer& renderer, float x, float y, float z, float w, float h, float d, const float color[4], int index, int shapeType, int vertexCount, float rotAngle = 0.0f) {
+        (void)index;
+        (void)vertexCount;
+        DirectX::XMMATRIX worldMatrix = DirectX::XMMatrixScaling(w, h, d);
+        if (shapeType == 3 || shapeType == 4) {
+            worldMatrix = DirectX::XMMatrixScaling(w, d, h) *
+                DirectX::XMMatrixRotationX(DirectX::XMConvertToRadians(90.0f));
+        }
+        const int activeMode = (transitionProgress < 0.5f) ? dimensionMode : nextDimensionMode;
+        if (shapeType == 6) {
+            if (activeMode == 1) worldMatrix *= DirectX::XMMatrixRotationX(DirectX::XMConvertToRadians(90.0f));
+            if (activeMode == 2) worldMatrix *= DirectX::XMMatrixRotationY(DirectX::XMConvertToRadians(90.0f));
+        }
+        worldMatrix *= DirectX::XMMatrixTranslation(x, y, z);
+        DirectX::XMFLOAT4X4 stored;
+        DirectX::XMStoreFloat4x4(&stored, DirectX::XMMatrixTranspose(worldMatrix * m_viewMatrix * m_projMatrix));
+        Matrix4x4 wvp;
+        for (int row = 0; row < 4; ++row) for (int column = 0; column < 4; ++column) wvp.m[row][column] = stored.m[row][column];
+        Primitive3D primitive;
+        primitive.shape = shapeType == 0 ? PrimitiveShape::Plate : shapeType == 1 ? PrimitiveShape::Box : shapeType == 3 ? PrimitiveShape::Cylinder : shapeType == 4 ? PrimitiveShape::Cone : shapeType == 5 ? PrimitiveShape::Prism : PrimitiveShape::Sprite2D;
+        primitive.wvpMatrix = wvp;
+        primitive.color = {color[0], color[1], color[2], color[3]};
+        primitive.rotationAngle = rotAngle;
+        renderer.Draw(primitive);
+#if 0
         ID3D12GraphicsCommandList* cmdList = renderer.GetCommandList();
         
         char* cbvCpuData = reinterpret_cast<char*>(renderer.GetCbvCpuData());
@@ -975,11 +994,12 @@ private:
         cmdList->SetGraphicsRootConstantBufferView(0, cbvGpuAddress);
         
         cmdList->DrawInstanced(vertexCount, 1, 0, 0);
+#endif
     }
 
     // 3D 空間オブジェクト描画ヘルパー (自由なXYZ回転対応版)
     void DrawObject3DEx(
-        D3D12RenderingService& renderer,
+        Renderer& renderer,
         float x, float y, float z,           // 位置
         float w, float h, float d,           // スケーリング（幅, 高さ, 奥行き）
         float rotX, float rotY, float rotZ,  // 自由な回転角（度数法: Degree）
@@ -988,6 +1008,23 @@ private:
         int shapeType,
         int vertexCount
     ) {
+        (void)index;
+        (void)shapeType;
+        (void)vertexCount;
+        DirectX::XMMATRIX worldMatrix = DirectX::XMMatrixScaling(w, h, d);
+        worldMatrix *= DirectX::XMMatrixRotationRollPitchYaw(
+            DirectX::XMConvertToRadians(rotX), DirectX::XMConvertToRadians(rotY), DirectX::XMConvertToRadians(rotZ));
+        worldMatrix *= DirectX::XMMatrixTranslation(x, y, z);
+        DirectX::XMFLOAT4X4 stored;
+        DirectX::XMStoreFloat4x4(&stored, DirectX::XMMatrixTranspose(worldMatrix * m_viewMatrix * m_projMatrix));
+        Matrix4x4 wvp;
+        for (int row = 0; row < 4; ++row) for (int column = 0; column < 4; ++column) wvp.m[row][column] = stored.m[row][column];
+        Primitive3D primitive;
+        primitive.shape = shapeType == 4 ? PrimitiveShape::Cone : PrimitiveShape::Prism;
+        primitive.wvpMatrix = wvp;
+        primitive.color = {color[0], color[1], color[2], color[3]};
+        renderer.Draw(primitive);
+#if 0
         ID3D12GraphicsCommandList* cmdList = renderer.GetCommandList();
 
         char* cbvCpuData = reinterpret_cast<char*>(renderer.GetCbvCpuData());
@@ -1049,9 +1086,20 @@ private:
         cmdList->SetGraphicsRootConstantBufferView(0, cbvGpuAddress);
 
         cmdList->DrawInstanced(vertexCount, 1, 0, 0);
+#endif
     }
     // UI 描画ヘルパー (ビュー・プロジェクション行列を適用せずNDC空間に直接スケーリング・配置)
-    void DrawObjectUI(D3D12RenderingService& renderer, float ndcX, float ndcY, float ndcZ, float ndcW, float ndcH, const float color[4], int index) {
+    void DrawObjectUI(Renderer& renderer, float ndcX, float ndcY, float ndcZ, float ndcW, float ndcH, const float color[4], int index) {
+        (void)index;
+        DirectX::XMMATRIX uiMatrix = DirectX::XMMatrixScaling(ndcW, ndcH, 1.0f) * DirectX::XMMatrixTranslation(ndcX, ndcY, ndcZ);
+        DirectX::XMFLOAT4X4 stored;
+        DirectX::XMStoreFloat4x4(&stored, DirectX::XMMatrixTranspose(uiMatrix));
+        Primitive3D primitive;
+        for (int row = 0; row < 4; ++row) for (int column = 0; column < 4; ++column) primitive.wvpMatrix.m[row][column] = stored.m[row][column];
+        primitive.shape = PrimitiveShape::Sprite2D;
+        primitive.color = {color[0], color[1], color[2], color[3]};
+        renderer.Draw(primitive);
+#if 0
         ID3D12GraphicsCommandList* cmdList = renderer.GetCommandList();
         
         char* cbvCpuData = reinterpret_cast<char*>(renderer.GetCbvCpuData());
@@ -1070,5 +1118,6 @@ private:
         cmdList->SetGraphicsRootConstantBufferView(0, cbvGpuAddress);
         
         cmdList->DrawInstanced(4, 1, 0, 0);
+#endif
     }
 };

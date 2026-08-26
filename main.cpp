@@ -1,3 +1,4 @@
+#include "Presentation/Scenes/CreditScene.h"
 #ifndef UNICODE
 #define UNICODE
 #endif
@@ -15,6 +16,7 @@
 #include "Infrastructure/ExternalServices/Win32WindowService.h"
 #include "Infrastructure/ExternalServices/AudioService.h"
 #include "Infrastructure/ExternalServices/D3D12RenderingService.h"
+#include "Engine/Graphics/Renderer.h"
 #include "Presentation/Scenes/TitleScene.h"
 #include "Presentation/Scenes/TestStage.h"
 
@@ -31,6 +33,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     Input::ProcessMessage(uMsg, wParam, lParam);
 
     switch (uMsg) {
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            return 0;
         case WM_DESTROY:
             PostQuitMessage(0);
             return 0;
@@ -45,12 +50,17 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
  * @return 
  */
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     Debug::Initialize();
     Debug::Log("Application starting");
 
-    // ウィンドウを作成
+    // プライマリモニターの解像度を取得する
+    const int screenWidth = GetSystemMetrics(SM_CXSCREEN);
+    const int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+
+    // 画面全体を覆うボーダーレスウィンドウを作成する
     HWND hwnd = Win32WindowService::Create(
-        hInstance, 1920, 1080, L"Floppy Disk Shooting Game - Clean Architecture", WindowProc
+        hInstance, screenWidth, screenHeight, L"Floppy Disk Shooting Game - Clean Architecture", WindowProc
     );
 
     // ウィンドウの作成に失敗した場合は終了
@@ -73,12 +83,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
 
     // DirectX 12 レンダラーの初期化
     D3D12RenderingService renderer;
-    if (!renderer.Initialize(hwnd, 1920, 1080)) {
+    if (!renderer.Initialize(hwnd, screenWidth, screenHeight)) {
         Debug::LogError("DirectX 12 initialization failed");
         MessageBox(NULL, L"DirectX 12 Initializing Failed", L"Error", MB_OK);
         Debug::Shutdown();
         return 0;
     }
+    Renderer renderFacade(renderer);
 
     AudioService audio;
     if (!audio.Initialize()) {
@@ -101,27 +112,33 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     app.getSharedData().audio = &audio;
     
     // シーンを登録
-    app.addScene<TitleScene>(SceneType::Title);
-    app.addScene<TestStage>(SceneType::TestStage);
+    app.AddScene<TitleScene>(SceneType::Title);
+    app.AddScene<TestStage>(SceneType::TestStage);
+    app.AddScene<CreditScene>(SceneType::Credit);
     
     // 初期シーンの設定
-    app.init(SceneType::Title);
+    app.Initialize(SceneType::Title);
 
     // 初期化処理にかかった時間をゲーム時間へ含めない
     Time::Initialize();
     
     // メインループ
     MSG msg = { };
-    while (msg.message != WM_QUIT) {
+    bool isRunning = true;
+    while (isRunning) {
         // 前フレームの状態を保存して新しい入力の受付を開始する
-        Input::Update();
+        Input::BeginFrame();
 
         while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                isRunning = false;
+                break;
+            }
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
 
-        if (msg.message == WM_QUIT) {
+        if (!isRunning) {
             break;
         }
 
@@ -144,13 +161,19 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
             Time::DiscardExcessFixedTime();
         }
 
-        renderer.BeginFrame();
-        app.Render(renderer);
-        renderer.EndFrame();
+        app.CommitTransitions();
+        audio.Update();
+
+        renderFacade.BeginFrame();
+        app.Render(renderFacade);
+        renderFacade.EndFrame();
     }
 
+    audio.Shutdown();
     renderer.Cleanup();
+    app.Dispose();
     Debug::Log("Application shutting down");
     Debug::Shutdown();
+    CoUninitialize();
     return 0;
 }

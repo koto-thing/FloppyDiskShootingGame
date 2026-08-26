@@ -270,6 +270,7 @@ bool TextRenderingService::InitPipeline(ID3D12Device* device, DXGI_FORMAT rtvFor
  * @param startY 
  * @param size 
  * @param color 
+ * @param characterSpacing 
  * @param screenWidth 
  * @param screenHeight 
  */
@@ -281,6 +282,7 @@ void TextRenderingService::RenderText(
     float startX, float startY,
     float size,
     DirectX::XMFLOAT4 color,
+    float characterSpacing,
     int screenWidth, int screenHeight
 ) {
     // パイプラインと記述子ヒープの設定
@@ -330,6 +332,7 @@ void TextRenderingService::RenderText(
         currentCbCpu = reinterpret_cast<TextConstantBufferData*>(reinterpret_cast<char*>(currentCbCpu) + 256);
         currentCbGpu += 256;
         
-        currentX += size * 1.5f; // 文字送り
+        // 基本の文字送りへ指定された字間を加算する
+        currentX += size * 1.5f + characterSpacing;
     }
 }

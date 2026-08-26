@@ -1,0 +1,774 @@
+Floppy Disk Shooting Game
+Siv3D風エンジンAPIへの全面改訂指示書
+
+作成日: 2026-08-22
+
+======================================================================
+0. この指示書の目的
+======================================================================
+
+現在、Unity風のGameObject／Component基盤が作業ツリーへ実装され始めている。
+この実装を単純に削除するのではなく、利用価値のある内部機構を残しながら、
+ゲーム開発者が触る公開APIをSiv3D風の軽量な設計へ全面改訂する。
+
+最終目標:
+
+- ゲームコードはScene、Entity、図形、描画、入力、音声を直接的に記述できる
+- GameObjectへ多数のComponentを追加しないと何もできない構造にしない
+- 描画はRendererへ図形や描画データを渡すだけで行える
+- 当たり判定は図形同士のIntersectsで簡単に記述できる
+- DirectX 12の詳細はゲームコードへ露出させない
+- 既存のSceneManager、Time、Input、Audio、数学型を活かす
+- 最終ビルド1.44MBという制約に合う小さなランタイムを維持する
+
+この作業では、UnityやSiv3Dとの完全互換を目指さない。
+Siv3Dの「C++で簡潔にゲームを書く」操作感を参考に、本ゲームに必要なAPIだけを作る。
+
+
+======================================================================
+1. 最重要ルール
+======================================================================
+
+1. ユーザーの既存変更をgit reset、checkout、restoreで破棄しないこと
+2. 現在の差分を読み、必要な部分を移植してから不要部分を除去すること
+3. 一度にゲーム本体まで全面移行せず、エンジンAPIを小さな単位で完成させること
+4. 各段階でFloppyEngineとTestsをビルド・実行すること
+5. Doxygenコメントを使用し、処理のまとまりには簡潔なコメントを書くこと
+6. コメント末尾に句点を付けないこと
+7. 公開APIへDirectX::XMFLOAT系を新規露出させず、Engine/Mathの型を使用すること
+8. 新しい共有所有権が必要でない限りshared_ptrを増やさないこと
+9. 実行時リフレクション、文字列メッセージ、汎用エディタ機構を作らないこと
+10. まず2D APIを完成させ、3D APIは同じ設計思想で後から追加すること
+
+
+======================================================================
+2. 現在のLuna実装の監査結果
+======================================================================
+
+現在確認できる主な変更:
+
+- Domain/Entities/Transform.h/.cppを追加
+- Transformの親子階層、Dirty伝播、遅延WorldMatrix計算を追加
+- Domain/Entities/Component.cppを追加
+- ComponentへenabledとUnity風ライフサイクルを追加
+- Domain/Entities/MonoBehaviour.hを追加
+- GameObjectへTransform、Tag、Layer、Active、遅延Destroy状態を追加
+- Engine/Scene/GameWorld.h/.cppを追加
+- Tests/TimeTests.cppへTransformテストを追加
+- FloppyEngine.vcxprojへ上記ファイルを追加
+
+このうち残すもの:
+
+- Transformのローカル姿勢
+- Transformの親子階層
+- Dirty伝播
+- WorldMatrixの遅延計算
+- 親子循環防止
+- worldPositionStays
+- Transformのテスト
+- Tag／Layerの小さなenum（実際に使用する場合）
+- GameWorldの遅延破棄アルゴリズム（内部用途として必要になった場合）
+
+改訂するもの:
+
+- Transform公開APIの型をDirectX::XMFLOAT3からVector3／Quaternionへ変更する
+- position()とPosition()のような重複アクセサーを一種類へ統一する
+- GameObjectからD3D12RenderingService依存を分離する
+- Componentの役割を限定し、描画とすべてのゲームロジックの必須基盤にしない
+- GameWorldをゲーム側の中心APIにせず、必要ならEntityStorageなど内部管理へ縮退する
+- Update系名称を本プロジェクトのInitialize／Tick／Render／Shutdownへ合わせる
+
+除去するもの:
+
+- MonoBehaviour
+- Awake
+- Start
+- FixedUpdate
+- Update
+- LateUpdate
+- OnEnable
+- OnDisable
+- OnDestroy
+- Unity風であることだけを目的としたGetComponentInChildren等の拡張
+- GameObjectを必ず経由するInstantiate／Prefab中心設計
+
+注意:
+
+現在のTransformは有用なので削除しないこと。公開型と命名を整理し、Cameraや複合Entityで
+必要になった場合に利用できる軽量な値／階層型として残す。
+
+
+======================================================================
+3. 採用する設計思想
+======================================================================
+
+ゲーム側はSceneがEntityの集合を所有し、各EntityがInitialize、Tick、Renderを持つ。
+単純な弾やアイテムは継承を使わない構造体でもよい。
+
+例:
+
+class Player {
+public:
+    void Initialize();
+    void Tick();
+    void Render(Renderer& renderer) const;
+
+    Circle Bounds() const;
+    const Vector3& Position() const;
+
+private:
+    Vector3 m_position {};
+    Vector3 m_velocity {};
+};
+
+class StageScene final : public IScene<SceneType, SceneSharedData> {
+public:
+    void Initialize() override;
+    void ProcessInput() override;
+    void Tick() override;
+    void Render(Renderer& renderer) override;
+    void Shutdown() override;
+
+private:
+    Player m_player;
+    std::vector<Enemy> m_enemies;
+    ObjectPool<Bullet> m_bullets;
+};
+
+描画例:
+
+renderer.Draw(Circle { position, 12.0f }, ColorF { 0.2f, 0.8f, 1.0f });
+renderer.Draw(Rect { position, size }, ColorF::White());
+renderer.Draw(mesh, transform, material);
+renderer.DrawText(font, "SCORE", position, ColorF::White());
+
+当たり判定例:
+
+if (player.Bounds().Intersects(enemy.Bounds())) {
+    player.Damage(1);
+}
+
+図形自身のDraw()は第一版では採用しない。
+Circle::Draw()がグローバルRendererへ依存するより、Renderer::Draw(Circle)の方が
+依存関係とテスト容易性に優れるためである。
+
+
+======================================================================
+4. 公開APIの命名規則
+======================================================================
+
+本プロジェクトでは以下を標準とする。
+
+- 初期化: Initialize
+- 状態更新: Tick
+- 固定時間更新が明確に必要な内部処理: FixedTick
+- 描画: Render
+- 終了処理: Shutdown
+- 有効状態: SetEnabled／IsEnabled
+- 座標取得: Position
+- サイズ取得: Size
+- 図形描画: Renderer::Draw
+- 文字描画: Renderer::DrawText
+- 衝突判定: Intersects
+- 点包含判定: Contains
+
+禁止する公開名:
+
+- Awake
+- Start
+- Update
+- FixedUpdate
+- LateUpdate
+- MonoBehaviour
+- OnEnable
+- OnDisable
+- OnDestroy
+
+内部のフレーム処理関数についても、可能な限りTick系へ統一する。
+
+
+======================================================================
+5. 目標アーキテクチャ
+======================================================================
+
+Engine/
+  Math/
+    Vector2
+    Vector3
+    Vector4
+    Quaternion
+    Matrix4x4
+    Math
+  Geometry/
+    Circle
+    Rect
+    Line
+    Box
+    Sphere
+    Intersection
+  Graphics/
+    Color
+    ColorF
+    Renderer
+    RenderCommand
+    Camera2D
+    Camera3D
+    MeshHandle
+    MaterialHandle
+    FontHandle
+  Input/
+  Time/
+  Audio/
+  Scene/
+    Transform
+    ObjectPool
+  Diagnostics/
+
+Application/
+  Interfaces/
+    IScene
+  UseCases/
+    SceneManager
+    ChapterController
+
+Domain/
+  Entities/
+    Player
+    Enemy
+    Bullet
+    Item
+  ValueObjects/
+
+Infrastructure/
+  ExternalServices/
+    D3D12RenderingService
+    TextRenderingService
+    AudioService
+    WindowsInputBackend
+
+Presentation/
+  Scenes/
+    TitleScene
+    StageScene
+
+RendererはEngine側の公開ファサードとし、D3D12RenderingServiceはInfrastructure側の
+実装詳細として隠す。依存性逆転を厳密に行う場合はIRenderBackendを間に置く。
+
+
+======================================================================
+6. Phase 0: 変更の保全と基準確認
+======================================================================
+
+作業内容:
+
+1. git statusとgit diffで既存差分を記録する
+2. Lunaが追加した全ファイルを読む
+3. 現在のFloppyEngineとTestsがビルド可能か確認する
+4. 失敗する場合は、既存失敗と新規失敗を分けて記録する
+5. ユーザーの差分を無断で削除しない
+
+完了条件:
+
+- 現状のビルド結果が分かっている
+- 残すLuna実装が明示されている
+- 以後の変更による回帰を判定できる
+
+
+======================================================================
+7. Phase 1: Unity風ライフサイクルの撤去
+======================================================================
+
+対象:
+
+- Domain/Entities/Component.h/.cpp
+- Domain/Entities/MonoBehaviour.h
+- Domain/Entities/GameObject.h/.cpp
+- Engine/Scene/GameWorld.h/.cpp
+- FloppyEngine.vcxproj
+
+作業内容:
+
+1. MonoBehaviourを参照しているコードがないことを確認する
+2. MonoBehaviour.hをプロジェクトから除外する
+3. Componentから以下を除去する
+   - Awake
+   - Start
+   - FixedUpdate
+   - Update
+   - LateUpdate
+   - OnEnable
+   - OnDisable
+   - OnDestroy
+   - m_started
+4. Componentが必要なら以下だけ残す
+   - Initialize
+   - Tick
+   - Render
+   - Shutdown
+   - SetEnabled
+   - IsEnabled
+   - GetGameObject
+5. GameObjectのFixedUpdateObject／UpdateObject／LateUpdateObjectを撤去する
+6. GameObjectを残す場合はInitialize／Tick／Render／Shutdownへ統一する
+7. GameWorldを直ちにゲーム本体へ導入しない
+8. GameWorldを残す場合はTickと遅延Destroyだけを持つ内部クラスへ簡略化する
+
+重要:
+
+GameObject／Componentを完全削除する必要はない。既存MeshRendererとColliderが依存して
+いるため、当面は互換層として残す。ただし新規ゲームロジックでは使用を必須にしない。
+
+完了条件:
+
+- ソースツリーにMonoBehaviourが存在しない
+- 公開APIにAwake／Start／Update系が残っていない
+- 既存MeshRendererとColliderがコンパイルできる
+
+
+======================================================================
+8. Phase 2: Transformの救済と整理
+======================================================================
+
+Luna実装のTransformは再利用する。
+
+作業内容:
+
+1. TransformをDomain/EntitiesからEngine/SceneまたはEngine/Mathへ移す
+2. DirectX::XMFLOAT3をVector3へ置き換える
+3. オイラー角の内部保存を再検討し、可能ならQuaternionを使用する
+4. 次の重複APIを統一する
+   - position()とPosition()
+   - localPosition()とLocalPosition()
+   - worldMatrix()とWorldMatrix()
+5. 公開APIをPascalCaseへ統一する
+6. 親子階層、Dirty伝播、循環防止は維持する
+7. GameObjectとの互換アクセサーは移行期間だけ残す
+8. TransformテストをTimeTests.cppから専用TransformTests.cppへ移す
+
+第一版API:
+
+class Transform {
+public:
+    const Vector3& LocalPosition() const;
+    void SetLocalPosition(const Vector3& position);
+
+    Vector3 Position() const;
+    void SetPosition(const Vector3& position);
+
+    const Quaternion& LocalRotation() const;
+    void SetLocalRotation(const Quaternion& rotation);
+
+    const Vector3& LocalScale() const;
+    void SetLocalScale(const Vector3& scale);
+
+    void Translate(const Vector3& distance);
+    bool SetParent(Transform* parent, bool keepWorldTransform = true);
+    Transform* Parent() const;
+    std::size_t ChildCount() const;
+    Transform* Child(std::size_t index) const;
+    const Matrix4x4& WorldMatrix() const;
+};
+
+SetParentは失敗理由を呼び出し側が判定できるようboolを返す。
+
+完了条件:
+
+- DirectX型を使わずTransformを操作できる
+- 親の移動・回転・拡縮が子へ正しく反映される
+- keepWorldTransformが正しく機能する
+- 親子循環を拒否する
+- 専用テストが通る
+
+
+======================================================================
+9. Phase 3: 基本図形と色
+======================================================================
+
+最初に実装する新しいSiv3D風APIは基本図形である。
+
+追加ファイル:
+
+- Engine/Graphics/Color.h
+- Engine/Geometry/Circle.h/.cpp
+- Engine/Geometry/Rect.h/.cpp
+- Engine/Geometry/Line.h/.cpp（必要最小限）
+- Tests/GeometryTests.cpp
+
+ColorF:
+
+struct ColorF {
+    float r = 1.0f;
+    float g = 1.0f;
+    float b = 1.0f;
+    float a = 1.0f;
+
+    static constexpr ColorF White();
+    static constexpr ColorF Black();
+    static constexpr ColorF Red();
+    static constexpr ColorF Transparent();
+};
+
+Circle:
+
+struct Circle {
+    Vector2 center {};
+    float radius = 0.0f;
+
+    bool Contains(const Vector2& point) const;
+    bool Intersects(const Circle& other) const;
+    bool Intersects(const Rect& other) const;
+};
+
+Rect:
+
+struct Rect {
+    Vector2 position {};
+    Vector2 size {};
+
+    Vector2 Center() const;
+    bool Contains(const Vector2& point) const;
+    bool Intersects(const Rect& other) const;
+    bool Intersects(const Circle& other) const;
+};
+
+規則:
+
+- 負の半径やサイズの扱いを明文化する
+- 判定は描画APIやDirectXへ依存させない
+- CircleとRect間の結果は呼び出し方向によらず一致させる
+- 境界上を衝突とみなす
+
+完了条件:
+
+- 図形だけで当たり判定を記述できる
+- GeometryTestsがウィンドウなしで実行できる
+
+
+======================================================================
+10. Phase 4: Rendererファサードと描画コマンド
+======================================================================
+
+目的:
+
+Temp/ShootingGame.hが定数バッファ、パイプライン番号、DrawInstancedを直接扱っている
+状態を解消する。
+
+追加する概念:
+
+- Renderer
+- RenderCommand
+- PipelineId
+- Camera2D
+- Camera3D
+
+第一版Renderer API:
+
+class Renderer {
+public:
+    void BeginFrame();
+    void Draw(const Circle& circle, const ColorF& color);
+    void Draw(const Rect& rect, const ColorF& color);
+    void Draw(const MeshHandle& mesh,
+              const Transform& transform,
+              const MaterialHandle& material);
+    void DrawText(std::string_view text,
+                  const Vector2& position,
+                  float size,
+                  const ColorF& color);
+    void EndFrame();
+};
+
+RenderCommandは固定容量またはフレームアロケータで保持し、ゲーム側のDraw呼び出し順を
+基本順序として記録する。必要な不透明物だけ後からMaterial単位でソートする。
+
+禁止事項:
+
+- Renderer公開APIからID3D12GraphicsCommandListを返さない
+- ゲーム側へ定数バッファのindexを渡さない
+- SetPipelineState(int)を新規コードで使用しない
+- アスペクト比を800/600などで固定しない
+
+移行期間はD3D12RenderingServiceをRenderer内部のBackendとして包む。
+
+完了条件:
+
+- CircleとRectをRenderer::Drawで描画できる
+- ゲームコードが定数バッファへ直接書き込まない
+- パイプライン指定が型付きである
+- ウィンドウサイズからアスペクト比を計算する
+
+
+======================================================================
+11. Phase 5: EntityとObjectPool
+======================================================================
+
+Player、Enemy、BulletをGameObject／Componentの組み合わせではなく、ゲーム固有の型へ
+移行する。
+
+例:
+
+struct Bullet {
+    Vector3 position {};
+    Vector3 velocity {};
+    float radius = 0.5f;
+    bool active = false;
+    bool enemy = false;
+
+    void Initialize(const BulletSpawnData& data);
+    void Tick();
+    void Render(Renderer& renderer) const;
+    Sphere Bounds() const;
+};
+
+ObjectPool<T>:
+
+- コンテナはstd::vector<T>または固定長配列
+- Spawn時に未使用要素を返す
+- 上限到達時の挙動を明確にする
+- Despawnはactive=falseを基本とする
+- 破棄ごとの動的メモリ確保を避ける
+
+PrefabRegistryは当面実装しない。必要な生成処理はFactory関数またはSpawnDataで表現する。
+
+完了条件:
+
+- BulletがGameObjectなしでTick／Render／Boundsを提供する
+- 弾の生成と消滅でヒープ確保が発生しない
+- 既存の最大500弾を管理できる
+
+
+======================================================================
+12. Phase 6: CollisionServiceの再編
+======================================================================
+
+二つの用途を分ける。
+
+A. 単純なゲーム判定
+
+- Circle::Intersects
+- Rect::Intersects
+- Sphere::Intersects
+- Box::Intersects
+
+B. 登録型の衝突システムが必要な場合
+
+- CollisionServiceを残す
+- previousPairsとcurrentPairsを保持する
+- Enter／Stay／Exitを正しく分類する
+- Collider登録解除を安全にする
+- LayerとMaskを使用する
+
+シューティングの弾対敵など、処理対象が明確な判定はAを優先する。
+物理世界へ全オブジェクトを登録する方式を必須にしない。
+
+完了条件:
+
+- Temp/ShootingGame.hの手書き距離判定を図形APIへ置き換えられる
+- 登録型を使う場合、接触開始時にEnterが一度だけ発生する
+
+
+======================================================================
+13. Phase 7: Scene APIの整理
+======================================================================
+
+既存SceneManagerはSiv3D風設計と相性が良いため維持する。
+
+ISceneの最終候補:
+
+class IScene {
+public:
+    virtual ~IScene() = default;
+    virtual void Initialize() = 0;
+    virtual void ProcessInput() = 0;
+    virtual void Tick() = 0;
+    virtual void Render(Renderer& renderer) const = 0;
+    virtual void Shutdown() {}
+};
+
+固定時間更新はメインループがTickを固定間隔で呼ぶ現行方式を維持してよい。
+可変Tickと固定Tickの両方が本当に必要になった場合だけFixedTickを追加する。
+
+SceneManager:
+
+- addSceneは既存互換のため残してよい
+- 新規APIはAddSceneなどプロジェクト規約に合わせて統一する
+- Scene遷移要求はフレーム境界で反映する
+- Scene間共有データを維持する
+- 将来的なフェード遷移はSceneTransitionとして分離する
+
+
+======================================================================
+14. 既存ファイルごとの具体的指示
+======================================================================
+
+Domain/Entities/Transform.h/.cpp
+
+- 削除禁止
+- Engine配下へ移動
+- Vector3、Quaternion、Matrix4x4へ移行
+- 重複命名を整理
+- テストを維持・拡充
+
+Domain/Entities/Component.h/.cpp
+
+- Unity風ライフサイクルを除去
+- 既存MeshRenderer／Collider用の薄い互換基底として残す
+- 将来的な完全削除はゲーム移行後に判断する
+
+Domain/Entities/MonoBehaviour.h
+
+- 参照がなければ削除
+- FloppyEngine.vcxprojからも除外
+
+Domain/Entities/GameObject.h/.cpp
+
+- Transformの互換窓口として当面残す
+- Awake／Start／Update系処理を除去
+- Initialize／Tick／Render／Shutdownへ簡略化
+- D3D12RenderingService依存の分離はRenderer完成時に行う
+- Tag／Layerは必要なら残す
+
+Engine/Scene/GameWorld.h/.cpp
+
+- ゲーム側の必須APIにはしない
+- 現時点で利用箇所がなければ、ビルド対象から外して保留してもよい
+- 残す場合はEntityStorage相当の内部所有・遅延破棄だけに限定する
+
+Tests/TimeTests.cpp
+
+- TransformテストをTransformTests.cppへ分離
+- TimeTestsという名前のまま他機能を増やさない
+
+Temp/ShootingGame.h
+
+- 一度に全面書き換えない
+- 新APIの実証場所として、一種類ずつ置き換える
+- 最初は当たり判定をCircle／Sphereへ移行
+- 次に描画ヘルパーをRendererへ移行
+- 最後にPlayer／Enemy／Bulletを正式ディレクトリへ移す
+
+FloppyEngine.vcxproj／FloppyDiskShootingGame.vcxproj
+
+- 追加・移動・削除したファイルを一致させる
+- filtersも必要に応じて更新する
+- ビルド対象外ファイルを残さない
+
+
+======================================================================
+15. 実装してはいけないもの
+======================================================================
+
+- Unity Editor相当のGUI
+- SerializeField互換
+- 実行時Componentリフレクション
+- 文字列ベースのSendMessage
+- MonoBehaviour互換
+- すべてをGameObject化する設計
+- すべてのEntityをshared_ptrで所有する設計
+- JSON依存の巨大なPrefabシステム
+- 汎用物理エンジン
+- ECS
+- API利用側でのDirectX 12リソース操作
+- 必要性が確認されていない抽象インターフェースの大量追加
+
+
+======================================================================
+16. ビルドと検証
+======================================================================
+
+各Phase終了時に以下を行う。
+
+1. FloppyEngineをビルドする
+2. FloppyEngine.Testsをビルド・実行する
+3. ゲーム本体をビルドする
+4. コンパイル警告を確認する
+5. 変更した公開APIをrgで検索し、旧名の残存を確認する
+
+最低限のテスト:
+
+- Vector／Matrix／Quaternion既存テスト
+- Transform親子階層
+- Transform循環防止
+- Transformのワールド姿勢維持
+- Circle／Circle
+- Rect／Rect
+- Circle／Rect
+- 境界接触
+- ObjectPool上限
+- Scene遷移
+
+旧Unity風名の確認:
+
+rg -n "MonoBehaviour|Awake|Start\(|FixedUpdate|LateUpdate|OnEnable|OnDisable|OnDestroy" \
+  Engine Domain Application Infrastructure Presentation Tests
+
+意図的な互換コード以外で結果が0件になることを目標とする。
+
+
+======================================================================
+17. コミット／作業単位
+======================================================================
+
+推奨作業単位:
+
+1. Unity風ライフサイクル撤去と既存ビルド回復
+2. Transformの型・配置・API整理
+3. ColorFとGeometry
+4. Rendererファサード
+5. ObjectPoolとBullet移行
+6. Collision整理
+7. Player／Enemy移行
+
+一つの作業単位でエンジン全面とゲーム全面を同時変更しない。
+各段階で動作可能な状態を保つ。
+
+
+======================================================================
+18. Lunaへの実行プロンプト
+======================================================================
+
+以下をLunaへそのまま渡してよい。
+
+--- ここから ---
+
+Docs/Siv3DStyleEngineRefactoringInstructions.txtを最初から最後まで読み、記載された
+Phase順に作業してください。
+
+まずPhase 0として現在のgit status、git diff、追加ファイル、ビルド結果を確認してください。
+既存のユーザー変更をgit reset、checkout、restoreで破棄してはいけません。
+
+今回の最初の実装範囲はPhase 1とPhase 2だけです。
+
+- MonoBehaviourおよびAwake／Start／Update／FixedUpdate／LateUpdate等のUnity風公開APIを撤去
+- 既存GameObject／ComponentはMeshRendererとColliderの互換層として必要最小限に維持
+- Lunaが実装済みのTransform親子階層、Dirty伝播、循環防止、worldPositionStaysは保存
+- TransformをEngine側へ移し、公開APIをVector3／Quaternion／Matrix4x4へ整理
+- Transformテストを専用テストファイルへ分離
+- vcxprojとfiltersを実ファイル構成へ合わせる
+- FloppyEngine、Tests、ゲーム本体をビルドして検証
+
+Phase 1とPhase 2が完全に動作するまで、Renderer、Geometry、Player、Enemy、Bulletの
+大規模移行へ進まないでください。
+
+完了時は、残したLuna実装、除去したUnity風要素、変更したAPI、ビルド・テスト結果、
+次にPhase 3へ進む際の注意点を報告してください。
+
+--- ここまで ---
+
+
+======================================================================
+19. 最終判断
+======================================================================
+
+Lunaが書いたコードを全面的に捨てる必要はない。
+
+Transformは今後のCamera、複合機体、3D描画にも有用なので残す。
+GameWorldの遅延破棄も、将来必要なら内部実装として活用できる。
+
+一方、MonoBehaviourとUnity固有ライフサイクルは本ゲームの公開APIから撤去する。
+ゲーム開発者が触る中心はScene、Entity、Geometry、Renderer、Input、Time、Audioとし、
+Initialize／Tick／Render／Shutdownによる単純な流れへ統一する。
+
+最初の実装はUnity風コードの撤去ではなく「Transformを救済しながら公開面を整理する」
+作業として行う。その後、ColorF、Circle、Rect、Renderer::Drawの順でSiv3D風APIを
+育てること。

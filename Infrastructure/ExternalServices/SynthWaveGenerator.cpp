@@ -95,46 +95,41 @@ float SFCPCMSampleProvider::Sample(uint8_t instrumentId, float phase, float freq
     }
 
     if (instrumentId == 5) {
-        float brassAttack = std::sin(PI_F * std::min(1.0f, t / 0.08f));
-        float loopSec = 0.20f;
-        float effectiveT = t;
-        if (t > 0.10f) {
-            effectiveT = 0.10f + std::fmod(t - 0.10f, loopSec);
-        }
+        // ブラス (アタックで滑らかに最大音量になり、ロングトーンも美しく伸びる)
+        float brassAttack = std::sin(PI_F * 0.5f * std::min(1.0f, t / 0.06f));
+        float saw1 = (phase - 0.5f) * 2.0f;
+        float saw2 = (std::fmod(phase * 1.003f, 1.0f) - 0.5f) * 2.0f;
+        float env = brassAttack * std::exp(-t * 0.25f);
 
-        float saw1 = (std::fmod(effectiveT * frequency, 1.0f) - 0.5f);
-        float saw2 = (std::fmod(effectiveT * (frequency * 1.003f), 1.0f) - 0.5f);
-        float env = brassAttack * std::exp(-t * 0.8f);
-
-        return (saw1 + saw2) * 0.6f * env;
+        return (saw1 + saw2) * 0.4f * env;
     }
 
     if (instrumentId == 6) {
-        float loopSec = 0.30f;
-        float effectiveT = t;
-        if (t > 0.15f) {
-            effectiveT = 0.15f + std::fmod(t - 0.15f, loopSec);
-        }
+        // ストリングス / リード
+        float stringsAttack = std::sin(PI_F * 0.5f * std::min(1.0f, t / 0.12f));
+        float saw1 = (phase - 0.5f) * 2.0f;
+        float saw2 = (std::fmod(phase * 1.005f, 1.0f) - 0.5f) * 2.0f;
+        float env = stringsAttack * std::exp(-t * 0.20f);
 
-        float saw1 = (std::fmod(effectiveT * frequency, 1.0f) - 0.5f);
-        float saw2 = (std::fmod(effectiveT * (frequency * 1.005f), 1.0f) - 0.5f);
-        float env = std::min(1.0f, t / 0.15f) * std::exp(-t * 0.4f);
-
-        return (saw1 + saw2) * 0.5f * env;
+        return (saw1 + saw2) * 0.35f * env;
     }
 
     if (instrumentId == 8 || instrumentId == 7) {
-        float pEnv = 160.0f * std::exp(-t * 35.0f) + 45.0f;
-        float click = ((static_cast<float>(rand()) / RAND_MAX) * 2.0f - 1.0f) * std::exp(-t * 150.0f) * 0.3f;
+        // キックドラム / タム (ノート周波数 frequency に応じて音高が変化する)
+        float pitchScale = std::clamp(frequency / 110.0f, 0.3f, 4.0f);
+        float pEnv = (240.0f * pitchScale) * std::exp(-t * 40.0f) + (50.0f * pitchScale);
+        float click = ((static_cast<float>(rand()) / RAND_MAX) * 2.0f - 1.0f) * std::exp(-t * 180.0f) * 0.5f;
         float body = std::sin(2.0f * PI_F * pEnv * t);
-        float env = std::exp(-t * 14.0f);
-        return (body + click) * env * 1.2f;
+        float env = std::exp(-t * 12.0f);
+        return (body + click) * env * 2.5f;
     }
 
     if (instrumentId == 9) {
-        float tone = std::sin(2.0f * PI_F * (180.0f * std::exp(-t * 20.0f)) * t) * std::exp(-t * 15.0f);
-        float noise = ((static_cast<float>(rand()) / RAND_MAX) * 2.0f - 1.0f) * std::exp(-t * 12.0f);
-        return (tone * 0.6f + noise * 0.7f);
+        // スネアドラム
+        float pitchScale = std::clamp(frequency / 180.0f, 0.5f, 2.0f);
+        float tone = std::sin(2.0f * PI_F * (320.0f * pitchScale * std::exp(-t * 25.0f)) * t) * std::exp(-t * 18.0f);
+        float noise = ((static_cast<float>(rand()) / RAND_MAX) * 2.0f - 1.0f) * std::exp(-t * 14.0f);
+        return (tone * 0.8f + noise * 0.9f) * 2.0f;
     }
 
     if (instrumentId == 10) {
@@ -159,16 +154,18 @@ float SFCPCMSampleProvider::Sample(uint8_t instrumentId, float phase, float freq
 
     if (instrumentId == 4) {
         if (frequency < 140.0f) {
-            float pEnv = 160.0f * std::exp(-t * 35.0f) + 45.0f;
-            float click = ((static_cast<float>(rand()) / RAND_MAX) * 2.0f - 1.0f) * std::exp(-t * 150.0f) * 0.3f;
+            float pitchScale = std::clamp(frequency / 110.0f, 0.3f, 4.0f);
+            float pEnv = (240.0f * pitchScale) * std::exp(-t * 40.0f) + (50.0f * pitchScale);
+            float click = ((static_cast<float>(rand()) / RAND_MAX) * 2.0f - 1.0f) * std::exp(-t * 180.0f) * 0.5f;
             float body = std::sin(2.0f * PI_F * pEnv * t);
-            float env = std::exp(-t * 14.0f);
-            return (body + click) * env * 1.2f;
+            float env = std::exp(-t * 12.0f);
+            return (body + click) * env * 2.5f;
         } 
         else if (frequency >= 140.0f && frequency < 220.0f) {
-            float tone = std::sin(2.0f * PI_F * (180.0f * std::exp(-t * 20.0f)) * t) * std::exp(-t * 15.0f);
-            float noise = ((static_cast<float>(rand()) / RAND_MAX) * 2.0f - 1.0f) * std::exp(-t * 12.0f);
-            return (tone * 0.6f + noise * 0.7f);
+            float pitchScale = std::clamp(frequency / 180.0f, 0.5f, 2.0f);
+            float tone = std::sin(2.0f * PI_F * (320.0f * pitchScale * std::exp(-t * 25.0f)) * t) * std::exp(-t * 18.0f);
+            float noise = ((static_cast<float>(rand()) / RAND_MAX) * 2.0f - 1.0f) * std::exp(-t * 14.0f);
+            return (tone * 0.8f + noise * 0.9f) * 2.0f;
         }
         else if (frequency >= 220.0f && frequency < 350.0f) {
             float noise = ((static_cast<float>(rand()) / RAND_MAX) * 2.0f - 1.0f);

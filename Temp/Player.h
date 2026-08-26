@@ -3,7 +3,9 @@
 #include <vector>
 #include <cmath>
 #include "Bullet.h"
+#include "../Engine/Scene/ObjectPool.h"
 #include "../Infrastructure/ExternalServices/InputService.h"
+#include "../Infrastructure/ExternalServices/AudioService.h"
 
 /**
  * @brief 自機（プレイヤー）クラス (シームレス2D/3D対応)
@@ -40,7 +42,7 @@ public:
         rollAngle = 0.0f;
     }
 
-    void Update(std::vector<Bullet>& bullets, int dimMode, int nextDimMode, float progress) {
+    void Tick(ObjectPool<Bullet>& bullets, int dimMode, int nextDimMode, float progress) {
         if (shootCooldown > 0) shootCooldown--;
         if (invincibleFrames > 0) invincibleFrames--;
 
@@ -114,34 +116,34 @@ public:
     }
 
 private:
-    void Fire(std::vector<Bullet>& bullets, int dimMode, int nextDimMode, float progress) {
+    void Fire(ObjectPool<Bullet>& bullets, int dimMode, int nextDimMode, float progress) {
+        AudioService::Get().PlaySE(Audio::SfxrPreset::LaserShoot);
         int fired = 0;
-        for (auto& b : bullets) {
-            if (!b.active) {
-                b.active = true;
-                b.isEnemyBullet = false;
-                b.size = 0.6f;
-                b.color[0] = 0.1f; b.color[1] = 0.9f; b.color[2] = 0.1f; b.color[3] = 1.0f;
+        for (; fired < 2; ++fired) {
+            Bullet* bullet = bullets.Spawn();
+            if (bullet == nullptr) break;
+            Bullet& b = *bullet;
+            b.active = true;
+            b.isEnemyBullet = false;
+            b.size = 0.6f;
+            b.color[0] = 0.1f; b.color[1] = 0.9f; b.color[2] = 0.1f; b.color[3] = 1.0f;
 
-                // 旧モードでの発射位置と初速
-                float sx1, sy1, sz1, vx1, vy1, vz1;
-                GetFireParams(dimMode, fired, sx1, sy1, sz1, vx1, vy1, vz1);
+            // 旧モードでの発射位置と初速
+            float sx1, sy1, sz1, vx1, vy1, vz1;
+            GetFireParams(dimMode, fired, sx1, sy1, sz1, vx1, vy1, vz1);
 
-                // 新モードでの発射位置と初速
-                float sx2, sy2, sz2, vx2, vy2, vz2;
-                GetFireParams(nextDimMode, fired, sx2, sy2, sz2, vx2, vy2, vz2);
+            // 新モードでの発射位置と初速
+            float sx2, sy2, sz2, vx2, vy2, vz2;
+            GetFireParams(nextDimMode, fired, sx2, sy2, sz2, vx2, vy2, vz2);
 
-                // 移行度 progress で線形補間
-                b.x = sx1 + (sx2 - sx1) * progress;
-                b.y = sy1 + (sy2 - sy1) * progress;
-                b.z = sz1 + (sz2 - sz1) * progress;
-                b.vx = vx1 + (vx2 - vx1) * progress;
-                b.vy = vy1 + (vy2 - vy1) * progress;
-                b.vz = vz1 + (vz2 - vz1) * progress;
+            // 移行度 progress で線形補間
+            b.x = sx1 + (sx2 - sx1) * progress;
+            b.y = sy1 + (sy2 - sy1) * progress;
+            b.z = sz1 + (sz2 - sz1) * progress;
+            b.vx = vx1 + (vx2 - vx1) * progress;
+            b.vy = vy1 + (vy2 - vy1) * progress;
+            b.vz = vz1 + (vz2 - vz1) * progress;
 
-                fired++;
-                if (fired >= 2) break;
-            }
         }
     }
 

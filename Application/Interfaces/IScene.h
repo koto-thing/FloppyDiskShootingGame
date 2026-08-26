@@ -4,6 +4,7 @@
 
 template <typename Key, typename SharedData>
 class SceneManager;
+class Renderer;
 
 /**
  * @brief シーンのインターフェースクラス
@@ -34,11 +35,13 @@ public:
     virtual void Tick() = 0;
 
     /**
-     * @brief シーンの描画処理を行う\n
-     * ゲームループの毎フレーム呼ばれる
-     * @param renderer DirectX 12 レンダラーの参照
+     * @brief シーンの描画処理を行う
+     * @param renderer GPU APIを隠蔽したRendererの参照
      */
-    virtual void Render(class D3D12RenderingService& renderer) = 0;
+    virtual void Render(Renderer& renderer) = 0;
+
+    /** @brief シーンが保持するリソースを解放する */
+    virtual void Dispose() {}
     
 protected:
     /**

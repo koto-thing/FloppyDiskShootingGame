@@ -33,7 +33,7 @@ bool Input::Initialize(HWND hwnd) {
 /**
  * @brief 新しいフレームの入力受付を開始する
  */
-void Input::Update() {
+void Input::BeginFrame() {
     // 現在のデジタル入力を前フレームの状態として保存する
     m_previousKeys = m_currentKeys;
     m_previousMouseButtons = m_currentMouseButtons;

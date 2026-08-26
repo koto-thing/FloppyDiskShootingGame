@@ -62,7 +62,14 @@ void MeshRenderer::Render(D3D12RenderingService& renderer, const DirectX::XMMATR
     if (!m_constantBuffer || !m_cbvCpuData || !m_mesh || !m_gameObject) return;
 
     // 親 GameObject のワールド行列の取得
-    DirectX::XMMATRIX world = m_gameObject->GetWorldMatrix();
+    DirectX::XMFLOAT4X4 worldData{};
+    const Matrix4x4& worldMatrix = m_gameObject->GetWorldMatrix();
+    for (int row = 0; row < 4; ++row) {
+        for (int column = 0; column < 4; ++column) {
+            worldData.m[row][column] = worldMatrix(row, column);
+        }
+    }
+    DirectX::XMMATRIX world = DirectX::XMLoadFloat4x4(&worldData);
 
     // WVPの合成
     DirectX::XMMATRIX wvpMatrix = world * viewMatrix * projMatrix;
@@ -75,7 +82,7 @@ void MeshRenderer::Render(D3D12RenderingService& renderer, const DirectX::XMMATR
         cbData->u_time = 0.0f;
         cbData->u_shapeType = static_cast<float>(m_mesh->GetShapeType());
         // GameObjectのY回転角度を自転角度として送る
-        cbData->u_rotAngle = DirectX::XMConvertToRadians(m_gameObject->GetRotation().y);
+        cbData->u_rotAngle = 0.0f;
     }
 
     // 定数バッファのバインドと描画

@@ -2,7 +2,15 @@
 
 #include <array>
 #include <cstddef>
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
 #include <Windows.h>
+
+// Win32のテキスト描画マクロをエンジン公開APIへ漏らさない
+#ifdef DrawText
+#undef DrawText
+#endif
 
 #include "KeyCode.h"
 #include "MouseButton.h"
@@ -25,7 +33,7 @@ public:
     /**
      * @brief 新しいフレームの入力受付を開始する
      */
-    static void Update();
+    static void BeginFrame();
 
     /**
      * @brief 指定したキーが押されているかを取得する

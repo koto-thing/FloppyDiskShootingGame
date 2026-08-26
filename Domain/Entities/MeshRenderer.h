@@ -1,6 +1,7 @@
 #pragma once
 #include "Component.h"
 #include "Mesh.h"
+#include <memory>
 #include <wrl/client.h>
 #include <d3d12.h>
 

@@ -1,0 +1,757 @@
+Floppy Disk Shooting Game
+Camera2D／Camera3D・3D Geometry 実装仕様書
+
+対象実装者: Luna
+作成日: 2026-08-22
+
+======================================================================
+1. 目的
+======================================================================
+
+Siv3D風Renderer統合の次フェーズとして、ゲームコードからDirectXMathを直接操作せずに
+2D縦スクロール、2D横スクロール、3Dレールを表現できるカメラ機能を実装する。
+
+同時に、カメラのスクリーン座標変換とシューティングの3D当たり判定に必要な最小限の
+Sphere、Box、Rayを追加する。
+
+最終状態:
+
+- Camera2Dが正投影行列を生成できる
+- Camera3Dがビュー行列と透視／正投影行列を生成できる
+- Rendererへ現在のカメラを型安全に設定できる
+- WorldToScreen、ScreenToWorld、ScreenPointToRayが利用できる
+- Sphere、Box、Ray同士の基本交差判定ができる
+- 画面サイズとアスペクト比がRendererから自動反映される
+- ShootingGame.hの手書きカメラ行列を段階的に置換できる
+- 公開APIにDirectX 12型とDirectXMath型を露出しない
+
+
+======================================================================
+2. 前提条件
+======================================================================
+
+本仕様へ着手する前に、RendererIntegrationImplementationSpec.txtの主要完了条件を満たすこと。
+
+必須前提:
+
+- Renderer::Flushが描画コマンドを実行する
+- IScene::Render(Renderer&)へ移行済みである
+- Renderer経由でCircle、Rect、Textが実描画される
+- 既存3D描画が維持されている、またはPrimitive3Dコマンドへ移行済みである
+- Debug x64のEngine Testsとゲーム本体がビルドできる
+- タイトルからステージへ遷移して既存ゲーム画面を確認できる
+
+既存3D描画が表示されない状態なら、先にその回帰を修正してから本仕様へ進むこと。
+
+
+======================================================================
+3. 作業ルール
+======================================================================
+
+1. 作業開始時にgit statusとgit diffを確認すること
+2. ユーザーや他エージェントの変更をgit reset、checkout、restoreで破棄しないこと
+3. 修正中のRenderer実装を読み、最新APIへ合わせること
+4. 公開APIへDirectX::XMMATRIX、XMFLOAT、ID3D12系を露出させないこと
+5. Engine/MathのVector2、Vector3、Quaternion、Matrix4x4を使用すること
+6. Doxygen形式でコメントを書くこと
+7. コメント末尾に句点を付けないこと
+8. 行列規約を一箇所に明記し、暗黙の転置を複数箇所へ散らさないこと
+9. Cameraの計算ロジックはGPUやウィンドウなしでテスト可能にすること
+10. 本仕様にないResourceManagerやEntity全面移行へ進まないこと
+
+
+======================================================================
+4. 座標系と行列規約
+======================================================================
+
+本エンジンでは以下へ統一する。
+
+- 左手座標系
+- +X: 右
+- +Y: 上
+- +Z: 前方
+- Vector3::Forwardは{ 0, 0, 1 }
+- Matrix4x4は列ベクトル規約
+- 変換は clip = projection * view * world * position
+- 回転はQuaternionを優先する
+- 公開角度APIはラジアンを基本とする
+- FOVもラジアンで保持する
+
+DirectX 12へ定数バッファを送る際の転置はD3D12バックエンドの境界で一度だけ行う。
+ゲームコード、Camera、Rendererの公開層でDirectXMath側の行列規約へ合わせないこと。
+
+NDC:
+
+- X: -1が左、+1が右
+- Y: -1が下、+1が上
+- Z: 0がNear、1がFar
+
+Screen座標:
+
+- 原点は画面左上
+- +Xは右
+- +Yは下
+- 単位はピクセル
+
+Viewport変換はNDCとScreenのY方向反転を正しく扱う。
+
+
+======================================================================
+5. 配置ファイル
+======================================================================
+
+追加候補:
+
+Engine/Graphics/Camera.h
+Engine/Graphics/Camera2D.h
+Engine/Graphics/Camera2D.cpp
+Engine/Graphics/Camera3D.h
+Engine/Graphics/Camera3D.cpp
+Engine/Graphics/Viewport.h
+Engine/Graphics/CameraMatrices.h
+
+Engine/Geometry/Sphere.h
+Engine/Geometry/Sphere.cpp
+Engine/Geometry/Box.h
+Engine/Geometry/Box.cpp
+Engine/Geometry/Ray.h
+Engine/Geometry/Ray.cpp
+Engine/Geometry/RayHit.h
+
+Tests/CameraTests.cpp
+Tests/Geometry3DTests.cpp
+
+Camera共通基底をvirtual classとして作る必要はない。
+Camera2DとCamera3Dが共通で返す値はCameraMatricesなどの小さな値型へ集約する。
+
+
+======================================================================
+6. Viewport
+======================================================================
+
+struct Viewport {
+    int x = 0;
+    int y = 0;
+    int width = 0;
+    int height = 0;
+
+    bool IsValid() const;
+    float AspectRatio() const;
+    bool Contains(const Vector2& screenPoint) const;
+};
+
+規則:
+
+- widthとheightが正のときだけ有効とする
+- Heightが0の場合、AspectRatioは1.0fを返す
+- Rendererの全画面Viewportは{0, 0, Width(), Height()}とする
+- 将来の分割画面に備え、CameraごとにViewportを保持できる
+- 第一版では正規化ViewportではなくピクセルViewportを使用する
+
+
+======================================================================
+7. CameraMatrices
+======================================================================
+
+struct CameraMatrices {
+    Matrix4x4 view = Matrix4x4::Identity;
+    Matrix4x4 projection = Matrix4x4::Identity;
+
+    Matrix4x4 ViewProjection() const;
+    bool TryInverseViewProjection(Matrix4x4& result) const;
+};
+
+ViewProjectionはprojection * viewを返す。
+
+RendererとIRenderBackendへCameraMatricesを渡す場合、ポインタを長期保存せず値を
+RenderCommandへコピーするか、フレーム内で生存が保証された値として明文化する。
+
+
+======================================================================
+8. Camera2D仕様
+======================================================================
+
+目的:
+
+- 2D縦スクロール
+- 2D横スクロール
+- UIとは独立したワールド2D描画
+- 位置、拡大率、回転を使った画面演出
+
+第一版API:
+
+class Camera2D {
+public:
+    Camera2D() = default;
+
+    const Vector2& Position() const;
+    void SetPosition(const Vector2& position);
+    float Rotation() const;
+    void SetRotation(float radians);
+    float Zoom() const;
+    void SetZoom(float zoom);
+    const Viewport& GetViewport() const;
+    void SetViewport(const Viewport& viewport);
+
+    Matrix4x4 ViewMatrix() const;
+    Matrix4x4 ProjectionMatrix() const;
+    CameraMatrices Matrices() const;
+
+    Vector2 WorldToScreen(const Vector2& worldPosition) const;
+    Vector2 ScreenToWorld(const Vector2& screenPosition) const;
+
+private:
+    Vector2 m_position = Vector2::Zero;
+    float m_rotation = 0.0f;
+    float m_zoom = 1.0f;
+    Viewport m_viewport {};
+};
+
+投影:
+
+- Camera2Dは正投影とする
+- Zoom 1.0fの意味を明文化する
+- 推奨: 1ワールド単位を1ピクセルとして扱う
+- Zoom 2.0fは同じ画面領域に半分のワールド範囲を表示する
+- zoom <= Math::EpsilonはMath::Epsilonへクランプする
+
+ViewMatrix:
+
+- Camera位置を画面中央へ移動する逆変換
+- Camera回転の逆回転を適用する
+- Camera自身のTransform行列をそのままViewに使用しない
+
+WorldToScreen／ScreenToWorld:
+
+- Viewportのオフセットを考慮する
+- Viewport左上をScreen座標の基準とする
+- 相互変換の往復誤差をテストする
+- 無効Viewportの場合は安全な既定値を返すかTry形式にする
+
+エラーを曖昧にしないため、以下のTry形式でもよい。
+
+bool TryWorldToScreen(const Vector2& world, Vector2& screen) const;
+bool TryScreenToWorld(const Vector2& screen, Vector2& world) const;
+
+
+======================================================================
+9. Camera3D仕様
+======================================================================
+
+enum class ProjectionMode {
+    Perspective,
+    Orthographic
+};
+
+class Camera3D {
+public:
+    Camera3D() = default;
+
+    const Vector3& Position() const;
+    void SetPosition(const Vector3& position);
+    const Quaternion& Rotation() const;
+    void SetRotation(const Quaternion& rotation);
+    bool LookAt(const Vector3& target, const Vector3& up = Vector3::Up);
+
+    Vector3 Forward() const;
+    Vector3 Right() const;
+    Vector3 Up() const;
+
+    ProjectionMode Mode() const;
+    void SetProjectionMode(ProjectionMode mode);
+    float FieldOfView() const;
+    void SetFieldOfView(float radians);
+    float OrthographicHeight() const;
+    void SetOrthographicHeight(float height);
+    float NearClip() const;
+    void SetNearClip(float distance);
+    float FarClip() const;
+    void SetFarClip(float distance);
+    const Viewport& GetViewport() const;
+    void SetViewport(const Viewport& viewport);
+
+    Matrix4x4 ViewMatrix() const;
+    Matrix4x4 ProjectionMatrix() const;
+    CameraMatrices Matrices() const;
+
+    bool TryWorldToScreen(const Vector3& world, Vector2& screen,
+                          float* depth = nullptr) const;
+    Ray ScreenPointToRay(const Vector2& screen) const;
+
+private:
+    Vector3 m_position = Vector3::Zero;
+    Quaternion m_rotation = Quaternion::Identity;
+    ProjectionMode m_mode = ProjectionMode::Perspective;
+    float m_fieldOfView = Math::Pi / 3.0f;
+    float m_orthographicHeight = 10.0f;
+    float m_nearClip = 0.1f;
+    float m_farClip = 1000.0f;
+    Viewport m_viewport {};
+};
+
+Perspective:
+
+- 垂直FOVを使用する
+- FOVは0より大きくPiより小さくする
+- aspect = viewport.width / viewport.height
+- nearClip > 0
+- farClip > nearClip
+- 不正値はセッターで安全な範囲へ補正するか、boolを返して拒否する
+
+Orthographic:
+
+- orthographicHeightは画面に表示するワールド高さ
+- orthographicWidth = orthographicHeight * aspect
+- orthographicHeightはMath::Epsilonより大きくする
+
+LookAt:
+
+- targetとpositionが同一点ならfalseを返して回転を変更しない
+- forwardとupがほぼ平行なら代替upを選ぶかfalseを返す
+- 左手系の+Z前方向としてQuaternionを生成する
+- 毎Tick呼んでも不必要なNaNを生成しない
+
+ScreenPointToRay:
+
+- PerspectiveではCamera位置をRay原点とする
+- OrthographicではNear平面上の該当位置をRay原点とする
+- 方向は正規化する
+- Viewport外座標でも数学的Rayは返してよい
+- 無効Viewport時はRay::InvalidまたはTry形式を検討する
+
+
+======================================================================
+10. Rendererとの統合
+======================================================================
+
+Renderer公開API候補:
+
+void SetCamera(const Camera2D& camera);
+void SetCamera(const Camera3D& camera);
+void ResetCamera();
+
+または:
+
+void SetCamera(const CameraMatrices& matrices,
+               const Viewport& viewport,
+               CameraKind kind);
+
+利用側の操作感を優先し、Camera2D／Camera3Dオーバーロードを推奨する。
+
+RenderCommandへ追加するType:
+
+- SetCamera2D
+- SetCamera3D
+- ResetCamera
+
+または共通のSetCamera
+
+規則:
+
+- SetCameraは他の描画コマンドと同様に遅延実行する
+- コマンドの順番によって途中でカメラを切り替えられる
+- Cameraオブジェクトへのポインタをコマンドへ保存しない
+- CameraMatricesとViewportを値としてコピーする
+- 2D UI描画はCameraの影響を受けない専用APIまたはResetCamera後に行う
+- PipelineとCameraは別概念として扱う
+
+IRenderBackend追加候補:
+
+virtual void SetCamera(const CameraMatrices& matrices,
+                       const Viewport& viewport) = 0;
+virtual void ResetCamera() = 0;
+
+D3D12バックエンド:
+
+- CameraMatricesをGPU用規約へ一箇所で変換する
+- WVPはprojection * view * worldの順で生成する
+- 転置が必要なら定数バッファ転送直前だけで行う
+- ViewportはRSSetViewportsへ反映できる設計にする
+- 第一版でScissorを扱うならViewport範囲へ合わせる
+
+
+======================================================================
+11. UIとワールド描画の分離
+======================================================================
+
+Camera導入後、UIがCameraの移動やZoomに影響されないようにする。
+
+推奨:
+
+- Renderer::SetCamera(camera)
+- ワールド描画
+- Renderer::ResetCamera()
+- UI描画
+
+またはRendererに明示的なDrawUIを用意する。
+
+第一版ではResetCamera方式を採用してよい。
+
+TitleSceneのTextはCameraなしのUI座標系で描画する。
+TestStageのHUDもResetCamera後に描画する。
+
+
+======================================================================
+12. Camera遷移
+======================================================================
+
+このゲームでは3Dレール、2D縦、2D横をシームレスに切り替える。
+
+第一版では汎用CameraTransitionクラスを必須にしない。
+以下の値型を用意してゲーム側で補間してよい。
+
+struct Camera3DState {
+    Vector3 position;
+    Quaternion rotation;
+    ProjectionMode mode;
+    float fieldOfView;
+    float orthographicHeight;
+    float nearClip;
+    float farClip;
+};
+
+補間規則:
+
+- positionはVector3::Lerp
+- rotationはQuaternion::Slerp
+- fieldOfViewとorthographicHeightは線形補間
+- near／farは原則遷移中に変更しない
+- View行列やProjection行列そのものを線形補間しない
+
+PerspectiveとOrthographic間:
+
+- ProjectionModeを途中で単純切り替えすると見た目が跳ねる
+- 第一段階では両方をPerspectiveとしてFOVと距離を補間して2D風画角を作ってよい
+- 真のPerspective／Orthographicシームレス補間は後回しでよい
+- 既存ゲームの見た目を優先し、現行のFOVブレンドをCamera3DStateへ移す
+
+
+======================================================================
+13. Sphere仕様
+======================================================================
+
+struct Sphere {
+    Vector3 center = Vector3::Zero;
+    float radius = 0.0f;
+
+    bool Contains(const Vector3& point) const;
+    bool Intersects(const Sphere& other) const;
+    bool Intersects(const Box& other) const;
+};
+
+規則:
+
+- 負のradiusは絶対値として扱うか0へクランプし、方針をCircleと揃える
+- 距離判定は可能な限りLengthSquaredを使う
+- 境界が接している状態を衝突とみなす
+- NaN入力の挙動をテストで要求しないがクラッシュしない
+
+
+======================================================================
+14. Box仕様
+======================================================================
+
+第一版は回転なしのAxis-Aligned Bounding Boxとする。
+
+struct Box {
+    Vector3 center = Vector3::Zero;
+    Vector3 size = Vector3::Zero;
+
+    Vector3 HalfSize() const;
+    Vector3 Min() const;
+    Vector3 Max() const;
+    bool Contains(const Vector3& point) const;
+    bool Intersects(const Box& other) const;
+    bool Intersects(const Sphere& sphere) const;
+};
+
+名称:
+
+- 既存AABBColliderとの混同を避けるため、AABBという名前でもよい
+- Siv3D風の簡潔さを優先するならBoxを採用する
+- 回転付きBoxが必要になった時点でOrientedBoxを別型として追加する
+
+規則:
+
+- 負のsizeは各成分の絶対値として扱う
+- Min／Maxの関係を常に保証する
+- 境界接触を衝突とみなす
+
+
+======================================================================
+15. RayとRayHit仕様
+======================================================================
+
+struct Ray {
+    Vector3 origin = Vector3::Zero;
+    Vector3 direction = Vector3::Forward;
+
+    Ray() = default;
+    Ray(const Vector3& origin, const Vector3& direction);
+    Vector3 PointAt(float distance) const;
+    bool Intersects(const Sphere& sphere, RayHit* hit = nullptr) const;
+    bool Intersects(const Box& box, RayHit* hit = nullptr) const;
+};
+
+struct RayHit {
+    float distance = 0.0f;
+    Vector3 point = Vector3::Zero;
+    Vector3 normal = Vector3::Zero;
+};
+
+規則:
+
+- Ray生成時にdirectionを正規化する
+- Zero方向を指定した場合はForwardへ置換するか無効Rayとして扱う
+- 採用方針をDoxygenへ明記する
+- distanceはRay原点からの非負距離
+- Ray原点が形状内部の場合も最初の前方交差を返す
+- Box判定はSlab法を使用してよい
+- 0除算と平行軸を安全に扱う
+
+
+======================================================================
+16. 既存ゲームへの段階移行
+======================================================================
+
+移行順:
+
+1. ShootingGameが保持するm_viewMatrix／m_projMatrixをCamera3Dへ置換
+2. GetCameraParamsの結果からCamera3DStateを作る
+3. Camera3DへpositionとLookAt結果を設定する
+4. Renderer::SetCamera(camera)を呼ぶ
+5. 3Dワールドを描画する
+6. Renderer::ResetCameraを呼ぶ
+7. HUDとTextを描画する
+8. 手書きDirectX::XMMatrixLookAtLHを削除する
+9. 手書きDirectX::XMMatrixPerspectiveFovLHを削除する
+10. 固定aspect値を削除する
+
+3D Geometry移行:
+
+- 自機弾 vs 敵: Sphere::Intersects(Sphere)
+- 敵弾 vs 自機: Sphere::Intersects(Sphere)
+- 障害物 vs 自機: Sphere::Intersects(Box)
+- マウス照準や選択: Camera3D::ScreenPointToRay
+
+移行は一種類ずつ行い、従来の当たり判定結果と比較する。
+
+
+======================================================================
+17. テスト仕様
+======================================================================
+
+Tests/CameraTests.cpp必須項目:
+
+1. Camera2Dの初期値が有限である
+2. Camera2DのPosition移動がViewMatrixへ逆方向に反映される
+3. Camera2DのZoomが表示範囲へ反映される
+4. Camera2DのWorldToScreenとScreenToWorldが往復する
+5. Viewportオフセットが変換へ反映される
+6. 無効ViewportでNaNやクラッシュを起こさない
+7. Camera3Dの初期Forwardが+Zである
+8. LookAtがtarget方向へForwardを向ける
+9. 同一点LookAtがfalseを返す
+10. Perspective行列が有限である
+11. Orthographic行列が有限である
+12. 不正near／farが安全に補正または拒否される
+13. 画面中央のScreenPointToRayがForwardと一致する
+14. Viewport端のRay方向が中央と異なる
+15. WorldToScreenでCamera前方の点が画面中央付近へ変換される
+16. Camera後方の点を可視として返さない
+17. ViewProjectionの逆行列を求められる
+
+Tests/Geometry3DTests.cpp必須項目:
+
+1. Sphere／Sphereの重なり
+2. Sphere／Sphereの境界接触
+3. Sphere／Sphereの非接触
+4. Sphere／Boxの重なり
+5. Sphere／Boxの境界接触
+6. Sphere／Boxの非接触
+7. Box／Boxの重なり
+8. Box／Boxの境界接触
+9. Box／Boxの非接触
+10. Containsの内部、境界、外部
+11. Ray／Sphereの前方Hit
+12. Ray／SphereのMiss
+13. Sphere内部からのRay
+14. Ray／Boxの前方Hit
+15. Box内部からのRay
+16. Box面に平行なRay
+17. RayHitのdistance、point、normal
+
+RendererTests追加項目:
+
+- SetCameraがFlush前にバックエンドを呼ばない
+- SetCameraが描画順どおり実行される
+- CameraMatricesが値コピーされる
+- ResetCameraが順序どおり実行される
+
+
+======================================================================
+18. 数値精度と安全性
+======================================================================
+
+- 浮動小数点比較にはMath::Epsilonまたはテスト用許容誤差を使用する
+- 逆行列が作れない場合をboolで通知する
+- Normalize対象がZeroの場合を明示的に扱う
+- LookAtのforwardとupが平行な場合を扱う
+- Viewportのwidth／heightが0の場合を扱う
+- FOV、near、far、zoomの不正値を扱う
+- WorldToScreenでwが0付近の場合を失敗として扱う
+- Camera後方点の扱いをTryWorldToScreenのfalseとして統一する
+
+
+======================================================================
+19. パフォーマンスと容量
+======================================================================
+
+- Camera行列生成でヒープ確保しない
+- Sphere、Box、Rayは小さな値型とする
+- 交差判定でstd::functionやvirtual dispatchを使わない
+- Camera共通基底のためだけにvirtual classを作らない
+- 行列キャッシュは必要性を計測してから導入する
+- 毎フレーム数個のCamera行列計算は許容する
+- 1.44MB制約を考慮し、汎用的すぎるテンプレート展開を避ける
+
+
+======================================================================
+20. 完了条件
+======================================================================
+
+以下をすべて満たしたら本仕様を完了とする。
+
+- Camera2DとCamera3DがEngine/Graphicsに存在する
+- 公開APIがEngine/Math型だけを使用する
+- 左手系、列ベクトル、+Z前方がコメントとテストで一致する
+- Renderer::SetCameraとResetCameraが遅延コマンドとして動作する
+- D3D12バックエンドがCameraMatricesを描画へ反映する
+- UIがCamera移動の影響を受けない
+- Width／Height／AspectRatioがCameraへ反映される
+- Sphere、Box、Ray、RayHitが実装される
+- 3D Geometryの必須交差判定が動作する
+- ShootingGameの手書きView／Projection行列がCamera3Dへ置換される
+- 弾、敵、障害物の最低一種類で新Geometry判定を使用する
+- Debug x64のEngine Testsが警告0、エラー0でビルドされる
+- 全テストが終了コード0で通る
+- Debug x64のゲーム本体がビルドされる
+- タイトルからステージへ遷移できる
+- 2D縦、2D横、3Dレールの表示を確認できる
+- UIが正しい位置へ表示される
+- 既存ゲームの3D描画が消えていない
+- 新規コードにDirectX::XMMATRIX／XMFLOATが露出していない
+
+
+======================================================================
+21. 対象外
+======================================================================
+
+- PerspectiveとOrthographicの数学的に完全な連続補間
+- カメラシェイク
+- カメラ追従スプリング
+- カメラカリング
+- Frustum型
+- OBB
+- Capsule
+- Mesh Collider
+- 物理応答
+- ResourceManager
+- Random API
+- 仮想画面の完成
+- WM_SIZEによるSwapChain再生成
+- Temp全体のEntity移行
+
+これらは本仕様完了後の個別フェーズとする。
+
+
+======================================================================
+22. ビルド・確認
+======================================================================
+
+Debug x64 Tests:
+
+MSBuild.exe FloppyEngine.Tests.vcxproj /p:Configuration=Debug /p:Platform=x64 /m
+bin\x64\Debug\FloppyEngine.Tests.exe
+
+Debug x64 Game:
+
+MSBuild.exe FloppyDiskShootingGame.vcxproj /p:Configuration=Debug /p:Platform=x64 /m
+
+DirectX公開漏れ:
+
+rg -n "DirectX::XMMATRIX|DirectX::XMFLOAT|ID3D12" \
+  Engine/Graphics/Camera* Engine/Geometry Tests/CameraTests.cpp Tests/Geometry3DTests.cpp
+
+旧カメラ計算の残存:
+
+rg -n "XMMatrixLookAt|XMMatrixPerspective|800\.0f / 600\.0f" Temp Presentation
+
+完了時は意図的なバックエンド実装以外を0件にする。
+
+
+======================================================================
+23. Lunaへ渡す実行指示
+======================================================================
+
+以下をLunaへそのまま渡してよい。
+
+--- ここから ---
+
+Docs/CameraAnd3DGeometryImplementationSpec.txtを最初から最後まで読み、仕様に従って
+Camera2D、Camera3D、Sphere、Box、Rayを実装してください。
+
+着手前にRenderer修正の最新差分、git status、git diff、ビルド、テストを確認してください。
+既存3Dゲーム描画が表示されない場合は、本仕様へ進む前にその回帰を報告して修正してください。
+
+ユーザーや他エージェントの変更をgit reset、git checkout、git restoreで破棄してはいけません。
+
+実装順:
+
+1. 座標系・行列規約を既存Math実装と照合
+2. ViewportとCameraMatrices
+3. Camera2Dと変換テスト
+4. Camera3D、LookAt、投影行列と変換テスト
+5. Sphere、Box、Ray、RayHitと交差テスト
+6. Renderer／IRenderBackendへ遅延SetCameraとResetCameraを追加
+7. D3D12バックエンドへCameraMatricesを接続
+8. ShootingGameの手書きView／Projection行列をCamera3Dへ移行
+9. 既存衝突判定を最低一種類だけ3D Geometryへ移行
+10. Testsとゲーム本体をビルド
+11. タイトル、3D、2D縦、2D横、UIを実画面確認
+
+公開APIにDirectXMathやD3D12型を追加してはいけません。行列を直接線形補間せず、位置は
+Vector3::Lerp、回転はQuaternion::Slerp、投影パラメータはスカラー補間してください。
+
+ResourceManager、Random API、WM_SIZE対応、Temp全体のEntity移行は今回の対象外です。
+
+完了時に以下を報告してください。
+
+- 変更ファイル一覧
+- 採用した座標系と行列順序
+- Camera2D／Camera3Dの公開API
+- WorldToScreen／ScreenPointToRayの失敗条件
+- Geometry交差判定の仕様
+- ShootingGameから除去したDirectXカメラ処理
+- テスト件数と結果
+- Debug x64のビルド結果
+- 実画面確認結果
+- 未解決事項
+
+--- ここまで ---
+
+
+======================================================================
+24. 次のフェーズ
+======================================================================
+
+本仕様完了後は、以下を個別仕様として進める。
+
+1. Random APIと再現可能なステージ生成
+2. MeshHandle／MaterialHandle／FontHandle
+3. ResourceManager
+4. 仮想画面とWM_SIZE／SwapChainリサイズ
+5. ShootingGameの残りの3D描画移行
+6. Tempから正式なEntityへの移動
+
+Cameraと3D Geometryの検証が完了するまで、これらへ進まないこと。

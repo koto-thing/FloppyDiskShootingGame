@@ -17,7 +17,8 @@ public:
     void Initialize() override;
     void ProcessInput() override;
     void Tick() override;
-    void Render(D3D12RenderingService& renderer) override;
+    void Dispose() override;
+    void Render(Renderer& renderer) override;
 
 private:
     std::unique_ptr<SideScrollingShooter> m_game;

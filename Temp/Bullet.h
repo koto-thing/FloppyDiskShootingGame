@@ -20,7 +20,7 @@ public:
         color[0] = 1.0f; color[1] = 1.0f; color[2] = 1.0f; color[3] = 1.0f;
     }
 
-    void Update(int dimMode, int nextDimMode, float progress) {
+    void Tick(int dimMode, int nextDimMode, float progress) {
         if (!active) return;
         x += vx;
         y += vy;
