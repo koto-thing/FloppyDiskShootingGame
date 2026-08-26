@@ -3,6 +3,7 @@
 #include "../../Domain/ValueObjects/SceneType.h"
 #include "../../Application/Interfaces/IScene.h"
 #include "../../Engine/UI/Button.h"
+#include "../../Engine/UI/Slider.h"
 
 #include <memory>
 
@@ -36,4 +37,7 @@ public:
 
 private:
     std::unique_ptr<Button> m_creditButton;
+    Slider masterSlider_;
+    Slider bgmSlider_;
+    Slider seSlider_;
 };
