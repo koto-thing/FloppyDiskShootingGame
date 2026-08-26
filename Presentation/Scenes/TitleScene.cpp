@@ -1,14 +1,7 @@
 #include "TitleScene.h"
 #include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
-#include "../../Engine/Input/Input.h"
-#include "../../Engine/Input/KeyCode.h"
 #include <windows.h>
-#include <cstdio>
-#include <algorithm>
-#include <string>
 #include "../../Engine/Graphics/Renderer.h"
-#include "../../Infrastructure/ExternalServices/InputService.h"
-#include "../../Infrastructure/ExternalServices/AudioService.h"
 
 #ifdef DrawText
 #undef DrawText
@@ -18,12 +11,32 @@
  * @brief タイトルシーンの初期化処理
  */
 void TitleScene::Initialize() {
-    // オプションボタン
+    /** @brief 画面中央の少し上にゲーム開始ボタンを配置する */
+    m_startButton = std::make_unique<Button>(
+        Vector2 { 0.35f, 0.10f },
+        RectAlign::Center,
+        "START GAME",
+        Vector2 { 0.0f, 0.05f }
+    );
+    m_startButton->SetOnClick([this]() { changeScene(SceneType::TestStage); });
+
+    /** @brief 画面中央の少し下にオプションボタンを配置する */
     m_optionButton = std::make_unique<Button>(
-        Rect { { 0.0f, -0.60f }, { 0.35f, 0.10f } },
-        "OPTIONS"
+        Vector2 { 0.35f, 0.10f },
+        RectAlign::Center,
+        "OPTIONS",
+        Vector2 { 0.0f, -0.15f }
     );
     m_optionButton->SetOnClick([this]() { changeScene(SceneType::Option); });
+
+    /** @brief オプションボタンの下にゲーム終了ボタンを配置する */
+    m_exitButton = std::make_unique<Button>(
+        Vector2 { 0.35f, 0.10f },
+        RectAlign::Center,
+        "EXIT GAME",
+        Vector2 { 0.0f, -0.35f }
+    );
+    m_exitButton->SetOnClick([]() { PostQuitMessage(0); });
     
     // 左下にクレジットシーンへ移動するボタンを配置する
     m_creditButton = std::make_unique<Button>(
@@ -33,55 +46,12 @@ void TitleScene::Initialize() {
     m_creditButton->SetOnClick([this]() { changeScene(SceneType::Credit); });
     
 
-    // 音量調整スライダーの初期化
-    // ラベルの右側に適正な余白を確保して配置する
-    masterSlider_ = Slider(
-        Rect{ { -0.65f, -0.47f }, { 0.55f, 0.04f } },
-        0.0f,
-        1.0f,
-        AudioService::Get().GetMasterVolume()
-    );
-    masterSlider_.SetOnValueChanged(
-        [](float vol) {
-            AudioService::Get().SetMasterVolume(vol);
-        }
-    );
-
-    bgmSlider_ = Slider(
-        Rect{ { -0.65f, -0.60f }, { 0.55f, 0.04f } },
-        0.0f,
-        1.0f,
-        AudioService::Get().GetBGMVolume()
-    );
-    bgmSlider_.SetOnValueChanged(
-        [](float vol) {
-            AudioService::Get().SetBGMVolume(vol);
-        }
-    );
-    
-    seSlider_ = Slider(
-        Rect{ { -0.65f, -0.73f }, { 0.55f, 0.04f } },
-        0.0f,
-        1.0f,
-        AudioService::Get().GetSEVolume()
-    );
-    seSlider_.SetOnValueChanged(
-        [](float vol) {
-            AudioService::Get().SetSEVolume(vol);
-        }
-    );
 }
 
 /**
  * @brief タイトルシーンの入力処理
  */
 void TitleScene::ProcessInput() {
-    // TODO: キー入力によるメニュー選択や、ゲーム本編への遷移要求などをここに実装します
-
-    // Enterキーの押下をフレーム単位で受け取りゲームシーンへ遷移する
-    if (Input::GetKeyDown(KeyCode::Enter)) {
-        changeScene(SceneType::TestStage);
-    }
     HWND hwnd = GetForegroundWindow();
 
     int w = 1280;
@@ -103,6 +73,16 @@ void TitleScene::ProcessInput() {
 
     UIInputState inputState = UIInput::Current(w, h);
 
+    /** @brief ゲーム開始ボタンにマウス入力を渡す */
+    if (m_startButton != nullptr) {
+        m_startButton->Update(inputState);
+    }
+
+    /** @brief ゲーム終了ボタンにマウス入力を渡す */
+    if (m_exitButton != nullptr) {
+        m_exitButton->Update(inputState);
+    }
+
     // 左下のクレジットボタンにマウス入力を渡す
     if (m_creditButton != nullptr) {
         m_creditButton->Update(inputState);
@@ -113,27 +93,17 @@ void TitleScene::ProcessInput() {
         m_optionButton->Update(inputState);
     }
 
-    // 音量スライダーの更新
-    masterSlider_.Update(inputState);
-    bgmSlider_.Update(inputState);
-    seSlider_.Update(inputState);
 }
 
 /**
  * @brief タイトルシーンの更新処理
  */
 void TitleScene::Tick() {
-    // Enterキーが押されたら、TestStageに移行する
-    if (InputService::IsKeyPressed(VK_RETURN)) {
-        AudioService::Get().PlaySE(
-            Audio::SfxrPreset::BlipSelect
-        );
-
-        changeScene(SceneType::TestStage);
-    }
 }
 
 void TitleScene::Dispose() {
+    m_startButton.reset();
+    m_exitButton.reset();
     m_creditButton.reset();
     m_optionButton.reset();
 }
@@ -144,18 +114,11 @@ void TitleScene::Dispose() {
 void TitleScene::Render(Renderer& renderer) {
     // 画面上部に "TITLE" と表示
     renderer.DrawText(
-        "FLOPPY DISK SHOOTING GAME",
-        { -0.7f, 0.6f },
+        "SPACE YANKEES",
+        { -0.4f, 0.6f },
         0.04f,
-        { 1.0f, 1.0f, 1.0f, 1.0f }
-    );
-
-    // 画面下部に "PRESS ENTER TO START" と表示
-    renderer.DrawText(
-        "PRESS ENTER TO START",
-        { -0.3f, 0.0f},
-        0.02f,
-        { 1.0f, 1.0f, 1.0f, 1.0f }
+        { 1.0f, 1.0f, 1.0f, 1.0f },
+        0.005f
     );
 
     // 左下のクレジットボタンを描画する
@@ -163,68 +126,19 @@ void TitleScene::Render(Renderer& renderer) {
         m_creditButton->Render(renderer);
     }
     
-    // オプションボタンを描画
+    /** @brief ゲーム開始ボタンを描画する */
+    if (m_startButton != nullptr) {
+        m_startButton->Render(renderer);
+    }
+
+    /** @brief オプションボタンを描画する */
     if (m_optionButton != nullptr) {
         m_optionButton->Render(renderer);
     }
 
-    // 音量調整スライダー
-    char buf[64];
+    /** @brief ゲーム終了ボタンを描画する */
+    if (m_exitButton != nullptr) {
+        m_exitButton->Render(renderer);
+    }
 
-    // MASTER
-    snprintf(
-        buf,
-        sizeof(buf),
-        "MST %3d%%",
-        static_cast<int>(
-            masterSlider_.Value() * 100.0f + 0.5f
-        )
-    );
-
-    renderer.DrawText(
-        buf,
-        { -0.95f, -0.45f },
-        0.016f,
-        ColorF(0.7f, 0.7f, 0.7f, 0.8f)
-    );
-
-    masterSlider_.Render(renderer);
-
-    // BGM
-    snprintf(
-        buf,
-        sizeof(buf),
-        "BGM %3d%%",
-        static_cast<int>(
-            bgmSlider_.Value() * 100.0f + 0.5f
-        )
-    );
-
-    renderer.DrawText(
-        buf,
-        { -0.95f, -0.58f },
-        0.016f,
-        ColorF(0.7f, 0.7f, 0.7f, 0.8f)
-    );
-
-    bgmSlider_.Render(renderer);
-
-    // SE
-    snprintf(
-        buf,
-        sizeof(buf),
-        "SE  %3d%%",
-        static_cast<int>(
-            seSlider_.Value() * 100.0f + 0.5f
-        )
-    );
-
-    renderer.DrawText(
-        buf,
-        { -0.95f, -0.71f },
-        0.016f,
-        ColorF(0.7f, 0.7f, 0.7f, 0.8f)
-    );
-
-    seSlider_.Render(renderer);
 }

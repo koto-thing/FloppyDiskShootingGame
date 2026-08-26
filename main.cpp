@@ -1,3 +1,4 @@
+#include "Presentation/Scenes/OptionScene.h"
 #ifndef UNICODE
 #define UNICODE
 #endif
@@ -114,6 +115,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     // シーンを登録
     app.AddScene<TitleScene>(SceneType::Title);
     app.AddScene<TestStage>(SceneType::TestStage);
+    app.AddScene<OptionScene>(SceneType::Option);
     app.AddScene<CreditScene>(SceneType::Credit);
     
     // 初期シーンの設定

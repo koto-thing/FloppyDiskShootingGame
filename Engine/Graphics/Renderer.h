@@ -94,6 +94,14 @@ public:
      * @param alignment 矩形全体を配置する画面上の位置
      */
     void Draw(const Rect& rect, RectAlign alignment, const ColorF& color);
+    /**
+     * @brief 画面内の配置基準から矩形の境界を生成する
+     * @param size 矩形のNDC座標上の大きさ
+     * @param alignment 矩形全体を配置する画面上の位置
+     * @param offset 配置位置からのNDC座標オフセット
+     */
+    static Rect CreateAlignedRect(const Vector2& size, RectAlign alignment,
+                                  const Vector2& offset = Vector2::Zero);
     /** @brief 型付き3Dプリミティブを描画コマンドとして記録する */
     void Draw(const Primitive3D& primitive);
     /**
@@ -140,7 +148,6 @@ public:
 
 private:
     RenderCommand* TryAppend(RenderCommand::Type type);
-    Vector2 CalculateRectPosition(const Rect& rect, RectAlign alignment) const;
     Vector2 CalculateTextPosition(std::string_view text, TextAlign alignment, float size,
                                   float characterSpacing) const;
 

@@ -97,13 +97,13 @@ void AlignsRectToScreenPositions() {
     renderer.BeginFrame();
     renderer.Draw(Rect{{}, {0.4f, 0.2f}}, RectAlign::Center, ColorF::White());
     renderer.Flush();
-    Require(IsNearlyEqual(backend.lastRect.position, {-0.2f, -0.1f}),
+    Require(IsNearlyEqual(backend.lastRect.position, {0.0f, 0.0f}),
             "Center alignment must place the rect at the screen center");
 
     renderer.BeginFrame();
     renderer.Draw(Rect{{0.1f, 0.05f}, {0.4f, 0.2f}}, RectAlign::BottomCenter, ColorF::White());
     renderer.Flush();
-    Require(IsNearlyEqual(backend.lastRect.position, {-0.1f, -0.95f}),
+    Require(IsNearlyEqual(backend.lastRect.position, {0.1f, -0.75f}),
             "BottomCenter alignment must place the rect at the bottom center with its offset");
 }
 

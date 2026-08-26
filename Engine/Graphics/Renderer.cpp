@@ -58,10 +58,9 @@ void Renderer::DrawText(std::string_view text, const Vector2& position, float si
 }
 
 void Renderer::Draw(const Rect& rect, RectAlign alignment, const ColorF& color) {
-    /** @brief 配置基準から矩形の左下座標を計算して既存の矩形描画へ渡す */
-    Rect alignedRect = rect;
-    alignedRect.position = CalculateRectPosition(rect, alignment);
-    Draw(alignedRect, color);
+    /** @brief 配置基準から描画用の中心座標と半サイズを計算して既存の矩形描画へ渡す */
+    const Rect bounds = CreateAlignedRect(rect.size * 2.0f, alignment, rect.position);
+    Draw(Rect{bounds.Center(), bounds.size * 0.5f}, color);
 }
 
 void Renderer::DrawText(std::string_view text, TextAlign alignment, float size, const ColorF& color,
@@ -71,19 +70,19 @@ void Renderer::DrawText(std::string_view text, TextAlign alignment, float size, 
              characterSpacing);
 }
 
-Vector2 Renderer::CalculateRectPosition(const Rect& rect, RectAlign alignment) const {
+Rect Renderer::CreateAlignedRect(const Vector2& size, RectAlign alignment, const Vector2& offset) {
     /** @brief 矩形のサイズと配置基準から画面内の左下座標を計算する */
-    Vector2 position = {-1.0f, 1.0f - rect.size.y};
+    Vector2 position = {-1.0f, 1.0f - size.y};
     switch (alignment) {
     case RectAlign::TopCenter:
     case RectAlign::Center:
     case RectAlign::BottomCenter:
-        position.x = -rect.size.x * 0.5f;
+        position.x = -size.x * 0.5f;
         break;
     case RectAlign::TopRight:
     case RectAlign::CenterRight:
     case RectAlign::BottomRight:
-        position.x = 1.0f - rect.size.x;
+        position.x = 1.0f - size.x;
         break;
     default:
         break;
@@ -93,7 +92,7 @@ Vector2 Renderer::CalculateRectPosition(const Rect& rect, RectAlign alignment) c
     case RectAlign::CenterLeft:
     case RectAlign::Center:
     case RectAlign::CenterRight:
-        position.y = -rect.size.y * 0.5f;
+        position.y = -size.y * 0.5f;
         break;
     case RectAlign::BottomLeft:
     case RectAlign::BottomCenter:
@@ -104,7 +103,7 @@ Vector2 Renderer::CalculateRectPosition(const Rect& rect, RectAlign alignment) c
         break;
     }
 
-    return position + rect.position;
+    return {position + offset, size};
 }
 
 Vector2 Renderer::CalculateTextPosition(std::string_view text, TextAlign alignment, float size,

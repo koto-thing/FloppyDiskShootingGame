@@ -4,7 +4,6 @@
 #include "../../Domain/ValueObjects/SceneType.h"
 #include "../../Application/Interfaces/IScene.h"
 #include "../../Engine/UI/Button.h"
-#include "../../Engine/UI/Slider.h"
 
 #include <memory>
 
@@ -37,9 +36,8 @@ public:
     void Render(Renderer& renderer) override;
 
 private:
+    std::unique_ptr<Button> m_startButton;
     std::unique_ptr<Button> m_optionButton;
+    std::unique_ptr<Button> m_exitButton;
     std::unique_ptr<Button> m_creditButton;
-    Slider masterSlider_;
-    Slider bgmSlider_;
-    Slider seSlider_;
 };
