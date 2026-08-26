@@ -1,4 +1,5 @@
 #pragma once
+
 #include "../../Domain/ValueObjects/SceneSharedData.h"
 #include "../../Domain/ValueObjects/SceneType.h"
 #include "../../Application/Interfaces/IScene.h"
@@ -36,6 +37,7 @@ public:
     void Render(Renderer& renderer) override;
 
 private:
+    std::unique_ptr<Button> m_optionButton;
     std::unique_ptr<Button> m_creditButton;
     Slider masterSlider_;
     Slider bgmSlider_;

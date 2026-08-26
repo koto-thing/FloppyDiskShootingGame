@@ -57,6 +57,115 @@ void Renderer::DrawText(std::string_view text, const Vector2& position, float si
 
 }
 
+void Renderer::Draw(const Rect& rect, RectAlign alignment, const ColorF& color) {
+    /** @brief 配置基準から矩形の左下座標を計算して既存の矩形描画へ渡す */
+    Rect alignedRect = rect;
+    alignedRect.position = CalculateRectPosition(rect, alignment);
+    Draw(alignedRect, color);
+}
+
+void Renderer::DrawText(std::string_view text, TextAlign alignment, float size, const ColorF& color,
+                        const Vector2& offset, float characterSpacing) {
+    /** @brief 配置基準から先頭文字の中心座標を計算して既存の文字描画へ渡す */
+    DrawText(text, CalculateTextPosition(text, alignment, size, characterSpacing) + offset, size, color,
+             characterSpacing);
+}
+
+Vector2 Renderer::CalculateRectPosition(const Rect& rect, RectAlign alignment) const {
+    /** @brief 矩形のサイズと配置基準から画面内の左下座標を計算する */
+    Vector2 position = {-1.0f, 1.0f - rect.size.y};
+    switch (alignment) {
+    case RectAlign::TopCenter:
+    case RectAlign::Center:
+    case RectAlign::BottomCenter:
+        position.x = -rect.size.x * 0.5f;
+        break;
+    case RectAlign::TopRight:
+    case RectAlign::CenterRight:
+    case RectAlign::BottomRight:
+        position.x = 1.0f - rect.size.x;
+        break;
+    default:
+        break;
+    }
+
+    switch (alignment) {
+    case RectAlign::CenterLeft:
+    case RectAlign::Center:
+    case RectAlign::CenterRight:
+        position.y = -rect.size.y * 0.5f;
+        break;
+    case RectAlign::BottomLeft:
+    case RectAlign::BottomCenter:
+    case RectAlign::BottomRight:
+        position.y = -1.0f;
+        break;
+    default:
+        break;
+    }
+
+    return position + rect.position;
+}
+
+Vector2 Renderer::CalculateTextPosition(std::string_view text, TextAlign alignment, float size,
+                                        float characterSpacing) const {
+    /** @brief 改行を考慮して最長行の文字数と行数を求める */
+    std::size_t longestLineLength = 0;
+    std::size_t currentLineLength = 0;
+    std::size_t lineCount = 1;
+    for (const char character : text) {
+        if (character == '\n') {
+            longestLineLength = std::max(longestLineLength, currentLineLength);
+            currentLineLength = 0;
+            ++lineCount;
+        } else {
+            ++currentLineLength;
+        }
+    }
+    longestLineLength = std::max(longestLineLength, currentLineLength);
+
+    /** @brief 文字列の幅と高さから各方向の先頭文字位置を決定する */
+    const float glyphHalfWidth = size * AspectRatio();
+    const float characterAdvance = size * 1.5f + characterSpacing;
+    const float lineWidth = longestLineLength == 0 ? 0.0f :
+        (static_cast<float>(longestLineLength - 1) * characterAdvance) + glyphHalfWidth * 2.0f;
+    const float textHeight = static_cast<float>(lineCount) * size * 2.0f;
+
+    float startX = -1.0f + glyphHalfWidth;
+    float startY = 1.0f - size;
+    switch (alignment) {
+    case TextAlign::TopCenter:
+    case TextAlign::Center:
+    case TextAlign::BottomCenter:
+        startX = -lineWidth * 0.5f + glyphHalfWidth;
+        break;
+    case TextAlign::TopRight:
+    case TextAlign::CenterRight:
+    case TextAlign::BottomRight:
+        startX = 1.0f - lineWidth + glyphHalfWidth;
+        break;
+    default:
+        break;
+    }
+
+    switch (alignment) {
+    case TextAlign::CenterLeft:
+    case TextAlign::Center:
+    case TextAlign::CenterRight:
+        startY = textHeight * 0.5f - size;
+        break;
+    case TextAlign::BottomLeft:
+    case TextAlign::BottomCenter:
+    case TextAlign::BottomRight:
+        startY = -1.0f + textHeight - size;
+        break;
+    default:
+        break;
+    }
+
+    return {startX, startY};
+}
+
 void Renderer::SetPipeline(PipelineId pipeline) {
     RenderCommand* command = TryAppend(RenderCommand::Type::Pipeline);
     if (command == nullptr) return;

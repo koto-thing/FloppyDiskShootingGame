@@ -15,6 +15,13 @@
  * @brief タイトルシーンの初期化処理
  */
 void TitleScene::Initialize() {
+    // オプションボタン
+    m_optionButton = std::make_unique<Button>(
+        Rect { { 0.0f, -0.60f }, { 0.35f, 0.10f } },
+        "OPTIONS"
+    );
+    m_optionButton->SetOnClick([this]() { changeScene(SceneType::Option); });
+    
     // 左下にクレジットシーンへ移動するボタンを配置する
     m_creditButton = std::make_unique<Button>(
         Rect { { -0.95f, -0.90f }, { 0.35f, 0.10f } },
@@ -31,7 +38,6 @@ void TitleScene::Initialize() {
         1.0f,
         AudioService::Get().GetMasterVolume()
     );
-
     masterSlider_.SetOnValueChanged(
         [](float vol) {
             AudioService::Get().SetMasterVolume(vol);
@@ -44,20 +50,18 @@ void TitleScene::Initialize() {
         1.0f,
         AudioService::Get().GetBGMVolume()
     );
-
     bgmSlider_.SetOnValueChanged(
         [](float vol) {
             AudioService::Get().SetBGMVolume(vol);
         }
     );
-
+    
     seSlider_ = Slider(
         Rect{ { -0.65f, -0.73f }, { 0.55f, 0.04f } },
         0.0f,
         1.0f,
         AudioService::Get().GetSEVolume()
     );
-
     seSlider_.SetOnValueChanged(
         [](float vol) {
             AudioService::Get().SetSEVolume(vol);
@@ -94,6 +98,11 @@ void TitleScene::ProcessInput() {
     if (m_creditButton != nullptr) {
         m_creditButton->Update(inputState);
     }
+    
+    // オプションボタンにマウス入力を渡す
+    if (m_optionButton != nullptr) {
+        m_optionButton->Update(inputState);
+    }
 
     // 音量スライダーの更新
     masterSlider_.Update(inputState);
@@ -117,6 +126,7 @@ void TitleScene::Tick() {
 
 void TitleScene::Dispose() {
     m_creditButton.reset();
+    m_optionButton.reset();
 }
 
 /**
@@ -142,6 +152,11 @@ void TitleScene::Render(Renderer& renderer) {
     // 左下のクレジットボタンを描画する
     if (m_creditButton != nullptr) {
         m_creditButton->Render(renderer);
+    }
+    
+    // オプションボタンを描画
+    if (m_optionButton != nullptr) {
+        m_optionButton->Render(renderer);
     }
 
     // 音量調整スライダー
