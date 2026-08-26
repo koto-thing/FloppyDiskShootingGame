@@ -30,6 +30,19 @@ constexpr float PlayerShotColor[4] = { 0.15f, 1.00f, 0.25f, 1.0f };
 constexpr float EnemyShotColor[4] = { 1.00f, 0.25f, 0.25f, 1.0f };
 constexpr float GridColor[4] = { 0.05f, 0.22f, 0.16f, 1.0f };
 constexpr float StarColor[4] = { 0.55f, 0.70f, 0.85f, 1.0f };
+
+/**
+ * @brief スクロール座標をNDCの横幅へ循環させる
+ * @param value 循環前のX座標
+ * @return -1.0f以上1.0f未満のX座標
+ */
+float WrapNdcX(float value) {
+    float wrapped = std::fmod(value + 1.0f, 2.0f);
+    if (wrapped < 0.0f) {
+        wrapped += 2.0f;
+    }
+    return wrapped - 1.0f;
+}
 }
 
 void SideScrollingShooter::Initialize(AudioService* audio) {
@@ -289,12 +302,12 @@ void SideScrollingShooter::Render(D3D12RenderingService& renderer) const {
     int drawIndex = 512;
 
     for (int i = 0; i < 18; ++i) {
-        float x = std::fmod(i * 0.137f - m_scroll * (0.6f + (i % 3) * 0.3f) + 1.0f, 2.0f) - 1.0f;
+        float x = WrapNdcX(i * 0.137f - m_scroll * (0.6f + (i % 3) * 0.3f));
         float y = -0.82f + static_cast<float>((i * 47) % 164) / 100.0f;
         DrawShape(renderer, drawIndex, x, y, 0.006f, 0.010f, StarColor);
     }
     for (int i = 0; i < 7; ++i) {
-        float x = std::fmod(i * 0.34f - m_scroll * 0.55f + 1.0f, 2.0f) - 1.0f;
+        float x = WrapNdcX(i * 0.34f - m_scroll * 0.55f);
         DrawShape(renderer, drawIndex, x, -0.80f, 0.008f, 1.55f, GridColor);
     }
     for (int i = 0; i < 5; ++i) {
