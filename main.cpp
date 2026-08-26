@@ -19,6 +19,7 @@
 #include "Engine/Graphics/Renderer.h"
 #include "Presentation/Scenes/TitleScene.h"
 #include "Presentation/Scenes/TestStage.h"
+#include "Presentation/Scenes/ModelTestScene.h"
 #include "Presentation/Scenes/CreditScene.h"
 
 /**
@@ -115,6 +116,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     // シーンを登録
     app.AddScene<TitleScene>(SceneType::Title);
     app.AddScene<TestStage>(SceneType::TestStage);
+    app.AddScene<ModelTestScene>(SceneType::ModelTest);
     app.AddScene<OptionScene>(SceneType::Option);
     app.AddScene<CreditScene>(SceneType::Credit);
     

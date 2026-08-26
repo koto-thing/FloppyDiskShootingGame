@@ -17,6 +17,9 @@
     <ClCompile Include="Presentation\Scenes\TestStage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Presentation\Scenes\ModelTestScene.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="Presentation\Scenes\TitleScene.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -78,6 +81,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Presentation\Scenes\TestStage.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Scenes\ModelTestScene.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Presentation\Scenes\TitleScene.h">

@@ -37,6 +37,7 @@ public:
 
 private:
     std::unique_ptr<Button> m_startButton;
+    std::unique_ptr<Button> m_modelTestButton;
     std::unique_ptr<Button> m_optionButton;
     std::unique_ptr<Button> m_exitButton;
     std::unique_ptr<Button> m_creditButton;

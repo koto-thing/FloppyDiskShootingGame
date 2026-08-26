@@ -49,7 +49,7 @@ public:
     /** @brief 画面のアスペクト比を取得する */
     float AspectRatio() const override { return m_height == 0 ? 1.0f : static_cast<float>(m_width) / static_cast<float>(m_height); }
 
-    // パイプラインステートの切り替え (0: Object, 1: Background, 2: SpellCircle)
+    // パイプラインステートの切り替え (0: Object, 1: Background, 2: SpellCircle, 3: Model3D)
     void SetPipelineState(int type);
 
     TextRenderingService& GetTextRenderer() { return m_textRenderer; }
@@ -83,6 +83,7 @@ private:
     ComPtr<ID3D12PipelineState> m_pipelineStateObject;
     ComPtr<ID3D12PipelineState> m_pipelineStateBackground;
     ComPtr<ID3D12PipelineState> m_pipelineStateSpellCircle;
+    ComPtr<ID3D12PipelineState> m_pipelineStateModel3D;
 
     ComPtr<ID3D12Fence> m_fence;
     UINT64 m_fenceValue;
@@ -100,4 +101,5 @@ private:
     CameraMatrices m_cameraMatrices {};
     Viewport m_cameraViewport {};
     bool m_hasCamera = false;
+    int m_currentPipelineType = 0;
 };

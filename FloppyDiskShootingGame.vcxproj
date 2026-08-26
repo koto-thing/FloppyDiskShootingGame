@@ -161,6 +161,7 @@
     <ClCompile Include="Presentation\Scenes\CreditScene.cpp" />
     <ClCompile Include="Presentation\Scenes\OptionScene.cpp" />
     <ClCompile Include="Presentation\Scenes\TestStage.cpp" />
+    <ClCompile Include="Presentation\Scenes\ModelTestScene.cpp" />
     <ClCompile Include="Presentation\Scenes\TitleScene.cpp" />
     <ClCompile Include="Presentation\TitleScene\TitleSceneColumn.cpp" />
   </ItemGroup>
@@ -184,6 +185,7 @@
     <ClInclude Include="Presentation\CreditScene\CreditSceneContent.h" />
     <ClInclude Include="Presentation\Scenes\OptionScene.h" />
     <ClInclude Include="Presentation\Scenes\TestStage.h" />
+    <ClInclude Include="Presentation\Scenes\ModelTestScene.h" />
     <ClInclude Include="Presentation\Gameplay\SideScrollingShooter.h" />
     <ClInclude Include="Presentation\Scenes\TitleScene.h" />
     <ClInclude Include="Presentation\TitleScene\TitleSceneColumn.h" />
