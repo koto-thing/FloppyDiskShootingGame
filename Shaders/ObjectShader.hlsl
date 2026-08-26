@@ -1,3 +1,13 @@
+/*
+shapeType = 0 → XZ平面の板
+shapeType = 1 → 四角柱
+shapeType = 2 → ピラミッド
+shapeType = 3 → 円柱
+shapeType = 4 → 円錐
+shapeType = 5 → 三角柱
+shapeType = 6 → XY平面の板
+*/
+
 struct VS_OUTPUT
 {
     float4 pos : SV_POSITION;
