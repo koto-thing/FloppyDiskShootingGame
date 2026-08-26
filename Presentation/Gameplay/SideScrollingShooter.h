@@ -31,6 +31,7 @@ private:
         float baseY = 0.0f;
         float phase = 0.0f;
         int hp = 0;
+        int maxHp = 0;
         int type = 0;
         int age = 0;
         bool active = false;
@@ -38,9 +39,12 @@ private:
 
     static constexpr int ShotCapacity = 64;
     static constexpr int EnemyCapacity = 12;
+    static constexpr float BossStartDistance = 12.0f;
+    static constexpr int BossMaxHp = 48;
 
     void Reset();
     void SpawnEnemy();
+    void StartBossBattle();
     void SpawnShot(float x, float y, float vx, float vy, bool enemy);
     void DamagePlayer();
     void PlayShotSound();
@@ -62,6 +66,7 @@ private:
     int m_lives = 3;
     int m_score = 0;
     int m_kills = 0;
+    int m_bossHp = 0;
     bool m_moveLeft = false;
     bool m_moveRight = false;
     bool m_moveUp = false;
@@ -69,4 +74,5 @@ private:
     bool m_fire = false;
     bool m_gameOver = false;
     bool m_clear = false;
+    bool m_bossBattle = false;
 };

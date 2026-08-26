@@ -24,6 +24,8 @@ constexpr float PlayerColor[4] = { 0.80f, 0.80f, 0.85f, 1.0f };
 constexpr float PlayerAccent[4] = { 0.10f, 0.90f, 0.90f, 1.0f };
 constexpr float EnemyColor[4] = { 0.90f, 0.12f, 0.12f, 1.0f };
 constexpr float EnemyAccent[4] = { 1.00f, 0.55f, 0.08f, 1.0f };
+constexpr float BossColor[4] = { 0.45f, 0.15f, 0.80f, 1.0f };
+constexpr float BossAccent[4] = { 1.00f, 0.30f, 0.65f, 1.0f };
 constexpr float PlayerShotColor[4] = { 0.15f, 1.00f, 0.25f, 1.0f };
 constexpr float EnemyShotColor[4] = { 1.00f, 0.25f, 0.25f, 1.0f };
 constexpr float GridColor[4] = { 0.05f, 0.22f, 0.16f, 1.0f };
@@ -48,8 +50,10 @@ void SideScrollingShooter::Reset() {
     m_lives = 3;
     m_score = 0;
     m_kills = 0;
+    m_bossHp = 0;
     m_gameOver = false;
     m_clear = false;
+    m_bossBattle = false;
 }
 
 void SideScrollingShooter::ProcessInput() {
@@ -70,7 +74,9 @@ void SideScrollingShooter::Tick() {
     }
 
     ++m_frame;
-    m_scroll += 0.008f;
+    if (!m_bossBattle) {
+        m_scroll += 0.008f;
+    }
     m_shotCooldown = (std::max)(0, m_shotCooldown - 1);
     m_invincible = (std::max)(0, m_invincible - 1);
 
@@ -89,7 +95,12 @@ void SideScrollingShooter::Tick() {
         PlayShotSound();
     }
 
-    if (--m_spawnCooldown <= 0 && m_kills < 24) {
+    // 規定スクロール距離へ到達したら通常区間を終了してボス戦を開始する
+    if (!m_bossBattle && m_scroll >= BossStartDistance) {
+        StartBossBattle();
+    }
+
+    if (!m_bossBattle && --m_spawnCooldown <= 0) {
         SpawnEnemy();
         m_spawnCooldown = (std::max)(28, 70 - m_kills);
     }
@@ -97,10 +108,20 @@ void SideScrollingShooter::Tick() {
     for (auto& enemy : m_enemies) {
         if (!enemy.active) continue;
         ++enemy.age;
-        enemy.x -= enemy.type == 0 ? 0.010f : 0.007f;
-        enemy.y = enemy.baseY + std::sin(enemy.phase + enemy.age * 0.055f) * (enemy.type == 0 ? 0.10f : 0.18f);
+        if (enemy.type == 2) {
+            // ボスは画面内へ進入した後、上下に往復する
+            if (enemy.x > 0.70f) {
+                enemy.x -= 0.008f;
+            }
+            enemy.y = std::sin(enemy.age * 0.025f) * 0.48f;
+        } else {
+            enemy.x -= enemy.type == 0 ? 0.010f : 0.007f;
+            enemy.y = enemy.baseY + std::sin(enemy.phase + enemy.age * 0.055f) *
+                (enemy.type == 0 ? 0.10f : 0.18f);
+        }
 
-        if (enemy.age % (enemy.type == 0 ? 105 : 72) == 0) {
+        const int aimedShotInterval = enemy.type == 2 ? 42 : (enemy.type == 0 ? 105 : 72);
+        if (enemy.age % aimedShotInterval == 0) {
             const float dxToPlayer = m_playerX - enemy.x;
             const float dyToPlayer = m_playerY - enemy.y;
             const float length = std::sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
@@ -110,9 +131,18 @@ void SideScrollingShooter::Tick() {
             }
         }
 
-        if (enemy.x < -1.08f) enemy.active = false;
-        if (enemy.active && m_invincible == 0 && Hit(m_playerX, m_playerY, 0.055f, enemy.x, enemy.y, 0.065f)) {
-            enemy.active = false;
+        // ボスは一定間隔で3方向へ弾を発射する
+        if (enemy.type == 2 && enemy.age % 120 == 0) {
+            SpawnShot(enemy.x - 0.12f, enemy.y, -0.020f, -0.010f, true);
+            SpawnShot(enemy.x - 0.12f, enemy.y, -0.022f, 0.000f, true);
+            SpawnShot(enemy.x - 0.12f, enemy.y, -0.020f, 0.010f, true);
+        }
+
+        if (enemy.type != 2 && enemy.x < -1.08f) enemy.active = false;
+        const float enemyRadius = enemy.type == 2 ? 0.18f : 0.065f;
+        if (enemy.active && m_invincible == 0 &&
+            Hit(m_playerX, m_playerY, 0.055f, enemy.x, enemy.y, enemyRadius)) {
+            if (enemy.type != 2) enemy.active = false;
             DamagePlayer();
         }
     }
@@ -135,14 +165,23 @@ void SideScrollingShooter::Tick() {
         }
 
         for (auto& enemy : m_enemies) {
-            if (!enemy.active || !Hit(shot.x, shot.y, 0.025f, enemy.x, enemy.y, 0.065f)) continue;
+            const float enemyRadius = enemy.type == 2 ? 0.18f : 0.065f;
+            if (!enemy.active || !Hit(shot.x, shot.y, 0.025f,
+                enemy.x, enemy.y, enemyRadius)) continue;
             shot.active = false;
             if (--enemy.hp <= 0) {
                 enemy.active = false;
-                ++m_kills;
-                m_score += enemy.type == 0 ? 100 : 250;
+                if (enemy.type == 2) {
+                    m_bossHp = 0;
+                    m_score += 5000;
+                    m_clear = true;
+                } else {
+                    ++m_kills;
+                    m_score += enemy.type == 0 ? 100 : 250;
+                }
                 PlayHitSound();
-                if (m_kills >= 24) m_clear = true;
+            } else if (enemy.type == 2) {
+                m_bossHp = enemy.hp;
             }
             break;
         }
@@ -159,8 +198,38 @@ void SideScrollingShooter::SpawnEnemy() {
         enemy.phase = static_cast<float>(m_frame % 31) * 0.2f;
         enemy.type = ((m_kills + m_frame / 60) % 5 == 4) ? 1 : 0;
         enemy.hp = enemy.type == 0 ? 1 : 3;
+        enemy.maxHp = enemy.hp;
         enemy.age = 0;
         return;
+    }
+}
+
+void SideScrollingShooter::StartBossBattle() {
+    m_bossBattle = true;
+    m_bossHp = BossMaxHp;
+
+    // 通常敵と敵弾を消去してボス戦へ切り替える
+    for (auto& enemy : m_enemies) {
+        enemy.active = false;
+    }
+    for (auto& shot : m_shots) {
+        if (shot.enemy) shot.active = false;
+    }
+
+    Enemy& boss = m_enemies[0];
+    boss.active = true;
+    boss.x = 1.16f;
+    boss.y = 0.0f;
+    boss.baseY = 0.0f;
+    boss.phase = 0.0f;
+    boss.type = 2;
+    boss.hp = BossMaxHp;
+    boss.maxHp = BossMaxHp;
+    boss.age = 0;
+    m_invincible = (std::max)(m_invincible, 60);
+
+    if (m_audio) {
+        m_audio->PlayMMLSE("t180 o4 l16 v12 c g > c");
     }
 }
 
@@ -240,9 +309,22 @@ void SideScrollingShooter::Render(D3D12RenderingService& renderer) const {
 
     for (const auto& enemy : m_enemies) {
         if (!enemy.active) continue;
-        DrawShape(renderer, drawIndex, enemy.x, enemy.y, enemy.type == 0 ? 0.12f : 0.17f,
-            enemy.type == 0 ? 0.10f : 0.15f, EnemyColor);
-        DrawShape(renderer, drawIndex, enemy.x + 0.025f, enemy.y, 0.035f, 0.045f, EnemyAccent);
+        if (enemy.type == 2) {
+            // ボスは複数の矩形を組み合わせて通常敵と識別できる外見にする
+            DrawShape(renderer, drawIndex, enemy.x, enemy.y, 0.28f, 0.23f, BossColor);
+            DrawShape(renderer, drawIndex, enemy.x - 0.12f, enemy.y + 0.20f,
+                0.17f, 0.075f, BossAccent);
+            DrawShape(renderer, drawIndex, enemy.x - 0.12f, enemy.y - 0.20f,
+                0.17f, 0.075f, BossAccent);
+            DrawShape(renderer, drawIndex, enemy.x - 0.23f, enemy.y,
+                0.065f, 0.10f, EnemyAccent);
+        } else {
+            DrawShape(renderer, drawIndex, enemy.x, enemy.y,
+                enemy.type == 0 ? 0.12f : 0.17f,
+                enemy.type == 0 ? 0.10f : 0.15f, EnemyColor);
+            DrawShape(renderer, drawIndex, enemy.x + 0.025f, enemy.y,
+                0.035f, 0.045f, EnemyAccent);
+        }
     }
     for (const auto& shot : m_shots) {
         if (!shot.active) continue;
@@ -250,11 +332,24 @@ void SideScrollingShooter::Render(D3D12RenderingService& renderer) const {
             shot.enemy ? 0.025f : 0.016f, shot.enemy ? EnemyShotColor : PlayerShotColor);
     }
 
-    char status[64];
-    std::snprintf(status, sizeof(status), "SCORE %06d   LIVES %d   ENEMY %02d/24", m_score, m_lives, m_kills);
+    char status[80];
+    const int progress = (std::min)(100,
+        static_cast<int>(m_scroll / BossStartDistance * 100.0f));
+    std::snprintf(status, sizeof(status), "SCORE %06d   LIVES %d   DIST %03d%%",
+        m_score, m_lives, progress);
     renderer.RenderText(status, { -0.92f, 0.86f }, 0.018f, { 0.75f, 0.95f, 0.85f, 1.0f });
     renderer.RenderText("MOVE: ARROWS/WASD  SHOT: Z/SPACE", { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
+    if (m_bossBattle && !m_clear) {
+        constexpr float BossBarBack[4] = { 0.20f, 0.08f, 0.22f, 1.0f };
+        constexpr float BossBarFill[4] = { 0.95f, 0.15f, 0.45f, 1.0f };
+        const float hpRate = static_cast<float>(m_bossHp) / BossMaxHp;
+        DrawShape(renderer, drawIndex, 0.0f, 0.76f, 0.62f, 0.025f, BossBarBack);
+        DrawShape(renderer, drawIndex, -0.62f * (1.0f - hpRate), 0.76f,
+            0.62f * hpRate, 0.018f, BossBarFill);
+        renderer.RenderText("BOSS", { 0.02f, 0.86f }, 0.014f,
+            { 1.0f, 0.45f, 0.65f, 1.0f });
+    }
     if (m_gameOver) {
         renderer.RenderText("GAME OVER", { -0.20f, 0.12f }, 0.045f, { 1.0f, 0.2f, 0.2f, 1.0f });
         renderer.RenderText("PRESS R TO RETRY", { -0.22f, -0.05f }, 0.020f, { 1, 1, 1, 1 });
