@@ -16,7 +16,8 @@
 enum class PipelineId {
     Object,
     Background,
-    SpellCircle
+    SpellCircle,
+    Model3D
 };
 
 /** @brief Rendererへ渡す3D形状の種類 */

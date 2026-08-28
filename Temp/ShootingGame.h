@@ -858,6 +858,7 @@ private:
                                 e.active = false;
                                 enemyKillCount++;
                                 player.score += (e.type == 2) ? 10000 : 200;
+                                AudioService::Get().PlaySE(Audio::SfxrPreset::Explosion);
 
                                 if (e.type == 2) {
                                     gameStatus = 2;
@@ -925,10 +926,12 @@ private:
         player.shield -= amount;
         if (player.shield <= 0) {
             player.lives--;
+            AudioService::Get().PlaySE(Audio::SfxrPreset::Explosion);
             if (player.lives >= 0) {
                 player.Reset();
             }
         } else {
+            AudioService::Get().PlaySE(Audio::SfxrPreset::HitHurt);
             player.invincibleFrames = 30;
         }
     }

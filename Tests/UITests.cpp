@@ -15,6 +15,19 @@ void RequireNear(float actual, float expected, const char* message) {
 }
 
 void RunUITests() {
+    Button alignedButton{{0.4f, 0.2f}, RectAlign::BottomCenter, "Start", {0.1f, 0.05f}};
+    RequireNear(alignedButton.Bounds().position.x, -0.1f,
+                "Button alignment must place its bounds at the bottom center with its offset");
+    RequireNear(alignedButton.Bounds().position.y, -0.95f,
+                "Button alignment must preserve its vertical offset");
+
+    Slider alignedSlider;
+    alignedSlider.SetBounds({0.4f, 0.2f}, RectAlign::Center);
+    RequireNear(alignedSlider.Bounds().position.x, -0.2f,
+                "Slider alignment must place its bounds at the screen center");
+    RequireNear(alignedSlider.Bounds().position.y, -0.1f,
+                "Slider alignment must center its bounds vertically");
+
     Button button{{{-0.5f, -0.25f}, {1.0f, 0.5f}}, "Start"};
     int clickCount = 0;
     button.SetOnClick([&clickCount] { ++clickCount; });

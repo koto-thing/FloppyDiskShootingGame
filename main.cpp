@@ -1,4 +1,4 @@
-#include "Presentation/Scenes/CreditScene.h"
+#include "Presentation/Scenes/OptionScene.h"
 #ifndef UNICODE
 #define UNICODE
 #endif
@@ -19,6 +19,8 @@
 #include "Engine/Graphics/Renderer.h"
 #include "Presentation/Scenes/TitleScene.h"
 #include "Presentation/Scenes/TestStage.h"
+#include "Presentation/Scenes/ModelTestScene.h"
+#include "Presentation/Scenes/CreditScene.h"
 
 /**
  * ウィンドウプロシージャ
@@ -33,6 +35,9 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
     Input::ProcessMessage(uMsg, wParam, lParam);
 
     switch (uMsg) {
+        case WM_CLOSE:
+            DestroyWindow(hwnd);
+            return 0;
         case WM_DESTROY:
             PostQuitMessage(0);
             return 0;
@@ -47,6 +52,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
  * @return 
  */
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     Debug::Initialize();
     Debug::Log("Application starting");
 
@@ -56,7 +62,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
 
     // 画面全体を覆うボーダーレスウィンドウを作成する
     HWND hwnd = Win32WindowService::Create(
-        hInstance, screenWidth, screenHeight, L"Floppy Disk Shooting Game - Clean Architecture", WindowProc
+        hInstance, screenWidth, screenHeight, L"Space Yankees", WindowProc
     );
 
     // ウィンドウの作成に失敗した場合は終了
@@ -105,10 +111,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     
     // シーンマネージャを作成
     SceneManager<SceneType, SceneSharedData> app;
+    app.getSharedData().audio = &audio;
     
     // シーンを登録
     app.AddScene<TitleScene>(SceneType::Title);
     app.AddScene<TestStage>(SceneType::TestStage);
+    app.AddScene<ModelTestScene>(SceneType::ModelTest);
+    app.AddScene<OptionScene>(SceneType::Option);
     app.AddScene<CreditScene>(SceneType::Credit);
     
     // 初期シーンの設定
@@ -119,16 +128,21 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     
     // メインループ
     MSG msg = { };
-    while (msg.message != WM_QUIT) {
+    bool isRunning = true;
+    while (isRunning) {
         // 前フレームの状態を保存して新しい入力の受付を開始する
         Input::BeginFrame();
 
         while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
+            if (msg.message == WM_QUIT) {
+                isRunning = false;
+                break;
+            }
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
 
-        if (msg.message == WM_QUIT) {
+        if (!isRunning) {
             break;
         }
 
@@ -152,15 +166,18 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         }
 
         app.CommitTransitions();
+        audio.Update();
 
         renderFacade.BeginFrame();
         app.Render(renderFacade);
         renderFacade.EndFrame();
     }
 
+    audio.Shutdown();
     renderer.Cleanup();
     app.Dispose();
     Debug::Log("Application shutting down");
     Debug::Shutdown();
+    CoUninitialize();
     return 0;
 }

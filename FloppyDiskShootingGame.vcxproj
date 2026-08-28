@@ -79,7 +79,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;_DEBUG;_CONSOLE;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/FS /utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -98,7 +98,8 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/FS /utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -115,7 +116,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>_DEBUG;_CONSOLE;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/FS /utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -134,7 +135,8 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/FS /utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -150,12 +152,16 @@
     <ClCompile Include="Infrastructure\ExternalServices\AudioService.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\MMLParser.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\SynthWaveGenerator.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\SfxrGenerator.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Presentation\Gameplay\SideScrollingShooter.cpp" />
     <ClCompile Include="Presentation\CreditScene\CreditContentController.cpp" />
     <ClCompile Include="Presentation\CreditScene\CreditContentPresenter.cpp" />
     <ClCompile Include="Presentation\CreditScene\CreditSceneContent.cpp" />
     <ClCompile Include="Presentation\Scenes\CreditScene.cpp" />
+    <ClCompile Include="Presentation\Scenes\OptionScene.cpp" />
     <ClCompile Include="Presentation\Scenes\TestStage.cpp" />
+    <ClCompile Include="Presentation\Scenes\ModelTestScene.cpp" />
     <ClCompile Include="Presentation\Scenes\TitleScene.cpp" />
     <ClCompile Include="Presentation\TitleScene\TitleSceneColumn.cpp" />
   </ItemGroup>
@@ -165,6 +171,7 @@
     <ClInclude Include="Infrastructure\ExternalServices\AudioService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\MMLParser.h" />
     <ClInclude Include="Infrastructure\ExternalServices\SynthWaveGenerator.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\SfxrGenerator.h" />
     <ClInclude Include="Infrastructure\ExternalServices\D3D12RenderingService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\InputService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\TextRenderingService.h" />
@@ -176,7 +183,10 @@
     <ClInclude Include="Presentation\Scenes\CreditScene.h" />
     <ClInclude Include="Presentation\CreditScene\CreditSceneColumn.h" />
     <ClInclude Include="Presentation\CreditScene\CreditSceneContent.h" />
+    <ClInclude Include="Presentation\Scenes\OptionScene.h" />
     <ClInclude Include="Presentation\Scenes\TestStage.h" />
+    <ClInclude Include="Presentation\Scenes\ModelTestScene.h" />
+    <ClInclude Include="Presentation\Gameplay\SideScrollingShooter.h" />
     <ClInclude Include="Presentation\Scenes\TitleScene.h" />
     <ClInclude Include="Presentation\TitleScene\TitleSceneColumn.h" />
     <ClInclude Include="Temp\Bullet.h" />
@@ -214,7 +224,6 @@
     <Copy SourceFiles="Shaders\ObjectShader.hlsl;Shaders\BackgroundShader.hlsl;Shaders\SpellCircleShader.hlsl;Shaders\TextShader.hlsl" DestinationFolder="$(OutDir)Shaders" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="CopyMML" AfterTargets="AfterBuild">
-    <Copy SourceFiles="mml\test.mml" DestinationFolder="$(OutDir)mml" SkipUnchangedFiles="true" Condition="Exists('mml\test.mml')" />
     <Copy SourceFiles="mml\test.mml" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('mml\test.mml')" />
     <Copy SourceFiles="test.mml" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('test.mml')" />
   </Target>

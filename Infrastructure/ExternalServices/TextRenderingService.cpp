@@ -288,6 +288,8 @@ void TextRenderingService::RenderText(
     // パイプラインと記述子ヒープの設定
     commandList->SetGraphicsRootSignature(m_rootSignatureText.Get());
     commandList->SetPipelineState(m_pipelineStateText.Get());
+    /** @brief 直前の3D描画に依存せず文字の4頂点をストリップとして接続する */
+    commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     
     ID3D12DescriptorHeap* heaps[] = { m_fontSrvHeap.Get() };
     commandList->SetDescriptorHeaps(_countof(heaps), heaps);

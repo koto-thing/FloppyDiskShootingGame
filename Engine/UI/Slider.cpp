@@ -8,6 +8,9 @@ Slider::Slider(Rect bounds, float minimum, float maximum, float value) : m_bound
     SetValue(value);
 }
 
+Slider::Slider(Vector2 size, RectAlign alignment, float minimum, float maximum, float value, Vector2 offset)
+    : Slider(Renderer::CreateAlignedRect(size, alignment, offset), minimum, maximum, value) {}
+
 void Slider::SetRange(float minimum, float maximum) {
     m_minimum = (std::min)(minimum, maximum);
     m_maximum = (std::max)(minimum, maximum);
@@ -38,13 +41,16 @@ void Slider::Update(const UIInputState& input) {
 
 void Slider::Render(Renderer& renderer) const {
     const ColorF& baseColor = m_enabled ? trackColor : disabledColor;
-    renderer.Draw(m_bounds, baseColor);
+    renderer.Draw(Rect{ m_bounds.Center(), m_bounds.size * 0.5f }, baseColor);
+
     const Vector2 minimum = m_bounds.Min();
     const Vector2 maximum = m_bounds.Max();
     const float handleCenter = minimum.x + (maximum.x - minimum.x) * NormalizedValue();
-    renderer.Draw(Rect{minimum, {handleCenter - minimum.x, maximum.y - minimum.y}}, m_enabled ? fillColor : disabledColor);
-    renderer.Draw(Rect{{handleCenter - handleWidth * 0.5f, minimum.y}, {handleWidth, maximum.y - minimum.y}},
-                  m_enabled ? handleColor : disabledColor);
+    const Rect fillRect{ minimum, { handleCenter - minimum.x, maximum.y - minimum.y } };
+    renderer.Draw(Rect{ fillRect.Center(), fillRect.size * 0.5f }, m_enabled ? fillColor : disabledColor);
+
+    const Rect handleRect{ { handleCenter - handleWidth * 0.5f, minimum.y }, { handleWidth, maximum.y - minimum.y } };
+    renderer.Draw(Rect{ handleRect.Center(), handleRect.size * 0.5f }, m_enabled ? handleColor : disabledColor);
 }
 
 void Slider::SetValueFromPosition(float x) {

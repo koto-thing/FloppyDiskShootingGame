@@ -1,4 +1,5 @@
 #pragma once
+
 #include "../../Domain/ValueObjects/SceneSharedData.h"
 #include "../../Domain/ValueObjects/SceneType.h"
 #include "../../Application/Interfaces/IScene.h"
@@ -35,5 +36,9 @@ public:
     void Render(Renderer& renderer) override;
 
 private:
+    std::unique_ptr<Button> m_startButton;
+    std::unique_ptr<Button> m_modelTestButton;
+    std::unique_ptr<Button> m_optionButton;
+    std::unique_ptr<Button> m_exitButton;
     std::unique_ptr<Button> m_creditButton;
 };

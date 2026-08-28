@@ -1,5 +1,6 @@
 #include "../Engine/Graphics/Renderer.h"
 
+#include <cmath>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -9,6 +10,12 @@ void Require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
 
+/** @brief 2つの座標が描画用の許容誤差内で一致するか判定する */
+bool IsNearlyEqual(const Vector2& left, const Vector2& right) {
+    constexpr float kTolerance = 0.0001f;
+    return std::abs(left.x - right.x) < kTolerance && std::abs(left.y - right.y) < kTolerance;
+}
+
 /**
  * @brief Rendererの記録順を検証するヘッドレスバックエンド
  */
@@ -16,12 +23,18 @@ class FakeRenderBackend final : public IRenderBackend {
 public:
     std::vector<std::string> events;
     float lastCharacterSpacing = 0.0f;
+    Vector2 lastTextPosition {};
+    Rect lastRect {};
 
     void BeginFrame() override { events.emplace_back("begin"); }
     void DrawCircle(const Circle&, const ColorF&) override { events.emplace_back("circle"); }
-    void DrawRect(const Rect&, const ColorF&) override { events.emplace_back("rect"); }
-    void DrawTextCommand(std::string_view, const Vector2&, float, const ColorF&, float characterSpacing) override {
+    void DrawRect(const Rect& rect, const ColorF&) override {
+        lastRect = rect;
+        events.emplace_back("rect");
+    }
+    void DrawTextCommand(std::string_view, const Vector2& position, float, const ColorF&, float characterSpacing) override {
         lastCharacterSpacing = characterSpacing;
+        lastTextPosition = position;
         events.emplace_back("text");
     }
     void SetPipeline(PipelineId) override { events.emplace_back("pipeline"); }
@@ -60,6 +73,38 @@ void SendsCharacterSpacingToBackend() {
     renderer.DrawText("SPACED", {}, 0.1f, ColorF::White(), 0.025f);
     renderer.Flush();
     Require(backend.lastCharacterSpacing == 0.025f, "Renderer must send character spacing to backend");
+}
+
+void AlignsTextToScreenPositions() {
+    FakeRenderBackend backend;
+    Renderer renderer(backend);
+    renderer.BeginFrame();
+    renderer.DrawText("AB", TextAlign::Center, 0.1f, ColorF::White());
+    renderer.Flush();
+    Require(IsNearlyEqual(backend.lastTextPosition, {-0.075f, 0.0f}),
+            "Center alignment must place the text at the screen center");
+
+    renderer.BeginFrame();
+    renderer.DrawText("A", TextAlign::BottomCenter, 0.1f, ColorF::White());
+    renderer.Flush();
+    Require(IsNearlyEqual(backend.lastTextPosition, {0.0f, -0.9f}),
+            "BottomCenter alignment must place the text at the bottom center");
+}
+
+void AlignsRectToScreenPositions() {
+    FakeRenderBackend backend;
+    Renderer renderer(backend);
+    renderer.BeginFrame();
+    renderer.Draw(Rect{{}, {0.4f, 0.2f}}, RectAlign::Center, ColorF::White());
+    renderer.Flush();
+    Require(IsNearlyEqual(backend.lastRect.position, {0.0f, 0.0f}),
+            "Center alignment must place the rect at the screen center");
+
+    renderer.BeginFrame();
+    renderer.Draw(Rect{{0.1f, 0.05f}, {0.4f, 0.2f}}, RectAlign::BottomCenter, ColorF::White());
+    renderer.Flush();
+    Require(IsNearlyEqual(backend.lastRect.position, {0.1f, -0.75f}),
+            "BottomCenter alignment must place the rect at the bottom center with its offset");
 }
 
 void HandlesTextAndOverflow() {
@@ -123,6 +168,8 @@ void RunRendererTests() {
     RecordsAndResetsCommands();
     RecordsCharacterSpacing();
     SendsCharacterSpacingToBackend();
+    AlignsTextToScreenPositions();
+    AlignsRectToScreenPositions();
     HandlesTextAndOverflow();
     ExecutesOnlyOnFlush();
     EndFrameFlushesAndBackendIsOptional();

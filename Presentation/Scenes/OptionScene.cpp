@@ -1,0 +1,125 @@
+﻿#include "OptionScene.h"
+
+#include <cstdio>
+#include <windows.h>
+
+#include "../../Engine/Graphics/Renderer.h"
+#include "../../Infrastructure/ExternalServices/AudioService.h"
+
+void OptionScene::Initialize() {
+    // タイトルに戻るボタン
+    m_backToTitleButton = std::make_unique<Button>(
+        Rect { { -0.95f, -0.90f }, { 0.35f, 0.10f } },
+        "BACK TO TITLE"
+    );
+    m_backToTitleButton->SetOnClick([this]() { changeScene(SceneType::Title); });
+    
+    // マスター音量
+    m_masterVolumeSlider = Slider(
+        Rect { { 0.0f, 0.15f }, { 0.55f, 0.04f } },
+        0.0f,
+        1.0f,
+        AudioService::Get().GetMasterVolume()
+    );
+    m_masterVolumeSlider.SetOnValueChanged(
+        [](float vol) {
+            AudioService::Get().SetMasterVolume(vol);
+        }
+    );
+    
+    // BGM音量
+    m_bgmVolumeSlider = Slider(
+        Rect { { 0.0f, 0.0f }, { 0.55f, 0.04f } },
+        0.0f,
+        1.0f,
+        AudioService::Get().GetBGMVolume()
+    );
+    m_bgmVolumeSlider.SetOnValueChanged(
+        [](float vol) {
+            AudioService::Get().SetBGMVolume(vol);
+        }
+    );
+    
+    // SE音量
+    m_seVolumeSlider = Slider(
+        Rect { { 0.0f, -0.15f }, { 0.55f, 0.04f} },
+        0.0f, 
+        1.0f,
+        AudioService::Get().GetSEVolume()
+    );
+    m_seVolumeSlider.SetOnValueChanged(
+        [](float vol) {
+            AudioService::Get().SetSEVolume(vol);
+        }
+    );
+}
+
+void OptionScene::ProcessInput() {
+    HWND hwnd = GetForegroundWindow();
+    
+    int w = 1280;
+    int h = 720;
+    
+    if (hwnd) {
+        RECT rect;
+        
+        GetClientRect(hwnd, &rect);
+        if (rect.right - rect.left > 0) {
+            w = rect.right - rect.left;
+        }
+        if (rect.bottom - rect.top > 0) {
+            h = rect.bottom - rect.top;
+        }
+    }
+    
+    UIInputState inputState = UIInput::Current(w, h);
+    
+    
+    if (m_backToTitleButton != nullptr) {
+        m_backToTitleButton->Update(inputState);
+    }
+    
+    m_masterVolumeSlider.Update(inputState);
+    m_bgmVolumeSlider.Update(inputState);
+    m_seVolumeSlider.Update(inputState);
+}
+
+void OptionScene::Tick() {
+    
+}
+
+void OptionScene::Dispose() {
+    m_backToTitleButton.reset();
+}
+
+void OptionScene::Render(Renderer& renderer) {
+    // オプション画面の見出しを描画する
+    renderer.DrawText(
+        "OPTIONS",
+        { -0.18f, 0.65f },
+        0.04f,
+        { 1.0f, 1.0f, 1.0f, 1.0f }
+    );
+
+    // 各音量の現在値をラベルとして描画する
+    char buf[64];
+
+    snprintf(buf, sizeof(buf), "MST %3d%%", static_cast<int>(m_masterVolumeSlider.Value() * 100.0f + 0.5f));
+    renderer.DrawText(buf, { -0.65f, 0.17f }, 0.016f, ColorF(0.7f, 0.7f, 0.7f, 0.8f));
+
+    snprintf(buf, sizeof(buf), "BGM %3d%%", static_cast<int>(m_bgmVolumeSlider.Value() * 100.0f + 0.5f));
+    renderer.DrawText(buf, { -0.65f, 0.02f }, 0.016f, ColorF(0.7f, 0.7f, 0.7f, 0.8f));
+
+    snprintf(buf, sizeof(buf), "SE  %3d%%", static_cast<int>(m_seVolumeSlider.Value() * 100.0f + 0.5f));
+    renderer.DrawText(buf, { -0.65f, -0.13f }, 0.016f, ColorF(0.7f, 0.7f, 0.7f, 0.8f));
+
+    // 音量スライダーを描画する
+    m_masterVolumeSlider.Render(renderer);
+    m_bgmVolumeSlider.Render(renderer);
+    m_seVolumeSlider.Render(renderer);
+
+    // タイトルへ戻るボタンを描画する
+    if (m_backToTitleButton != nullptr) {
+        m_backToTitleButton->Render(renderer);
+    }
+}

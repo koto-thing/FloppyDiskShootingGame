@@ -428,6 +428,18 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
+    /** @brief 奥側のポリゴンを除外して閉じた3Dメッシュを正しく表示するPSOを作成する */
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC model3DPsoDesc = psoDesc;
+    model3DPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+    HRESULT hrPSOModel3D = m_device->CreateGraphicsPipelineState(
+        &model3DPsoDesc, IID_PPV_ARGS(&m_pipelineStateModel3D));
+    if (FAILED(hrPSOModel3D)) {
+        char buf[128];
+        sprintf_s(buf, "CreateGraphicsPipelineState (Model3D) Failed with HRESULT: 0x%08X", hrPSOModel3D);
+        MessageBoxA(NULL, buf, "PSO Creation Error", MB_OK);
+        return false;
+    }
+
     // B. Background 用 PSO 作成 (PSBackground)
     ComPtr<ID3DBlob> pixelShaderBG;
     error.Reset();
@@ -503,6 +515,7 @@ bool D3D12RenderingService::InitPipeline() {
 void D3D12RenderingService::BeginFrame() {
     // フレームごとに定数バッファのインデックスをリセット
     m_constantBufferCursor = 0;
+    m_currentPipelineType = 0;
     
     m_commandAllocator->Reset();
     m_commandList->Reset(m_commandAllocator.Get(), m_pipelineStateObject.Get());
@@ -580,15 +593,19 @@ D3D12_CPU_DESCRIPTOR_HANDLE D3D12RenderingService::GetRtvCpuDescriptorHandle() c
 }
 
 /**
- * パイプラインステートを切り替える (0: Object, 1: Background, 2: SpellCircle)
+ * パイプラインステートを切り替える (0: Object, 1: Background, 2: SpellCircle, 3: Model3D)
  */
 void D3D12RenderingService::SetPipelineState(int type) {
+    /** @brief 文字描画後に元のパイプラインを復元するため選択を保持する */
+    m_currentPipelineType = type;
     if (type == 0) {
         m_commandList->SetPipelineState(m_pipelineStateObject.Get());
     } else if (type == 1) {
         m_commandList->SetPipelineState(m_pipelineStateBackground.Get());
     } else if (type == 2) {
         m_commandList->SetPipelineState(m_pipelineStateSpellCircle.Get());
+    } else if (type == 3) {
+        m_commandList->SetPipelineState(m_pipelineStateModel3D.Get());
     }
 }
 
@@ -596,7 +613,20 @@ void D3D12RenderingService::SetPipelineState(int type) {
  * @brief Rendererのパイプライン識別子を既存のD3D12パイプラインへ変換する
  */
 void D3D12RenderingService::SetPipeline(PipelineId pipeline) {
-    SetPipelineState(static_cast<int>(pipeline));
+    switch (pipeline) {
+    case PipelineId::Object:
+        SetPipelineState(0);
+        break;
+    case PipelineId::Background:
+        SetPipelineState(1);
+        break;
+    case PipelineId::SpellCircle:
+        SetPipelineState(2);
+        break;
+    case PipelineId::Model3D:
+        SetPipelineState(3);
+        break;
+    }
 }
 
 void D3D12RenderingService::SetCamera(const CameraMatrices& matrices, const Viewport& viewport) {
@@ -633,6 +663,9 @@ void D3D12RenderingService::DrawUiPrimitive(
     UINT vertexCount) {
     if (m_constantBufferCursor >= MAX_CONSTANT_BUFFER_ELEMENTS) return;
 
+    /** @brief 4頂点で構成するUIプリミティブ用の三角形ストリップを設定する */
+    m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+
     // NDC上の中心、サイズを既存シェーダーの単位形状へ変換する
     auto* cbData = reinterpret_cast<RendererTransformBufferData*>(
         reinterpret_cast<char*>(m_cbvCpuData) + static_cast<size_t>(m_constantBufferCursor) * 256);
@@ -656,12 +689,28 @@ void D3D12RenderingService::DrawUiPrimitive(
  * @brief NDC矩形を描画する
  */
 void D3D12RenderingService::DrawRect(const Rect& rect, const ColorF& color) {
-    DrawUiPrimitive(rect.position.x, rect.position.y, rect.size.x, rect.size.y, 0.0f,
-                    color, 6.0f, 4);
+    SetPipeline(PipelineId::Object);
+
+    DrawUiPrimitive(
+        rect.position.x,
+        rect.position.y,
+        rect.size.x,
+        rect.size.y,
+        0.0f,
+        color,
+        6.0f,
+        4
+    );
 }
 
 void D3D12RenderingService::DrawPrimitive3D(const Primitive3D& primitive) {
     if (m_constantBufferCursor >= MAX_CONSTANT_BUFFER_ELEMENTS) return;
+
+    /** @brief 頂点配列の構成に応じてGPUのプリミティブトポロジーを切り替える */
+    const bool usesTriangleStrip = primitive.shape == PrimitiveShape::Plate ||
+        primitive.shape == PrimitiveShape::Sprite2D;
+    m_commandList->IASetPrimitiveTopology(
+        usesTriangleStrip ? D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP : D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
     struct PrimitiveBuffer {
         DirectX::XMFLOAT4X4 wvp;
@@ -756,6 +805,9 @@ void D3D12RenderingService::RenderText(const char* text, DirectX::XMFLOAT2 posit
     
     // 次のテキストが使用する位置を自動更新
     m_constantBufferCursor += static_cast<UINT>(length);
+    /** @brief フォント専用ルートシグネチャとPSOが後続のモデルやUIへ漏れないよう復元する */
+    m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
+    SetPipelineState(m_currentPipelineType);
 }
 
 /**
