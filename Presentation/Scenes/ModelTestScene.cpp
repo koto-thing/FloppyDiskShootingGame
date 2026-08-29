@@ -65,10 +65,6 @@ void ModelTestScene::Render(Renderer& renderer) {
 
     // カラー定義
     const ColorF noseCol = { 0.90f, 0.20f, 0.20f, 1.0f }; // 赤系（ノーズ）
-    const ColorF pCol = { 0.80f, 0.80f, 0.80f, 1.0f }; // 白・グレー系（メイン）
-    const ColorF rearCol = { 0.60f, 0.60f, 0.65f, 1.0f }; // ダークグレー系（リア）
-    const ColorF wingCol = { 0.20f, 0.50f, 0.90f, 1.0f }; // 青系（主翼）
-    const ColorF tailCol = { 0.90f, 0.70f, 0.10f, 1.0f }; // 黄系（尾翼）
 
     // 描画用ローカルラムダ（コード重複を減らし規則を統一）
     auto DrawPart = [&](PrimitiveShape shape, const Vector3& pos, const Vector3& scale, const Vector3& rot, const ColorF& color) {
