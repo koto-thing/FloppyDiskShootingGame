@@ -619,7 +619,7 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     std::snprintf(status, sizeof(status), "SCORE %06d   LIVES %d   DIST %03d%%",
         m_score, m_lives, progress);
     renderer.DrawText(status, { -0.92f, 0.86f }, 0.018f, { 0.75f, 0.95f, 0.85f, 1.0f });
-    renderer.DrawText("MOVE: ARROWS/WASD  SHOT: Z  MODE: SPACE", { -0.92f, -0.92f }, 0.012f,
+    renderer.DrawText("MOVE: ARROWS/WASD  SHOT: Z/SPACE  MODE: X", { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
     renderer.DrawText("VIEW: SIDE 2D", { 0.50f, 0.86f }, 0.014f,
         { ModeTextColor[0], ModeTextColor[1], ModeTextColor[2], ModeTextColor[3] });
