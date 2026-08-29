@@ -158,7 +158,9 @@
     <ClCompile Include="Presentation\CreditScene\CreditContentController.cpp" />
     <ClCompile Include="Presentation\CreditScene\CreditContentPresenter.cpp" />
     <ClCompile Include="Presentation\CreditScene\CreditSceneContent.cpp" />
+    <ClCompile Include="Presentation\ModeSelectionScene\ModeSelectionStateController.cpp" />
     <ClCompile Include="Presentation\Scenes\CreditScene.cpp" />
+    <ClCompile Include="Presentation\Scenes\ModeSelectionScene.cpp" />
     <ClCompile Include="Presentation\Scenes\OptionScene.cpp" />
     <ClCompile Include="Presentation\Scenes\TestStage.cpp" />
     <ClCompile Include="Presentation\Scenes\ModelTestScene.cpp" />
@@ -166,6 +168,8 @@
     <ClCompile Include="Presentation\TitleScene\TitleSceneColumn.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Domain\ValueObjects\DifficultyType.h" />
+    <ClInclude Include="Domain\ValueObjects\PlayerType.h" />
     <ClInclude Include="Domain\ValueObjects\SceneSharedData.h" />
     <ClInclude Include="Domain\ValueObjects\SceneType.h" />
     <ClInclude Include="Infrastructure\ExternalServices\AudioService.h" />
@@ -180,9 +184,11 @@
     <ClInclude Include="Application\UseCases\SceneManager.h" />
     <ClInclude Include="Presentation\CreditScene\CreditContentController.h" />
     <ClInclude Include="Presentation\CreditScene\CreditContentPresenter.h" />
+    <ClInclude Include="Presentation\ModeSelectionScene\ModeSelectionStateController.h" />
     <ClInclude Include="Presentation\Scenes\CreditScene.h" />
     <ClInclude Include="Presentation\CreditScene\CreditSceneColumn.h" />
     <ClInclude Include="Presentation\CreditScene\CreditSceneContent.h" />
+    <ClInclude Include="Presentation\Scenes\ModeSelectionScene.h" />
     <ClInclude Include="Presentation\Scenes\OptionScene.h" />
     <ClInclude Include="Presentation\Scenes\TestStage.h" />
     <ClInclude Include="Presentation\Scenes\ModelTestScene.h" />

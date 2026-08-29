@@ -129,7 +129,7 @@ void TitleScene::Dispose() {
 void TitleScene::Render(Renderer& renderer) {
     // 画面上部に "TITLE" と表示
     renderer.DrawText(
-        "SPACE YANKEES",
+        "SPACE YAKUZA",
         { -0.4f, 0.6f },
         0.04f,
         { 1.0f, 1.0f, 1.0f, 1.0f },
