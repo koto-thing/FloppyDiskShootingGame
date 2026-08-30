@@ -18,6 +18,10 @@ public:
     void Render(Renderer& renderer) const;
 
 private:
+    class Stage;
+    class Stage1;
+    class Stage2;
+
     struct Shot {
         float x = 0.0f;
         float y = 0.0f;
@@ -64,6 +68,8 @@ private:
     };
 
     void Reset();
+    static const Stage& Stage1Instance();
+    static const Stage& Stage2Instance();
     void TickViewTransition();
     void InitializeRailObjects();
     void TickPlayer();
@@ -104,6 +110,7 @@ private:
     std::array<Shot, ShotCapacity> m_shots {};
     std::array<Enemy, EnemyCapacity> m_enemies {};
     AudioService* m_audio = nullptr;
+    const Stage* m_stage = nullptr;
     float m_playerX = -0.72f;
     float m_playerY = 0.0f;
     float m_scroll = 0.0f;

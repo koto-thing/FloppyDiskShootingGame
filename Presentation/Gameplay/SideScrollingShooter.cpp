@@ -45,6 +45,18 @@ Vector3 RotateYawOffset(float x, float y, float z, float yaw) {
 }
 }
 
+#include "SideScrollingShooterStages.h"
+
+const SideScrollingShooter::Stage& SideScrollingShooter::Stage1Instance() {
+    static const Stage1 stage;
+    return stage;
+}
+
+const SideScrollingShooter::Stage& SideScrollingShooter::Stage2Instance() {
+    static const Stage2 stage;
+    return stage;
+}
+
 void SideScrollingShooter::Initialize(AudioService* audio) {
     m_audio = audio;
     Reset();
@@ -53,6 +65,7 @@ void SideScrollingShooter::Initialize(AudioService* audio) {
 void SideScrollingShooter::Reset() {
     m_shots = {};
     m_enemies = {};
+    m_stage = &Stage1Instance();
     m_playerX = -0.72f;
     m_playerY = 0.0f;
     m_scroll = 0.0f;
@@ -115,13 +128,13 @@ void SideScrollingShooter::Tick() {
     }
 
     // 規定スクロール距離へ到達したら通常区間を終了してボス戦を開始する
-    if (!m_bossBattle && m_scroll >= BossStartDistance) {
+    if (!m_bossBattle && m_scroll >= m_stage->BossStartDistance()) {
         StartBossBattle();
     }
 
     if (!m_bossBattle && --m_spawnCooldown <= 0) {
         SpawnEnemy();
-        m_spawnCooldown = (std::max)(28, 70 - m_kills);
+        m_spawnCooldown = m_stage->SpawnCooldown(m_frame, m_kills);
     }
 
     TickEnemies();
@@ -178,7 +191,7 @@ void SideScrollingShooter::TickEnemies() {
                 (enemy.type == 0 ? 0.10f : 0.18f);
         }
 
-        const int aimedShotInterval = enemy.type == 2 ? 42 : (enemy.type == 0 ? 105 : 72);
+        const int aimedShotInterval = m_stage->AimedShotInterval(enemy.type);
         if (enemy.age % aimedShotInterval == 0) {
             const float dxToPlayer = m_playerX - enemy.x;
             const float dyToPlayer = m_playerY - enemy.y;
@@ -191,14 +204,12 @@ void SideScrollingShooter::TickEnemies() {
 
         // ボスは一定間隔で3方向へ弾を発射する
         if (enemy.type == 2 && enemy.age % 120 == 0) {
-            if (IsRailGameplayActive()) {
-                SpawnShot(enemy.x, enemy.y, 0.0f, -0.018f, true, enemy.z);
-                SpawnShot(enemy.x, enemy.y, 0.0f, 0.000f, true, enemy.z);
-                SpawnShot(enemy.x, enemy.y, 0.0f, 0.018f, true, enemy.z);
-            } else {
-                SpawnShot(enemy.x - 0.12f, enemy.y, -0.020f, -0.010f, true, enemy.z);
-                SpawnShot(enemy.x - 0.12f, enemy.y, -0.022f, 0.000f, true, enemy.z);
-                SpawnShot(enemy.x - 0.12f, enemy.y, -0.020f, 0.010f, true, enemy.z);
+            const bool railMode = IsRailGameplayActive();
+            const int bulletCount = m_stage->BossBulletCount(railMode);
+            for (int i = 0; i < bulletCount; ++i) {
+                const Stage::BossBullet bullet = m_stage->GetBossBullet(i, railMode);
+                SpawnShot(enemy.x + bullet.offsetX, enemy.y + bullet.offsetY,
+                    bullet.vx, bullet.vy, true, enemy.z);
             }
         }
 
@@ -361,26 +372,14 @@ void SideScrollingShooter::SpawnEnemy() {
     for (auto& enemy : m_enemies) {
         if (enemy.active) continue;
         enemy.active = true;
-        enemy.baseX = IsRailGameplayActive() ?
-            -0.72f + static_cast<float>((m_frame * 53) % 145) / 100.0f : 1.05f;
-        enemy.x = enemy.baseX;
-        enemy.baseY = IsRailGameplayActive() ?
-            -0.52f + static_cast<float>((m_frame * 37) % 105) / 100.0f :
-            -0.60f + static_cast<float>((m_frame * 37) % 120) / 100.0f;
-        enemy.y = enemy.baseY;
-        enemy.z = IsRailGameplayActive() ? EnemyRailFarZ : ToRailZFromSideX(enemy.x);
-        enemy.phase = static_cast<float>(m_frame % 31) * 0.2f;
-        enemy.type = ((m_kills + m_frame / 60) % 5 == 4) ? 1 : 0;
-        enemy.hp = enemy.type == 0 ? 1 : 3;
-        enemy.maxHp = enemy.hp;
-        enemy.age = 0;
+        m_stage->ConfigureEnemy(enemy, m_frame, m_kills, IsRailGameplayActive());
         return;
     }
 }
 
 void SideScrollingShooter::StartBossBattle() {
     m_bossBattle = true;
-    m_bossHp = BossMaxHp;
+    m_bossHp = m_stage->BossMaxHp();
 
     // 通常敵と敵弾を消去してボス戦へ切り替える
     for (auto& enemy : m_enemies) {
@@ -391,17 +390,7 @@ void SideScrollingShooter::StartBossBattle() {
     }
 
     Enemy& boss = m_enemies[0];
-    boss.active = true;
-    boss.x = 1.16f;
-    boss.y = 0.0f;
-    boss.z = IsRailGameplayActive() ? 48.0f : ToRailZFromSideX(boss.x);
-    boss.baseX = 0.0f;
-    boss.baseY = 0.0f;
-    boss.phase = 0.0f;
-    boss.type = 2;
-    boss.hp = BossMaxHp;
-    boss.maxHp = BossMaxHp;
-    boss.age = 0;
+    m_stage->ConfigureBoss(boss, IsRailGameplayActive());
     m_invincible = (std::max)(m_invincible, 60);
 
     if (m_audio) {
@@ -658,7 +647,7 @@ void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
     // 2D/3D共通のボスHP表示をカメラリセット後のUI座標へ描画する
     constexpr float BossBarBack[4] = { 0.20f, 0.08f, 0.22f, 1.0f };
     constexpr float BossBarFill[4] = { 0.95f, 0.15f, 0.45f, 1.0f };
-    const float hpRate = static_cast<float>(m_bossHp) / BossMaxHp;
+    const float hpRate = static_cast<float>(m_bossHp) / m_stage->BossMaxHp();
     DrawShape(renderer, 0.0f, 0.76f, 0.62f, 0.025f, BossBarBack);
     DrawShape(renderer, -0.62f * (1.0f - hpRate), 0.76f,
         0.62f * hpRate, 0.018f, BossBarFill);
@@ -719,7 +708,7 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
 
     char status[80];
     const int progress = (std::min)(100,
-        static_cast<int>(m_scroll / BossStartDistance * 100.0f));
+        static_cast<int>(m_scroll / m_stage->BossStartDistance() * 100.0f));
     std::snprintf(status, sizeof(status), "SCORE %06d   LIVES %d   DIST %03d%%",
         m_score, m_lives, progress);
     renderer.DrawText(status, { -0.92f, 0.86f }, 0.018f, { 0.75f, 0.95f, 0.85f, 1.0f });
@@ -822,7 +811,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
 
     char status[80];
     const int progress = (std::min)(100,
-        static_cast<int>(m_scroll / BossStartDistance * 100.0f));
+        static_cast<int>(m_scroll / m_stage->BossStartDistance() * 100.0f));
     std::snprintf(status, sizeof(status), "SCORE %06d   LIVES %d   DIST %03d%%",
         m_score, m_lives, progress);
     renderer.DrawText(status, { -0.92f, 0.86f }, 0.018f, { 0.75f, 0.95f, 0.85f, 1.0f });
