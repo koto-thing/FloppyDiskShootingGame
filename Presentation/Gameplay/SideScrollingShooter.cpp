@@ -191,9 +191,15 @@ void SideScrollingShooter::TickEnemies() {
 
         // ボスは一定間隔で3方向へ弾を発射する
         if (enemy.type == 2 && enemy.age % 120 == 0) {
-            SpawnShot(enemy.x - 0.12f, enemy.y, -0.020f, -0.010f, true, enemy.z);
-            SpawnShot(enemy.x - 0.12f, enemy.y, -0.022f, 0.000f, true, enemy.z);
-            SpawnShot(enemy.x - 0.12f, enemy.y, -0.020f, 0.010f, true, enemy.z);
+            if (IsRailGameplayActive()) {
+                SpawnShot(enemy.x, enemy.y, 0.0f, -0.018f, true, enemy.z);
+                SpawnShot(enemy.x, enemy.y, 0.0f, 0.000f, true, enemy.z);
+                SpawnShot(enemy.x, enemy.y, 0.0f, 0.018f, true, enemy.z);
+            } else {
+                SpawnShot(enemy.x - 0.12f, enemy.y, -0.020f, -0.010f, true, enemy.z);
+                SpawnShot(enemy.x - 0.12f, enemy.y, -0.022f, 0.000f, true, enemy.z);
+                SpawnShot(enemy.x - 0.12f, enemy.y, -0.020f, 0.010f, true, enemy.z);
+            }
         }
 
         if (enemy.type != 2 && !IsRailGameplayActive() && enemy.x < -1.08f) enemy.active = false;
@@ -334,9 +340,20 @@ void SideScrollingShooter::InitializeRailObjects() {
             shot.z = ToRailZFromSideX(shot.x);
         }
         shot.x = 0.0f;
-        shot.vz = shot.enemy ? -0.52f : 1.45f;
-        shot.vx = shot.enemy ? shot.vx : 0.0f;
-        shot.vy = shot.enemy ? shot.vy : 0.0f;
+        if (shot.enemy) {
+            const float dx = ToWorldX(m_playerX) - ToWorldX(shot.x);
+            const float dy = ToWorldY(m_playerY) - ToWorldY(shot.y);
+            const float dz = PlayerRailZ - shot.z;
+            const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
+            constexpr float EnemyShotSpeed = 0.62f;
+            shot.vx = FromWorldX(dx / length * EnemyShotSpeed);
+            shot.vy = FromWorldY(dy / length * EnemyShotSpeed);
+            shot.vz = dz / length * EnemyShotSpeed;
+        } else {
+            shot.vx = 0.0f;
+            shot.vy = 0.0f;
+            shot.vz = 1.45f;
+        }
     }
 }
 
@@ -403,7 +420,25 @@ void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool 
         shot.transitionSideY = y;
         shot.vx = vx;
         shot.vy = vy;
-        shot.vz = IsRailGameplayActive() ? (enemy ? -0.52f : 1.45f) : 0.0f;
+        shot.vz = 0.0f;
+        if (IsRailGameplayActive()) {
+            if (enemy) {
+                const float targetX = m_playerX + vx * 12.0f;
+                const float targetY = m_playerY + vy * 12.0f;
+                const float dx = ToWorldX(targetX) - ToWorldX(x);
+                const float dy = ToWorldY(targetY) - ToWorldY(y);
+                const float dz = PlayerRailZ - shot.z;
+                const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
+                constexpr float EnemyShotSpeed = 0.62f;
+                shot.vx = FromWorldX(dx / length * EnemyShotSpeed);
+                shot.vy = FromWorldY(dy / length * EnemyShotSpeed);
+                shot.vz = dz / length * EnemyShotSpeed;
+            } else {
+                shot.vx = 0.0f;
+                shot.vy = 0.0f;
+                shot.vz = 1.45f;
+            }
+        }
         shot.enemy = enemy;
         shot.active = true;
         return;
