@@ -134,10 +134,11 @@ void SideScrollingShooter::TickPlayer() {
         dx *= 0.7071f;
         dy *= 0.7071f;
     }
-    const float minX = IsRailGameplayActive() ? -0.78f : -0.88f;
-    const float maxX = IsRailGameplayActive() ? 0.78f : 0.35f;
-    const float minY = IsRailGameplayActive() ? -0.64f : -0.72f;
-    const float maxY = IsRailGameplayActive() ? 0.64f : 0.72f;
+    //移動範囲制限
+    const float minX = IsRailGameplayActive() ? -1.2f : -1.2f;
+    const float maxX = IsRailGameplayActive() ? 1.2f : 1.2f;
+    const float minY = IsRailGameplayActive() ? -0.9f : -0.9f;
+    const float maxY = IsRailGameplayActive() ? 0.9f : 0.9f;
     m_playerX = (std::clamp)(m_playerX + dx * 0.018f, minX, maxX);
     m_playerY = (std::clamp)(m_playerY + dy * 0.024f, minY, maxY);
 }
