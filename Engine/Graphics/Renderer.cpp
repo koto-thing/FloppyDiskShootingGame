@@ -43,6 +43,12 @@ void Renderer::Draw(const Primitive3D& primitive) {
     command->primitive = primitive;
 }
 
+void Renderer::DrawPlayerShot(const PlayerShotVisual& shot) {
+    RenderCommand* command = TryAppend(RenderCommand::Type::PlayerShot);
+    if (command == nullptr) return;
+    command->playerShot = shot;
+}
+
 void Renderer::DrawText(std::string_view text, const Vector2& position, float size, const ColorF& color,
                         float characterSpacing) {
     RenderCommand* command = TryAppend(RenderCommand::Type::Text);
@@ -201,6 +207,9 @@ void Renderer::Flush() {
             break;
         case RenderCommand::Type::Primitive3D:
             m_backend->DrawPrimitive3D(command.primitive);
+            break;
+        case RenderCommand::Type::PlayerShot:
+            m_backend->DrawPlayerShot(command.playerShot);
             break;
         case RenderCommand::Type::Text:
             m_backend->DrawTextCommand(std::string_view(command.text.data(), command.textLength),

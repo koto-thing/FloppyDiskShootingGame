@@ -161,6 +161,7 @@
     <ClCompile Include="Presentation\ModeSelectionScene\ModeSelectionStateController.cpp" />
     <ClCompile Include="Presentation\Scenes\CreditScene.cpp" />
     <ClCompile Include="Presentation\Scenes\ModeSelectionScene.cpp" />
+    <ClCompile Include="Presentation\Scenes\StoryScene.cpp" />
     <ClCompile Include="Presentation\Scenes\OptionScene.cpp" />
     <ClCompile Include="Presentation\Scenes\TestStage.cpp" />
     <ClCompile Include="Presentation\Scenes\ModelTestScene.cpp" />
@@ -189,6 +190,7 @@
     <ClInclude Include="Presentation\CreditScene\CreditSceneColumn.h" />
     <ClInclude Include="Presentation\CreditScene\CreditSceneContent.h" />
     <ClInclude Include="Presentation\Scenes\ModeSelectionScene.h" />
+    <ClInclude Include="Presentation\Scenes\StoryScene.h" />
     <ClInclude Include="Presentation\Scenes\OptionScene.h" />
     <ClInclude Include="Presentation\Scenes\TestStage.h" />
     <ClInclude Include="Presentation\Scenes\ModelTestScene.h" />
