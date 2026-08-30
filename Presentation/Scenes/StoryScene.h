@@ -42,7 +42,7 @@ private:
 
         /**
          * @brief TAYAMA会長率いる血も涙もない巨大極道組織が無法の宙域を支配している
-         * @details LUMI、RYOTA、BOTAMOCHI、KOTOが率いるヤクザ艦隊は星々を粉砕し、宇宙を恐怖に陥れている
+         * @details LUMI、RYOTA、BOTAMOCHI、KOTOが率いるPANDD艦隊は星々を粉砕し、宇宙を恐怖に陥れている
          */
         "CHAIRMAN TAYAMA AND HIS BLOODTHIRSTY",
         "YAKUZA SYNDICATE RULE THE FRONTIER.",
@@ -84,7 +84,7 @@ private:
 // 鉄の掟を敷くLUMI組長、恐れ知らずの若頭RYOTA、
 // 冷酷なる本部長BOTAMOCHI、そして歴戦の舎弟頭KOTOという無慈悲な指揮系統が、
 // 逆らう者すべてを粉砕していた。
-// 彼らの強大な「ヤクザ艦隊」は罪なき星々を次々と制圧し、宇宙全体を恐怖のどん底に陥れている。
+// 彼らの強大な「PANDD艦隊」は罪なき星々を次々と制圧し、宇宙全体を恐怖のどん底に陥れている。
 //
 // 警察組織すらも極道の力に屈し、腐敗していく中、決して暗黒に屈しない一人の警官がいた。
 // はぐれ者の宇宙警察、MOMIJIである。
