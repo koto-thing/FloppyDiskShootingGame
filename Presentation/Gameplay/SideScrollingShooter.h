@@ -22,6 +22,8 @@ private:
         float x = 0.0f;
         float y = 0.0f;
         float z = 0.0f;
+        float transitionSideX = 0.0f;
+        float transitionSideY = 0.0f;
         float vx = 0.0f;
         float vy = 0.0f;
         float vz = 0.0f;
@@ -33,6 +35,8 @@ private:
         float x = 0.0f;
         float y = 0.0f;
         float z = 0.0f;
+        float transitionSideX = 0.0f;
+        float transitionSideY = 0.0f;
         float baseX = 0.0f;
         float baseY = 0.0f;
         float phase = 0.0f;
@@ -78,6 +82,8 @@ private:
     static float ToWorldY(float y);
     static float FromWorldX(float x);
     static float FromWorldY(float y);
+    static float ToRailZFromSideX(float x);
+    static float ToSideXFromRailZ(float z);
     float RailBlend() const;
     bool IsRailGameplayActive() const;
     bool IsRailRenderActive() const;
