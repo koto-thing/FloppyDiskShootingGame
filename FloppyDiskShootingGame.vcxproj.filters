@@ -23,6 +23,9 @@
     <ClCompile Include="Presentation\Scenes\TitleScene.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Presentation\Scenes\StoryScene.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="Presentation\TitleScene\TitleSceneColumn.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -87,6 +90,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Presentation\Scenes\TitleScene.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Scenes\StoryScene.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Presentation\TitleScene\TitleSceneColumn.h">

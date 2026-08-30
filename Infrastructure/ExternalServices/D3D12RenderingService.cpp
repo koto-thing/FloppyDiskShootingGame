@@ -1,6 +1,91 @@
 #include "D3D12RenderingService.h"
 
 namespace {
+/** @brief 画像を使わず3種類の自機弾を生成する埋め込みHLSL */
+constexpr char PlayerShotShaderCode[] = R"hlsl(
+struct VS_OUTPUT
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+cbuffer ShotBuffer : register(b0)
+{
+    float4x4 u_transform;
+    float4 u_color;
+    float u_time;
+    float u_shotType;
+    float u_direction;
+    float u_padding;
+};
+
+VS_OUTPUT VSPlayerShot(uint vertexId : SV_VertexID)
+{
+    VS_OUTPUT output;
+    float2 localPosition;
+    localPosition.x = float(vertexId & 2) - 1.0f;
+    localPosition.y = float((vertexId & 1) << 1) - 1.0f;
+
+    output.position = mul(float4(localPosition, 0.0f, 1.0f), u_transform);
+    output.uv = localPosition;
+    return output;
+}
+
+float4 PSPlayerShot(VS_OUTPUT input) : SV_TARGET
+{
+    float2 uv = input.uv;
+    float pulse = 0.88f + sin(u_time * 0.18f) * 0.12f;
+    float3 color;
+    float alpha;
+
+    if (u_shotType < 0.5f)
+    {
+        // HOMING: 明るい弾頭と後方へ細く消える青緑色の尾
+        float headDistance = length((uv - float2(0.38f, 0.0f)) * float2(1.0f, 1.35f));
+        float head = 1.0f - smoothstep(0.18f, 0.68f, headDistance);
+        float tailWidth = 0.08f + saturate((uv.x + 1.0f) * 0.24f);
+        float tail = (1.0f - smoothstep(tailWidth, tailWidth + 0.18f, abs(uv.y))) *
+            saturate(1.0f - (uv.x - 0.10f) * 0.75f) * saturate(uv.x + 1.0f);
+        float core = 1.0f - smoothstep(0.02f, 0.12f, abs(uv.y));
+        alpha = saturate(head + tail * 0.72f);
+        color = lerp(float3(0.02f, 0.45f, 0.95f), float3(0.75f, 1.0f, 1.0f),
+            saturate(head + core * tail)) * pulse;
+    }
+    else if (u_shotType < 1.5f)
+    {
+        // PIERCING: 白い芯を紫の発光が包む細長いレーザー
+        float endMask = 1.0f - smoothstep(0.72f, 1.0f, abs(uv.x));
+        float core = 1.0f - smoothstep(0.02f, 0.13f, abs(uv.y));
+        float glow = 1.0f - smoothstep(0.08f, 0.72f, abs(uv.y));
+        alpha = saturate((core + glow * 0.65f) * endMask);
+        color = lerp(float3(0.52f, 0.05f, 1.0f), float3(1.0f, 0.95f, 1.0f), core) * pulse;
+    }
+    else if (u_shotType < 2.5f)
+    {
+        // SPREAD: 中心核と発光リングを持つ赤紫色の小型光弾
+        float distanceFromCenter = length(uv);
+        float core = 1.0f - smoothstep(0.05f, 0.34f, distanceFromCenter);
+        float body = 1.0f - smoothstep(0.30f, 0.78f, distanceFromCenter);
+        float ring = 1.0f - smoothstep(0.035f, 0.13f, abs(distanceFromCenter - 0.58f));
+        alpha = saturate(body + ring * 0.72f);
+        color = lerp(float3(1.0f, 0.08f, 0.32f), float3(1.0f, 0.82f, 1.0f),
+            saturate(core + ring * 0.35f)) * pulse;
+    }
+    else
+    {
+        // NORMAL: 機首中央から飛ぶ白青色の小型レーザー
+        float endMask = 1.0f - smoothstep(0.74f, 1.0f, abs(uv.x));
+        float core = 1.0f - smoothstep(0.02f, 0.19f, abs(uv.y));
+        float glow = 1.0f - smoothstep(0.10f, 0.74f, abs(uv.y));
+        alpha = saturate((core + glow * 0.48f) * endMask);
+        color = lerp(float3(0.05f, 0.58f, 1.0f), float3(0.92f, 1.0f, 1.0f), core) * pulse;
+    }
+
+    if (alpha < 0.01f) discard;
+    return float4(color, alpha);
+}
+)hlsl";
+
 /** @brief 2D描画でも共有する256バイト定数バッファの先頭部分 */
 struct RendererTransformBufferData {
     DirectX::XMFLOAT4X4 u_wvpMatrix;
@@ -506,6 +591,52 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
+    /** @brief C++文字列から自機弾専用シェーダーをコンパイルする */
+    ComPtr<ID3DBlob> playerShotVertexShader;
+    ComPtr<ID3DBlob> playerShotPixelShader;
+    error.Reset();
+    const UINT shaderCompileFlags = D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION;
+    HRESULT hrPlayerShotVS = D3DCompile(
+        PlayerShotShaderCode, sizeof(PlayerShotShaderCode) - 1, "EmbeddedPlayerShotShader",
+        nullptr, nullptr, "VSPlayerShot", "vs_5_0", shaderCompileFlags, 0,
+        &playerShotVertexShader, &error);
+    if (FAILED(hrPlayerShotVS)) {
+        if (error) MessageBoxA(NULL, static_cast<char*>(error->GetBufferPointer()),
+            "Player Shot Shader Compile Error (VS)", MB_OK);
+        return false;
+    }
+
+    error.Reset();
+    HRESULT hrPlayerShotPS = D3DCompile(
+        PlayerShotShaderCode, sizeof(PlayerShotShaderCode) - 1, "EmbeddedPlayerShotShader",
+        nullptr, nullptr, "PSPlayerShot", "ps_5_0", shaderCompileFlags, 0,
+        &playerShotPixelShader, &error);
+    if (FAILED(hrPlayerShotPS)) {
+        if (error) MessageBoxA(NULL, static_cast<char*>(error->GetBufferPointer()),
+            "Player Shot Shader Compile Error (PS)", MB_OK);
+        return false;
+    }
+
+    /** @brief 発光を重ねられる加算ブレンドの自機弾PSOを作成する */
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC playerShotPsoDesc = psoDesc;
+    playerShotPsoDesc.VS = {
+        playerShotVertexShader->GetBufferPointer(), playerShotVertexShader->GetBufferSize() };
+    playerShotPsoDesc.PS = {
+        playerShotPixelShader->GetBufferPointer(), playerShotPixelShader->GetBufferSize() };
+    playerShotPsoDesc.BlendState.RenderTarget[0] = {
+        TRUE, FALSE,
+        D3D12_BLEND_SRC_ALPHA, D3D12_BLEND_ONE, D3D12_BLEND_OP_ADD,
+        D3D12_BLEND_ONE, D3D12_BLEND_ONE, D3D12_BLEND_OP_ADD,
+        D3D12_LOGIC_OP_NOOP,
+        D3D12_COLOR_WRITE_ENABLE_ALL,
+    };
+    if (FAILED(m_device->CreateGraphicsPipelineState(
+        &playerShotPsoDesc, IID_PPV_ARGS(&m_pipelineStatePlayerShot)))) {
+        MessageBoxA(NULL, "CreateGraphicsPipelineState (PlayerShot) Failed",
+            "PSO Creation Error", MB_OK);
+        return false;
+    }
+
     return true;
 }
 
@@ -606,6 +737,8 @@ void D3D12RenderingService::SetPipelineState(int type) {
         m_commandList->SetPipelineState(m_pipelineStateSpellCircle.Get());
     } else if (type == 3) {
         m_commandList->SetPipelineState(m_pipelineStateModel3D.Get());
+    } else if (type == 4) {
+        m_commandList->SetPipelineState(m_pipelineStatePlayerShot.Get());
     }
 }
 
@@ -748,6 +881,34 @@ void D3D12RenderingService::DrawPrimitive3D(const Primitive3D& primitive) {
         static_cast<UINT64>(m_constantBufferCursor) * 256;
     m_commandList->SetGraphicsRootConstantBufferView(0, address);
     m_commandList->DrawInstanced(vertexCount, 1, 0, 0);
+    ++m_constantBufferCursor;
+}
+
+/** @brief 埋め込みHLSLを使用して自機弾を描画する */
+void D3D12RenderingService::DrawPlayerShot(const PlayerShotVisual& shot) {
+    if (m_constantBufferCursor >= MAX_CONSTANT_BUFFER_ELEMENTS) return;
+
+    /** @brief 自機弾の位置と大きさを定数バッファへ設定する */
+    auto* cbData = reinterpret_cast<RendererTransformBufferData*>(
+        reinterpret_cast<char*>(m_cbvCpuData) + static_cast<size_t>(m_constantBufferCursor) * 256);
+    const DirectX::XMMATRIX matrix = DirectX::XMMatrixScaling(shot.size.x, shot.size.y, 1.0f) *
+        DirectX::XMMatrixRotationZ(shot.direction) *
+        DirectX::XMMatrixTranslation(shot.position.x, shot.position.y, 0.0f);
+    DirectX::XMStoreFloat4x4(&cbData->u_wvpMatrix, DirectX::XMMatrixTranspose(matrix));
+    cbData->u_Color = {1.0f, 1.0f, 1.0f, 1.0f};
+    cbData->u_time = shot.time;
+    cbData->u_shapeType = static_cast<float>(shot.type);
+    cbData->u_rotAngle = shot.direction;
+
+    /** @brief 自機弾専用PSOで4頂点の矩形を描画する */
+    m_currentPipelineType = 4;
+    m_commandList->SetPipelineState(m_pipelineStatePlayerShot.Get());
+    m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
+    m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+    const D3D12_GPU_VIRTUAL_ADDRESS address = m_constantBuffer->GetGPUVirtualAddress() +
+        static_cast<UINT64>(m_constantBufferCursor) * 256;
+    m_commandList->SetGraphicsRootConstantBufferView(0, address);
+    m_commandList->DrawInstanced(4, 1, 0, 0);
     ++m_constantBufferCursor;
 }
 

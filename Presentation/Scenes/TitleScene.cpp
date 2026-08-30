@@ -18,7 +18,7 @@ void TitleScene::Initialize() {
         "START GAME",
         Vector2 { 0.0f, 0.20f }
     );
-    m_startButton->SetOnClick([this]() { changeScene(SceneType::TestStage); });
+    m_startButton->SetOnClick([this]() { changeScene(SceneType::ModeSelection); });
 
     /** @brief ゲーム開始ボタンの下に3Dモデルテスト用ボタンを配置する */
     m_modelTestButton = std::make_unique<Button>(
@@ -129,7 +129,7 @@ void TitleScene::Dispose() {
 void TitleScene::Render(Renderer& renderer) {
     // 画面上部に "TITLE" と表示
     renderer.DrawText(
-        "SPACE YANKEES",
+        "SPACE YAKUZA",
         { -0.4f, 0.6f },
         0.04f,
         { 1.0f, 1.0f, 1.0f, 1.0f },
@@ -141,22 +141,22 @@ void TitleScene::Render(Renderer& renderer) {
         m_creditButton->Render(renderer);
     }
     
-    /** @brief ゲーム開始ボタンを描画する */
+    // ゲーム開始ボタンを描画する
     if (m_startButton != nullptr) {
         m_startButton->Render(renderer);
     }
 
-    /** @brief 3Dモデルテストボタンを描画する */
+    // 3Dモデルテストボタンを描画する
     if (m_modelTestButton != nullptr) {
         m_modelTestButton->Render(renderer);
     }
 
-    /** @brief オプションボタンを描画する */
+    // オプションボタンを描画する
     if (m_optionButton != nullptr) {
         m_optionButton->Render(renderer);
     }
 
-    /** @brief ゲーム終了ボタンを描画する */
+    // ゲーム終了ボタンを描画する
     if (m_exitButton != nullptr) {
         m_exitButton->Render(renderer);
     }

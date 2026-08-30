@@ -48,6 +48,7 @@ struct RenderCommand {
         Circle,
         Rect,
         Primitive3D,
+        PlayerShot,
         Text,
         Pipeline,
         SetCamera,
@@ -58,6 +59,7 @@ struct RenderCommand {
     Circle circle {};
     Rect rect {};
     Primitive3D primitive {};
+    PlayerShotVisual playerShot {};
     Vector2 position {};
     float size = 0.0f;
     float characterSpacing = 0.0f;
@@ -104,6 +106,8 @@ public:
                                   const Vector2& offset = Vector2::Zero);
     /** @brief 型付き3Dプリミティブを描画コマンドとして記録する */
     void Draw(const Primitive3D& primitive);
+    /** @brief プロシージャル自機弾を描画コマンドとして記録する */
+    void DrawPlayerShot(const PlayerShotVisual& shot);
     /**
      * @brief 文字を描画コマンドとして記録する
      * @param characterSpacing 文字ごとに追加する字間
