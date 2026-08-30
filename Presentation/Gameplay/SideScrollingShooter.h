@@ -91,6 +91,7 @@ private:
     void ConfigureRailCamera(Camera3D& camera, Renderer& renderer) const;
     void Render2D(Renderer& renderer) const;
     void Render3D(Renderer& renderer) const;
+    void DrawBossHud(Renderer& renderer) const;
     static void DrawShape(Renderer& renderer,
         float x, float y, float w, float h, const float color[4]);
     static void DrawModelPrimitive(Renderer& renderer, const Camera3D& camera, int shape,

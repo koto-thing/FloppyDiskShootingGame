@@ -650,6 +650,22 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
         0.16f, 0.16f, length, color, yaw);
 }
 
+void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
+    if (!m_bossBattle || m_clear) {
+        return;
+    }
+
+    // 2D/3D共通のボスHP表示をカメラリセット後のUI座標へ描画する
+    constexpr float BossBarBack[4] = { 0.20f, 0.08f, 0.22f, 1.0f };
+    constexpr float BossBarFill[4] = { 0.95f, 0.15f, 0.45f, 1.0f };
+    const float hpRate = static_cast<float>(m_bossHp) / BossMaxHp;
+    DrawShape(renderer, 0.0f, 0.76f, 0.62f, 0.025f, BossBarBack);
+    DrawShape(renderer, -0.62f * (1.0f - hpRate), 0.76f,
+        0.62f * hpRate, 0.018f, BossBarFill);
+    renderer.DrawText("BOSS", { 0.02f, 0.86f }, 0.014f,
+        { 1.0f, 0.45f, 0.65f, 1.0f });
+}
+
 void SideScrollingShooter::Render(Renderer& renderer) const {
     if (IsRailRenderActive()) {
         Render3D(renderer);
@@ -712,16 +728,7 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     renderer.DrawText("VIEW: SIDE 2D", { 0.50f, 0.86f }, 0.014f,
         { ModeTextColor[0], ModeTextColor[1], ModeTextColor[2], ModeTextColor[3] });
 
-    if (m_bossBattle && !m_clear) {
-        constexpr float BossBarBack[4] = { 0.20f, 0.08f, 0.22f, 1.0f };
-        constexpr float BossBarFill[4] = { 0.95f, 0.15f, 0.45f, 1.0f };
-        const float hpRate = static_cast<float>(m_bossHp) / BossMaxHp;
-        DrawShape(renderer, 0.0f, 0.76f, 0.62f, 0.025f, BossBarBack);
-        DrawShape(renderer, -0.62f * (1.0f - hpRate), 0.76f,
-            0.62f * hpRate, 0.018f, BossBarFill);
-        renderer.DrawText("BOSS", { 0.02f, 0.86f }, 0.014f,
-            { 1.0f, 0.45f, 0.65f, 1.0f });
-    }
+    DrawBossHud(renderer);
     if (m_gameOver) {
         renderer.DrawText("GAME OVER", { -0.20f, 0.12f }, 0.045f, { 1.0f, 0.2f, 0.2f, 1.0f });
         renderer.DrawText("PRESS R TO RETRY", { -0.22f, -0.05f }, 0.020f, { 1, 1, 1, 1 });
@@ -827,6 +834,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
         renderer.DrawText("CAMERA SHIFT", { -0.16f, -0.02f }, 0.026f,
             { 0.55f, 0.85f, 1.0f, 1.0f });
     }
+    DrawBossHud(renderer);
     if (m_gameOver) {
         renderer.DrawText("GAME OVER", { -0.20f, 0.12f }, 0.045f, { 1.0f, 0.2f, 0.2f, 1.0f });
         renderer.DrawText("PRESS R TO RETRY", { -0.22f, -0.05f }, 0.020f, { 1, 1, 1, 1 });
