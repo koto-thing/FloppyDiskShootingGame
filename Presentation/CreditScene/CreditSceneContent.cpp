@@ -87,11 +87,11 @@ CreditSceneContent CreditSceneContent::CreateDefault() {
 }
 
 /**
- * @brief クレジットの表示列を追加します
+ * @brief クレジットの表示列を追加
  * @param column 追加するクレジットの表示列
  */
 void CreditSceneContent::AddColumn(CreditSceneColumn column) {
-    // 追加順を上から下へ並ぶ表示順として保持します
+    // 追加順を上から下へ並ぶ表示順として保持
     m_columns.push_back(std::move(column));
 }
 
@@ -104,7 +104,7 @@ const std::vector<CreditSceneColumn>& CreditSceneContent::GetColumns() const {
 }
 
 /**
- * @brief 先頭行からクレジット末尾までのスクロール距離を取得します
+ * @brief 先頭行からクレジット末尾までのスクロール距離を取得
  * @return NDC座標系におけるクレジット全体の高さ
  */
 float CreditSceneContent::GetScrollLength() const {

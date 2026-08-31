@@ -49,6 +49,7 @@ struct RenderCommand {
         Rect,
         Primitive3D,
         PlayerShot,
+        Explosion,
         Text,
         Pipeline,
         SetCamera,
@@ -60,6 +61,7 @@ struct RenderCommand {
     Rect rect {};
     Primitive3D primitive {};
     PlayerShotVisual playerShot {};
+    ExplosionVisual explosion {};
     Vector2 position {};
     float size = 0.0f;
     float characterSpacing = 0.0f;
@@ -108,6 +110,8 @@ public:
     void Draw(const Primitive3D& primitive);
     /** @brief プロシージャル自機弾を描画コマンドとして記録する */
     void DrawPlayerShot(const PlayerShotVisual& shot);
+    /** @brief プロシージャル爆発エフェクトを描画コマンドとして記録する */
+    void DrawExplosion(const ExplosionVisual& explosion);
     /**
      * @brief 文字を描画コマンドとして記録する
      * @param characterSpacing 文字ごとに追加する字間

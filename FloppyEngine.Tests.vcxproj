@@ -60,6 +60,8 @@
     <ClCompile Include="Tests\CameraTests.cpp" />
     <ClCompile Include="Tests\Geometry3DTests.cpp" />
     <ClCompile Include="Tests\UITests.cpp" />
+    <ClCompile Include="Tests\ScoreRepositoryTests.cpp" />
+    <ClCompile Include="Infrastructure\Repositories\ScoreRepository.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="FloppyEngine.vcxproj">

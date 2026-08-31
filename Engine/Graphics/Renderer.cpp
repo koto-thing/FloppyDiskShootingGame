@@ -49,6 +49,12 @@ void Renderer::DrawPlayerShot(const PlayerShotVisual& shot) {
     command->playerShot = shot;
 }
 
+void Renderer::DrawExplosion(const ExplosionVisual& explosion) {
+    RenderCommand* command = TryAppend(RenderCommand::Type::Explosion);
+    if (command == nullptr) return;
+    command->explosion = explosion;
+}
+
 void Renderer::DrawText(std::string_view text, const Vector2& position, float size, const ColorF& color,
                         float characterSpacing) {
     RenderCommand* command = TryAppend(RenderCommand::Type::Text);
@@ -210,6 +216,9 @@ void Renderer::Flush() {
             break;
         case RenderCommand::Type::PlayerShot:
             m_backend->DrawPlayerShot(command.playerShot);
+            break;
+        case RenderCommand::Type::Explosion:
+            m_backend->DrawExplosion(command.explosion);
             break;
         case RenderCommand::Type::Text:
             m_backend->DrawTextCommand(std::string_view(command.text.data(), command.textLength),

@@ -53,6 +53,16 @@ public:
     void ProcessInput();
     void Tick();
     void Render(Renderer& renderer) const;
+    /**
+     * @brief 全ステージをクリア済みか取得する
+     * @return 最終ステージのクリア演出中ならtrue
+     */
+    bool IsAllStagesCleared() const;
+    /**
+     * @brief 現在の合計スコアを取得する
+     * @return 現在の合計スコア
+     */
+    int Score() const;
 
 private:
     class Stage;
@@ -102,6 +112,33 @@ private:
     };
     static_assert(BossPartCount == 5);
 
+    /** @brief ボス戦の攻撃フェーズ */
+    enum BossPhase {
+        BossNormalPhase1,
+        BossSpecialPhase1,
+        BossNormalPhase2,
+        BossSpecialPhase2,
+        BossPhaseCount
+    };
+    static_assert(BossPhaseCount == 4);
+
+    /**
+     * @brief 本体HPから現在の攻撃フェーズを取得する
+     * @param hp 現在の本体HP
+     * @param maxHp 本体の最大HP
+     * @return 通常、特殊、通常、特殊の順で進むフェーズ番号
+     */
+    static constexpr int BossPhaseForHp(int hp, int maxHp) {
+        if (maxHp <= 0) return BossNormalPhase1;
+        const int clampedHp = hp < 0 ? 0 : (hp > maxHp ? maxHp : hp);
+        const int phase = (maxHp - clampedHp) * BossPhaseCount / maxHp;
+        return phase < BossPhaseCount ? phase : BossPhaseCount - 1;
+    }
+    static_assert((480 - 480) * BossPhaseCount / 480 == BossNormalPhase1);
+    static_assert((480 - 360) * BossPhaseCount / 480 == BossSpecialPhase1);
+    static_assert((480 - 240) * BossPhaseCount / 480 == BossNormalPhase2);
+    static_assert((480 - 1) * BossPhaseCount / 480 == BossSpecialPhase2);
+
     struct Enemy {
         float x = 0.0f;
         float y = 0.0f;
@@ -116,8 +153,37 @@ private:
         int type = 0;
         int age = 0;
         int shotInterval = 0;
+        int bossPhase = BossNormalPhase1;
         std::array<int, BossPartCount> bossPartHp {};
         const EnemyBehavior* behavior = nullptr;
+        bool active = false;
+    };
+
+    /** @brief 弾が敵へ命中した位置に表示する短時間の爆発 */
+    struct Explosion {
+        float x = 0.0f;
+        float y = 0.0f;
+        float z = 0.0f;
+        int age = 0;
+        bool active = false;
+    };
+
+    /** @brief 撃破された機体モデルから分離して飛散する部品 */
+    struct Debris {
+        float x = 0.0f;
+        float y = 0.0f;
+        float z = 0.0f;
+        float vx = 0.0f;
+        float vy = 0.0f;
+        float vz = 0.0f;
+        float yaw = 0.0f;
+        float spin = 0.0f;
+        float width = 0.0f;
+        float height = 0.0f;
+        float depth = 0.0f;
+        std::array<float, 4> color {};
+        int shape = 1;
+        int age = 0;
         bool active = false;
     };
 
@@ -150,19 +216,25 @@ private:
     static constexpr int ShotCapacity = 64;
     static constexpr int EnemyCapacity = 12;
     static constexpr int ItemCapacity = 48;
+    static constexpr int ExplosionCapacity = 32;
+    static constexpr int ExplosionLifetimeFrames = 18;
+    static constexpr int DebrisCapacity = 96;
+    static constexpr int DebrisLifetimeFrames = 36;
+    static constexpr int BoneArchMaxHp = 12000;
     static constexpr float MaxPower = 4.0f;
     static constexpr int ChapterLengthFrames = 500;
     static constexpr int ChapterResultCountUpFrames = 120;
     static constexpr int ChapterResultDisplayFrames = 180;
+    static constexpr int RestartDisplayFrames = 180;
     static constexpr float BossStartDistance = 12.0f;
     static constexpr int BossMaxHp = 480;
     static constexpr int ViewTransitionFrames = 90;
     static constexpr float WorldXScale = 7.0f;
     static constexpr float WorldYScale = 4.4f;
     /** @brief 2D画面のプレイ領域左端に対応する自機中心のX座標 */
-    static constexpr float Side2DPlayerMinX = -1.82f;
+    static constexpr float Side2DPlayerMinX = -2.00f;
     /** @brief 2D画面のプレイ領域右端に対応する自機中心のX座標 */
-    static constexpr float Side2DPlayerMaxX = 1.82f;
+    static constexpr float Side2DPlayerMaxX = 2.00f;
     /** @brief フッター直上のプレイ領域下端に対応する自機中心のY座標 */
     static constexpr float Side2DPlayerMinY = -1.38f;
     /** @brief ヘッダー直下のプレイ領域上端に対応する自機中心のY座標 */
@@ -208,6 +280,47 @@ private:
     void TickPlayer();
     void TickEnemies();
     void TickShots();
+    /** @brief ステージ固有の破壊可能ギミックを更新する */
+    void TickStageGimmicks();
+    /** @brief ステージ固有の破壊可能ギミックを初期状態へ戻す */
+    void ResetStageGimmicks();
+    /**
+     * @brief 自機弾がステージ固有ギミックへ命中した場合にダメージを適用する
+     * @param shot 命中判定対象の自機弾
+     * @return ギミックへ命中した場合true
+     */
+    bool TryDamageStageGimmick(Shot& shot);
+    /**
+     * @brief 砂漠を横切る骨アーチへ指定球が接触したか判定する
+     * @param x 判定対象のゲーム座標X
+     * @param y 判定対象のゲーム座標Y
+     * @param z 判定対象のレール座標Z
+     * @param radius 判定対象の半径
+     * @return 骨アーチに接触している場合true
+     */
+    bool HitsDesertBoneArch(float x, float y, float z, float radius) const;
+    /**
+     * @brief ステージ1を横切る隕石へ指定球が接触したか判定する
+     * @param x 判定対象のゲーム座標X
+     * @param y 判定対象のゲーム座標Y
+     * @param z 判定対象のレール座標Z
+     * @param radius 判定対象の半径
+     * @return 隕石に接触している場合true
+     */
+    bool HitsStage1Meteor(float x, float y, float z, float radius) const;
+    /**
+     * @brief 海面を横断するウミヘビへ指定球が接触したか判定する
+     * @param x 判定対象のゲーム座標X
+     * @param y 判定対象のゲーム座標Y
+     * @param z 判定対象のレール座標Z
+     * @param radius 判定対象の半径
+     * @return ウミヘビに接触している場合true
+     */
+    bool HitsOceanSeaSerpent(float x, float y, float z, float radius) const;
+    /** @brief 生存中の爆発エフェクトを更新する */
+    void TickExplosions();
+    /** @brief 飛散中の機体部品を更新する */
+    void TickDebris();
     /** @brief 取得アイテムを更新して自機との取得判定を行う */
     void TickItems();
     /** @brief ボス戦前会話を進行する */
@@ -222,14 +335,41 @@ private:
     /** @brief 指定座標にScoreアイテムを生成する */
     void SpawnScoreItem(float x, float y, float z, int value);
     void StartBossBattle();
+    /**
+     * @brief ボス部位から現在フェーズに対応する弾幕を発射する
+     * @param boss 弾幕を発射するボス
+     */
+    void FireBossPartBarrage(const Enemy& boss);
+    /**
+     * @brief ボス本体へダメージを与え、攻撃フェーズを更新する
+     * @param boss ダメージ対象のボス
+     * @param damage 与えるダメージ
+     * @return ボスを撃破した場合true
+     */
+    bool DamageBoss(Enemy& boss, int damage);
+    /**
+     * @brief ボス撃破後の報酬とクリア状態を設定する
+     * @param boss 撃破したボス
+     */
+    void DefeatBoss(Enemy& boss);
     /** @brief 次のステージの戦闘状態を初期化する */
     void StartNextStage();
     void SpawnShot(float x, float y, float vx, float vy, bool enemy,
         float z = -1.0f, float railSpeed = -1.0f, int damage = 1);
     void SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy);
+    /** @brief 弾の命中位置へ爆発エフェクトを生成する */
+    void SpawnExplosion(float x, float y, float z);
+    /** @brief 機体モデルを構成する部品を飛散エフェクトとして生成する */
+    void SpawnEnemyDebris(const Enemy& enemy, int bossPart = -1);
+    /** @brief 飛散するモデル部品を固定長プールへ追加する */
+    void SpawnDebrisPiece(float x, float y, float z, float vx, float vy, float vz,
+        float yaw, float spin, int shape, float width, float height, float depth,
+        const float color[4]);
     void FireSpecialShots();
     void UpdateHomingShot(Shot& shot);
     void DamagePlayer();
+    /** @brief 現在のチャプターを開始時状態へ戻す */
+    void RestartCurrentChapter();
     /**
      * @brief 自機弾が未破壊のボス部位へ命中したか判定する
      * @param shot 判定対象の自機弾
@@ -260,6 +400,30 @@ private:
     void ConfigureRailCamera(Camera3D& camera, Renderer& renderer) const;
     void Render2D(Renderer& renderer) const;
     void Render3D(Renderer& renderer) const;
+    /**
+     * @brief プリミティブ球だけで構成した砂漠の巨大骨アーチを描画する
+     * @param renderer 描画先レンダラー
+     * @param camera 現在の3Dカメラ
+     * @param railWeight 横視点からレール視点への補間率
+     * @return なし
+     */
+    void DrawDesertBoneArch(Renderer& renderer, const Camera3D& camera, float railWeight) const;
+    /**
+     * @brief プリミティブ球だけで構成したステージ1の巨大隕石を描画する
+     * @param renderer 描画先レンダラー
+     * @param camera 現在の3Dカメラ
+     * @param railWeight 横視点からレール視点への補間率
+     * @return なし
+     */
+    void DrawStage1Meteor(Renderer& renderer, const Camera3D& camera, float railWeight) const;
+    /**
+     * @brief 海面から飛び出す巨大ウミヘビを描画する
+     * @param renderer 描画先レンダラー
+     * @param camera 現在の3Dカメラ
+     * @param railWeight 横視点からレール視点への補間率
+     * @return なし
+     */
+    void DrawOceanSeaSerpent(Renderer& renderer, const Camera3D& camera, float railWeight) const;
     void DrawBossHud(Renderer& renderer) const;
     /** @brief ボス戦前会話を画面へ描画する */
     void DrawBossStory(Renderer& renderer) const;
@@ -270,16 +434,24 @@ private:
     static void DrawPlayerModel(Renderer& renderer, const Camera3D& camera,
         float x, float y, float z, bool visible, float yaw = 0.0f);
     static void DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw = 0.0f);
-    static void DrawShotModel(Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw = 0.0f);
+    void DrawShotModel(Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw = 0.0f) const;
+    /** @brief 爆発エフェクトをHLSLへ渡す描画コマンドとして記録する */
+    static void DrawExplosion(Renderer& renderer, const Camera3D& camera, const Explosion& explosion);
+    /** @brief 飛散中の機体部品を描画する */
+    static void DrawDebris(Renderer& renderer, const Camera3D& camera, const Debris& debris);
     /** @brief 取得アイテムを描画する */
     static void DrawItemModel(Renderer& renderer, const Camera3D& camera,
         const Item& item, float yaw = 0.0f);
     /** @brief チャプター終了時の戦績を描画する */
     void DrawChapterResult(Renderer& renderer) const;
+    /** @brief リスタート中のカウントダウンを描画する */
+    void DrawRestart(Renderer& renderer) const;
 
     std::array<Shot, ShotCapacity> m_shots {};
     std::array<Enemy, EnemyCapacity> m_enemies {};
     std::array<Item, ItemCapacity> m_items {};
+    std::array<Explosion, ExplosionCapacity> m_explosions {};
+    std::array<Debris, DebrisCapacity> m_debris {};
     AudioService* m_audio = nullptr;
     const Stage* m_stage = nullptr;
     PlayerType m_playerType = Homing;
@@ -292,25 +464,33 @@ private:
     int m_shotCooldown = 0;
     int m_specialShotCooldown = 0;
     int m_invincible = 0;
-    int m_lives = 3;
     int m_score = 0;
     int m_kills = 0;
     int m_bossHp = 0;
+    float m_displayBossHp = 0.0f;
     int m_bossStoryLine = 0;
     bool m_bossStoryActive = false;
     int m_stageNumber = 1;
     int m_chapterNumber = 1;
     std::array<int, 3> m_chapterRetryCounts {};
     ChapterResult m_chapterResult {};
+    float m_chapterStartPower = 0.0f;
+    int m_chapterStartScore = 0;
+    int m_chapterStartKills = 0;
     int m_chapterResultTimer = 0;
+    int m_restartTimer = 0;
     float m_power = 0.0f;
     int m_clearTimer = 0;
+    float m_meteorTravel = 0.0f;
+    float m_meteorScale = 1.0f;
+    bool m_meteorDestroyed = false;
+    int m_boneArchHp = BoneArchMaxHp;
+    bool m_boneArchDestroyed = false;
     bool m_moveLeft = false;
     bool m_moveRight = false;
     bool m_moveUp = false;
     bool m_moveDown = false;
     bool m_fire = false;
-    bool m_gameOver = false;
     bool m_clear = false;
     bool m_bossBattle = false;
     bool m_bossBattlePending = false;

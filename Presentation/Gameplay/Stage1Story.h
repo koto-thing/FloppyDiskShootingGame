@@ -13,17 +13,19 @@ struct BossStoryLine {
 struct BossStory {
     const BossStoryLine* lines;
     int lineCount;
+    const char* bossName;
 };
 
 namespace BossStories {
 /**
  * @brief 台詞配列から会話定義を生成する
  * @param lines 会話に使用する台詞配列
- * @return 台詞数を含む会話定義
+ * @param bossName HUDに表示するボス名
+ * @return 台詞数とボス名を含む会話定義
  */
 template <std::size_t LineCount>
-constexpr BossStory Create(const BossStoryLine (&lines)[LineCount]) {
-    return {lines, static_cast<int>(LineCount)};
+constexpr BossStory Create(const BossStoryLine (&lines)[LineCount], const char* bossName) {
+    return {lines, static_cast<int>(LineCount), bossName};
 }
 
 inline constexpr BossStoryLine Stage1[] = {
@@ -75,11 +77,11 @@ inline constexpr BossStoryLine Stage5[] = {
  */
 inline constexpr BossStory ForStage(int stageNumber) {
     switch (stageNumber) {
-    case 2: return Create(Stage2);
-    case 3: return Create(Stage3);
-    case 4: return Create(Stage4);
-    case 5: return Create(Stage5);
-    default: return Create(Stage1);
+    case 2: return Create(Stage2, "BOSS");
+    case 3: return Create(Stage3, "BOSS");
+    case 4: return Create(Stage4, "BOSS");
+    case 5: return Create(Stage5, "BOSS");
+    default: return Create(Stage1, "KOTO");
     }
 }
 }

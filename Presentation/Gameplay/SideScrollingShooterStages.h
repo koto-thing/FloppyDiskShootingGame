@@ -49,6 +49,13 @@ public:
     virtual int BossMaxHp() const {
         return BossEnemyBehaviorInstance().MaxHpForStage(StageIndex());
     }
+    /**
+     * @brief 撃破時の飛散部品に重力を適用するか取得する
+     * @return 重力を適用するステージの場合true
+     */
+    virtual bool HasDebrisGravity() const {
+        return false;
+    }
     virtual bool TrySelectEnemySpawn(int frame, EnemySpawnRule& spawn, int& chapterNumber) const = 0;
     virtual void ConfigureEnemy(SideScrollingShooter& shooter, Enemy& enemy,
         int enemyType, int frame, int kills, bool railMode) const {
@@ -60,6 +67,39 @@ public:
     }
     virtual int BossBulletCount(bool railMode) const = 0;
     virtual BossBullet GetBossBullet(int index, bool railMode) const = 0;
+    /**
+     * @brief 指定部位・フェーズの弾数を取得する
+     * @param part 発射するボス部位
+     * @param phase 現在のボス攻撃フェーズ
+     * @param railMode レール表示中か
+    * @return 発射する弾数
+    */
+    virtual int BossPartBulletCount(BossPart part, BossPhase phase, bool railMode) const {
+        if (part == BossNose) return BossBulletCount(railMode);
+        if (part == BossLeftWing || part == BossRightWing) {
+            return phase == BossSpecialPhase1 || phase == BossSpecialPhase2 ? 3 : 2;
+        }
+        return phase == BossSpecialPhase1 || phase == BossSpecialPhase2 ? 2 : 1;
+    }
+    /**
+     * @brief 指定部位・フェーズの弾幕内の弾を取得する
+     * @param part 発射するボス部位
+     * @param phase 現在のボス攻撃フェーズ
+     * @param index 弾幕内の弾番号
+     * @param railMode レール表示中か
+     * @return 発射位置オフセットと速度
+     */
+    virtual BossBullet GetBossPartBullet(BossPart part, BossPhase phase, int index, bool railMode) const {
+        const int baseCount = BossBulletCount(railMode);
+        const int patternIndex = part == BossNose ? index :
+            (part == BossLeftWing ? 0 : (part == BossRightWing ? baseCount - 1 : baseCount / 2));
+        BossBullet bullet = GetBossBullet(patternIndex, railMode);
+        if (phase == BossSpecialPhase1 || phase == BossSpecialPhase2) {
+            bullet.vx *= 1.35f;
+            bullet.vy += (index - BossPartBulletCount(part, phase, railMode) / 2) * 0.010f;
+        }
+        return bullet;
+    }
 
 protected:
     bool TrySelectByChapters(const Chapter* chapters, int chapterCount, int frame,

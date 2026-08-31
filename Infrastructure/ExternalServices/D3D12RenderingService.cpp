@@ -86,6 +86,50 @@ float4 PSPlayerShot(VS_OUTPUT input) : SV_TARGET
 }
 )hlsl";
 
+/** @brief 敵命中時に火花と衝撃波を描く埋め込みHLSL */
+constexpr char ExplosionShaderCode[] = R"hlsl(
+struct VS_OUTPUT
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+cbuffer ExplosionBuffer : register(b0)
+{
+    float4x4 u_transform;
+    float4 u_color;
+    float u_progress;
+    float u_shapeType;
+    float u_rotation;
+    float u_padding;
+};
+
+VS_OUTPUT VSExplosion(uint vertexId : SV_VertexID)
+{
+    VS_OUTPUT output;
+    float2 localPosition;
+    localPosition.x = float(vertexId & 2) - 1.0f;
+    localPosition.y = float((vertexId & 1) << 1) - 1.0f;
+    output.position = mul(float4(localPosition, 0.0f, 1.0f), u_transform);
+    output.uv = localPosition;
+    return output;
+}
+
+float4 PSExplosion(VS_OUTPUT input) : SV_TARGET
+{
+    float distanceFromCenter = length(input.uv);
+    float progress = saturate(u_progress);
+    float core = 1.0f - smoothstep(0.03f, 0.34f + progress * 0.18f, distanceFromCenter);
+    float ringRadius = 0.16f + progress * 0.78f;
+    float ring = 1.0f - smoothstep(0.025f, 0.12f, abs(distanceFromCenter - ringRadius));
+    float sparks = saturate(sin(atan2(input.uv.y, input.uv.x) * 9.0f + progress * 28.0f) * 0.5f + 0.5f);
+    float alpha = saturate((core + ring * (0.75f + sparks * 0.25f)) * (1.0f - progress));
+    if (alpha < 0.01f) discard;
+    float3 color = lerp(float3(1.0f, 0.10f, 0.01f), float3(1.0f, 0.92f, 0.35f), core);
+    return float4(color, alpha);
+}
+)hlsl";
+
 /** @brief 2D描画でも共有する256バイト定数バッファの先頭部分 */
 struct RendererTransformBufferData {
     DirectX::XMFLOAT4X4 u_wvpMatrix;
@@ -694,6 +738,49 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
+    /** @brief C++文字列から命中爆発用シェーダーをコンパイルする */
+    ComPtr<ID3DBlob> explosionVertexShader;
+    ComPtr<ID3DBlob> explosionPixelShader;
+    error.Reset();
+    HRESULT hrExplosionVS = D3DCompile(
+        ExplosionShaderCode, sizeof(ExplosionShaderCode) - 1, "EmbeddedExplosionShader",
+        nullptr, nullptr, "VSExplosion", "vs_5_0", shaderCompileFlags, 0,
+        &explosionVertexShader, &error);
+    if (FAILED(hrExplosionVS)) {
+        if (error) MessageBoxA(NULL, static_cast<char*>(error->GetBufferPointer()),
+            "Explosion Shader Compile Error (VS)", MB_OK);
+        return false;
+    }
+
+    error.Reset();
+    HRESULT hrExplosionPS = D3DCompile(
+        ExplosionShaderCode, sizeof(ExplosionShaderCode) - 1, "EmbeddedExplosionShader",
+        nullptr, nullptr, "PSExplosion", "ps_5_0", shaderCompileFlags, 0,
+        &explosionPixelShader, &error);
+    if (FAILED(hrExplosionPS)) {
+        if (error) MessageBoxA(NULL, static_cast<char*>(error->GetBufferPointer()),
+            "Explosion Shader Compile Error (PS)", MB_OK);
+        return false;
+    }
+
+    /** @brief 加算ブレンドで発光する爆発用PSOを作成する */
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC explosionPsoDesc = playerShotPsoDesc;
+    explosionPsoDesc.VS = { explosionVertexShader->GetBufferPointer(), explosionVertexShader->GetBufferSize() };
+    explosionPsoDesc.PS = { explosionPixelShader->GetBufferPointer(), explosionPixelShader->GetBufferSize() };
+    explosionPsoDesc.BlendState.RenderTarget[0] = {
+        TRUE, FALSE,
+        D3D12_BLEND_SRC_ALPHA, D3D12_BLEND_ONE, D3D12_BLEND_OP_ADD,
+        D3D12_BLEND_ONE, D3D12_BLEND_ONE, D3D12_BLEND_OP_ADD,
+        D3D12_LOGIC_OP_NOOP,
+        D3D12_COLOR_WRITE_ENABLE_ALL,
+    };
+    if (FAILED(m_device->CreateGraphicsPipelineState(
+        &explosionPsoDesc, IID_PPV_ARGS(&m_pipelineStateExplosion)))) {
+        MessageBoxA(NULL, "CreateGraphicsPipelineState (Explosion) Failed",
+            "PSO Creation Error", MB_OK);
+        return false;
+    }
+
     return true;
 }
 
@@ -782,7 +869,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE D3D12RenderingService::GetRtvCpuDescriptorHandle() c
 }
 
 /**
- * パイプラインステートを切り替える (0: Object, 1: Background, 2: SpellCircle, 3: Model3D)
+ * パイプラインステートを切り替える (0: Object, 1: Background, 2: SpellCircle, 3: Model3D, 4: PlayerShot, 5: Explosion)
  */
 void D3D12RenderingService::SetPipelineState(int type) {
     /** @brief 文字描画後に元のパイプラインを復元するため選択を保持する */
@@ -797,6 +884,8 @@ void D3D12RenderingService::SetPipelineState(int type) {
         m_commandList->SetPipelineState(m_pipelineStateModel3D.Get());
     } else if (type == 4) {
         m_commandList->SetPipelineState(m_pipelineStatePlayerShot.Get());
+    } else if (type == 5) {
+        m_commandList->SetPipelineState(m_pipelineStateExplosion.Get());
     }
 }
 
@@ -959,7 +1048,7 @@ void D3D12RenderingService::DrawPlayerShot(const PlayerShotVisual& shot) {
     cbData->u_rotAngle = shot.direction;
 
     /** @brief 自機弾専用PSOで4頂点の矩形を描画する */
-    m_currentPipelineType = 4;
+    const int previousPipelineType = m_currentPipelineType;
     m_commandList->SetPipelineState(m_pipelineStatePlayerShot.Get());
     m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
@@ -968,6 +1057,37 @@ void D3D12RenderingService::DrawPlayerShot(const PlayerShotVisual& shot) {
     m_commandList->SetGraphicsRootConstantBufferView(0, address);
     m_commandList->DrawInstanced(4, 1, 0, 0);
     ++m_constantBufferCursor;
+    SetPipelineState(previousPipelineType);
+}
+
+/** @brief 埋め込みHLSLを使用して爆発エフェクトを描画する */
+void D3D12RenderingService::DrawExplosion(const ExplosionVisual& explosion) {
+    if (m_constantBufferCursor >= MAX_CONSTANT_BUFFER_ELEMENTS) return;
+
+    // 3Dカメラ込みの変換行列と進行率を定数バッファへ設定する
+    auto* cbData = reinterpret_cast<RendererTransformBufferData*>(
+        reinterpret_cast<char*>(m_cbvCpuData) + static_cast<size_t>(m_constantBufferCursor) * 256);
+    for (int row = 0; row < 4; ++row) {
+        for (int column = 0; column < 4; ++column) {
+            cbData->u_wvpMatrix.m[row][column] = explosion.wvpMatrix.m[row][column];
+        }
+    }
+    cbData->u_Color = {1.0f, 1.0f, 1.0f, 1.0f};
+    cbData->u_time = explosion.progress;
+    cbData->u_shapeType = 0.0f;
+    cbData->u_rotAngle = 0.0f;
+
+    // 爆発専用PSOで画面正対クアッドを発行する
+    const int previousPipelineType = m_currentPipelineType;
+    m_commandList->SetPipelineState(m_pipelineStateExplosion.Get());
+    m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
+    m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+    const D3D12_GPU_VIRTUAL_ADDRESS address = m_constantBuffer->GetGPUVirtualAddress() +
+        static_cast<UINT64>(m_constantBufferCursor) * 256;
+    m_commandList->SetGraphicsRootConstantBufferView(0, address);
+    m_commandList->DrawInstanced(4, 1, 0, 0);
+    ++m_constantBufferCursor;
+    SetPipelineState(previousPipelineType);
 }
 
 /**

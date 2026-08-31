@@ -23,6 +23,8 @@
 #include "Presentation/Scenes/CreditScene.h"
 #include "Presentation/Scenes/ModeSelectionScene.h"
 #include "Presentation/Scenes/StoryScene.h"
+#include "Presentation/Scenes/EndingScene.h"
+#include "Presentation/Scenes/RankingScene.h"
 
 /**
  * ウィンドウプロシージャ
@@ -64,7 +66,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
 
     // 画面全体を覆うボーダーレスウィンドウを作成する
     HWND hwnd = Win32WindowService::Create(
-        hInstance, screenWidth, screenHeight, L"Space Yankees", WindowProc
+        hInstance, screenWidth, screenHeight, L"Space Yakuza", WindowProc
     );
 
     // ウィンドウの作成に失敗した場合は終了
@@ -123,6 +125,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     app.AddScene<ModelTestScene>(SceneType::ModelTest);
     app.AddScene<OptionScene>(SceneType::Option);
     app.AddScene<CreditScene>(SceneType::Credit);
+    app.AddScene<EndingScene>(SceneType::Ending);
+    app.AddScene<RankingScene>(SceneType::Ranking);
     
     // 初期シーンの設定
     app.Initialize(SceneType::Title);

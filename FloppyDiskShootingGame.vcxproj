@@ -153,6 +153,7 @@
     <ClCompile Include="Infrastructure\ExternalServices\MMLParser.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\SynthWaveGenerator.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\SfxrGenerator.cpp" />
+    <ClCompile Include="Infrastructure\Repositories\ScoreRepository.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Presentation\Gameplay\SideScrollingShooter.cpp" />
     <ClCompile Include="Presentation\CreditScene\CreditContentController.cpp" />
@@ -162,6 +163,8 @@
     <ClCompile Include="Presentation\Scenes\CreditScene.cpp" />
     <ClCompile Include="Presentation\Scenes\ModeSelectionScene.cpp" />
     <ClCompile Include="Presentation\Scenes\StoryScene.cpp" />
+    <ClCompile Include="Presentation\Scenes\EndingScene.cpp" />
+    <ClCompile Include="Presentation\Scenes\RankingScene.cpp" />
     <ClCompile Include="Presentation\Scenes\OptionScene.cpp" />
     <ClCompile Include="Presentation\Scenes\TestStage.cpp" />
     <ClCompile Include="Presentation\Scenes\ModelTestScene.cpp" />
@@ -181,6 +184,7 @@
     <ClInclude Include="Infrastructure\ExternalServices\InputService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\TextRenderingService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\Win32WindowService.h" />
+    <ClInclude Include="Infrastructure\Repositories\ScoreRepository.h" />
     <ClInclude Include="Application\Interfaces\IScene.h" />
     <ClInclude Include="Application\UseCases\SceneManager.h" />
     <ClInclude Include="Presentation\CreditScene\CreditContentController.h" />
@@ -191,6 +195,8 @@
     <ClInclude Include="Presentation\CreditScene\CreditSceneContent.h" />
     <ClInclude Include="Presentation\Scenes\ModeSelectionScene.h" />
     <ClInclude Include="Presentation\Scenes\StoryScene.h" />
+    <ClInclude Include="Presentation\Scenes\EndingScene.h" />
+    <ClInclude Include="Presentation\Scenes\RankingScene.h" />
     <ClInclude Include="Presentation\Scenes\OptionScene.h" />
     <ClInclude Include="Presentation\Scenes\TestStage.h" />
     <ClInclude Include="Presentation\Scenes\ModelTestScene.h" />
