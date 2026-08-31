@@ -134,10 +134,11 @@ void SideScrollingShooter::TickPlayer() {
         dx *= 0.7071f;
         dy *= 0.7071f;
     }
-    const float minX = IsRailGameplayActive() ? -0.78f : -0.88f;
-    const float maxX = IsRailGameplayActive() ? 0.78f : 0.35f;
-    const float minY = IsRailGameplayActive() ? -0.64f : -0.72f;
-    const float maxY = IsRailGameplayActive() ? 0.64f : 0.72f;
+    // 2D時は上下HUDの外側を避けつつ、左右は画面端まで移動可能にする
+    const float minX = IsRailGameplayActive() ? -0.78f : Side2DPlayerMinX;
+    const float maxX = IsRailGameplayActive() ? 0.78f : Side2DPlayerMaxX;
+    const float minY = IsRailGameplayActive() ? -0.64f : Side2DPlayerMinY;
+    const float maxY = IsRailGameplayActive() ? 0.64f : Side2DPlayerMaxY;
     m_playerX = (std::clamp)(m_playerX + dx * 0.018f, minX, maxX);
     m_playerY = (std::clamp)(m_playerY + dy * 0.024f, minY, maxY);
 }
