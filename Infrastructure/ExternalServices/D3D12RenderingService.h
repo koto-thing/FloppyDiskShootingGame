@@ -40,6 +40,8 @@ public:
     void DrawPrimitive3D(const Primitive3D& primitive) override;
     /** @brief 埋め込みHLSLで自機弾を描画する */
     void DrawPlayerShot(const PlayerShotVisual& shot) override;
+    /** @brief 埋め込みHLSLで爆発エフェクトを描画する */
+    void DrawExplosion(const ExplosionVisual& explosion) override;
     /** @brief Rendererのパイプライン識別子をD3D12ステートへ変換する */
     void SetPipeline(PipelineId pipeline) override;
     void SetCamera(const CameraMatrices& matrices, const Viewport& viewport) override;
@@ -89,6 +91,7 @@ private:
     ComPtr<ID3D12PipelineState> m_pipelineStateSpellCircle;
     ComPtr<ID3D12PipelineState> m_pipelineStateModel3D;
     ComPtr<ID3D12PipelineState> m_pipelineStatePlayerShot;
+    ComPtr<ID3D12PipelineState> m_pipelineStateExplosion;
 
     ComPtr<ID3D12Fence> m_fence;
     UINT64 m_fenceValue;

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <memory>
+#include <span>
 
 #include "../../Application/Interfaces/IScene.h"
 #include "../../Domain/ValueObjects/SceneSharedData.h"
@@ -16,6 +17,18 @@ public:
     void Tick() override;
     void Dispose() override;
     void Render(Renderer& renderer) override;
+
+protected:
+    /**
+     * @brief スクロール終了後に遷移するシーンを取得する
+     * @return 遷移先のシーン種別
+     */
+    virtual SceneType NextScene() const;
+    /**
+     * @brief スクロール表示する文章を取得する
+     * @return 表示順に並んだ文章
+     */
+    virtual std::span<const char* const> CrawlLines() const;
 
 private:
     enum class Phase {

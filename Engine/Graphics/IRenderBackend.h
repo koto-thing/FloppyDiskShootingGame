@@ -41,6 +41,12 @@ struct PlayerShotVisual {
     int type = 0;
 };
 
+/** @brief HLSLで描画する爆発エフェクトの描画情報 */
+struct ExplosionVisual {
+    Matrix4x4 wvpMatrix = Matrix4x4::Identity;
+    float progress = 0.0f;
+};
+
 /**
  * @brief Rendererの記録済みコマンドを実行するバックエンド境界
  *
@@ -60,6 +66,8 @@ public:
     virtual void DrawPrimitive3D(const Primitive3D& primitive) { (void)primitive; }
     /** @brief HLSLで生成する自機弾を描画する */
     virtual void DrawPlayerShot(const PlayerShotVisual& shot) { (void)shot; }
+    /** @brief HLSLで生成する爆発エフェクトを描画する */
+    virtual void DrawExplosion(const ExplosionVisual& explosion) { (void)explosion; }
     /**
      * @brief 文字をNDC座標系へ描画する
      * @param characterSpacing 文字ごとに追加する字間

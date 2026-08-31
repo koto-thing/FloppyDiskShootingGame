@@ -32,6 +32,7 @@ public:
         lastRect = rect;
         events.emplace_back("rect");
     }
+    void DrawExplosion(const ExplosionVisual&) override { events.emplace_back("explosion"); }
     void DrawTextCommand(std::string_view, const Vector2& position, float, const ColorF&, float characterSpacing) override {
         lastCharacterSpacing = characterSpacing;
         lastTextPosition = position;
@@ -64,6 +65,17 @@ void RecordsCharacterSpacing() {
     renderer.BeginFrame();
     renderer.DrawText("SPACED", {}, 0.1f, ColorF::White(), 0.025f);
     Require(renderer.Command(0).characterSpacing == 0.025f, "Text command must preserve character spacing");
+}
+
+void RecordsExplosionCommand() {
+    Renderer renderer;
+    renderer.BeginFrame();
+    renderer.DrawExplosion({Matrix4x4::Identity, 0.5f});
+    Require(renderer.CommandCount() == 1, "Explosion must be recorded as one command");
+    Require(renderer.Command(0).type == RenderCommand::Type::Explosion,
+        "Explosion command must preserve its type");
+    Require(renderer.Command(0).explosion.progress == 0.5f,
+        "Explosion command must preserve progress");
 }
 
 void SendsCharacterSpacingToBackend() {
@@ -167,6 +179,7 @@ void EndFrameFlushesAndBackendIsOptional() {
 void RunRendererTests() {
     RecordsAndResetsCommands();
     RecordsCharacterSpacing();
+    RecordsExplosionCommand();
     SendsCharacterSpacingToBackend();
     AlignsTextToScreenPositions();
     AlignsRectToScreenPositions();

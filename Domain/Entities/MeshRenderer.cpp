@@ -87,6 +87,8 @@ void MeshRenderer::Render(D3D12RenderingService& renderer, const DirectX::XMMATR
 
     // 定数バッファのバインドと描画
     ID3D12GraphicsCommandList* cmdList = renderer.GetCommandList();
+    // Cube を含むメッシュ頂点は三角形リストとして定義されている
+    cmdList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
     cmdList->SetGraphicsRootConstantBufferView(0, m_constantBuffer->GetGPUVirtualAddress());
     cmdList->DrawInstanced(m_mesh->GetVertexCount(), 1, 0, 0);
 }

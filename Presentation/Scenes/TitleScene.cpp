@@ -29,12 +29,21 @@ void TitleScene::Initialize() {
     );
     m_modelTestButton->SetOnClick([this]() { changeScene(SceneType::ModelTest); });
 
-    /** @brief 画面中央の少し下にオプションボタンを配置する */
+    /** @brief モデルテストボタンの下にランキングボタンを配置する */
+    m_rankingButton = std::make_unique<Button>(
+        Vector2 { 0.35f, 0.10f },
+        RectAlign::Center,
+        "RANKING",
+        Vector2 { 0.0f, -0.20f }
+    );
+    m_rankingButton->SetOnClick([this]() { changeScene(SceneType::Ranking); });
+
+    /** @brief ランキングボタンの下にオプションボタンを配置する */
     m_optionButton = std::make_unique<Button>(
         Vector2 { 0.35f, 0.10f },
         RectAlign::Center,
         "OPTIONS",
-        Vector2 { 0.0f, -0.20f }
+        Vector2 { 0.0f, -0.40f }
     );
     m_optionButton->SetOnClick([this]() { changeScene(SceneType::Option); });
 
@@ -43,7 +52,7 @@ void TitleScene::Initialize() {
         Vector2 { 0.35f, 0.10f },
         RectAlign::Center,
         "EXIT GAME",
-        Vector2 { 0.0f, -0.40f }
+        Vector2 { 0.0f, -0.60f }
     );
     m_exitButton->SetOnClick([]() { PostQuitMessage(0); });
     
@@ -92,6 +101,11 @@ void TitleScene::ProcessInput() {
         m_modelTestButton->Update(inputState);
     }
 
+    /** @brief ランキングボタンにマウス入力を渡す */
+    if (m_rankingButton != nullptr) {
+        m_rankingButton->Update(inputState);
+    }
+
     /** @brief ゲーム終了ボタンにマウス入力を渡す */
     if (m_exitButton != nullptr) {
         m_exitButton->Update(inputState);
@@ -118,6 +132,7 @@ void TitleScene::Tick() {
 void TitleScene::Dispose() {
     m_startButton.reset();
     m_modelTestButton.reset();
+    m_rankingButton.reset();
     m_exitButton.reset();
     m_creditButton.reset();
     m_optionButton.reset();
@@ -149,6 +164,11 @@ void TitleScene::Render(Renderer& renderer) {
     // 3Dモデルテストボタンを描画する
     if (m_modelTestButton != nullptr) {
         m_modelTestButton->Render(renderer);
+    }
+
+    // ランキングボタンを描画する
+    if (m_rankingButton != nullptr) {
+        m_rankingButton->Render(renderer);
     }
 
     // オプションボタンを描画する

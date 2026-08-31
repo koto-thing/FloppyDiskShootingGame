@@ -28,7 +28,7 @@ void StoryScene::Initialize() {
     // 右下にゲーム開始用のスキップボタンを配置する
     m_skipButton = std::make_unique<Button>(
         Vector2 { 0.24f, 0.09f }, RectAlign::BottomRight, "SKIP", Vector2 { -0.04f, 0.04f });
-    m_skipButton->SetOnClick([this]() { changeScene(SceneType::TestStage); });
+    m_skipButton->SetOnClick([this]() { changeScene(NextScene()); });
 }
 
 /** @brief スキップボタンへマウス入力を渡す */
@@ -53,7 +53,7 @@ void StoryScene::Tick() {
     if (m_phase == Phase::Scrolling) {
         m_scrollTime += Time::fixedDeltaTime;
         const float lastLineY = CrawlStartY + m_scrollTime * CrawlSpeed -
-            static_cast<float>(StoryLines.size() - 1) * LineSpacing;
+            static_cast<float>(CrawlLines().size() - 1) * LineSpacing;
         if (lastLineY >= FadeStartY) {
             m_phase = Phase::Fading;
             m_phaseTime = 0.0f;
@@ -68,8 +68,24 @@ void StoryScene::Tick() {
         m_phase = Phase::Waiting;
         m_phaseTime = 0.0f;
     } else if (m_phase == Phase::Waiting && m_phaseTime >= WaitDuration) {
-        changeScene(SceneType::TestStage);
+        changeScene(NextScene());
     }
+}
+
+/**
+ * @brief スクロール終了後に遷移するシーンを取得する
+ * @return ゲームプレイシーン
+ */
+SceneType StoryScene::NextScene() const {
+    return SceneType::TestStage;
+}
+
+/**
+ * @brief スクロール表示する文章を取得する
+ * @return 表示順に並んだストーリー文章
+ */
+std::span<const char* const> StoryScene::CrawlLines() const {
+    return StoryLines;
 }
 
 /** @brief ストーリーシーンが保持するUIを解放する */
@@ -139,10 +155,11 @@ void StoryScene::RenderCrawl(Renderer& renderer) const {
         ? (std::clamp)(1.0f - m_phaseTime / FadeDuration, 0.0f, 1.0f)
         : 1.0f;
 
-    for (size_t index = 0; index < StoryLines.size(); ++index) {
+    const std::span<const char* const> lines = CrawlLines();
+    for (size_t index = 0; index < lines.size(); ++index) {
         const float y = CrawlStartY + activeScrollTime * CrawlSpeed -
             static_cast<float>(index) * LineSpacing;
-        if (y < -1.08f || y > 0.93f || StoryLines[index][0] == '\0') continue;
+        if (y < -1.08f || y > 0.93f || lines[index][0] == '\0') continue;
 
         // 消失点へ近づくほど文字と行間の見かけを小さくする
         const float depth = (std::clamp)((1.0f - y) * 0.5f, 0.0f, 1.0f);
@@ -150,7 +167,7 @@ void StoryScene::RenderCrawl(Renderer& renderer) const {
         if (index == 0) textSize *= 1.45f;
         const float horizonFade = (std::clamp)((0.93f - y) / 0.22f, 0.0f, 1.0f);
         renderer.DrawText(
-            StoryLines[index], TextAlign::Center, textSize,
+            lines[index], TextAlign::Center, textSize,
             { StoryColor.r, StoryColor.g, StoryColor.b, fadeAlpha * horizonFade },
             { 0.0f, y }, 0.0015f);
     }

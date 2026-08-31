@@ -12,4 +12,5 @@ enum class SceneType {
     TestStage,
     ModelTest,
     Ending,
+    Ranking,
 };
