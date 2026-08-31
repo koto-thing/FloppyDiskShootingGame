@@ -288,6 +288,16 @@ bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
         MessageBoxA(NULL, "CreateDescriptorHeap (RTV) Failed", "Error", MB_OK);
         return false;
     }
+    
+    // Depth Stencil View用のDescriptor Heap
+    D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
+    dsvHeapDesc.NumDescriptors = 1;
+    dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+    dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+    if (FAILED(m_device->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&m_dsvHeap)))) {
+        MessageBoxA(NULL, "CreateDescriptorHeap (DSV) Failed", "Error", MB_OK);
+        return false;
+    }
 
     m_rtvDescriptorSize = m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
     D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
@@ -335,8 +345,7 @@ bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
     resDesc.Format = DXGI_FORMAT_UNKNOWN;
     resDesc.SampleDesc.Count = 1;
     resDesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-
-    // 【修正】末尾の余分な閉じ括弧 ')' を削除
+    
     hr = m_device->CreateCommittedResource(
         &heapProps,
         D3D12_HEAP_FLAG_NONE,
@@ -349,6 +358,48 @@ bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
         MessageBoxA(NULL, "CreateCommittedResource (ConstantBuffer) Failed", "Error", MB_OK);
         return false;
     }
+    
+    D3D12_RESOURCE_DESC depthDesc = {};
+    depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    depthDesc.Alignment = 0;
+    depthDesc.Width = width;
+    depthDesc.Height = height;
+    depthDesc.DepthOrArraySize = 1;
+    depthDesc.MipLevels = 1;
+    depthDesc.Format = DXGI_FORMAT_D32_FLOAT;
+    depthDesc.SampleDesc.Count = 1;
+    depthDesc.SampleDesc.Quality = 0;
+    depthDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    depthDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
+    
+    D3D12_CLEAR_VALUE depthClearValue = {};
+    depthClearValue.Format = DXGI_FORMAT_D32_FLOAT;
+    depthClearValue.DepthStencil.Depth = 1.0f;
+    depthClearValue.DepthStencil.Stencil = 0;
+    
+    D3D12_HEAP_PROPERTIES depthHeapProps = {};
+    depthHeapProps.Type = D3D12_HEAP_TYPE_DEFAULT;
+    
+    HRESULT depthHr = m_device->CreateCommittedResource(
+        &depthHeapProps,
+        D3D12_HEAP_FLAG_NONE,
+        &depthDesc,
+        D3D12_RESOURCE_STATE_DEPTH_WRITE,
+        &depthClearValue,
+        IID_PPV_ARGS(&m_depthStencil)
+    );
+    
+    if (FAILED(depthHr)) {
+        MessageBoxA(NULL, "CreateCommittedResource (DepthStencil) Failed", "Error", MB_OK);
+        return false;
+    }
+    
+    // 
+    D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc = {};
+    dsvDesc.Format = DXGI_FORMAT_D32_FLOAT;
+    dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+    dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
+    m_device->CreateDepthStencilView(m_depthStencil.Get(), &dsvDesc, m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
 
     D3D12_RANGE readRange = { 0, 0 };
     if (FAILED(m_constantBuffer->Map(0, &readRange, reinterpret_cast<void**>(&m_cbvCpuData)))) {
@@ -513,9 +564,15 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
-    /** @brief 奥側のポリゴンを除外して閉じた3Dメッシュを正しく表示するPSOを作成する */
+    // 奥側のポリゴンを除外して閉じた3Dメッシュを正しく表示するPSOを作成する
     D3D12_GRAPHICS_PIPELINE_STATE_DESC model3DPsoDesc = psoDesc;
     model3DPsoDesc.RasterizerState.CullMode = D3D12_CULL_MODE_BACK;
+    model3DPsoDesc.DepthStencilState.DepthEnable = TRUE;
+    model3DPsoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ALL;
+    model3DPsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+    model3DPsoDesc.DepthStencilState.StencilEnable = FALSE;
+    model3DPsoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+    
     HRESULT hrPSOModel3D = m_device->CreateGraphicsPipelineState(
         &model3DPsoDesc, IID_PPV_ARGS(&m_pipelineStateModel3D));
     if (FAILED(hrPSOModel3D)) {
@@ -668,10 +725,11 @@ void D3D12RenderingService::BeginFrame() {
     m_commandList->ResourceBarrier(1, &barrier);
 
     D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = GetRtvCpuDescriptorHandle();
-    const float clearColor[] = { 0.05f, 0.05f, 0.1f, 1.0f };
+    D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = m_dsvHeap->GetCPUDescriptorHandleForHeapStart();
+    constexpr float clearColor[] = { 0.05f, 0.05f, 0.1f, 1.0f };
     m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
-    m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
-
+    m_commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
+    m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, &dsvHandle);
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 }
 
@@ -839,7 +897,7 @@ void D3D12RenderingService::DrawRect(const Rect& rect, const ColorF& color) {
 void D3D12RenderingService::DrawPrimitive3D(const Primitive3D& primitive) {
     if (m_constantBufferCursor >= MAX_CONSTANT_BUFFER_ELEMENTS) return;
 
-    /** @brief 頂点配列の構成に応じてGPUのプリミティブトポロジーを切り替える */
+    // 頂点配列の構成に応じてGPUのプリミティブトポロジーを切り替える
     const bool usesTriangleStrip = primitive.shape == PrimitiveShape::Plate ||
         primitive.shape == PrimitiveShape::Sprite2D;
     m_commandList->IASetPrimitiveTopology(
