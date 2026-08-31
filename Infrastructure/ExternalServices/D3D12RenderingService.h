@@ -38,6 +38,8 @@ public:
     /** @brief 2D矩形を既存のプロシージャルシェーダーで描画する */
     void DrawRect(const Rect& rect, const ColorF& color) override;
     void DrawPrimitive3D(const Primitive3D& primitive) override;
+    /** @brief 埋め込みHLSLで自機弾を描画する */
+    void DrawPlayerShot(const PlayerShotVisual& shot) override;
     /** @brief Rendererのパイプライン識別子をD3D12ステートへ変換する */
     void SetPipeline(PipelineId pipeline) override;
     void SetCamera(const CameraMatrices& matrices, const Viewport& viewport) override;
@@ -84,6 +86,7 @@ private:
     ComPtr<ID3D12PipelineState> m_pipelineStateBackground;
     ComPtr<ID3D12PipelineState> m_pipelineStateSpellCircle;
     ComPtr<ID3D12PipelineState> m_pipelineStateModel3D;
+    ComPtr<ID3D12PipelineState> m_pipelineStatePlayerShot;
 
     ComPtr<ID3D12Fence> m_fence;
     UINT64 m_fenceValue;

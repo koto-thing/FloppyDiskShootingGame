@@ -316,38 +316,69 @@ public:
         // 3. 敵機の描画 (自転角度を反映)
         for (auto& e : enemies) {
             if (e.active) {
+                //ボスの描画
                 if (e.type == 2) {
-                    float eCol[4] = { 0.2f, 0.4f, 0.8f,  1.0f }; // 敵機のカラー（blue）
-                    // A. 機首ノーズ (円錐)
-                    DrawObject3DEx(renderer, e.x, e.y, e.z - 4.0f, 1.6f, 1.6f, 4.0f, 270.0f, 0, 0, eCol, drawCount++, 4, 48);
+                    float gCol[4] = { 0.5f, 0.5f, 0.5f, 1.0f };    // グレー
+                    float wCol[4] = { 0.6f, 0.6f, 0.6f, 1.0f };    //白
+                    float bCol[4] = { 0.2f, 0.2f, 0.2f, 1.0f };     //ブラック
+                    // 機首ノーズ
+                    {
+                        DrawObject3D(renderer, e.x, e.y + 3, e.z - 14 , 6.0f, 6.0f, 4.0f, gCol, drawCount++, 3, 96);
+                        DrawObject3D(renderer, e.x, e.y + 2, e.z - 17.5, 2.0f, 2.0f, 3.0f, gCol, drawCount++, 3, 96);
+                        DrawObject3D(renderer, e.x, e.y + 4.5, e.z - 20, 1.0f, 1.0f, 8.0f, bCol, drawCount++, 3, 96);
+                    }
 
-                    // B. メインボディ (円柱)
-                    DrawObject3D(renderer, e.x, e.y, e.z - 1.0f, 2.4f, 2.4f, 5.0f, eCol, drawCount++, 3, 96);
+                    //メインボディ(上部)
+                    {
+                        DrawObject3D(renderer, e.x, e.y + 2, e.z, 18.0f, 18.0f,16.0f, gCol, drawCount++, 3, 96);
+                        DrawObject3D(renderer, e.x, e.y + 2, e.z - 10, 14.0f, 14.0f, 4.0f, gCol, drawCount++, 3, 96);
+                        DrawObject3D(renderer, e.x, e.y + 2, e.z + 10, 14.0f, 14.0f, 4.0f, gCol, drawCount++, 3, 96);
+                        DrawObject3D(renderer, e.x, e.y + 12, e.z + 2, 4.0f, 4.0f, 4.0f, gCol, drawCount++, 1, 36);
+                        DrawObject3D(renderer, e.x, e.y + 13, e.z - 2, 1.0f, 1.0f, 4.0f, bCol, drawCount++, 3, 96);
+                    }
 
-                    // C. 後方メインボディ (円柱)
-                    DrawObject3D(renderer, e.x, e.y, e.z + 3.0f, 1.8f, 1.8f, 4.0f, eCol, drawCount++, 3, 96);
+                    //サブボディ(下部)
+                    {
+                        DrawObject3D(renderer, e.x, e.y - 12, e.z, 4.0f, 4.0f, 10.0f, gCol, drawCount++, 3, 96);
+                        DrawObject3D(renderer, e.x, e.y - 15, e.z + 1, 2.0f, 2.0f, 8.0f, gCol, drawCount++, 3, 96);
+                        DrawObject3D(renderer, e.x, e.y - 12, e.z - 7, 1.0f, 1.0f, 6.0f, bCol, drawCount++, 3, 96);
+                        DrawObject3D(renderer, e.x + 2, e.y - 8, e.z, 1.0f, 5.0f, 1.0f, bCol, drawCount++, 1, 36);
+                        DrawObject3D(renderer, e.x - 2, e.y - 8, e.z, 1.0f, 5.0f, 1.0f, bCol, drawCount++, 1, 36);
+                    }
 
-                    // D. 左右主翼 (三角柱)
-                    float eleftWingX = e.x - 3.5f;
-                    float eleftWingY = e.y;
-                    DrawObject3DEx(renderer, eleftWingX, eleftWingY, e.z + 0.5f, 6.0f, 0.4f, 3.5f, 180.0f, 0, 0, eCol, drawCount++, 5, 24);
+                    //主翼
+                    {
+                        //左
+                        DrawObject3D(renderer, e.x + 4 + 9, e.y + 2, e.z, 8.0f, 4.0f, 12.0f, wCol, drawCount++, 1, 36);
+                        DrawObject3D(renderer, e.x + 4 + 9 + 8, e.y + 2, e.z, 12.0f, 2.0f, 10.0f, wCol, drawCount++, 1, 36);
 
-                    float erightWingX = e.x + 3.5f;
-                    float erightWingY = e.y;
-                    DrawObject3DEx(renderer, erightWingX, erightWingY, e.z + 0.5f, 6.0f, 0.4f, 3.5f, 180.0f, 0, 0, eCol, drawCount++, 5, 24);
+                        //右
+                        DrawObject3D(renderer, e.x - 4 - 9, e.y + 2, e.z, 8.0f, 4.0f, 12.0f, wCol, drawCount++, 1, 36);
+                        DrawObject3D(renderer, e.x - 4 - 9 - 8, e.y + 2, e.z, 12.0f, 2.0f, 10.0f, wCol, drawCount++, 1, 36);
 
-                    // E. 左右昇降舵 (三角柱)
-                    float eleftElevatorX = e.x - 1.5f;
-                    float eleftElevatorY = e.y;
-                    DrawObject3DEx(renderer, eleftElevatorX, eleftElevatorY, e.z + 4.5f, 3.2f, 0.25f, 2.0f, 180.0f, 0, 0, eCol, drawCount++, 5, 24);
+                    }
 
-                    float erightElevatorX = e.x + 1.5f;
-                    float erightElevatorY = e.y;
-                    DrawObject3DEx(renderer, erightElevatorX, erightElevatorY, e.z + 4.5f, 3.2f, 0.25f, 2.0f, 180.0f, 0, 0, eCol, drawCount++, 5, 24);
+                    //メインエンジン
+                    {
+                        DrawObject3D(renderer, e.x, e.y + 3, e.z + 15, 10.0f, 10.0f, 6.0f, gCol, drawCount++, 3, 96);
+                        DrawObject3D(renderer, e.x + 7, e.y + 3, e.z + 18, 4.0f, 4.0f, 6.0f, bCol, drawCount++, 3, 96);
+                        DrawObject3D(renderer, e.x - 7, e.y + 3, e.z + 18, 4.0f, 4.0f, 6.0f, bCol, drawCount++, 3, 96);
+                        DrawObject3D(renderer, e.x, e.y - 6, e.z + 16.5, 2.0f, 8.0f, 3.0f, wCol, drawCount++, 1, 36);
+                        DrawObject3D(renderer, e.x, e.y + 12, e.z + 16.5, 2.0f, 8.0f, 3.0f, wCol, drawCount++, 1, 36);
+                    }
 
-                    // F. 方向舵 (三角柱)
-                    DrawObject3D(renderer, e.x, e.y + 1.8f, e.z + 4.0f, 0.25f, 2.8f, 2.2f, eCol, drawCount++, 5, 24);
+                    //サブエンジン
+                    {
+                        //左
+                        DrawObject3D(renderer, e.x + 6, e.y - 6, e.z + 10, 4.0f, 4.0f, 10.0f, bCol, drawCount++, 3, 96);
+                        DrawObject3D(renderer, e.x + 6, e.y - 6, e.z + 16, 2.0f, 2.0f, 2.0f, bCol, drawCount++, 3, 96);
+
+                        //右
+                        DrawObject3D(renderer, e.x - 6, e.y - 6, e.z + 10, 4.0f, 4.0f, 10.0f, bCol, drawCount++, 3, 96);
+                        DrawObject3D(renderer, e.x - 6, e.y - 6, e.z + 16, 2.0f, 2.0f, 2.0f, bCol, drawCount++, 3, 96);
+                    }
                 }
+                //雑魚敵の描画
                 else {
                     float eCol[4] = { 0.9f, 0.1f, 0.1f, 1.0f }; // 敵機のカラー（レッド）
                     // A. 機首ノーズ (円錐)
@@ -694,8 +725,8 @@ private:
 
     void SpawnEnemies() {
         if (transitionTimer > 0) return; // シフト移行中はスポーンさせない
-
-        if (enemyKillCount >= 30) {
+            //敵を３０体倒したらボスが出現する
+        if (enemyKillCount >= 2) {
             bool bossExists = false;
             for (auto& e : enemies) {
                 if (e.active && e.type == 2) bossExists = true;
@@ -918,8 +949,11 @@ private:
         }
     }
 
-    // 3D 空間オブジェクト描画ヘルパー (WVP行列と自転角を転送、かつ2D正対回転を処理)
-    void DrawObject3D(Renderer& renderer, float x, float y, float z, float w, float h, float d, const float color[4], int index, int shapeType, int vertexCount, float rotAngle = 0.0f) {
+    /*
+        3D 空間オブジェクト描画ヘルパー (WVP行列と自転角を転送、かつ2D正対回転を処理)
+        (描画処理を行うRenderer, X座標, Y座標, Z座標, 幅（X方向の大きさ）, 高さ（Y方向の大きさ）, 奥行き（Z方向の大きさ）, RGBAカラー, 定数バッファ用のインデックス, 描画する形状, 頂点数, 回転角度)
+    */
+        void DrawObject3D(Renderer& renderer, float x, float y, float z, float w, float h, float d, const float color[4], int index, int shapeType, int vertexCount, float rotAngle = 0.0f) {
         (void)index;
         (void)vertexCount;
         DirectX::XMMATRIX worldMatrix = DirectX::XMMatrixScaling(w, h, d);
@@ -996,6 +1030,7 @@ private:
         cmdList->DrawInstanced(vertexCount, 1, 0, 0);
 #endif
     }
+
 
     // 3D 空間オブジェクト描画ヘルパー (自由なXYZ回転対応版)
     void DrawObject3DEx(

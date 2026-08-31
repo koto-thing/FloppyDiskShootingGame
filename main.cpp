@@ -21,6 +21,8 @@
 #include "Presentation/Scenes/TestStage.h"
 #include "Presentation/Scenes/ModelTestScene.h"
 #include "Presentation/Scenes/CreditScene.h"
+#include "Presentation/Scenes/ModeSelectionScene.h"
+#include "Presentation/Scenes/StoryScene.h"
 
 /**
  * ウィンドウプロシージャ
@@ -115,6 +117,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     
     // シーンを登録
     app.AddScene<TitleScene>(SceneType::Title);
+    app.AddScene<ModeSelectionScene>(SceneType::ModeSelection);
+    app.AddScene<StoryScene>(SceneType::Story);
     app.AddScene<TestStage>(SceneType::TestStage);
     app.AddScene<ModelTestScene>(SceneType::ModelTest);
     app.AddScene<OptionScene>(SceneType::Option);

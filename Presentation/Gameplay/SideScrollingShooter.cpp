@@ -105,8 +105,9 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorFo
     }
 }
 
-void SideScrollingShooter::Initialize(AudioService* audio) {
+void SideScrollingShooter::Initialize(AudioService* audio, PlayerType playerType) {
     m_audio = audio;
+    m_playerType = playerType;
     Reset();
 }
 
@@ -120,6 +121,7 @@ void SideScrollingShooter::Reset() {
     m_frame = 0;
     m_spawnCooldown = 35;
     m_shotCooldown = 0;
+    m_specialShotCooldown = 0;
     m_invincible = 90;
     m_lives = 3;
     m_score = 0;
@@ -164,16 +166,26 @@ void SideScrollingShooter::Tick() {
         m_scroll += 0.008f;
     }
     m_shotCooldown = (std::max)(0, m_shotCooldown - 1);
+    m_specialShotCooldown = (std::max)(0, m_specialShotCooldown - 1);
     m_invincible = (std::max)(0, m_invincible - 1);
 
     TickPlayer();
 
+    bool firedPlayerShot = false;
     if (m_fire && m_shotCooldown == 0) {
         SpawnShot(m_playerX + (IsRailGameplayActive() ? 0.0f : 0.12f), m_playerY,
             IsRailGameplayActive() ? 0.0f : 0.045f, 0.0f, false);
         m_shotCooldown = 7;
         PlayShotSound();
     }
+    if (m_fire && m_specialShotCooldown == 0) {
+        /** @brief 選択中の機体タイプに対応する特殊弾を発射する */
+        FireSpecialShots();
+        const auto& config = PlayerShotConfigs[static_cast<size_t>(m_playerType)];
+        m_specialShotCooldown = config.fireIntervalFrames;
+        firedPlayerShot = true;
+    }
+    if (firedPlayerShot) PlayShotSound();
 
     // 規定スクロール距離へ到達したら通常区間を終了してボス戦を開始する
     if (!m_bossBattle && m_scroll >= m_stage->BossStartDistance()) {
@@ -258,6 +270,12 @@ void SideScrollingShooter::TickEnemies() {
 void SideScrollingShooter::TickShots() {
     for (auto& shot : m_shots) {
         if (!shot.active) continue;
+
+        /** @brief 追尾弾を最寄りの前方敵へ旋回させる */
+        if (!shot.enemy && shot.special && shot.playerType == Homing) {
+            UpdateHomingShot(shot);
+        }
+
         shot.x += shot.vx;
         shot.y += shot.vy;
         shot.z += shot.vz;
@@ -478,6 +496,72 @@ void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, 
         shot.enemy = enemy;
         shot.active = true;
         return;
+    }
+}
+
+/** @brief 選択中の機体タイプに対応する特殊弾を生成する */
+void SideScrollingShooter::FireSpecialShots() {
+    const auto& config = PlayerShotConfigs[static_cast<size_t>(m_playerType)];
+    constexpr float DegreesToRadians = 3.1415926535f / 180.0f;
+
+    /** @brief 弾数に応じて左右対称の角度と発射位置を求める */
+    for (int i = 0; i < config.projectileCount; ++i) {
+        const float centeredIndex = static_cast<float>(i) -
+            static_cast<float>(config.projectileCount - 1) * 0.5f;
+        const float angleStep = config.projectileCount > 1
+            ? config.spreadAngleDegrees / static_cast<float>(config.projectileCount - 1)
+            : 0.0f;
+        const float angle = centeredIndex * angleStep * DegreesToRadians;
+        const float spawnY = m_playerY + centeredIndex * config.spawnOffsetY;
+
+        /** @brief 空きスロットへ機体タイプ固有の属性を設定する */
+        for (auto& shot : m_shots) {
+            if (shot.active) continue;
+            shot = {};
+            shot.x = m_playerX + config.spawnOffsetX;
+            shot.y = spawnY;
+            shot.vx = std::cos(angle) * config.speed;
+            shot.vy = std::sin(angle) * config.speed;
+            shot.hitRadius = config.hitRadius;
+            shot.damage = config.damage;
+            shot.playerType = m_playerType;
+            shot.special = true;
+            shot.piercing = config.piercing;
+            shot.active = true;
+            break;
+        }
+    }
+}
+
+/** @brief 追尾弾の進行方向を最寄りの前方敵へ近づける */
+void SideScrollingShooter::UpdateHomingShot(Shot& shot) {
+    const Enemy* target = nullptr;
+    float nearestDistanceSquared = 100.0f;
+
+    /** @brief 前方にいる最寄りの敵を追尾対象として検索する */
+    for (const auto& enemy : m_enemies) {
+        if (!enemy.active || enemy.x <= shot.x) continue;
+        const float dx = enemy.x - shot.x;
+        const float dy = enemy.y - shot.y;
+        const float distanceSquared = dx * dx + dy * dy;
+        if (distanceSquared < nearestDistanceSquared) {
+            nearestDistanceSquared = distanceSquared;
+            target = &enemy;
+        }
+    }
+    if (target == nullptr || nearestDistanceSquared <= 0.000001f) return;
+
+    /** @brief 現在速度と目標方向を補間して速度を一定に保つ */
+    const auto& config = PlayerShotConfigs[static_cast<size_t>(Homing)];
+    const float inverseDistance = 1.0f / std::sqrt(nearestDistanceSquared);
+    const float desiredVx = (target->x - shot.x) * inverseDistance * config.speed;
+    const float desiredVy = (target->y - shot.y) * inverseDistance * config.speed;
+    shot.vx += (desiredVx - shot.vx) * config.homingStrength;
+    shot.vy += (desiredVy - shot.vy) * config.homingStrength;
+    const float velocityLength = std::sqrt(shot.vx * shot.vx + shot.vy * shot.vy);
+    if (velocityLength > 0.000001f) {
+        shot.vx = shot.vx / velocityLength * config.speed;
+        shot.vy = shot.vy / velocityLength * config.speed;
     }
 }
 
