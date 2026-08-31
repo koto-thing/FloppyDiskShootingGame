@@ -96,6 +96,10 @@ private:
     static constexpr int ViewTransitionFrames = 90;
     static constexpr float WorldXScale = 7.0f;
     static constexpr float WorldYScale = 4.4f;
+    static constexpr float Side2DPlayerMinX = -0.88f;
+    static constexpr float Side2DPlayerMaxX = 0.88f;
+    static constexpr float Side2DPlayerMinY = -0.72f;
+    static constexpr float Side2DPlayerMaxY = 0.72f;
     static constexpr float PlayerRailZ = 8.0f;
     static constexpr float SidePlaneZ = 10.0f;
     static constexpr float EnemyRailFarZ = 60.0f;
