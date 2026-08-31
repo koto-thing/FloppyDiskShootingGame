@@ -12,6 +12,7 @@ public:
         float sideX = 1.08f;
         float railX = 0.0f;
         float y = 0.0f;
+        float railZ = EnemyRailFarZ;
     };
 
     virtual ~EnemyBehavior() = default;
@@ -76,17 +77,17 @@ protected:
 
     virtual EntryCandidate EntryCandidateAt(int index, int stageIndex) const {
         constexpr EntryCandidate Stage1Candidates[] = {
-            {1.08f, -0.72f, -0.54f},
-            {1.10f, -0.22f, 0.36f},
-            {1.12f, 0.42f, -0.12f},
-            {1.14f, 0.70f, 0.58f}
+            {1.08f, -0.72f, -0.54f, EnemyRailFarZ},
+            {1.10f, -0.22f, 0.36f, EnemyRailFarZ},
+            {1.12f, 0.42f, -0.12f, EnemyRailFarZ},
+            {1.14f, 0.70f, 0.58f, EnemyRailFarZ}
         };
         constexpr EntryCandidate Stage2Candidates[] = {
-            {1.08f, -0.85f, -0.68f},
-            {1.10f, -0.40f, 0.54f},
-            {1.12f, 0.05f, -0.18f},
-            {1.14f, 0.48f, 0.18f},
-            {1.16f, 0.82f, 0.68f}
+            {1.08f, -0.85f, -0.68f, EnemyRailFarZ},
+            {1.10f, -0.40f, 0.54f, EnemyRailFarZ},
+            {1.12f, 0.05f, -0.18f, EnemyRailFarZ},
+            {1.14f, 0.48f, 0.18f, EnemyRailFarZ},
+            {1.16f, 0.82f, 0.68f, EnemyRailFarZ}
         };
         if (stageIndex >= 2) {
             return Stage2Candidates[index % (sizeof(Stage2Candidates) / sizeof(Stage2Candidates[0]))];
@@ -101,7 +102,7 @@ protected:
         enemy.x = enemy.baseX;
         enemy.baseY = candidate.y;
         enemy.y = enemy.baseY;
-        enemy.z = railMode ? EnemyRailFarZ : ToRailZFromSideX(enemy.x);
+        enemy.z = railMode ? candidate.railZ : ToRailZFromSideX(enemy.x);
     }
 };
 
@@ -239,7 +240,7 @@ public:
             SelectEntryCandidateIndex(frame, kills, stageIndex), stageIndex);
         enemy.baseX = railMode ? candidate.railX : candidate.sideX;
         enemy.x = enemy.baseX;
-        enemy.z = railMode ? EnemyRailFarZ : ToRailZFromSideX(enemy.x);
+        enemy.z = railMode ? candidate.railZ : ToRailZFromSideX(enemy.x);
         enemy.baseY = candidate.y;
         enemy.y = enemy.baseY;
         enemy.phase = 0.0f;
@@ -275,16 +276,16 @@ protected:
     EntryCandidate EntryCandidateAt(int index, int stageIndex) const override {
         const bool lateStage = stageIndex >= 2;
         constexpr EntryCandidate Stage1Candidates[] = {
-            {1.10f, -0.78f, 0.86f},
-            {1.12f, -0.18f, -0.86f},
-            {1.14f, 0.35f, 0.86f},
-            {1.16f, 0.78f, -0.86f}
+            {1.10f, -0.78f, 0.86f, 48.0f},
+            {1.12f, -0.18f, -0.86f, 42.0f},
+            {1.14f, 0.35f, 0.86f, 54.0f},
+            {1.16f, 0.78f, -0.86f, 36.0f}
         };
         constexpr EntryCandidate Stage2Candidates[] = {
-            {1.10f, -0.82f, 0.88f},
-            {1.12f, -0.28f, -0.88f},
-            {1.14f, 0.28f, 0.88f},
-            {1.16f, 0.82f, -0.88f}
+            {1.10f, -0.82f, 0.88f, 50.0f},
+            {1.12f, -0.28f, -0.88f, 40.0f},
+            {1.14f, 0.28f, 0.88f, 56.0f},
+            {1.16f, 0.82f, -0.88f, 34.0f}
         };
         if (lateStage) {
             return Stage2Candidates[index % (sizeof(Stage2Candidates) / sizeof(Stage2Candidates[0]))];
