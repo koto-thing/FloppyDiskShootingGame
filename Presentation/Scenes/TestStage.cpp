@@ -10,7 +10,7 @@ TestStage::TestStage() : m_game(std::make_unique<SideScrollingShooter>()) {
 TestStage::~TestStage() = default;
 
 void TestStage::Initialize() {
-    m_game->Initialize(getData().audio, getData().playerType);
+    m_game->Initialize(getData().audio, getData().playerType, getData().difficulty);
 }
 
 void TestStage::ProcessInput() {
