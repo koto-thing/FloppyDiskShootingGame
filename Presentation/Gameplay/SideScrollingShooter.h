@@ -27,6 +27,7 @@ private:
     class ArmoredEnemyBehavior;
     class BossEnemyBehavior;
     class StraightShooterEnemyBehavior;
+    class CircleShooterEnemyBehavior;
 
     struct Shot {
         float x = 0.0f;
@@ -83,6 +84,7 @@ private:
     static const EnemyBehavior& ArmoredEnemyBehaviorInstance();
     static const EnemyBehavior& BossEnemyBehaviorInstance();
     static const EnemyBehavior& StraightShooterEnemyBehaviorInstance();
+    static const EnemyBehavior& CircleShooterEnemyBehaviorInstance();
     static const EnemyBehavior& EnemyBehaviorForType(int type);
     void TickViewTransition();
     void InitializeRailObjects();
@@ -92,6 +94,7 @@ private:
     void SpawnEnemy();
     void StartBossBattle();
     void SpawnShot(float x, float y, float vx, float vy, bool enemy, float z = -1.0f);
+    void SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy);
     void DamagePlayer();
     void PlayShotSound();
     void PlayHitSound();

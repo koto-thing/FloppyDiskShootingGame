@@ -31,9 +31,10 @@ public:
     }
     virtual int SpawnCooldown(int frame, int kills) const = 0;
     virtual int SelectEnemyType(int frame, int kills) const = 0;
-    virtual void ConfigureEnemy(Enemy& enemy, int frame, int kills, bool railMode) const {
+    virtual void ConfigureEnemy(SideScrollingShooter& shooter, Enemy& enemy,
+        int frame, int kills, bool railMode) const {
         EnemyBehaviorForType(SelectEnemyType(frame, kills)).ConfigureSpawn(
-            enemy, frame, kills, railMode, StageIndex());
+            shooter, enemy, frame, kills, railMode, StageIndex());
     }
     virtual void ConfigureBoss(Enemy& boss, bool railMode) const {
         BossEnemyBehaviorInstance().ConfigureBossSpawn(boss, railMode, StageIndex());
@@ -69,6 +70,7 @@ public:
     int SelectEnemyType(int frame, int kills) const override {
         constexpr EnemySpawnRule Rules[] = {
             {3, 90, 6, 2},
+            {5, 75, 7, 3},
             {1, 60, 5, 4}
         };
         return SelectByRules(Rules, static_cast<int>(sizeof(Rules) / sizeof(Rules[0])), frame, kills);
@@ -113,6 +115,7 @@ public:
     int SelectEnemyType(int frame, int kills) const override {
         constexpr EnemySpawnRule Rules[] = {
             {3, 75, 5, 1},
+            {5, 60, 6, 2},
             {4, 45, 4, 3}
         };
         return SelectByRules(Rules, static_cast<int>(sizeof(Rules) / sizeof(Rules[0])), frame, kills);

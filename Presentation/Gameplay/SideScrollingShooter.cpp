@@ -83,6 +83,11 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::StraightShooter
     return behavior;
 }
 
+const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::CircleShooterEnemyBehaviorInstance() {
+    static const CircleShooterEnemyBehavior behavior;
+    return behavior;
+}
+
 const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorForType(int type) {
     switch (type) {
     case 1:
@@ -93,6 +98,8 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorFo
         return StraightShooterEnemyBehaviorInstance();
     case 4:
         return ArmoredEnemyBehaviorInstance();
+    case 5:
+        return CircleShooterEnemyBehaviorInstance();
     default:
         return BasicEnemyBehaviorInstance();
     }
@@ -211,7 +218,7 @@ void SideScrollingShooter::TickEnemies() {
         enemy.behavior->Tick(*this, enemy);
 
         const int aimedShotInterval = enemy.shotInterval;
-        if (enemy.age % aimedShotInterval == 0) {
+        if (aimedShotInterval > 0 && enemy.age % aimedShotInterval == 0) {
             const float dxToPlayer = m_playerX - enemy.x;
             const float dyToPlayer = m_playerY - enemy.y;
             const float length = std::sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
@@ -260,8 +267,9 @@ void SideScrollingShooter::TickShots() {
             shot.active = false;
             continue;
         }
+        // 端から出る円形弾幕が生成直後に欠けないよう、弾のY消滅範囲だけ少し広げる
         if (IsRailGameplayActive() && (shot.z < 0.0f || shot.z > 72.0f ||
-            std::abs(shot.x) > 1.2f || std::abs(shot.y) > 1.0f)) {
+            std::abs(shot.x) > 1.2f || std::abs(shot.y) > 1.24f)) {
             shot.active = false;
             continue;
         }
@@ -395,7 +403,7 @@ void SideScrollingShooter::SpawnEnemy() {
     for (auto& enemy : m_enemies) {
         if (enemy.active) continue;
         enemy.active = true;
-        m_stage->ConfigureEnemy(enemy, m_frame, m_kills, IsRailGameplayActive());
+        m_stage->ConfigureEnemy(*this, enemy, m_frame, m_kills, IsRailGameplayActive());
         return;
     }
 }
@@ -451,6 +459,23 @@ void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool 
                 shot.vz = 1.45f;
             }
         }
+        shot.enemy = enemy;
+        shot.active = true;
+        return;
+    }
+}
+
+void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy) {
+    for (auto& shot : m_shots) {
+        if (shot.active) continue;
+        shot.x = x;
+        shot.y = y;
+        shot.z = z;
+        shot.transitionSideX = x;
+        shot.transitionSideY = y;
+        shot.vx = vx;
+        shot.vy = vy;
+        shot.vz = vz;
         shot.enemy = enemy;
         shot.active = true;
         return;

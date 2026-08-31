@@ -26,7 +26,11 @@ public:
     virtual int AimedShotIntervalForStage(int) const {
         return AimedShotInterval();
     }
-    virtual void ConfigureSpawn(Enemy& enemy, int frame, int kills, bool railMode, int stageIndex) const {
+    virtual void FireSpecial(SideScrollingShooter&, Enemy&) const {
+    }
+    virtual void ConfigureSpawn(SideScrollingShooter& shooter, Enemy& enemy,
+        int frame, int kills, bool railMode, int stageIndex) const {
+        (void)shooter;
         ConfigureStats(enemy, stageIndex);
         ConfigureDefaultEntry(enemy, frame, kills, railMode, stageIndex);
         enemy.phase = static_cast<float>((frame + (stageIndex - 1) * 17) % 47) * 0.17f;
@@ -90,6 +94,30 @@ protected:
             {1.16f, 0.82f, 0.68f, EnemyRailFarZ}
         };
         if (stageIndex >= 2) {
+            return Stage2Candidates[index % (sizeof(Stage2Candidates) / sizeof(Stage2Candidates[0]))];
+        }
+        return Stage1Candidates[index % (sizeof(Stage1Candidates) / sizeof(Stage1Candidates[0]))];
+    }
+
+    int EdgeEntryCandidateCount() const {
+        return 4;
+    }
+
+    EntryCandidate EdgeEntryCandidateAt(int index, int stageIndex) const {
+        const bool lateStage = stageIndex >= 2;
+        constexpr EntryCandidate Stage1Candidates[] = {
+            {1.10f, -0.78f, 0.86f, 48.0f},
+            {1.12f, -0.18f, -0.86f, 42.0f},
+            {1.14f, 0.35f, 0.25f, 54.0f},
+            {1.16f, 0.78f, -0.25f, 36.0f}
+        };
+        constexpr EntryCandidate Stage2Candidates[] = {
+            {1.10f, -0.82f, 0.88f, 50.0f},
+            {1.12f, -0.28f, -0.88f, 40.0f},
+            {1.14f, 0.28f, 0.88f, 56.0f},
+            {1.16f, 0.82f, -0.88f, 34.0f}
+        };
+        if (lateStage) {
             return Stage2Candidates[index % (sizeof(Stage2Candidates) / sizeof(Stage2Candidates[0]))];
         }
         return Stage1Candidates[index % (sizeof(Stage1Candidates) / sizeof(Stage1Candidates[0]))];
@@ -234,7 +262,9 @@ public:
         return 2;
     }
 
-    void ConfigureSpawn(Enemy& enemy, int frame, int kills, bool railMode, int stageIndex) const override {
+    void ConfigureSpawn(SideScrollingShooter& shooter, Enemy& enemy,
+        int frame, int kills, bool railMode, int stageIndex) const override {
+        (void)shooter;
         ConfigureStats(enemy, stageIndex);
         const EntryCandidate candidate = EntryCandidateAt(
             SelectEntryCandidateIndex(frame, kills, stageIndex), stageIndex);
@@ -270,27 +300,140 @@ public:
 
 protected:
     int EntryCandidateCount(int) const override {
-        return 4;
+        return EdgeEntryCandidateCount();
+    }
+
+    EntryCandidate EntryCandidateAt(int index, int stageIndex) const override {
+        return EdgeEntryCandidateAt(index, stageIndex);
+    }
+};
+
+/**
+ * @brief 停止後に円形弾幕を撃つ砲台機を制御する
+ */
+class SideScrollingShooter::CircleShooterEnemyBehavior final : public SideScrollingShooter::EnemyBehavior {
+public:
+    int Type() const override {
+        return 5;
+    }
+
+    int MaxHp() const override {
+        return 3;
+    }
+
+    void ConfigureSpawn(SideScrollingShooter& shooter, Enemy& enemy,
+        int frame, int kills, bool railMode, int stageIndex) const override {
+        ConfigureStats(enemy, stageIndex);
+        const EntryCandidate candidate = SelectFreeCandidate(shooter, enemy, frame, kills, stageIndex);
+        enemy.baseX = railMode ? candidate.railX : candidate.sideX;
+        enemy.x = enemy.baseX;
+        enemy.z = railMode ? candidate.railZ : ToRailZFromSideX(enemy.x);
+        enemy.baseY = candidate.y;
+        enemy.y = enemy.baseY;
+        enemy.phase = 0.0f;
+    }
+
+    void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
+        const float stopX = (std::max)(enemy.baseX - 0.38f, -0.84f);
+        if (enemy.x > stopX) {
+            enemy.x -= shooter.IsRailGameplayActive() ? 0.010f : 0.012f;
+        } else {
+            enemy.x = stopX;
+        }
+        if (!shooter.IsRailGameplayActive()) {
+            enemy.z = ToRailZFromSideX(enemy.x);
+        }
+        enemy.y = enemy.baseY;
+        FireSpecial(shooter, enemy);
+    }
+
+    int AimedShotInterval() const override {
+        return 0;
+    }
+
+    int Score(const Enemy&) const override {
+        return 280;
+    }
+
+    float RenderScale() const override {
+        return 1.22f;
+    }
+
+    void FireSpecial(SideScrollingShooter& shooter, Enemy& enemy) const override {
+        if (enemy.age < 36 || enemy.age % 72 != 0) {
+            return;
+        }
+
+        constexpr int BulletCount = 8;
+        if (shooter.IsRailGameplayActive()) {
+            constexpr float Radius = 0.22f;
+            for (int i = 0; i < BulletCount; ++i) {
+                const float angle = static_cast<float>(i) * Math::TwoPi / static_cast<float>(BulletCount);
+                const float cx = std::cos(angle);
+                const float sy = std::sin(angle);
+                shooter.SpawnShotDirect(enemy.x + cx * Radius, enemy.y + sy * Radius, enemy.z,
+                    cx * 0.010f, sy * 0.014f, -0.58f, true);
+            }
+            return;
+        }
+
+        for (int i = 0; i < BulletCount; ++i) {
+            const float offsetY = (static_cast<float>(i) - 3.5f) * 0.075f;
+            shooter.SpawnShotDirect(enemy.x - 0.06f, enemy.y + offsetY, ToRailZFromSideX(enemy.x),
+                -0.018f, 0.0f, 0.0f, true);
+        }
+    }
+
+protected:
+    int EntryCandidateCount(int) const override {
+        return EdgeEntryCandidateCount();
     }
 
     EntryCandidate EntryCandidateAt(int index, int stageIndex) const override {
         const bool lateStage = stageIndex >= 2;
         constexpr EntryCandidate Stage1Candidates[] = {
             {1.10f, -0.78f, 0.86f, 48.0f},
-            {1.12f, -0.18f, -0.86f, 42.0f},
-            {1.14f, 0.35f, 0.86f, 54.0f},
+            {1.12f, -0.18f, 0.32f, 42.0f},
+            {1.14f, 0.35f, -0.32f, 54.0f},
             {1.16f, 0.78f, -0.86f, 36.0f}
         };
         constexpr EntryCandidate Stage2Candidates[] = {
-            {1.10f, -0.82f, 0.88f, 50.0f},
-            {1.12f, -0.28f, -0.88f, 40.0f},
-            {1.14f, 0.28f, 0.88f, 56.0f},
-            {1.16f, 0.82f, -0.88f, 34.0f}
+            {1.10f, -0.82f, 0.86f, 50.0f},
+            {1.12f, -0.28f, 0.32f, 40.0f},
+            {1.14f, 0.28f, -0.32f, 56.0f},
+            {1.16f, 0.82f, -0.86f, 34.0f}
         };
         if (lateStage) {
             return Stage2Candidates[index % (sizeof(Stage2Candidates) / sizeof(Stage2Candidates[0]))];
         }
         return Stage1Candidates[index % (sizeof(Stage1Candidates) / sizeof(Stage1Candidates[0]))];
+    }
+
+	// 同じ場所に出現している敵がいないか確認し、空いている候補を返す
+    EntryCandidate SelectFreeCandidate(const SideScrollingShooter& shooter,
+        const Enemy& spawningEnemy, int frame, int kills, int stageIndex) const {
+        const int firstIndex = SelectEntryCandidateIndex(frame, kills, stageIndex);
+        const int candidateCount = EntryCandidateCount(stageIndex);
+        for (int offset = 0; offset < candidateCount; ++offset) {
+            const EntryCandidate candidate = EntryCandidateAt(firstIndex + offset, stageIndex);
+            if (!IsLaneOccupied(shooter, spawningEnemy, candidate.y)) {
+                return candidate;
+            }
+        }
+        return EntryCandidateAt(firstIndex, stageIndex);
+    }
+
+    bool IsLaneOccupied(const SideScrollingShooter& shooter,
+        const Enemy& spawningEnemy, float laneY) const {
+        for (const auto& enemy : shooter.m_enemies) {
+            if (&enemy == &spawningEnemy || !enemy.active || enemy.type != Type()) {
+                continue;
+            }
+            if (std::abs(enemy.baseY - laneY) < 0.05f) {
+                return true;
+            }
+        }
+        return false;
     }
 };
 
