@@ -16,9 +16,8 @@ public:
 
     struct EnemySpawnRule {
         int enemyType = 0;
-        int frameUnit = 1;
-        int cycle = 1;
-        int remainder = 0;
+        int firstFrame = 0;
+        int interval = 0;
     };
 
     virtual ~Stage() = default;
@@ -29,11 +28,10 @@ public:
     virtual int BossMaxHp() const {
         return BossEnemyBehaviorInstance().MaxHpForStage(StageIndex());
     }
-    virtual int SpawnCooldown(int frame, int kills) const = 0;
-    virtual int SelectEnemyType(int frame, int kills) const = 0;
+    virtual bool TrySelectEnemyType(int frame, int& enemyType) const = 0;
     virtual void ConfigureEnemy(SideScrollingShooter& shooter, Enemy& enemy,
-        int frame, int kills, bool railMode) const {
-        EnemyBehaviorForType(SelectEnemyType(frame, kills)).ConfigureSpawn(
+        int enemyType, int frame, int kills, bool railMode) const {
+        EnemyBehaviorForType(enemyType).ConfigureSpawn(
             shooter, enemy, frame, kills, railMode, StageIndex());
     }
     virtual void ConfigureBoss(Enemy& boss, bool railMode) const {
@@ -43,14 +41,24 @@ public:
     virtual BossBullet GetBossBullet(int index, bool railMode) const = 0;
 
 protected:
-    int SelectByRules(const EnemySpawnRule* rules, int ruleCount, int frame, int kills) const {
+    bool TrySelectByRules(const EnemySpawnRule* rules, int ruleCount, int frame, int& enemyType) const {
         for (int i = 0; i < ruleCount; ++i) {
             const EnemySpawnRule& rule = rules[i];
-            if ((kills + frame / rule.frameUnit) % rule.cycle == rule.remainder) {
-                return rule.enemyType;
+            if (frame < rule.firstFrame) {
+                continue;
+            }
+            if (frame == rule.firstFrame ||
+                (rule.interval > 0 && (frame - rule.firstFrame) % rule.interval == 0)) {
+                enemyType = rule.enemyType;
+                return true;
             }
         }
-        return 0;
+        return false;
+    }
+
+    bool TrySelectByRules(const EnemySpawnRule* rules, int ruleCount, int frame, int kills, int& enemyType) const {
+        (void)kills;
+        return TrySelectByRules(rules, ruleCount, frame, enemyType);
     }
 };
 
@@ -63,17 +71,15 @@ public:
         return 1;
     }
 
-    int SpawnCooldown(int, int kills) const override {
-        return (std::max)(28, 70 - kills);
-    }
-
-    int SelectEnemyType(int frame, int kills) const override {
+    bool TrySelectEnemyType(int frame, int& enemyType) const override {
+        // { 敵タイプ, 最初の生成フレーム, 以降生成する周期 }
         constexpr EnemySpawnRule Rules[] = {
-            {3, 90, 6, 2},
-            {5, 75, 7, 3},
-            {1, 60, 5, 4}
+            {0, 35, 70},
+            {3, 160, 360},
+            {5, 220, 525},
+            {1, 300, 420}
         };
-        return SelectByRules(Rules, static_cast<int>(sizeof(Rules) / sizeof(Rules[0])), frame, kills);
+        return TrySelectByRules(Rules, static_cast<int>(sizeof(Rules) / sizeof(Rules[0])), frame, enemyType);
     }
 
     int BossBulletCount(bool) const override {
@@ -108,17 +114,15 @@ public:
         return 2;
     }
 
-    int SpawnCooldown(int frame, int kills) const override {
-        return (std::max)(22, 62 - kills + (frame / 180) % 10);
-    }
-
-    int SelectEnemyType(int frame, int kills) const override {
+    bool TrySelectEnemyType(int frame, int& enemyType) const override {
+        // { 敵タイプ, 最初の生成フレーム, 以降生成する周期 }
         constexpr EnemySpawnRule Rules[] = {
-            {3, 75, 5, 1},
-            {5, 60, 6, 2},
-            {4, 45, 4, 3}
+            {0, 30, 62},
+            {3, 120, 300},
+            {5, 180, 420},
+            {4, 260, 360}
         };
-        return SelectByRules(Rules, static_cast<int>(sizeof(Rules) / sizeof(Rules[0])), frame, kills);
+        return TrySelectByRules(Rules, static_cast<int>(sizeof(Rules) / sizeof(Rules[0])), frame, enemyType);
     }
 
     int BossBulletCount(bool) const override {

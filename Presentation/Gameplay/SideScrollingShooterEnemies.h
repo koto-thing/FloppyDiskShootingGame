@@ -8,6 +8,8 @@
  */
 class SideScrollingShooter::EnemyBehavior {
 public:
+	// @brief 敵の初期配置候補
+    // { 2DのX, 3DのX, 上下Y, 3DのZ }
     struct EntryCandidate {
         float sideX = 1.08f;
         float railX = 0.0f;
@@ -20,6 +22,12 @@ public:
     virtual int MaxHp() const = 0;
     virtual void Tick(SideScrollingShooter& shooter, Enemy& enemy) const = 0;
     virtual int AimedShotInterval() const = 0;
+    virtual float AimedShotSpeed() const {
+        return 0.018f;
+    }
+    virtual float RailAimedShotSpeed() const {
+        return 0.42f;
+    }
     virtual int MaxHpForStage(int) const {
         return MaxHp();
     }
@@ -80,6 +88,7 @@ protected:
     }
 
     virtual EntryCandidate EntryCandidateAt(int index, int stageIndex) const {
+        // { 2DのX, 3DのX, 上下Y, 3DのZ }
         constexpr EntryCandidate Stage1Candidates[] = {
             {1.08f, -0.72f, -0.54f, EnemyRailFarZ},
             {1.10f, -0.22f, 0.36f, EnemyRailFarZ},
@@ -162,6 +171,14 @@ public:
         return 105;
     }
 
+    float AimedShotSpeed() const override {
+        return 0.018f;
+    }
+
+    float RailAimedShotSpeed() const override {
+        return 0.42f;
+    }
+
     int AimedShotIntervalForStage(int stageIndex) const override {
         return stageIndex >= 2 ? 92 : AimedShotInterval();
     }
@@ -197,6 +214,14 @@ public:
 
     int AimedShotInterval() const override {
         return 72;
+    }
+
+    float AimedShotSpeed() const override {
+        return 0.017f;
+    }
+
+    float RailAimedShotSpeed() const override {
+        return 0.58f;
     }
 
     int AimedShotIntervalForStage(int stageIndex) const override {
@@ -238,6 +263,14 @@ public:
 
     int AimedShotInterval() const override {
         return 64;
+    }
+
+    float AimedShotSpeed() const override {
+        return 0.016f;
+    }
+
+    float RailAimedShotSpeed() const override {
+        return 0.54f;
     }
 
     int Score(const Enemy&) const override {
@@ -284,6 +317,14 @@ public:
 
     int AimedShotInterval() const override {
         return 32;
+    }
+
+    float AimedShotSpeed() const override {
+        return 0.020f;
+    }
+
+    float RailAimedShotSpeed() const override {
+        return 0.58f;
     }
 
     int AimedShotIntervalForStage(int stageIndex) const override {
@@ -351,6 +392,14 @@ public:
         return 0;
     }
 
+    float RingShotSpeed() const {
+        return 0.58f;
+    }
+
+    float RingSpreadSpeed() const {
+        return 0.010f;
+    }
+
     int Score(const Enemy&) const override {
         return 280;
     }
@@ -372,7 +421,7 @@ public:
                 const float cx = std::cos(angle);
                 const float sy = std::sin(angle);
                 shooter.SpawnShotDirect(enemy.x + cx * Radius, enemy.y + sy * Radius, enemy.z,
-                    cx * 0.010f, sy * 0.014f, -0.58f, true);
+                    cx * RingSpreadSpeed(), sy * RingSpreadSpeed() * 1.4f, -RingShotSpeed(), true);
             }
             return;
         }
@@ -380,7 +429,7 @@ public:
         for (int i = 0; i < BulletCount; ++i) {
             const float offsetY = (static_cast<float>(i) - 3.5f) * 0.075f;
             shooter.SpawnShotDirect(enemy.x - 0.06f, enemy.y + offsetY, ToRailZFromSideX(enemy.x),
-                -0.018f, 0.0f, 0.0f, true);
+                -AimedShotSpeed(), 0.0f, 0.0f, true);
         }
     }
 
@@ -472,6 +521,14 @@ public:
 
     int AimedShotInterval() const override {
         return 42;
+    }
+
+    float AimedShotSpeed() const override {
+        return 0.018f;
+    }
+
+    float RailAimedShotSpeed() const override {
+        return 0.62f;
     }
 
     int AimedShotIntervalForStage(int stageIndex) const override {

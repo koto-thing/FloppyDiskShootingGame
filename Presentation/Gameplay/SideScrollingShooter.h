@@ -91,9 +91,10 @@ private:
     void TickPlayer();
     void TickEnemies();
     void TickShots();
-    void SpawnEnemy();
+    void SpawnEnemy(int enemyType);
     void StartBossBattle();
-    void SpawnShot(float x, float y, float vx, float vy, bool enemy, float z = -1.0f);
+    void SpawnShot(float x, float y, float vx, float vy, bool enemy,
+        float z = -1.0f, float railSpeed = -1.0f);
     void SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy);
     void DamagePlayer();
     void PlayShotSound();

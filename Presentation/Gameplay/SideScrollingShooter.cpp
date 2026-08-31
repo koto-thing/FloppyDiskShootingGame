@@ -180,9 +180,9 @@ void SideScrollingShooter::Tick() {
         StartBossBattle();
     }
 
-    if (!m_bossBattle && --m_spawnCooldown <= 0) {
-        SpawnEnemy();
-        m_spawnCooldown = m_stage->SpawnCooldown(m_frame, m_kills);
+    int enemyType = 0;
+    if (!m_bossBattle && m_stage->TrySelectEnemyType(m_frame, enemyType)) {
+        SpawnEnemy(enemyType);
     }
 
     TickEnemies();
@@ -223,8 +223,9 @@ void SideScrollingShooter::TickEnemies() {
             const float dyToPlayer = m_playerY - enemy.y;
             const float length = std::sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
             if (length > 0.001f) {
-                SpawnShot(enemy.x - 0.06f, enemy.y, dxToPlayer / length * 0.018f,
-                    dyToPlayer / length * 0.018f, true, enemy.z);
+                const float shotSpeed = enemy.behavior->AimedShotSpeed();
+                SpawnShot(enemy.x - 0.06f, enemy.y, dxToPlayer / length * shotSpeed,
+                    dyToPlayer / length * shotSpeed, true, enemy.z, enemy.behavior->RailAimedShotSpeed());
             }
         }
 
@@ -235,7 +236,7 @@ void SideScrollingShooter::TickEnemies() {
             for (int i = 0; i < bulletCount; ++i) {
                 const Stage::BossBullet bullet = m_stage->GetBossBullet(i, railMode);
                 SpawnShot(enemy.x + bullet.offsetX, enemy.y + bullet.offsetY,
-                    bullet.vx, bullet.vy, true, enemy.z);
+                    bullet.vx, bullet.vy, true, enemy.z, enemy.behavior->RailAimedShotSpeed());
             }
         }
 
@@ -396,11 +397,11 @@ void SideScrollingShooter::InitializeRailObjects() {
     }
 }
 
-void SideScrollingShooter::SpawnEnemy() {
+void SideScrollingShooter::SpawnEnemy(int enemyType) {
     for (auto& enemy : m_enemies) {
         if (enemy.active) continue;
         enemy.active = true;
-        m_stage->ConfigureEnemy(*this, enemy, m_frame, m_kills, IsRailGameplayActive());
+        m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
         return;
     }
 }
@@ -426,7 +427,8 @@ void SideScrollingShooter::StartBossBattle() {
     }
 }
 
-void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool enemy, float z) {
+void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool enemy,
+    float z, float railSpeed) {
     for (auto& shot : m_shots) {
         if (shot.active) continue;
         shot.x = x;
@@ -446,7 +448,7 @@ void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool 
                 const float dy = ToWorldY(targetY) - ToWorldY(y);
                 const float dz = PlayerRailZ - shot.z;
                 const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
-                constexpr float EnemyShotSpeed = 0.62f;
+                const float EnemyShotSpeed = railSpeed >= 0.0f ? railSpeed : 0.62f;
                 shot.vx = FromWorldX(dx / length * EnemyShotSpeed);
                 shot.vy = FromWorldY(dy / length * EnemyShotSpeed);
                 shot.vz = dz / length * EnemyShotSpeed;
