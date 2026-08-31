@@ -378,24 +378,21 @@ void SideScrollingShooter::InitializeRailObjects() {
         if (!shot.active) continue;
         shot.transitionSideX = shot.x;
         shot.transitionSideY = shot.y;
+        const float sideVx = shot.vx;
         if (shot.z <= 0.0f) {
             shot.z = ToRailZFromSideX(shot.x);
         }
-        shot.x = 0.0f;
+        // 2Dで裏側に動いていた奥行き速度を復元し、既存のx/y速度は維持する
         if (shot.enemy) {
-            const float dx = ToWorldX(m_playerX) - ToWorldX(shot.x);
-            const float dy = ToWorldY(m_playerY) - ToWorldY(shot.y);
-            const float dz = PlayerRailZ - shot.z;
-            const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
-            constexpr float EnemyShotSpeed = 0.62f;
-            shot.vx = FromWorldX(dx / length * EnemyShotSpeed);
-            shot.vy = FromWorldY(dy / length * EnemyShotSpeed);
-            shot.vz = dz / length * EnemyShotSpeed;
-        } else {
+            shot.vz = sideVx * 18.0f;
+        }
+        else {
             shot.vx = 0.0f;
             shot.vy = 0.0f;
             shot.vz = 1.45f;
         }
+
+        
     }
 }
 
