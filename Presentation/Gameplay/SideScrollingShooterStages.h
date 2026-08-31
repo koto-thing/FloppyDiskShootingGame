@@ -56,6 +56,14 @@ public:
     virtual bool HasDebrisGravity() const {
         return false;
     }
+    /**
+     * @brief 指定チャプターの終了フレームを取得する
+     * @param chapterNumber チャプター番号
+     * @return 指定チャプターの終了フレーム
+     */
+    virtual int ChapterEndFrame(int chapterNumber) const {
+        return chapterNumber * SideScrollingShooter::ChapterLengthFrames;
+    }
     virtual bool TrySelectEnemySpawn(int frame, EnemySpawnRule& spawn, int& chapterNumber) const = 0;
     virtual void ConfigureEnemy(SideScrollingShooter& shooter, Enemy& enemy,
         int enemyType, int frame, int kills, bool railMode) const {

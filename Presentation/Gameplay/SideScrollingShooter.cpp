@@ -370,6 +370,9 @@ void SideScrollingShooter::Tick() {
     } else {
         m_displayBossHp = static_cast<float>(m_bossHp);
     }
+    if (m_viewTransitionTimer > 0) {
+        return;
+    }
     if (m_clear) {
         TickExplosions();
         TickDebris();
@@ -378,8 +381,7 @@ void SideScrollingShooter::Tick() {
     }
     if (m_restartTimer > 0) {
         --m_restartTimer;
-        // リスタート表示中はチャプター進行と敵出現を止め、背景と自機弾だけを更新する
-        m_scroll += 0.008f;
+        // リスタート表示中は距離とチャプター進行を止め、画面上の弾と演出だけを更新する
         TickPlayer();
         TickShots();
         TickExplosions();
@@ -389,8 +391,7 @@ void SideScrollingShooter::Tick() {
     if (m_chapterResultActive) {
         TickChapterResult();
         if (m_chapterResultActive) {
-            // 戦闘進行は止めたまま、結果画面の背後と画面上の弾・破壊演出・アイテムを動かす
-            m_scroll += 0.008f;
+            // 戦闘進行は止めたまま、画面上の弾・破壊演出・アイテムを動かす
             TickPlayer();
             TickShots();
             TickExplosions();
@@ -416,7 +417,7 @@ void SideScrollingShooter::Tick() {
     m_shotCooldown = (std::max)(0, m_shotCooldown - 1);
     m_specialShotCooldown = (std::max)(0, m_specialShotCooldown - 1);
     m_invincible = (std::max)(0, m_invincible - 1);
-    if (!m_bossBattle && !m_chapterResultActive && m_frame >= m_chapterNumber * ChapterLengthFrames) {
+    if (!m_bossBattle && !m_chapterResultActive && m_frame >= m_stage->ChapterEndFrame(m_chapterNumber)) {
         FinishChapter();
     }
 
@@ -446,11 +447,6 @@ void SideScrollingShooter::Tick() {
         firedPlayerShot = true;
     }
     if (firedPlayerShot) PlayShotSound();
-
-    // 規定スクロール距離へ到達したら通常区間を終了してボス戦を開始する
-    if (!m_bossBattle && m_scroll >= m_stage->BossStartDistance()) {
-        StartBossBattle();
-    }
 
     Stage::EnemySpawnRule spawn;
     if (!m_bossBattle && !m_chapterResultActive &&
@@ -1412,8 +1408,8 @@ void SideScrollingShooter::RestartCurrentChapter() {
     m_kills = m_chapterStartKills;
     m_playerX = -0.72f;
     m_playerY = 0.0f;
-    m_scroll = static_cast<float>(m_chapterNumber - 1) * ChapterLengthFrames * 0.008f;
-    m_frame = (m_chapterNumber - 1) * ChapterLengthFrames;
+    m_frame = m_stage->ChapterEndFrame(m_chapterNumber - 1);
+    m_scroll = static_cast<float>(m_frame) * 0.008f;
     m_spawnCooldown = 35;
     m_shotCooldown = 0;
     m_specialShotCooldown = 0;
