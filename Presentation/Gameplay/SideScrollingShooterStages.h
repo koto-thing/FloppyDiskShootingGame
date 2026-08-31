@@ -14,15 +14,43 @@ public:
         float vy = 0.0f;
     };
 
+    struct EnemySpawnRule {
+        int enemyType = 0;
+        int frameUnit = 1;
+        int cycle = 1;
+        int remainder = 0;
+    };
+
     virtual ~Stage() = default;
-    virtual float BossStartDistance() const { return SideScrollingShooter::BossStartDistance; }
-    virtual int BossMaxHp() const { return SideScrollingShooter::BossMaxHp; }
+    virtual int StageIndex() const = 0;
+    virtual float BossStartDistance() const {
+        return SideScrollingShooter::BossStartDistance;
+    }
+    virtual int BossMaxHp() const {
+        return BossEnemyBehaviorInstance().MaxHpForStage(StageIndex());
+    }
     virtual int SpawnCooldown(int frame, int kills) const = 0;
-    virtual void ConfigureEnemy(Enemy& enemy, int frame, int kills, bool railMode) const = 0;
-    virtual void ConfigureBoss(Enemy& boss, bool railMode) const = 0;
-    virtual int AimedShotInterval(int enemyType) const = 0;
+    virtual int SelectEnemyType(int frame, int kills) const = 0;
+    virtual void ConfigureEnemy(Enemy& enemy, int frame, int kills, bool railMode) const {
+        EnemyBehaviorForType(SelectEnemyType(frame, kills)).ConfigureSpawn(
+            enemy, frame, kills, railMode, StageIndex());
+    }
+    virtual void ConfigureBoss(Enemy& boss, bool railMode) const {
+        BossEnemyBehaviorInstance().ConfigureBossSpawn(boss, railMode, StageIndex());
+    }
     virtual int BossBulletCount(bool railMode) const = 0;
     virtual BossBullet GetBossBullet(int index, bool railMode) const = 0;
+
+protected:
+    int SelectByRules(const EnemySpawnRule* rules, int ruleCount, int frame, int kills) const {
+        for (int i = 0; i < ruleCount; ++i) {
+            const EnemySpawnRule& rule = rules[i];
+            if ((kills + frame / rule.frameUnit) % rule.cycle == rule.remainder) {
+                return rule.enemyType;
+            }
+        }
+        return 0;
+    }
 };
 
 /**
@@ -30,40 +58,20 @@ public:
  */
 class SideScrollingShooter::Stage1 final : public SideScrollingShooter::Stage {
 public:
+    int StageIndex() const override {
+        return 1;
+    }
+
     int SpawnCooldown(int, int kills) const override {
         return (std::max)(28, 70 - kills);
     }
 
-    void ConfigureEnemy(Enemy& enemy, int frame, int kills, bool railMode) const override {
-        enemy.baseX = railMode ? -0.72f + static_cast<float>((frame * 53) % 145) / 100.0f : 1.05f;
-        enemy.x = enemy.baseX;
-        enemy.baseY = railMode ? -0.52f + static_cast<float>((frame * 37) % 105) / 100.0f :
-            -0.60f + static_cast<float>((frame * 37) % 120) / 100.0f;
-        enemy.y = enemy.baseY;
-        enemy.z = railMode ? EnemyRailFarZ : ToRailZFromSideX(enemy.x);
-        enemy.phase = static_cast<float>(frame % 31) * 0.2f;
-        enemy.type = ((kills + frame / 60) % 5 == 4) ? 1 : 0;
-        enemy.hp = enemy.type == 0 ? 1 : 3;
-        enemy.maxHp = enemy.hp;
-        enemy.age = 0;
-    }
-
-    void ConfigureBoss(Enemy& boss, bool railMode) const override {
-        boss.active = true;
-        boss.x = 1.16f;
-        boss.y = 0.0f;
-        boss.z = railMode ? 48.0f : ToRailZFromSideX(boss.x);
-        boss.baseX = 0.0f;
-        boss.baseY = 0.0f;
-        boss.phase = 0.0f;
-        boss.type = 2;
-        boss.hp = BossMaxHp();
-        boss.maxHp = boss.hp;
-        boss.age = 0;
-    }
-
-    int AimedShotInterval(int enemyType) const override {
-        return enemyType == 2 ? 42 : (enemyType == 0 ? 105 : 72);
+    int SelectEnemyType(int frame, int kills) const override {
+        constexpr EnemySpawnRule Rules[] = {
+            {3, 90, 6, 2},
+            {1, 60, 5, 4}
+        };
+        return SelectByRules(Rules, static_cast<int>(sizeof(Rules) / sizeof(Rules[0])), frame, kills);
     }
 
     int BossBulletCount(bool) const override {
@@ -94,44 +102,20 @@ public:
  */
 class SideScrollingShooter::Stage2 final : public SideScrollingShooter::Stage {
 public:
-    int BossMaxHp() const override {
-        return SideScrollingShooter::BossMaxHp + 16;
+    int StageIndex() const override {
+        return 2;
     }
 
     int SpawnCooldown(int frame, int kills) const override {
         return (std::max)(22, 62 - kills + (frame / 180) % 10);
     }
 
-    void ConfigureEnemy(Enemy& enemy, int frame, int kills, bool railMode) const override {
-        enemy.baseX = railMode ? -0.85f + static_cast<float>((frame * 41) % 170) / 100.0f : 1.08f;
-        enemy.x = enemy.baseX;
-        enemy.baseY = railMode ? -0.62f + static_cast<float>((frame * 29) % 125) / 100.0f :
-            -0.70f + static_cast<float>((frame * 29) % 140) / 100.0f;
-        enemy.y = enemy.baseY;
-        enemy.z = railMode ? EnemyRailFarZ : ToRailZFromSideX(enemy.x);
-        enemy.phase = static_cast<float>((frame + 17) % 47) * 0.17f;
-        enemy.type = ((kills + frame / 45) % 4 == 3) ? 1 : 0;
-        enemy.hp = enemy.type == 0 ? 1 : 4;
-        enemy.maxHp = enemy.hp;
-        enemy.age = 0;
-    }
-
-    void ConfigureBoss(Enemy& boss, bool railMode) const override {
-        boss.active = true;
-        boss.x = 1.16f;
-        boss.y = 0.0f;
-        boss.z = railMode ? 52.0f : ToRailZFromSideX(boss.x);
-        boss.baseX = 0.0f;
-        boss.baseY = 0.0f;
-        boss.phase = 0.0f;
-        boss.type = 2;
-        boss.hp = BossMaxHp();
-        boss.maxHp = boss.hp;
-        boss.age = 0;
-    }
-
-    int AimedShotInterval(int enemyType) const override {
-        return enemyType == 2 ? 36 : (enemyType == 0 ? 92 : 64);
+    int SelectEnemyType(int frame, int kills) const override {
+        constexpr EnemySpawnRule Rules[] = {
+            {3, 75, 5, 1},
+            {4, 45, 4, 3}
+        };
+        return SelectByRules(Rules, static_cast<int>(sizeof(Rules) / sizeof(Rules[0])), frame, kills);
     }
 
     int BossBulletCount(bool) const override {

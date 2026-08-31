@@ -21,6 +21,12 @@ private:
     class Stage;
     class Stage1;
     class Stage2;
+    class EnemyBehavior;
+    class BasicEnemyBehavior;
+    class HeavyEnemyBehavior;
+    class ArmoredEnemyBehavior;
+    class BossEnemyBehavior;
+    class StraightShooterEnemyBehavior;
 
     struct Shot {
         float x = 0.0f;
@@ -48,6 +54,8 @@ private:
         int maxHp = 0;
         int type = 0;
         int age = 0;
+        int shotInterval = 0;
+        const EnemyBehavior* behavior = nullptr;
         bool active = false;
     };
 
@@ -70,6 +78,12 @@ private:
     void Reset();
     static const Stage& Stage1Instance();
     static const Stage& Stage2Instance();
+    static const EnemyBehavior& BasicEnemyBehaviorInstance();
+    static const EnemyBehavior& HeavyEnemyBehaviorInstance();
+    static const EnemyBehavior& ArmoredEnemyBehaviorInstance();
+    static const EnemyBehavior& BossEnemyBehaviorInstance();
+    static const EnemyBehavior& StraightShooterEnemyBehaviorInstance();
+    static const EnemyBehavior& EnemyBehaviorForType(int type);
     void TickViewTransition();
     void InitializeRailObjects();
     void TickPlayer();
