@@ -2,7 +2,7 @@
 
 #include <array>
 
-#include "../../Domain/ValueObjects/PlayerType.h"
+#include "../../Engine/Graphics/Camera3D.h"
 
 class AudioService;
 class Renderer;
@@ -47,17 +47,26 @@ public:
     void Render(Renderer& renderer) const;
 
 private:
+    class Stage;
+    class Stage1;
+    class Stage2;
+    class EnemyBehavior;
+    class BasicEnemyBehavior;
+    class HeavyEnemyBehavior;
+    class ArmoredEnemyBehavior;
+    class BossEnemyBehavior;
+    class StraightShooterEnemyBehavior;
+    class CircleShooterEnemyBehavior;
+
     struct Shot {
         float x = 0.0f;
         float y = 0.0f;
+        float z = 0.0f;
+        float transitionSideX = 0.0f;
+        float transitionSideY = 0.0f;
         float vx = 0.0f;
         float vy = 0.0f;
-        float hitRadius = 0.022f;
-        int damage = 1;
-        unsigned int hitEnemyMask = 0;
-        PlayerType playerType = Homing;
-        bool special = false;
-        bool piercing = false;
+        float vz = 0.0f;
         bool enemy = false;
         bool active = false;
     };
@@ -65,12 +74,18 @@ private:
     struct Enemy {
         float x = 0.0f;
         float y = 0.0f;
+        float z = 0.0f;
+        float transitionSideX = 0.0f;
+        float transitionSideY = 0.0f;
+        float baseX = 0.0f;
         float baseY = 0.0f;
         float phase = 0.0f;
         int hp = 0;
         int maxHp = 0;
         int type = 0;
         int age = 0;
+        int shotInterval = 0;
+        const EnemyBehavior* behavior = nullptr;
         bool active = false;
     };
 
@@ -78,25 +93,71 @@ private:
     static constexpr int EnemyCapacity = 12;
     static constexpr float BossStartDistance = 12.0f;
     static constexpr int BossMaxHp = 48;
+    static constexpr int ViewTransitionFrames = 90;
+    static constexpr float WorldXScale = 7.0f;
+    static constexpr float WorldYScale = 4.4f;
+    static constexpr float PlayerRailZ = 8.0f;
+    static constexpr float SidePlaneZ = 10.0f;
+    static constexpr float EnemyRailFarZ = 60.0f;
+
+    enum class ViewMode {
+        Side2D,
+        Rail3D
+    };
 
     void Reset();
-    void SpawnEnemy();
+    static const Stage& Stage1Instance();
+    static const Stage& Stage2Instance();
+    static const EnemyBehavior& BasicEnemyBehaviorInstance();
+    static const EnemyBehavior& HeavyEnemyBehaviorInstance();
+    static const EnemyBehavior& ArmoredEnemyBehaviorInstance();
+    static const EnemyBehavior& BossEnemyBehaviorInstance();
+    static const EnemyBehavior& StraightShooterEnemyBehaviorInstance();
+    static const EnemyBehavior& CircleShooterEnemyBehaviorInstance();
+    static const EnemyBehavior& EnemyBehaviorForType(int type);
+    void TickViewTransition();
+    void InitializeRailObjects();
+    void TickPlayer();
+    void TickEnemies();
+    void TickShots();
+    void SpawnEnemy(int enemyType);
     void StartBossBattle();
-    void SpawnShot(float x, float y, float vx, float vy, bool enemy);
-    void FireNormalShot();
-    void FireSpecialShots();
-    void UpdateHomingShot(Shot& shot);
+    void SpawnShot(float x, float y, float vx, float vy, bool enemy,
+        float z = -1.0f, float railSpeed = -1.0f);
+    void SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy);
     void DamagePlayer();
     void PlayShotSound();
     void PlayHitSound();
     static bool Hit(float ax, float ay, float ar, float bx, float by, float br);
+    static bool Hit3D(float ax, float ay, float az, float ar, float bx, float by, float bz, float br);
+    static float SmoothStep(float value);
+    static float ToWorldX(float x);
+    static float ToWorldY(float y);
+    static float FromWorldX(float x);
+    static float FromWorldY(float y);
+    static float ToRailZFromSideX(float x);
+    static float ToSideXFromRailZ(float z);
+    float RailBlend() const;
+    bool IsRailGameplayActive() const;
+    bool IsRailRenderActive() const;
+    void ConfigureSideCamera(Camera3D& camera, Renderer& renderer) const;
+    void ConfigureRailCamera(Camera3D& camera, Renderer& renderer) const;
+    void Render2D(Renderer& renderer) const;
+    void Render3D(Renderer& renderer) const;
+    void DrawBossHud(Renderer& renderer) const;
     static void DrawShape(Renderer& renderer,
         float x, float y, float w, float h, const float color[4]);
+    static void DrawModelPrimitive(Renderer& renderer, const Camera3D& camera, int shape,
+        float x, float y, float z, float w, float h, float d, const float color[4], float yaw = 0.0f);
+    static void DrawPlayerModel(Renderer& renderer, const Camera3D& camera,
+        float x, float y, float z, bool visible, float yaw = 0.0f);
+    static void DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw = 0.0f);
+    static void DrawShotModel(Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw = 0.0f);
 
     std::array<Shot, ShotCapacity> m_shots {};
     std::array<Enemy, EnemyCapacity> m_enemies {};
     AudioService* m_audio = nullptr;
-    PlayerType m_playerType = Homing;
+    const Stage* m_stage = nullptr;
     float m_playerX = -0.72f;
     float m_playerY = 0.0f;
     float m_scroll = 0.0f;
@@ -117,4 +178,9 @@ private:
     bool m_gameOver = false;
     bool m_clear = false;
     bool m_bossBattle = false;
+    bool m_viewToggleRequested = false;
+    ViewMode m_viewMode = ViewMode::Side2D;
+    ViewMode m_nextViewMode = ViewMode::Side2D;
+    int m_viewTransitionTimer = 0;
+    float m_viewTransitionProgress = 0.0f;
 };
