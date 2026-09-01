@@ -153,7 +153,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 1;
+        return 10;
     }
 
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
@@ -198,7 +198,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 3;
+        return 30;
     }
 
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
@@ -247,7 +247,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 4;
+        return 50;
     }
 
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
@@ -292,7 +292,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 2;
+        return 20;
     }
 
     void ConfigureSpawn(SideScrollingShooter& shooter, Enemy& enemy,
@@ -310,8 +310,13 @@ public:
     }
 
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
-        enemy.z -= 0.36f;
-        enemy.x = shooter.IsRailGameplayActive() ? enemy.baseX : ToSideXFromRailZ(enemy.z);
+        if (shooter.IsRailGameplayActive()) {
+            enemy.z -= 0.36f;
+            enemy.x = enemy.baseX;
+        } else {
+            enemy.x -= 0.020f;
+            enemy.z = ToRailZFromSideX(enemy.x);
+        }
         enemy.y = enemy.baseY;
     }
 
@@ -359,7 +364,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 3;
+        return 50;
     }
 
     void ConfigureSpawn(SideScrollingShooter& shooter, Enemy& enemy,

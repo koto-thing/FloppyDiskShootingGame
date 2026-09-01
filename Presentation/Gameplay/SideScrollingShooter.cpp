@@ -518,8 +518,7 @@ void SideScrollingShooter::TickEnemies() {
             FireBossPartBarrage(enemy);
         }
 
-        if (enemy.type != 2 && !IsRailGameplayActive() && enemy.x < -1.08f) enemy.active = false;
-        if (enemy.type == 3 && !IsRailGameplayActive() && enemy.z < 16.0f) enemy.active = false;
+        if (enemy.type != 2 && !IsRailGameplayActive() && enemy.x < -2.6f) enemy.active = false;
         if (enemy.type != 2 && IsRailGameplayActive() && enemy.z < 2.0f) enemy.active = false;
         const float enemyRadius = enemy.behavior->CollisionRadius(enemy);
         const bool playerHit = IsRailGameplayActive() ?
