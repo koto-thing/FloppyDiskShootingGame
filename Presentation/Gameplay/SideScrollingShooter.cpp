@@ -1262,22 +1262,20 @@ void SideScrollingShooter::TickDebris() {
 }
 
 void SideScrollingShooter::FireBossPartBarrage(const Enemy& boss) {
-    constexpr float ModelScale = 0.14f;
-    constexpr float PartX[] = { 0.0f, 17.0f, -17.0f, 6.0f, -6.0f };
-    constexpr float PartY[] = { 3.0f, 2.0f, 2.0f, -6.0f, -6.0f };
-    constexpr float PartZ[] = { -17.5f, 0.0f, 0.0f, 13.0f, 13.0f };
     const bool railMode = IsRailGameplayActive();
+    const float socketScale = m_stage->BossPartSocketScale();
 
     // 未破壊部位ごとに、ステージ定義の通常または特殊弾幕を発射する
     for (int part = 0; part < m_stage->BossPartTotal(); ++part) {
         if (boss.bossPartHp[part] <= 0) continue;
+        const Stage::BossPartSocket socket = m_stage->GetBossPartSocket(part);
         const int bulletCount = m_stage->BossPartBulletCount(part, boss.bossPhase, railMode);
         for (int index = 0; index < bulletCount; ++index) {
             const Stage::BossBullet bullet = m_stage->GetBossPartBullet(part, boss.bossPhase, index, railMode);
-            const float x = railMode ? boss.x + PartX[part] * ModelScale / WorldXScale :
-                boss.x + PartZ[part] * ModelScale / WorldXScale;
-            const float y = boss.y + PartY[part] * ModelScale / WorldYScale;
-            const float z = boss.z + PartZ[part] * ModelScale;
+            const float x = railMode ? boss.x + socket.localX * socketScale / WorldXScale :
+                boss.x + socket.localZ * socketScale / WorldXScale;
+            const float y = boss.y + socket.localY * socketScale / WorldYScale;
+            const float z = boss.z + socket.localZ * socketScale;
             SpawnShot(x + bullet.offsetX, y + bullet.offsetY, bullet.vx, bullet.vy, true,
                 z, boss.behavior->RailAimedShotSpeed());
         }
@@ -1635,30 +1633,26 @@ void SideScrollingShooter::RestartCurrentChapter() {
 }
 
 bool SideScrollingShooter::TryHitBossPart(const Shot& shot, const Enemy& boss, int& part) const {
-    // 既存ボスモデルのローカル座標に対応する、破壊可能部位の中心と当たり判定半径
-    constexpr float ModelScale = 0.14f;
-    constexpr float PartX[] = { 0.0f, 17.0f, -17.0f, 6.0f, -6.0f };
-    constexpr float PartY[] = { 3.0f, 2.0f, 2.0f, -6.0f, -6.0f };
-    constexpr float PartZ[] = { -17.5f, 0.0f, 0.0f, 13.0f, 13.0f };
-    constexpr float PartRadius[] = { 0.50f, 1.20f, 1.20f, 0.58f, 0.58f };
+    const float socketScale = m_stage->BossPartSocketScale();
 
     for (int i = 0; i < m_stage->BossPartTotal(); ++i) {
         if (boss.bossPartHp[i] <= 0) continue;
+        const Stage::BossPartSocket socket = m_stage->GetBossPartSocket(i);
         if (IsRailGameplayActive()) {
-            const float partX = ToWorldX(boss.x) + PartX[i] * ModelScale;
-            const float partY = ToWorldY(boss.y) + PartY[i] * ModelScale;
-            const float partZ = boss.z + PartZ[i] * ModelScale;
+            const float partX = ToWorldX(boss.x) + socket.localX * socketScale;
+            const float partY = ToWorldY(boss.y) + socket.localY * socketScale;
+            const float partZ = boss.z + socket.localZ * socketScale;
             if (!Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
                 ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
-                partX, partY, partZ, PartRadius[i])) {
+                partX, partY, partZ, socket.radius)) {
                 continue;
             }
         } else {
             // 2D表示ではY軸回転済みモデルの奥行きを画面X座標へ投影する
-            const float partX = boss.x + PartZ[i] * ModelScale / WorldXScale;
-            const float partY = boss.y + PartY[i] * ModelScale / WorldYScale;
+            const float partX = boss.x + socket.localZ * socketScale / WorldXScale;
+            const float partY = boss.y + socket.localY * socketScale / WorldYScale;
             if (!Hit(shot.x, shot.y, shot.hitRadius, partX, partY,
-                PartRadius[i] / WorldXScale)) {
+                socket.radius / WorldXScale)) {
                 continue;
             }
         }
@@ -2730,7 +2724,7 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
         Enemy sideEnemy = enemy;
         sideEnemy.z = SidePlaneZ + (enemy.type == 2 ? 2.2f : 1.5f);
         if (enemy.type == 2) {
-            DrawEnemyModel(renderer, camera, sideEnemy, Math::HalfPi);
+            DrawEnemyModel(renderer, camera, sideEnemy, m_stage->BossSideModelYaw());
         } else {
             DrawEnemyModel(renderer, camera, sideEnemy, Math::HalfPi);
         }
@@ -2812,6 +2806,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     const float railWeight = RailBlend();
     const float playerYaw = Math::Lerp(Math::HalfPi, 0.0f, railWeight);
     const float enemyYaw = Math::Lerp(Math::HalfPi, 0.0f, railWeight);
+    const float bossYaw = Math::Lerp(m_stage->BossSideModelYaw(), m_stage->BossRailModelYaw(), railWeight);
     constexpr float SideBackgroundZ = SidePlaneZ + 20.0f;
     const float sideBackgroundHalfHeight = (SideBackgroundZ - SideCameraZ) *
         std::tan(Math::ToRadians(SideCameraFieldOfView) * 0.5f) * 1.01f;
@@ -3166,7 +3161,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
                 isBoss ? 2.4f : 0.72f, isBoss ? 2.0f : 0.58f,
                 railWeight * (isBoss ? 0.34f : 0.26f));
         }
-        DrawEnemyModel(renderer, camera, drawEnemy, enemyYaw);
+        DrawEnemyModel(renderer, camera, drawEnemy, enemy.type == 2 ? bossYaw : enemyYaw);
     }
     for (const auto& shot : m_shots) {
         if (!shot.active) continue;

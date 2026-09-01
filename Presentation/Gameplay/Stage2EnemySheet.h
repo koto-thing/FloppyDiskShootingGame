@@ -1,11 +1,11 @@
 #pragma once
 
-#include "Stage1EnemySheet.h"
+#include "SideScrollingShooterStages.h"
 
 /**
  * @brief ステージ2の難易度共通設定を定義する
  */
-class SideScrollingShooter::Stage2EnemySheet : public SideScrollingShooter::Stage1EnemySheet {
+class SideScrollingShooter::Stage2EnemySheet : public SideScrollingShooter::Stage {
 public:
     /** @brief ステージ2ボス機体で個別に破壊できる部位 */
     enum BossPart {
@@ -21,14 +21,19 @@ public:
     /** @brief ステージ2ボス戦の攻撃フェーズ */
     enum BossPhase {
         BossNormalPhase1,
-        BossSpecialPhase1,
         BossNormalPhase2,
-        BossSpecialPhase2,
         BossPhaseCount
     };
-    static_assert(BossPhaseCount == 4);
+    static_assert(BossPhaseCount == 2);
 
-    static constexpr int BossPhaseHp[] = {480, 360, 240, 120};
+    static constexpr int BossPhaseHp[] = {480, 240};
+    static constexpr float BossSideEntryX = 3.20f;
+    static constexpr float BossSideAnchorX = 1.05f;
+    static constexpr float BossRailEntryZ = 88.0f;
+    static constexpr float BossRailAnchorZ = 52.0f;
+    static constexpr float BossAnchorY = -0.58f;
+    static constexpr float BossSideYaw = 0.0f;
+    static constexpr float BossRailYaw = -1.57079632679f;
 
     int StageIndex() const override {
         return 2;
@@ -44,9 +49,49 @@ public:
     int BossRightEnginePart() const override { return BossRightEngine; }
     const char* BossPhaseLabel(int phase) const override {
         constexpr const char* PhaseLabels[] = {
-            "NORMAL 1", "SPECIAL 1", "NORMAL 2", "SPECIAL 2"
+            "NORMAL 1", "NORMAL 2"
         };
         return PhaseLabels[phase % BossPhaseCount];
+    }
+
+    /**
+     * @brief ステージ2ボスの2D表示時初期Y軸回転を取得する
+     * @return Y軸回転角度
+     */
+    float BossSideModelYaw() const override {
+        return BossSideYaw;
+    }
+
+    /**
+     * @brief ステージ2ボスの3D表示時初期Y軸回転を取得する
+     * @return Y軸回転角度
+     */
+    float BossRailModelYaw() const override {
+        return BossRailYaw;
+    }
+
+    /**
+     * @brief ステージ2ボス部位ソケットのローカル座標倍率を取得する
+     * @return ローカル座標からワールド座標への倍率
+     */
+    float BossPartSocketScale() const override {
+        return 1.92f;
+    }
+
+    /**
+     * @brief ステージ2ボスの指定部位ソケットを取得する
+     * @param part 取得するボス部位
+     * @return 巨大艦モデル基準の部位ソケット
+     */
+    BossPartSocket GetBossPartSocket(int part) const override {
+        constexpr BossPartSocket Sockets[] = {
+            {-5.70f, 2.86f, 0.00f, 2.30f},
+            {-0.60f, 1.18f, 1.74f, 1.95f},
+            {-0.60f, 1.18f, -1.74f, 1.95f},
+            {4.80f, -0.46f, 1.42f, 1.55f},
+            {4.80f, -0.46f, -1.42f, 1.55f}
+        };
+        return Sockets[part % BossPartCount];
     }
 
     /**
@@ -73,20 +118,39 @@ public:
     }
 
     /**
-     * @brief ステージ1と同じボス性能でステージ2のボスを設定する
+     * @brief ステージ2巨大艦ボスの生成位置を設定する
      * @param boss 生成するボス
      * @param railMode レール表示中か
      * @return なし
      */
     void ConfigureBoss(Enemy& boss, bool railMode) const override {
-        BossEnemyBehaviorInstance().ConfigureBossSpawn(boss, railMode, 1);
+        BossEnemyBehaviorInstance().ConfigureBossSpawn(boss, railMode, StageIndex());
         boss.hp = BossMaxHp();
         boss.maxHp = BossMaxHp();
-        boss.x = 2.6f;
-        boss.y = 0.0f;
-        boss.z = railMode ? 48.0f : ToRailZFromSideX(boss.x);
-        boss.baseX = 0.0f;
-        boss.baseY = 0.0f;
+        boss.x = railMode ? 0.0f : BossSideEntryX;
+        boss.y = BossAnchorY;
+        boss.z = railMode ? BossRailEntryZ : ToRailZFromSideX(boss.x);
+        boss.baseX = railMode ? 0.0f : BossSideAnchorX;
+        boss.baseY = BossAnchorY;
+        boss.baseZ = railMode ? BossRailAnchorZ : ToRailZFromSideX(BossSideAnchorX);
+        boss.actionX = boss.x;
+        boss.actionY = boss.y;
+        boss.actionZ = boss.z;
+        boss.phase = 0.0f;
+        boss.motionAge = 0;
+    }
+
+    /**
+     * @brief ステージ2ボスの3Dモード基準点を設定する
+     * @param boss 基準点へ移動するボス
+     * @return なし
+     */
+    void ConfigureBossRailAnchor(Enemy& boss) const override {
+        boss.x = 0.0f;
+        boss.y = BossAnchorY;
+        boss.z = BossRailAnchorZ;
+        boss.baseX = boss.x;
+        boss.baseY = boss.y;
         boss.baseZ = boss.z;
         boss.actionX = boss.x;
         boss.actionY = boss.y;
@@ -96,12 +160,67 @@ public:
     }
 
     /**
+     * @brief ステージ2ボスの2Dモード基準点を設定する
+     * @param boss 基準点へ移動するボス
+     * @return なし
+     */
+    void ConfigureBossSideAnchor(Enemy& boss) const override {
+        boss.x = BossSideAnchorX;
+        boss.y = BossAnchorY;
+        boss.z = ToRailZFromSideX(boss.x);
+        boss.baseX = boss.x;
+        boss.baseY = boss.y;
+        boss.baseZ = boss.z;
+        boss.actionX = boss.x;
+        boss.actionY = boss.y;
+        boss.actionZ = boss.z;
+        boss.phase = 0.0f;
+        boss.motionAge = 0;
+    }
+
+    /**
+     * @brief ステージ2ボスの部位HPを設定する
+     * @param boss 部位HPを設定するボス
+     * @return なし
+     */
+    void ConfigureBossPartHp(Enemy& boss) const override {
+        boss.bossPartHp = { 180, 240, 240, 160, 160 };
+    }
+
+    /**
+     * @brief ステージ2ボスの登場移動を更新する
+     * @param shooter ゲーム本体
+     * @param boss 更新するボス
+     * @return なし
+     */
+    void TickBoss(SideScrollingShooter& shooter, Enemy& boss) const override {
+        // 2Dでは画面右側、3Dでは奥から基準点へゆっくり進入して停止する
+        if (shooter.IsRailGameplayActive()) {
+            if (boss.z > boss.baseZ) {
+                boss.z = (std::max)(boss.baseZ, boss.z - 0.20f);
+            }
+            if (boss.x > boss.baseX) {
+                boss.x = (std::max)(boss.baseX, boss.x - 0.012f);
+            } else if (boss.x < boss.baseX) {
+                boss.x = (std::min)(boss.baseX, boss.x + 0.012f);
+            }
+        } else {
+            if (boss.x > boss.baseX) {
+                boss.x = (std::max)(boss.baseX, boss.x - 0.012f);
+            }
+            boss.z = ToRailZFromSideX(boss.x);
+        }
+        boss.y = boss.baseY;
+    }
+
+
+    /**
      * @brief ステージ2ボス弾幕の発射間隔を取得する
      * @param phase 現在のボス攻撃フェーズ
      * @return 発射間隔
      */
     int BossAttackInterval(int phase) const override {
-        return phase == BossNormalPhase1 || phase == BossNormalPhase2 ? 120 : 84;
+        return phase == BossNormalPhase1 ? 144 : 104;
     }
 
     /**
@@ -113,9 +232,7 @@ public:
     int BossPhaseForHp(int hp, int maxHp) const override {
         (void)maxHp;
         if (hp > BossPhaseHp[1]) return BossNormalPhase1;
-        if (hp > BossPhaseHp[2]) return BossSpecialPhase1;
-        if (hp > BossPhaseHp[3]) return BossNormalPhase2;
-        return BossSpecialPhase2;
+        return BossNormalPhase2;
     }
 
     /**
@@ -125,7 +242,40 @@ public:
      */
     int BossPartBreakDamage(int part) const override {
         (void)part;
-        return 120;
+        return 90;
+    }
+
+    int BossBulletCount(bool railMode) const override {
+        (void)railMode;
+        return 5;
+    }
+
+    /**
+     * @brief ステージ2ボス弾幕の指定弾を取得する
+     * @param index 弾幕内の弾番号
+     * @param railMode レール表示中か
+     * @return 発射位置オフセットと速度
+     */
+    BossBullet GetBossBullet(int index, bool railMode) const override {
+        if (railMode) {
+            constexpr BossBullet RailPattern[] = {
+                {0.0f, 0.0f, -0.016f, -0.020f},
+                {0.0f, 0.0f, -0.008f, -0.010f},
+                {0.0f, 0.0f, 0.000f, 0.000f},
+                {0.0f, 0.0f, 0.008f, 0.010f},
+                {0.0f, 0.0f, 0.016f, 0.020f}
+            };
+            return RailPattern[index % 5];
+        }
+
+        constexpr BossBullet SidePattern[] = {
+            {-0.18f, 0.0f, -0.016f, -0.018f},
+            {-0.18f, 0.0f, -0.020f, -0.009f},
+            {-0.18f, 0.0f, -0.023f, 0.000f},
+            {-0.18f, 0.0f, -0.020f, 0.009f},
+            {-0.18f, 0.0f, -0.016f, 0.018f}
+        };
+        return SidePattern[index % 5];
     }
 
     /**
@@ -138,9 +288,9 @@ public:
     int BossPartBulletCount(int part, int phase, bool railMode) const override {
         if (part == BossNose) return BossBulletCount(railMode);
         if (part == BossLeftWing || part == BossRightWing) {
-            return phase == BossSpecialPhase1 || phase == BossSpecialPhase2 ? 3 : 2;
+            return phase == BossNormalPhase2 ? 3 : 2;
         }
-        return phase == BossSpecialPhase1 || phase == BossSpecialPhase2 ? 2 : 1;
+        return phase == BossNormalPhase2 ? 2 : 1;
     }
 
     /**
@@ -156,7 +306,7 @@ public:
         const int patternIndex = part == BossNose ? index :
             (part == BossLeftWing ? 0 : (part == BossRightWing ? baseCount - 1 : baseCount / 2));
         BossBullet bullet = GetBossBullet(patternIndex, railMode);
-        if (phase == BossSpecialPhase1 || phase == BossSpecialPhase2) {
+        if (phase == BossNormalPhase2) {
             bullet.vx *= 1.35f;
             bullet.vy += (index - BossPartBulletCount(part, phase, railMode) / 2) * 0.010f;
         }

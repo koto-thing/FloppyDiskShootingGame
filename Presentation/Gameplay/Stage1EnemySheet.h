@@ -27,6 +27,8 @@ public:
     static_assert(BossPhaseCount == 2);
 
     static constexpr int BossPhaseHp[] = {480,240};
+    static constexpr float BossSideYaw = 1.57079632679f;
+    static constexpr float BossRailYaw = 0.0f;
 
     int StageIndex() const override { return 1; }
 
@@ -43,6 +45,46 @@ public:
             "NORMAL 1", "NORMAL 2"
         };
         return PhaseLabels[phase % BossPhaseCount];
+    }
+
+    /**
+     * @brief ステージ1ボスの2D表示時初期Y軸回転を取得する
+     * @return Y軸回転角度
+     */
+    float BossSideModelYaw() const override {
+        return BossSideYaw;
+    }
+
+    /**
+     * @brief ステージ1ボスの3D表示時初期Y軸回転を取得する
+     * @return Y軸回転角度
+     */
+    float BossRailModelYaw() const override {
+        return BossRailYaw;
+    }
+
+    /**
+     * @brief ステージ1ボス部位ソケットのローカル座標倍率を取得する
+     * @return ローカル座標からワールド座標への倍率
+     */
+    float BossPartSocketScale() const override {
+        return 0.14f;
+    }
+
+    /**
+     * @brief ステージ1ボスの指定部位ソケットを取得する
+     * @param part 取得するボス部位
+     * @return ボスモデル基準の部位ソケット
+     */
+    BossPartSocket GetBossPartSocket(int part) const override {
+        constexpr BossPartSocket Sockets[] = {
+            {0.0f, 3.0f, -17.5f, 0.50f},
+            {17.0f, 2.0f, 0.0f, 1.20f},
+            {-17.0f, 2.0f, 0.0f, 1.20f},
+            {6.0f, -6.0f, 13.0f, 0.58f},
+            {-6.0f, -6.0f, 13.0f, 0.58f}
+        };
+        return Sockets[part % BossPartCount];
     }
 
     /**

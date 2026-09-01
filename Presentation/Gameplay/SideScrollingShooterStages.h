@@ -24,6 +24,13 @@ public:
         float vy = 0.0f;
     };
 
+    struct BossPartSocket {
+        float localX = 0.0f;
+        float localY = 0.0f;
+        float localZ = 0.0f;
+        float radius = 0.50f;
+    };
+
     struct EnemySpawnRule {
         int enemyType = BasicEnemy;
         int firstFrame = 0;
@@ -80,6 +87,42 @@ public:
             "NORMAL 1", "SPECIAL 1", "NORMAL 2", "SPECIAL 2"
         };
         return PhaseLabels[phase % 4];
+    }
+    /**
+     * @brief 2D表示時のボスモデル初期Y軸回転を取得する
+     * @return Y軸回転角度
+     */
+    virtual float BossSideModelYaw() const {
+        return 1.57079632679f;
+    }
+    /**
+     * @brief 3D表示時のボスモデル初期Y軸回転を取得する
+     * @return Y軸回転角度
+     */
+    virtual float BossRailModelYaw() const {
+        return 0.0f;
+    }
+    /**
+     * @brief ボス部位ソケットのローカル座標倍率を取得する
+     * @return ローカル座標からワールド座標への倍率
+     */
+    virtual float BossPartSocketScale() const {
+        return 0.14f;
+    }
+    /**
+     * @brief 指定ボス部位の弾発射位置と当たり判定半径を取得する
+     * @param part 取得するボス部位
+     * @return ボスモデル基準の部位ソケット
+     */
+    virtual BossPartSocket GetBossPartSocket(int part) const {
+        constexpr BossPartSocket Sockets[] = {
+            {0.0f, 3.0f, -17.5f, 0.50f},
+            {17.0f, 2.0f, 0.0f, 1.20f},
+            {-17.0f, 2.0f, 0.0f, 1.20f},
+            {6.0f, -6.0f, 13.0f, 0.58f},
+            {-6.0f, -6.0f, 13.0f, 0.58f}
+        };
+        return Sockets[part % SideScrollingShooter::BossPartCapacity];
     }
     /**
      * @brief 撃破時の飛散部品に重力を適用するか取得する
