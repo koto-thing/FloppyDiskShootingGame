@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 #include "SideScrollingShooterStages.h"
 
 /**
@@ -34,6 +36,14 @@ public:
     static constexpr float BossAnchorY = -0.58f;
     static constexpr float BossSideYaw = 0.0f;
     static constexpr float BossRailYaw = -1.57079632679f;
+    static constexpr float BossSideIdleBackDistance = 0.32f;
+    static constexpr float BossRailIdleBackDistance = 10.2f;
+    static constexpr int BossIdleMoveFrames = 75;
+    static constexpr int BossIdleBackHoldFrames = 140;
+    static constexpr int BossIdleFrontHoldFrames = 140;
+    static constexpr int BossIdleMotionFrames =
+        BossIdleMoveFrames * 2 + BossIdleBackHoldFrames + BossIdleFrontHoldFrames;
+    static constexpr int BossTransitionHoldFrames = 90;
 
     int StageIndex() const override {
         return 2;
@@ -155,7 +165,7 @@ public:
         boss.actionX = boss.x;
         boss.actionY = boss.y;
         boss.actionZ = boss.z;
-        boss.phase = 0.0f;
+        boss.phase = -static_cast<float>(BossTransitionHoldFrames);
         boss.motionAge = 0;
     }
 
@@ -174,7 +184,7 @@ public:
         boss.actionX = boss.x;
         boss.actionY = boss.y;
         boss.actionZ = boss.z;
-        boss.phase = 0.0f;
+        boss.phase = -static_cast<float>(BossTransitionHoldFrames);
         boss.motionAge = 0;
     }
 
@@ -194,19 +204,45 @@ public:
      * @return なし
      */
     void TickBoss(SideScrollingShooter& shooter, Enemy& boss) const override {
-        // 2Dでは画面右側、3Dでは奥から基準点へゆっくり進入して停止する
+        // モード切替直後は基準点で待機し、補間中の目標位置を動かさない
+        if (boss.phase < 0.0f) {
+            boss.x = boss.baseX;
+            boss.y = boss.baseY;
+            boss.z = shooter.IsRailGameplayActive() ? boss.baseZ : ToRailZFromSideX(boss.baseX);
+            boss.phase += 1.0f;
+            if (boss.phase >= 0.0f) {
+                boss.phase = 1.0f;
+            }
+            return;
+        }
+
+        // 2Dでは画面右側、3Dでは奥から基準点へゆっくり進入する
         if (shooter.IsRailGameplayActive()) {
-            if (boss.z > boss.baseZ) {
+            if (boss.phase == 0.0f && boss.z > boss.baseZ) {
                 boss.z = (std::max)(boss.baseZ, boss.z - 0.20f);
             }
-            if (boss.x > boss.baseX) {
+            if (boss.phase == 0.0f && boss.x > boss.baseX) {
                 boss.x = (std::max)(boss.baseX, boss.x - 0.012f);
-            } else if (boss.x < boss.baseX) {
+            } else if (boss.phase == 0.0f && boss.x < boss.baseX) {
                 boss.x = (std::min)(boss.baseX, boss.x + 0.012f);
             }
+            if (boss.z <= boss.baseZ && boss.x == boss.baseX) {
+                boss.phase = 1.0f;
+                boss.motionAge = 0;
+            }
+            if (boss.phase > 0.0f) {
+                boss.z = boss.baseZ + BossRailIdleBackDistance * IdleMotionRate(++boss.motionAge);
+            }
         } else {
-            if (boss.x > boss.baseX) {
+            if (boss.phase == 0.0f && boss.x > boss.baseX) {
                 boss.x = (std::max)(boss.baseX, boss.x - 0.012f);
+            }
+            if (boss.x <= boss.baseX) {
+                boss.phase = 1.0f;
+                boss.motionAge = 0;
+            }
+            if (boss.phase > 0.0f) {
+                boss.x = boss.baseX + BossSideIdleBackDistance * IdleMotionRate(++boss.motionAge);
             }
             boss.z = ToRailZFromSideX(boss.x);
         }
@@ -311,5 +347,36 @@ public:
             bullet.vy += (index - BossPartBulletCount(part, phase, railMode) / 2) * 0.010f;
         }
         return bullet;
+    }
+
+private:
+    /**
+     * @brief 後退、後方停止、前進、前方停止を行う待機モーションの割合を取得する
+     * @param frame 待機モーション開始後フレーム
+     * @return 基準点から後退方向への割合
+     */
+    static float IdleMotionRate(int frame) {
+        const int cycleFrame = frame % BossIdleMotionFrames;
+        if (cycleFrame < BossIdleMoveFrames) {
+            return EaseOut(static_cast<float>(cycleFrame) / static_cast<float>(BossIdleMoveFrames));
+        }
+        const int backHoldEnd = BossIdleMoveFrames + BossIdleBackHoldFrames;
+        if (cycleFrame < backHoldEnd) {
+            return 1.0f;
+        }
+        const int forwardFrame = cycleFrame - backHoldEnd;
+        if (forwardFrame < BossIdleMoveFrames) {
+            return 1.0f - EaseOut(static_cast<float>(forwardFrame) / static_cast<float>(BossIdleMoveFrames));
+        }
+        return 0.0f;
+    }
+
+    /**
+     * @brief 0から1の値へEaseOutを適用する
+     * @param value 補間率
+     * @return EaseOut後の補間率
+     */
+    static float EaseOut(float value) {
+        return 1.0f - (1.0f - value) * (1.0f - value);
     }
 };
