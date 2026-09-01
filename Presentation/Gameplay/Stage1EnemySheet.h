@@ -53,8 +53,9 @@ public:
      * @return なし
      */
     void TickBoss(SideScrollingShooter& shooter, Enemy& boss) const override {
+        if ((boss.bossPhase == BossNormalPhase2 || boss.bossPhase == BossSpecialPhase2) &&
         if (shooter.IsRailGameplayActive()) {
-            boss.x = std::sin(boss.age * 0.018f) * 0.34f;
+            boss.x = boss.baseX + std::sin(currentMotionAge * 0.038f) * 1.40f;
             boss.y = std::sin(boss.age * 0.025f) * 0.36f;
             if (boss.z <= 0.0f) {
                 boss.z = 48.0f;
