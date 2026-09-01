@@ -16,6 +16,8 @@ void RunCameraTests();
 void RunGeometry3DTests();
 void RunUITests();
 void RunScoreRepositoryTests();
+void RunStage4BossModelViewTests();
+void RunStage5ModelViewTests();
 #include <thread>
 
 namespace {
@@ -191,6 +193,8 @@ int main()
         RunGeometry3DTests();
         RunUITests();
         RunScoreRepositoryTests();
+        RunStage4BossModelViewTests();
+        RunStage5ModelViewTests();
     } catch (const std::exception& exception) {
         std::cerr << "TimeTests failed: " << exception.what() << '\n';
         return 1;

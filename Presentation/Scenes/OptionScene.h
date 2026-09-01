@@ -21,7 +21,9 @@ public:
     
 private:
     std::unique_ptr<Button> m_backToTitleButton;
+    std::unique_ptr<Button> m_retroEffectButton;
     Slider m_masterVolumeSlider;
     Slider m_bgmVolumeSlider;
     Slider m_seVolumeSlider;
+    bool m_retroEffectEnabled = true;
 };

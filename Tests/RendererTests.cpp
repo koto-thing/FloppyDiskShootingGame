@@ -70,12 +70,17 @@ void RecordsCharacterSpacing() {
 void RecordsExplosionCommand() {
     Renderer renderer;
     renderer.BeginFrame();
-    renderer.DrawExplosion({Matrix4x4::Identity, 0.5f});
-    Require(renderer.CommandCount() == 1, "Explosion must be recorded as one command");
+    renderer.DrawExplosion({Matrix4x4::Identity, 0.5f, 2});
+    renderer.DrawExplosion({Matrix4x4::Identity, 0.75f, 3});
+    Require(renderer.CommandCount() == 2, "Explosions must be recorded as individual commands");
     Require(renderer.Command(0).type == RenderCommand::Type::Explosion,
         "Explosion command must preserve its type");
     Require(renderer.Command(0).explosion.progress == 0.5f,
         "Explosion command must preserve progress");
+    Require(renderer.Command(0).explosion.effectType == 2,
+        "Explosion command must preserve its effect type");
+    Require(renderer.Command(1).explosion.effectType == 3,
+        "Engine flame command must preserve its effect type");
 }
 
 void SendsCharacterSpacingToBackend() {

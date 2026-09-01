@@ -108,6 +108,15 @@ public:
         boss.bossPartHp = { 120, 180, 180, 150, 150 };
     }
     /**
+     * @brief 部位破壊時にボス本体へ与えるダメージを取得する
+     * @param part 破壊された部位
+     * @return 本体へ与えるダメージ
+     */
+    virtual int BossPartBreakDamage(BossPart part) const {
+        (void)part;
+        return 120;
+    }
+    /**
      * @brief ボスの移動を更新する
      * @param shooter ゲーム本体
      * @param boss 更新するボス
@@ -252,7 +261,23 @@ public:
 /** @brief ステージ5の敵出現と弾幕を定義する */
 class SideScrollingShooter::Stage5 final : public SideScrollingShooter::Stage {
 public:
+    /**
+     * @brief ステージ番号を取得する
+     * @return Stage 5を表す番号
+     */
     int StageIndex() const override { return 5; }
+    /**
+     * @brief EASTSOURCEの最大HPを取得する
+     * @return EASTSOURCEの最大HP
+     */
+    int BossMaxHp() const override { return SideScrollingShooter::EastsourceMaxHp; }
+    /**
+     * @brief Stage 5の経過フレームから通常敵の出現を選択する
+     * @param frame Stage 5開始からの経過フレーム
+     * @param spawn 選択した出現規則の格納先
+     * @param chapterNumber 現在チャプター番号の格納先
+     * @return 敵を出現させるフレームの場合true
+     */
     bool TrySelectEnemySpawn(int frame, EnemySpawnRule& spawn, int& chapterNumber) const override {
         static constexpr EnemySpawnRule Chapter1[] = {{5, 18, 42, 1.14f, -0.82f, 0.86f, 50.0f}, {4, 75, 180, 1.12f, -0.28f, -0.42f, 60.0f}};
         static constexpr EnemySpawnRule Chapter2[] = {{5, 510, 95, 1.14f, 0.28f, -0.32f, 56.0f}, {3, 550, 105, 1.10f, 0.82f, 0.88f, 34.0f}, {1, 610, 145, 1.16f, -0.85f, 0.54f, 60.0f}};
@@ -260,10 +285,78 @@ public:
         constexpr Chapter Chapters[] = {{0, 500, Chapter1, 2}, {500, 1000, Chapter2, 3}, {1000, 1500, Chapter3, 4}};
         return TrySelectByChapters(Chapters, 3, frame, spawn, chapterNumber);
     }
-    int BossBulletCount(bool) const override { return 9; }
+    /**
+     * @brief 汎用ボス弾幕の弾数を取得する
+     * @param railMode 3Dレール表示の場合true
+     * @return 弾数
+     */
+    int BossBulletCount(bool railMode) const override {
+        (void)railMode;
+        return 9;
+    }
+    /**
+     * @brief 汎用ボス弾幕の一発を取得する
+     * @param index 弾番号
+     * @param railMode 3Dレール表示の場合true
+     * @return 弾の発射位置と速度
+     */
     BossBullet GetBossBullet(int index, bool railMode) const override {
         constexpr BossBullet SidePattern[] = {{-0.12f, 0.0f, -0.020f, -0.032f}, {-0.12f, 0.0f, -0.023f, -0.024f}, {-0.12f, 0.0f, -0.026f, -0.016f}, {-0.12f, 0.0f, -0.028f, -0.008f}, {-0.12f, 0.0f, -0.030f, 0.0f}, {-0.12f, 0.0f, -0.028f, 0.008f}, {-0.12f, 0.0f, -0.026f, 0.016f}, {-0.12f, 0.0f, -0.023f, 0.024f}, {-0.12f, 0.0f, -0.020f, 0.032f}};
         constexpr BossBullet RailPattern[] = {{0.0f, 0.0f, -0.022f, -0.032f}, {0.0f, 0.0f, -0.016f, -0.024f}, {0.0f, 0.0f, -0.011f, -0.016f}, {0.0f, 0.0f, -0.005f, -0.008f}, {0.0f, 0.0f, 0.0f, 0.0f}, {0.0f, 0.0f, 0.005f, 0.008f}, {0.0f, 0.0f, 0.011f, 0.016f}, {0.0f, 0.0f, 0.016f, 0.024f}, {0.0f, 0.0f, 0.022f, 0.032f}};
         return (railMode ? RailPattern : SidePattern)[index % 9];
+    }
+    /**
+     * @brief EASTSOURCEを戦闘開始状態へ設定する
+     * @param boss 設定するEASTSOURCE
+     * @param railMode 3Dレール表示の場合true
+     * @return なし
+     */
+    void ConfigureBoss(Enemy& boss, bool railMode) const override {
+        BossEnemyBehaviorInstance().ConfigureBossSpawn(boss, railMode, StageIndex());
+        boss.hp = SideScrollingShooter::EastsourceMaxHp;
+        boss.maxHp = boss.hp;
+        boss.shotInterval = 0;
+        if (railMode) ConfigureBossRailAnchor(boss);
+    }
+    /**
+     * @brief EASTSOURCEの部位HPを設定する
+     * @param boss 設定するEASTSOURCE
+     * @return なし
+     */
+    void ConfigureBossPartHp(Enemy& boss) const override {
+        boss.bossPartHp = {
+            SideScrollingShooter::EastsourceNoseHp,
+            SideScrollingShooter::EastsourceWingHp,
+            SideScrollingShooter::EastsourceWingHp,
+            SideScrollingShooter::EastsourceEngineHp,
+            SideScrollingShooter::EastsourceEngineHp
+        };
+    }
+    /**
+     * @brief EASTSOURCE部位破壊時の本体ダメージを取得する
+     * @param part 破壊された部位
+     * @return 本体へ与えるダメージ
+     */
+    int BossPartBreakDamage(BossPart part) const override {
+        return part == BossNose ? 75 : (part == BossLeftWing || part == BossRightWing ? 90 : 65);
+    }
+    /**
+     * @brief EASTSOURCEの移動と攻撃を更新する
+     * @param shooter ゲーム本体
+     * @param boss 更新するEASTSOURCE
+     * @return なし
+     */
+    void TickBoss(SideScrollingShooter& shooter, Enemy& boss) const override {
+        shooter.TickEastsource(boss);
+    }
+    /**
+     * @brief EASTSOURCE専用攻撃が有効か取得する
+     * @param boss 判定するEASTSOURCE
+     * @return 常にtrue
+     */
+    bool IsBossSpecialAttackActive(const Enemy& boss) const override {
+        (void)boss;
+        // EASTSOURCEは専用の予告付き4フェーズ攻撃だけを使用する
+        return true;
     }
 };

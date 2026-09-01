@@ -14,7 +14,7 @@ public:
     void Initialize() override;
     /** @brief テストシーンの入力を処理する */
     void ProcessInput() override;
-    /** @brief 円柱の回転状態を更新する */
+    /** @brief Stage4ボスの回転状態を更新する */
     void Tick() override;
     /** @brief テストモデルと操作説明を描画する */
     void Render(Renderer& renderer) override;

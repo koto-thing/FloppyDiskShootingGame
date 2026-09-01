@@ -14,6 +14,16 @@ void OptionScene::Initialize() {
         "BACK TO TITLE"
     );
     m_backToTitleButton->SetOnClick([this]() { changeScene(SceneType::Title); });
+
+    // 保存済みのレトロ映像効果設定を切替ボタンへ反映する
+    m_retroEffectEnabled = SettingsRepository().Load().retroEffectEnabled;
+    m_retroEffectButton = std::make_unique<Button>(
+        Rect {{0.0f, -0.36f}, {0.55f, 0.10f}},
+        m_retroEffectEnabled ? "RETRO EFFECT  ON" : "RETRO EFFECT OFF");
+    m_retroEffectButton->SetOnClick([this]() {
+        m_retroEffectEnabled = !m_retroEffectEnabled;
+        m_retroEffectButton->SetText(m_retroEffectEnabled ? "RETRO EFFECT  ON" : "RETRO EFFECT OFF");
+    });
     
     // マスター音量
     m_masterVolumeSlider = Slider(
@@ -79,6 +89,7 @@ void OptionScene::ProcessInput() {
     if (m_backToTitleButton != nullptr) {
         m_backToTitleButton->Update(inputState);
     }
+    if (m_retroEffectButton != nullptr) m_retroEffectButton->Update(inputState);
     
     m_masterVolumeSlider.Update(inputState);
     m_bgmVolumeSlider.Update(inputState);
@@ -95,12 +106,16 @@ void OptionScene::Dispose() {
     SettingsRepository().Save({
         audio.GetMasterVolume(),
         audio.GetBGMVolume(),
-        audio.GetSEVolume()
+        audio.GetSEVolume(),
+        m_retroEffectEnabled
     });
     m_backToTitleButton.reset();
+    m_retroEffectButton.reset();
 }
 
 void OptionScene::Render(Renderer& renderer) {
+    // 切替結果を次の描画フレームからバックエンドへ反映する
+    renderer.SetRetroEffectEnabled(m_retroEffectEnabled);
     // オプション画面の見出しを描画する
     renderer.DrawText(
         "OPTIONS",
@@ -125,6 +140,8 @@ void OptionScene::Render(Renderer& renderer) {
     m_masterVolumeSlider.Render(renderer);
     m_bgmVolumeSlider.Render(renderer);
     m_seVolumeSlider.Render(renderer);
+
+    if (m_retroEffectButton != nullptr) m_retroEffectButton->Render(renderer);
 
     // タイトルへ戻るボタンを描画する
     if (m_backToTitleButton != nullptr) {

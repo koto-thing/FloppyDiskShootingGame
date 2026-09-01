@@ -55,6 +55,12 @@ void Renderer::DrawExplosion(const ExplosionVisual& explosion) {
     command->explosion = explosion;
 }
 
+void Renderer::DrawRailgun(const RailgunVisual& railgun) {
+    RenderCommand* command = TryAppend(RenderCommand::Type::Railgun);
+    if (command == nullptr) return;
+    command->railgun = railgun;
+}
+
 void Renderer::DrawText(std::string_view text, const Vector2& position, float size, const ColorF& color,
                         float characterSpacing) {
     RenderCommand* command = TryAppend(RenderCommand::Type::Text);
@@ -219,6 +225,9 @@ void Renderer::Flush() {
             break;
         case RenderCommand::Type::Explosion:
             m_backend->DrawExplosion(command.explosion);
+            break;
+        case RenderCommand::Type::Railgun:
+            m_backend->DrawRailgun(command.railgun);
             break;
         case RenderCommand::Type::Text:
             m_backend->DrawTextCommand(std::string_view(command.text.data(), command.textLength),

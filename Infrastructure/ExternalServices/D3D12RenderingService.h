@@ -21,6 +21,8 @@ public:
 
     void BeginFrame() override;
     void EndFrame() override;
+    /** @brief 低解像度のレトロ映像効果を切り替える */
+    void SetRetroEffectEnabled(bool enabled) override { m_retroEffectEnabled = enabled; }
     void SyncFrame();
 
     ID3D12Device* GetDevice() const { return m_device.Get(); }
@@ -42,6 +44,8 @@ public:
     void DrawPlayerShot(const PlayerShotVisual& shot) override;
     /** @brief 埋め込みHLSLで爆発エフェクトを描画する */
     void DrawExplosion(const ExplosionVisual& explosion) override;
+    /** @brief 埋め込みHLSLでレールガン軌跡を描画する */
+    void DrawRailgun(const RailgunVisual& railgun) override;
     /** @brief Rendererのパイプライン識別子をD3D12ステートへ変換する */
     void SetPipeline(PipelineId pipeline) override;
     void SetCamera(const CameraMatrices& matrices, const Viewport& viewport) override;
@@ -96,6 +100,7 @@ private:
     ComPtr<ID3D12Resource> m_renderTargets[2];
     ComPtr<ID3D12Resource> m_lowResolutionRenderTarget;
     ComPtr<ID3D12Resource> m_depthStencil;
+    ComPtr<ID3D12Resource> m_lowResolutionDepthStencil;
     ComPtr<ID3D12CommandAllocator> m_commandAllocator;
     ComPtr<ID3D12GraphicsCommandList> m_commandList;
     ComPtr<ID3D12RootSignature> m_rootSignature;
@@ -107,6 +112,8 @@ private:
     ComPtr<ID3D12PipelineState> m_pipelineStateModel3D;
     ComPtr<ID3D12PipelineState> m_pipelineStatePlayerShot;
     ComPtr<ID3D12PipelineState> m_pipelineStateExplosion;
+    ComPtr<ID3D12PipelineState> m_pipelineStateExplosionSmoke;
+    ComPtr<ID3D12PipelineState> m_pipelineStateRailgun;
     ComPtr<ID3D12PipelineState> m_pipelineStateUpscale;
 
     ComPtr<ID3D12Fence> m_fence;
@@ -126,5 +133,7 @@ private:
     Viewport m_cameraViewport {};
     bool m_hasCamera = false;
     bool m_sceneUpscaled = false;
+    bool m_retroEffectEnabled = true;
+    bool m_frameRetroEffectEnabled = true;
     int m_currentPipelineType = 0;
 };

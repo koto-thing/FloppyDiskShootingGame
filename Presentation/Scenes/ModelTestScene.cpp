@@ -1,17 +1,17 @@
 #include "ModelTestScene.h"
-#include "../Gameplay/BossModelView.h"
+#include "../Gameplay/Stage4BossModelView.h"
 
 #include "../../Engine/Graphics/Renderer.h"
 #include "../../Engine/Input/Input.h"
 #include "../../Engine/Time/Time.h"
 
 /**
- * @brief テスト用カメラを円柱全体が見える位置へ設定する
+ * @brief テスト用カメラをStage4ボス全体が見える位置へ設定する
  */
 void ModelTestScene::Initialize() {
-    /** @brief 円柱の上面と側面を確認できる視点を設定する */
-    m_camera.SetPosition({12.0f, 8.0f, -18.0f});
-    m_camera.LookAt({0.0f, 1.5f, 0.0f});
+    // 長い車体の上面と側面を同時に確認できる斜め視点を設定する
+    m_camera.SetPosition({22.0f, 13.0f, -36.0f});
+    m_camera.LookAt({0.0f, 1.6f, 0.0f});
     m_camera.SetNearClip(0.1f);
     m_camera.SetFarClip(100.0f);
 }
@@ -27,7 +27,7 @@ void ModelTestScene::ProcessInput() {
 }
 
 /**
- * @brief 外形を全方向から確認できるよう円柱を自動回転させる
+ * @brief 正面、横、斜めを確認できるようStage4ボスを自動回転させる
  */
 void ModelTestScene::Tick() {
     /** @brief 固定タイムステップに合わせてY軸の回転角度を進める */
@@ -53,8 +53,8 @@ void ModelTestScene::Render(Renderer& renderer) {
 
     // 床
     const Matrix4x4 floorWorld =
-        Matrix4x4::Translation({0.0f, -2.0f, 0.0f}) *
-        Matrix4x4::Scale({12.0f, 1.0f, 8.0f});
+        Matrix4x4::Translation({0.0f, -1.32f, 0.0f}) *
+        Matrix4x4::Scale({18.0f, 1.0f, 16.0f});
 
     renderer.Draw({
         PrimitiveShape::Plate,
@@ -63,13 +63,14 @@ void ModelTestScene::Render(Renderer& renderer) {
         {0.12f, 0.16f, 0.22f, 1.0f}
     });
 
-    // BossModelView.h 用描画アダプタ
+    // Stage4BossModelView用描画アダプタ
     auto drawBossPart =
         [&](int shape,
             const Vector3& position,
             const Vector3& scale,
             const float color[4],
-            float yaw) {
+            float yaw,
+            float pitch) {
 
         const PrimitiveShape primitiveShape =
             static_cast<PrimitiveShape>(shape);
@@ -84,6 +85,7 @@ void ModelTestScene::Render(Renderer& renderer) {
         const Matrix4x4 world =
             Matrix4x4::Translation(position) *
             Matrix4x4::RotationY(yaw) *
+            Matrix4x4::RotationZ(pitch) *
             Matrix4x4::Scale(scale);
 
         renderer.Draw({
@@ -95,51 +97,18 @@ void ModelTestScene::Render(Renderer& renderer) {
         });
     };
 
-    // -------------------------
-    // 下部：砂中潜航艦
-    // -------------------------
-
-    BossModelTransform submarineTransform;
-
-    submarineTransform.position = {
-        0.0f,
-        0.0f,
-        0.0f
-    };
-
-    submarineTransform.yaw = m_rotationAngle;
-    submarineTransform.scale = 1.0f;
-
-    SandSubmarineView::Draw(
-        submarineTransform,
-        drawBossPart
-    );
-
-    // -------------------------
-    // 上部：陸上戦艦
-    // -------------------------
-
-    BossModelTransform battleshipTransform;
-
-    battleshipTransform.position = {
-        0.0f,
-        1.55f,
-        0.0f
-    };
-
-    battleshipTransform.yaw = m_rotationAngle;
-    battleshipTransform.scale = 1.0f;
-
-    LandBattleshipView::Draw(
-        battleshipTransform,
-        drawBossPart
-    );
+    // 親Transformだけを回転させて全160パーツを360度確認する
+    BossModelTransform bossTransform;
+    bossTransform.position = {0.0f, 0.0f, 0.0f};
+    bossTransform.yaw = m_rotationAngle;
+    bossTransform.scale = 1.0f;
+    Stage4BossModelView::Draw(bossTransform, drawBossPart);
 
     // UI描画へ戻す
     renderer.ResetCamera();
 
     renderer.DrawText(
-        "BOSS MODEL TEST",
+        "STAGE 4 BOSS MODEL TEST",
         TextAlign::TopCenter,
         0.035f,
         ColorF::White(),
