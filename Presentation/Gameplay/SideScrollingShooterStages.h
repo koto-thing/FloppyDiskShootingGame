@@ -229,6 +229,25 @@ public:
         (void)part;
         return 120;
     }
+    /**
+     * @brief ボス本体のメイン攻撃間隔を取得する
+     * @param phase 現在のボス攻撃フェーズ
+     * @return 発射しない場合0、発射する場合は間隔フレーム
+     */
+    virtual int BossMainAttackInterval(int phase) const {
+        (void)phase;
+        return 0;
+    }
+    /**
+     * @brief ボス本体のメイン攻撃を発射する
+     * @param shooter ゲーム本体
+     * @param boss 発射元のボス
+     * @return なし
+     */
+    virtual void FireBossMainAttack(SideScrollingShooter& shooter, const Enemy& boss) const {
+        (void)shooter;
+        (void)boss;
+    }
     virtual int BossBulletCount(bool railMode) const = 0;
     virtual BossBullet GetBossBullet(int index, bool railMode) const = 0;
     /**

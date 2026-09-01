@@ -65,6 +65,12 @@ constexpr int Stage3DawnStartFrame = 500;
 constexpr int Stage3DawnFrame = 750;
 constexpr int Stage5WallClimbStartFrame = 750;
 constexpr int Stage5WallClimbEndFrame = 1000;
+constexpr int BossKnifeTrackCount = 2;
+constexpr int BossKnifeMoveFrames = 100;
+constexpr int BossKnifeHoldFrames = 60;
+constexpr float BossKnifeSideFlySpeed = 0.040f;
+constexpr float BossKnifeRailFlySpeed = 0.15f;
+constexpr float BossKnifeHitRadius = 0.070f;
 
 struct SeaSerpentMotion {
     int segmentCount;
@@ -635,6 +641,13 @@ void SideScrollingShooter::TickEnemies() {
             enemy.age % m_stage->BossAttackInterval(enemy.bossPhase) == 0) {
             FireBossPartBarrage(enemy);
         }
+        const int bossMainAttackInterval = enemy.type == 2 ? m_stage->BossMainAttackInterval(enemy.bossPhase) : 0;
+        if (enemy.type == 2 &&
+            bossMainAttackInterval > 0 &&
+            !m_stage->IsBossSpecialAttackActive(enemy) &&
+            enemy.age % bossMainAttackInterval == 0) {
+            m_stage->FireBossMainAttack(*this, enemy);
+        }
 
         if (enemy.type != 2 && !IsRailGameplayActive() && enemy.x < -2.6f) enemy.active = false;
         if (enemy.type != 2 && IsRailGameplayActive() && enemy.z < 2.0f) enemy.active = false;
@@ -716,14 +729,20 @@ void SideScrollingShooter::TickShots() {
     for (auto& shot : m_shots) {
         if (!shot.active) continue;
 
+        // ボス用回転ナイフ弾は専用の追跡、停止、突進を行う
+        if (shot.enemy && shot.bossKnife) {
+            UpdateBossKnifeShot(shot);
+        }
         /** @brief 追尾弾を最寄りの前方敵へ旋回させる */
-        if (!shot.enemy && shot.special && shot.playerType == Homing) {
+        else if (!shot.enemy && shot.special && shot.playerType == Homing) {
             UpdateHomingShot(shot);
         }
 
-        shot.x += shot.vx;
-        shot.y += shot.vy;
-        shot.z += shot.vz;
+        if (!shot.bossKnife) {
+            shot.x += shot.vx;
+            shot.y += shot.vy;
+            shot.z += shot.vz;
+        }
         if (!IsRailGameplayActive()) {
             shot.z = ToRailZFromSideX(shot.x);
         }
@@ -745,12 +764,16 @@ void SideScrollingShooter::TickShots() {
         if (shot.enemy) {
             const bool playerHit = IsRailGameplayActive() ?
                 Hit3D(ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ, 0.38f,
-                    ToWorldX(shot.x), ToWorldY(shot.y), shot.z, 0.28f) :
-                Hit(m_playerX, m_playerY, 0.050f, shot.x, shot.y, 0.022f);
+                    ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
+                    shot.bossKnife ? shot.hitRadius * WorldXScale : 0.28f) :
+                Hit(m_playerX, m_playerY, 0.050f, shot.x, shot.y,
+                    shot.bossKnife ? shot.hitRadius : 0.022f);
             const bool grazed = IsRailGameplayActive() ?
                 Hit3D(ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ, 0.80f,
-                    ToWorldX(shot.x), ToWorldY(shot.y), shot.z, 0.28f) :
-                Hit(m_playerX, m_playerY, 0.140f, shot.x, shot.y, 0.022f);
+                    ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
+                    shot.bossKnife ? shot.hitRadius * WorldXScale : 0.28f) :
+                Hit(m_playerX, m_playerY, 0.140f, shot.x, shot.y,
+                    shot.bossKnife ? shot.hitRadius : 0.022f);
             if (!playerHit && grazed && !shot.grazed) {
                 shot.grazed = true;
                 ++m_chapterResult.grazeCount;
@@ -1264,18 +1287,20 @@ void SideScrollingShooter::TickDebris() {
 void SideScrollingShooter::FireBossPartBarrage(const Enemy& boss) {
     const bool railMode = IsRailGameplayActive();
     const float socketScale = m_stage->BossPartSocketScale();
+    const float bossYaw = railMode ? m_stage->BossRailModelYaw() : m_stage->BossSideModelYaw();
 
     // 未破壊部位ごとに、ステージ定義の通常または特殊弾幕を発射する
     for (int part = 0; part < m_stage->BossPartTotal(); ++part) {
         if (boss.bossPartHp[part] <= 0) continue;
         const Stage::BossPartSocket socket = m_stage->GetBossPartSocket(part);
+        const Vector3 offset = RotateYawOffset(socket.localX * socketScale,
+            socket.localY * socketScale, socket.localZ * socketScale, bossYaw);
         const int bulletCount = m_stage->BossPartBulletCount(part, boss.bossPhase, railMode);
         for (int index = 0; index < bulletCount; ++index) {
             const Stage::BossBullet bullet = m_stage->GetBossPartBullet(part, boss.bossPhase, index, railMode);
-            const float x = railMode ? boss.x + socket.localX * socketScale / WorldXScale :
-                boss.x + socket.localZ * socketScale / WorldXScale;
-            const float y = boss.y + socket.localY * socketScale / WorldYScale;
-            const float z = boss.z + socket.localZ * socketScale;
+            const float x = boss.x + offset.x / WorldXScale;
+            const float y = boss.y + offset.y / WorldYScale;
+            const float z = boss.z + offset.z;
             SpawnShot(x + bullet.offsetX, y + bullet.offsetY, bullet.vx, bullet.vy, true,
                 z, boss.behavior->RailAimedShotSpeed());
         }
@@ -1466,6 +1491,33 @@ void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, 
     }
 }
 
+void SideScrollingShooter::SpawnBossKnifeShot(const Enemy& boss,
+    float localX, float localY, float localZ, float socketScale) {
+    const bool railMode = IsRailGameplayActive();
+    const float bossYaw = railMode ? m_stage->BossRailModelYaw() : m_stage->BossSideModelYaw();
+    const Vector3 offset = RotateYawOffset(localX * socketScale, localY * socketScale, localZ * socketScale, bossYaw);
+    const float x = boss.x + offset.x / WorldXScale;
+    const float y = boss.y + offset.y / WorldYScale;
+    const float z = boss.z + offset.z;
+
+    // 回転ナイフ弾は専用状態を持たせ、通常敵弾とは別の更新を行う
+    for (auto& shot : m_shots) {
+        if (shot.active) continue;
+        shot = {};
+        shot.x = x;
+        shot.y = y;
+        shot.z = railMode ? z : ToRailZFromSideX(x);
+        shot.transitionSideX = x;
+        shot.transitionSideY = y;
+        shot.hitRadius = BossKnifeHitRadius;
+        shot.damage = 1;
+        shot.enemy = true;
+        shot.bossKnife = true;
+        shot.active = true;
+        return;
+    }
+}
+
 /** @brief 選択中の機体タイプに対応する特殊弾を生成する */
 void SideScrollingShooter::FireSpecialShots() {
     const auto& config = PlayerShotConfigs[static_cast<size_t>(m_playerType)];
@@ -1589,6 +1641,66 @@ void SideScrollingShooter::UpdateHomingShot(Shot& shot) {
     }
 }
 
+void SideScrollingShooter::UpdateBossKnifeShot(Shot& shot) {
+    const bool railMode = IsRailGameplayActive();
+    const int trackFrameCount = BossKnifeMoveFrames + BossKnifeHoldFrames;
+
+    // 最初の3回はプレイヤー位置を取得し、EaseOutで移動してから停止する
+    if (shot.phase < BossKnifeTrackCount) {
+        if (shot.age == 0) {
+            shot.startX = shot.x;
+            shot.startY = shot.y;
+            shot.startZ = shot.z;
+            shot.targetX = m_playerX;
+            shot.targetY = m_playerY;
+            shot.targetZ = railMode ? PlayerRailZ : ToRailZFromSideX(m_playerX);
+        }
+        if (shot.age < BossKnifeMoveFrames) {
+            const float t = static_cast<float>(shot.age + 1) / static_cast<float>(BossKnifeMoveFrames);
+            const float eased = 1.0f - (1.0f - t) * (1.0f - t);
+            shot.x = Math::Lerp(shot.startX, shot.targetX, eased);
+            shot.y = Math::Lerp(shot.startY, shot.targetY, eased);
+            shot.z = Math::Lerp(shot.startZ, shot.targetZ, eased);
+        } else {
+            shot.x = shot.targetX;
+            shot.y = shot.targetY;
+            shot.z = shot.targetZ;
+        }
+        if (!railMode) {
+            shot.z = ToRailZFromSideX(shot.x);
+        }
+        if (++shot.age >= trackFrameCount) {
+            ++shot.phase;
+            shot.age = 0;
+        }
+        return;
+    }
+
+    // 4回目は現在のプレイヤー方向を取得し、その方向へ減速せずに飛ばす
+    if (shot.age == 0) {
+        if (railMode) {
+            const float dx = ToWorldX(m_playerX) - ToWorldX(shot.x);
+            const float dy = ToWorldY(m_playerY) - ToWorldY(shot.y);
+            const float dz = PlayerRailZ - shot.z;
+            const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
+            shot.vx = FromWorldX(dx / length * BossKnifeRailFlySpeed);
+            shot.vy = FromWorldY(dy / length * BossKnifeRailFlySpeed);
+            shot.vz = dz / length * BossKnifeRailFlySpeed;
+        } else {
+            const float dx = m_playerX - shot.x;
+            const float dy = m_playerY - shot.y;
+            const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy));
+            shot.vx = dx / length * BossKnifeSideFlySpeed;
+            shot.vy = dy / length * BossKnifeSideFlySpeed;
+            shot.vz = 0.0f;
+        }
+    }
+    shot.x += shot.vx;
+    shot.y += shot.vy;
+    shot.z += shot.vz;
+    ++shot.age;
+}
+
 /**
  * @brief 被弾効果を再生して現在のチャプターをやり直す
  * @return なし
@@ -1634,23 +1746,27 @@ void SideScrollingShooter::RestartCurrentChapter() {
 
 bool SideScrollingShooter::TryHitBossPart(const Shot& shot, const Enemy& boss, int& part) const {
     const float socketScale = m_stage->BossPartSocketScale();
+    const bool railMode = IsRailGameplayActive();
+    const float bossYaw = railMode ? m_stage->BossRailModelYaw() : m_stage->BossSideModelYaw();
 
     for (int i = 0; i < m_stage->BossPartTotal(); ++i) {
         if (boss.bossPartHp[i] <= 0) continue;
         const Stage::BossPartSocket socket = m_stage->GetBossPartSocket(i);
-        if (IsRailGameplayActive()) {
-            const float partX = ToWorldX(boss.x) + socket.localX * socketScale;
-            const float partY = ToWorldY(boss.y) + socket.localY * socketScale;
-            const float partZ = boss.z + socket.localZ * socketScale;
+        const Vector3 offset = RotateYawOffset(socket.localX * socketScale,
+            socket.localY * socketScale, socket.localZ * socketScale, bossYaw);
+        if (railMode) {
+            const float partX = ToWorldX(boss.x) + offset.x;
+            const float partY = ToWorldY(boss.y) + offset.y;
+            const float partZ = boss.z + offset.z;
             if (!Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
                 ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
                 partX, partY, partZ, socket.radius)) {
                 continue;
             }
         } else {
-            // 2D表示ではY軸回転済みモデルの奥行きを画面X座標へ投影する
-            const float partX = boss.x + socket.localZ * socketScale / WorldXScale;
-            const float partY = boss.y + socket.localY * socketScale / WorldYScale;
+            // 2D表示ではY軸回転済みモデルの横位置を画面X座標へ投影する
+            const float partX = boss.x + offset.x / WorldXScale;
+            const float partY = boss.y + offset.y / WorldYScale;
             if (!Hit(shot.x, shot.y, shot.hitRadius, partX, partY,
                 socket.radius / WorldXScale)) {
                 continue;
@@ -2185,6 +2301,20 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
 
 void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw) const {
     if (shot.enemy) {
+        if (shot.bossKnife) {
+            constexpr float CoreColor[] = { 0.92f, 0.94f, 0.98f, 1.0f };
+            constexpr float EdgeColor[] = { 1.00f, 0.18f, 0.12f, 1.0f };
+            const float spin = static_cast<float>(m_frame) * 0.34f;
+            const float x = ToWorldX(shot.x);
+            const float y = ToWorldY(shot.y);
+            DrawModelPrimitive(renderer, camera, 5, x, y, shot.z,
+                0.28f, 0.28f, 0.28f, EdgeColor, yaw);
+            DrawModelPrimitive(renderer, camera, 4, x, y, shot.z,
+                0.78f, 0.055f, 0.12f, CoreColor, yaw + spin);
+            DrawModelPrimitive(renderer, camera, 4, x, y, shot.z,
+                0.78f, 0.055f, 0.12f, CoreColor, yaw + spin + Math::HalfPi);
+            return;
+        }
         DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
             0.16f, 0.16f, 0.65f, EnemyShotColor, yaw);
         return;

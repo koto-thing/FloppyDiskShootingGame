@@ -94,13 +94,22 @@ private:
         float vx = 0.0f;
         float vy = 0.0f;
         float vz = 0.0f;
+        float startX = 0.0f;
+        float startY = 0.0f;
+        float startZ = 0.0f;
+        float targetX = 0.0f;
+        float targetY = 0.0f;
+        float targetZ = 0.0f;
         float hitRadius = 0.025f;
         int damage = 1;
+        int age = 0;
+        int phase = 0;
         int barrageIndex = -1;
         int barrageCount = 0;
         PlayerType playerType = Homing;
         bool enemy = false;
         bool special = false;
+        bool bossKnife = false;
         bool piercing = false;
         bool grazed = false;
         bool active = false;
@@ -365,6 +374,16 @@ private:
         float z = -1.0f, float railSpeed = -1.0f, int damage = 1);
     void SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy,
         int barrageIndex = -1, int barrageCount = 0);
+    /**
+     * @brief ボス主砲から回転ナイフ弾を生成する
+     * @param boss 発射元のボス
+     * @param localX 発射位置のボスローカルX
+     * @param localY 発射位置のボスローカルY
+     * @param localZ 発射位置のボスローカルZ
+     * @param socketScale ソケット座標の倍率
+     * @return なし
+     */
+    void SpawnBossKnifeShot(const Enemy& boss, float localX, float localY, float localZ, float socketScale);
     /** @brief 弾の命中位置へ爆発エフェクトを生成する */
     void SpawnExplosion(float x, float y, float z);
     /** @brief 機体モデルを構成する部品を飛散エフェクトとして生成する */
@@ -382,6 +401,12 @@ private:
     void SpawnMeteorDebris(const Meteor& meteor, int count);
     void FireSpecialShots();
     void UpdateHomingShot(Shot& shot);
+    /**
+     * @brief ボス用回転ナイフ弾の追跡と突進を更新する
+     * @param shot 更新する弾
+     * @return なし
+     */
+    void UpdateBossKnifeShot(Shot& shot);
     void DamagePlayer();
     /** @brief 現在のチャプターを開始時状態へ戻す */
     void RestartCurrentChapter();

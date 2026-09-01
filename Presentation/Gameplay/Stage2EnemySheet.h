@@ -44,6 +44,7 @@ public:
     static constexpr int BossIdleMotionFrames =
         BossIdleMoveFrames * 2 + BossIdleBackHoldFrames + BossIdleFrontHoldFrames;
     static constexpr int BossTransitionHoldFrames = 90;
+    static constexpr int BossKnifeAttackIntervalFrames = 400;
 
     int StageIndex() const override {
         return 2;
@@ -279,6 +280,26 @@ public:
     int BossPartBreakDamage(int part) const override {
         (void)part;
         return 90;
+    }
+
+    /**
+     * @brief ステージ2ボス本体のメイン攻撃間隔を取得する
+     * @param phase 現在のボス攻撃フェーズ
+     * @return 発射しない場合0、発射する場合は間隔フレーム
+     */
+    int BossMainAttackInterval(int phase) const override {
+        return BossKnifeAttackIntervalFrames;
+    }
+
+    /**
+     * @brief ステージ2ボス本体の回転ナイフ弾を主砲から発射する
+     * @param shooter ゲーム本体
+     * @param boss 発射元のボス
+     * @return なし
+     */
+    void FireBossMainAttack(SideScrollingShooter& shooter, const Enemy& boss) const override {
+        const BossPartSocket socket = GetBossPartSocket(BossNose);
+        shooter.SpawnBossKnifeShot(boss, socket.localX, socket.localY, socket.localZ, BossPartSocketScale());
     }
 
     int BossBulletCount(bool railMode) const override {
