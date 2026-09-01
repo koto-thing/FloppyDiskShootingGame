@@ -104,12 +104,16 @@ private:
         int damage = 1;
         int age = 0;
         int phase = 0;
+        int bossKnifeMode = 0;
+        int burstCount = 0;
         int barrageIndex = -1;
         int barrageCount = 0;
+        float burstSpeed = 0.0f;
         PlayerType playerType = Homing;
         bool enemy = false;
         bool special = false;
         bool bossKnife = false;
+        bool radialShot = false;
         bool piercing = false;
         bool grazed = false;
         bool active = false;
@@ -384,6 +388,21 @@ private:
      * @return なし
      */
     void SpawnBossKnifeShot(const Enemy& boss, float localX, float localY, float localZ, float socketScale);
+    /**
+     * @brief ボス主砲から破裂する大型回転ナイフ弾を生成する
+     * @param boss 発射元のボス
+     * @param localX 発射位置のボスローカルX
+     * @param localY 発射位置のボスローカルY
+     * @param localZ 発射位置のボスローカルZ
+     * @param socketScale ソケット座標の倍率
+     * @param hitRadius 円形当たり判定半径
+     * @param speed 発射速度
+     * @param burstCount 破裂後に生成する散弾数
+     * @param burstSpeed 破裂後の散弾速度
+     * @return なし
+     */
+    void SpawnBossCannonKnifeShot(const Enemy& boss, float localX, float localY, float localZ,
+        float socketScale, float hitRadius, float speed, int burstCount, float burstSpeed);
     /** @brief 弾の命中位置へ爆発エフェクトを生成する */
     void SpawnExplosion(float x, float y, float z);
     /** @brief 機体モデルを構成する部品を飛散エフェクトとして生成する */

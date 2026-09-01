@@ -71,6 +71,10 @@ constexpr int BossKnifeHoldFrames = 60;
 constexpr float BossKnifeSideFlySpeed = 0.040f;
 constexpr float BossKnifeRailFlySpeed = 0.15f;
 constexpr float BossKnifeHitRadius = 0.070f;
+constexpr int BossKnifeTrackingMode = 0;
+constexpr int BossKnifeCannonMode = 1;
+constexpr int BossKnifeCannonSideMode = 0;
+constexpr int BossKnifeCannonRailMode = 1;
 
 struct SeaSerpentMotion {
     int segmentCount;
@@ -732,6 +736,7 @@ void SideScrollingShooter::TickShots() {
         // ボス用回転ナイフ弾は専用の追跡、停止、突進を行う
         if (shot.enemy && shot.bossKnife) {
             UpdateBossKnifeShot(shot);
+            if (!shot.active) continue;
         }
         /** @brief 追尾弾を最寄りの前方敵へ旋回させる */
         else if (!shot.enemy && shot.special && shot.playerType == Homing) {
@@ -1511,6 +1516,40 @@ void SideScrollingShooter::SpawnBossKnifeShot(const Enemy& boss,
         shot.transitionSideY = y;
         shot.hitRadius = BossKnifeHitRadius;
         shot.damage = 1;
+        shot.bossKnifeMode = BossKnifeTrackingMode;
+        shot.enemy = true;
+        shot.bossKnife = true;
+        shot.active = true;
+        return;
+    }
+}
+
+void SideScrollingShooter::SpawnBossCannonKnifeShot(const Enemy& boss, float localX, float localY, float localZ,
+    float socketScale, float hitRadius, float speed, int burstCount, float burstSpeed) {
+    const bool railMode = IsRailGameplayActive();
+    const float bossYaw = railMode ? m_stage->BossRailModelYaw() : m_stage->BossSideModelYaw();
+    const Vector3 offset = RotateYawOffset(localX * socketScale, localY * socketScale, localZ * socketScale, bossYaw);
+    const float x = boss.x + offset.x / WorldXScale;
+    const float y = boss.y + offset.y / WorldYScale;
+    const float z = boss.z + offset.z;
+
+    // 大型ナイフ砲弾は2Dでは横方向、3Dでは奥行き方向へ発射する
+    for (auto& shot : m_shots) {
+        if (shot.active) continue;
+        shot = {};
+        shot.x = x;
+        shot.y = y;
+        shot.z = railMode ? z : ToRailZFromSideX(x);
+        shot.transitionSideX = x;
+        shot.transitionSideY = y;
+        shot.vx = railMode ? 0.0f : -speed;
+        shot.vz = railMode ? -speed * 18.0f : 0.0f;
+        shot.hitRadius = hitRadius;
+        shot.damage = 1;
+        shot.bossKnifeMode = BossKnifeCannonMode;
+        shot.phase = railMode ? BossKnifeCannonRailMode : BossKnifeCannonSideMode;
+        shot.burstCount = burstCount;
+        shot.burstSpeed = burstSpeed;
         shot.enemy = true;
         shot.bossKnife = true;
         shot.active = true;
@@ -1643,6 +1682,47 @@ void SideScrollingShooter::UpdateHomingShot(Shot& shot) {
 
 void SideScrollingShooter::UpdateBossKnifeShot(Shot& shot) {
     const bool railMode = IsRailGameplayActive();
+    if (shot.bossKnifeMode == BossKnifeCannonMode) {
+        shot.x += shot.vx;
+        shot.y += shot.vy;
+        shot.z = shot.phase == BossKnifeCannonRailMode ? shot.z + shot.vz : ToRailZFromSideX(shot.x);
+        ++shot.age;
+        const bool sideBurst = shot.phase == BossKnifeCannonSideMode && shot.x <= Side2DPlayerMinX + 0.02f;
+        const bool railBurst = shot.phase == BossKnifeCannonRailMode && shot.z <= ToRailZFromSideX(Side2DPlayerMinX + 0.02f);
+        if (sideBurst || railBurst) {
+            const float burstX = shot.x;
+            const float burstY = shot.y;
+            const float burstZ = shot.z;
+            const int burstCount = (std::max)(1, shot.burstCount);
+            const float burstSpeed = shot.burstSpeed;
+            shot.active = false;
+
+            // 破裂位置を中心に、外側へ花開く散弾を生成する
+            for (int i = 0; i < burstCount; ++i) {
+                const float angle = static_cast<float>(i) * Math::TwoPi / static_cast<float>(burstCount);
+                const float vx = std::cos(angle) * burstSpeed;
+                const float vy = std::sin(angle) * burstSpeed;
+                for (auto& shard : m_shots) {
+                    if (shard.active) continue;
+                    shard = {};
+                    shard.x = burstX;
+                    shard.y = burstY;
+                    shard.z = burstZ;
+                    shard.transitionSideX = burstX;
+                    shard.transitionSideY = burstY;
+                    shard.vx = vx;
+                    shard.vy = vy;
+                    shard.vz = 0.0f;
+                    shard.hitRadius = 0.024f;
+                    shard.enemy = true;
+                    shard.radialShot = true;
+                    shard.active = true;
+                    break;
+                }
+            }
+        }
+        return;
+    }
     const int trackFrameCount = BossKnifeMoveFrames + BossKnifeHoldFrames;
 
     // 最初の3回はプレイヤー位置を取得し、EaseOutで移動してから停止する
@@ -2307,12 +2387,27 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
             const float spin = static_cast<float>(m_frame) * 0.34f;
             const float x = ToWorldX(shot.x);
             const float y = ToWorldY(shot.y);
+            const float size = shot.hitRadius / BossKnifeHitRadius;
             DrawModelPrimitive(renderer, camera, 5, x, y, shot.z,
-                0.28f, 0.28f, 0.28f, EdgeColor, yaw);
+                0.28f * size, 0.28f * size, 0.28f * size, EdgeColor, yaw);
             DrawModelPrimitive(renderer, camera, 4, x, y, shot.z,
-                0.78f, 0.055f, 0.12f, CoreColor, yaw + spin);
+                0.78f * size, 0.055f * size, 0.12f * size, CoreColor, yaw + spin);
             DrawModelPrimitive(renderer, camera, 4, x, y, shot.z,
-                0.78f, 0.055f, 0.12f, CoreColor, yaw + spin + Math::HalfPi);
+                0.78f * size, 0.055f * size, 0.12f * size, CoreColor, yaw + spin + Math::HalfPi);
+            return;
+        }
+        if (shot.radialShot) {
+            constexpr float ShardColor[] = { 1.00f, 0.36f, 0.18f, 1.0f };
+            const float angle = std::atan2(ToWorldY(shot.vy), ToWorldX(shot.vx));
+            const Matrix4x4 world = Matrix4x4::Translation({ToWorldX(shot.x), ToWorldY(shot.y), shot.z}) *
+                Matrix4x4::RotationZ(angle) * Matrix4x4::Scale({0.62f, 0.075f, 0.075f});
+            renderer.Draw({
+                PrimitiveShape::Sphere,
+                camera.ProjectionMatrix() * camera.ViewMatrix() * world,
+                Vector3::One,
+                {ShardColor[0], ShardColor[1], ShardColor[2], ShardColor[3]},
+                angle
+            });
             return;
         }
         DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,

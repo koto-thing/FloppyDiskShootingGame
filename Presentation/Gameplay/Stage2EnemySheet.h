@@ -45,6 +45,11 @@ public:
         BossIdleMoveFrames * 2 + BossIdleBackHoldFrames + BossIdleFrontHoldFrames;
     static constexpr int BossTransitionHoldFrames = 90;
     static constexpr int BossKnifeAttackIntervalFrames = 400;
+    static constexpr int BossCannonKnifeAttackIntervalFrames = 180;
+    static constexpr float BossCannonKnifeHitRadius = 0.13f;
+    static constexpr float BossCannonKnifeSpeed = 0.024f;
+    static constexpr int BossCannonKnifeBurstCount = 14;
+    static constexpr float BossCannonKnifeBurstSpeed = 0.022f;
 
     int StageIndex() const override {
         return 2;
@@ -288,7 +293,7 @@ public:
      * @return 発射しない場合0、発射する場合は間隔フレーム
      */
     int BossMainAttackInterval(int phase) const override {
-        return BossKnifeAttackIntervalFrames;
+        return phase == BossNormalPhase1 ? BossKnifeAttackIntervalFrames : BossCannonKnifeAttackIntervalFrames;
     }
 
     /**
@@ -299,7 +304,15 @@ public:
      */
     void FireBossMainAttack(SideScrollingShooter& shooter, const Enemy& boss) const override {
         const BossPartSocket socket = GetBossPartSocket(BossNose);
-        shooter.SpawnBossKnifeShot(boss, socket.localX, socket.localY, socket.localZ, BossPartSocketScale());
+        if (boss.bossPhase == BossNormalPhase1) {
+            shooter.SpawnBossKnifeShot(boss, socket.localX, socket.localY, socket.localZ, BossPartSocketScale());
+            return;
+        }
+        if (!shooter.IsRailGameplayActive()) {
+            shooter.SpawnBossCannonKnifeShot(boss, socket.localX, socket.localY, socket.localZ,
+                BossPartSocketScale(), BossCannonKnifeHitRadius, BossCannonKnifeSpeed,
+                BossCannonKnifeBurstCount, BossCannonKnifeBurstSpeed);
+        }
     }
 
     int BossBulletCount(bool railMode) const override {
