@@ -254,6 +254,14 @@ private:
 
     void Reset(bool resetRetryCounts = true);
     /**
+     * @brief デバッグ用に指定ステージとチャプターから開始する
+     * @param stageNumber 開始するステージ番号
+     * @param chapterNumber 開始するチャプター番号
+     * @param bossBattle ボス戦から開始する場合true
+     * @return なし
+     */
+    void StartDebugCheckpoint(int stageNumber, int chapterNumber, bool bossBattle);
+    /**
      * @brief 指定難易度のステージ1敵出現シートを取得する
      * @param difficulty 取得する難易度
      * @return 難易度に対応するステージ1敵出現シート

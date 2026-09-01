@@ -346,6 +346,62 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
     m_viewTransitionProgress = 0.0f;
 }
 
+/**
+ * @brief デバッグ用に指定ステージとチャプターから開始する
+ * @param stageNumber 開始するステージ番号
+ * @param chapterNumber 開始するチャプター番号
+ * @param bossBattle ボス戦から開始する場合true
+ * @return なし
+ */
+void SideScrollingShooter::StartDebugCheckpoint(int stageNumber, int chapterNumber, bool bossBattle) {
+    m_shots = {};
+    m_enemies = {};
+    m_items = {};
+    m_explosions = {};
+    m_debris = {};
+    ResetStageGimmicks();
+
+    // 指定範囲をゲーム内の進行範囲へ収める
+    m_stageNumber = (std::clamp)(stageNumber, 1, 5);
+    m_chapterNumber = (std::clamp)(chapterNumber, 1, 3);
+    m_stage = &StageForNumber(m_stageNumber, m_difficulty);
+    m_chapterRetryCounts = {};
+    m_chapterResult = {};
+    m_chapterStartPower = m_power;
+    m_chapterStartScore = m_score;
+    m_chapterStartKills = m_kills;
+    m_chapterResultTimer = 0;
+    m_frame = bossBattle ? m_stage->ChapterEndFrame(3) : m_stage->ChapterEndFrame(m_chapterNumber - 1);
+    m_scroll = static_cast<float>(m_frame) * 0.008f;
+    m_spawnCooldown = 35;
+    m_shotCooldown = 0;
+    m_specialShotCooldown = 0;
+    m_invincible = 90;
+    m_bossHp = 0;
+    m_displayBossHp = 0.0f;
+    m_bossStoryLine = 0;
+    m_bossStoryActive = false;
+    m_clearTimer = 0;
+    m_clear = false;
+    m_bossBattle = false;
+    m_bossBattlePending = false;
+    m_chapterResultActive = false;
+    m_restartTimer = 0;
+    m_viewToggleRequested = false;
+    m_viewMode = ViewMode::Side2D;
+    m_nextViewMode = ViewMode::Side2D;
+    m_viewTransitionTimer = 0;
+    m_viewTransitionProgress = 0.0f;
+    m_playerX = -0.72f;
+    m_playerY = 0.0f;
+
+    if (bossBattle) {
+        m_chapterNumber = 3;
+        StartBossBattle();
+        m_bossStoryActive = false;
+    }
+}
+
 void SideScrollingShooter::ProcessInput() {
     m_moveLeft = Input::GetKey(KeyCode::LeftArrow) || Input::GetKey(KeyCode::A);
     m_moveRight = Input::GetKey(KeyCode::RightArrow) || Input::GetKey(KeyCode::D);
@@ -353,6 +409,17 @@ void SideScrollingShooter::ProcessInput() {
     m_moveDown = Input::GetKey(KeyCode::DownArrow) || Input::GetKey(KeyCode::S);
     m_fire = Input::GetKey(KeyCode::Z) || Input::GetKey(KeyCode::Space);
     m_viewToggleRequested = Input::GetKeyDown(KeyCode::X);
+
+    // デバッグ用に任意の進行地点へ移動する
+    if (Input::GetKeyDown(KeyCode::F1)) StartDebugCheckpoint(1, 1, false);
+    if (Input::GetKeyDown(KeyCode::F2)) StartDebugCheckpoint(2, 1, false);
+    if (Input::GetKeyDown(KeyCode::F3)) StartDebugCheckpoint(3, 1, false);
+    if (Input::GetKeyDown(KeyCode::F4)) StartDebugCheckpoint(4, 1, false);
+    if (Input::GetKeyDown(KeyCode::F5)) StartDebugCheckpoint(5, 1, false);
+    if (Input::GetKeyDown(KeyCode::Alpha1)) StartDebugCheckpoint(m_stageNumber, 1, false);
+    if (Input::GetKeyDown(KeyCode::Alpha2)) StartDebugCheckpoint(m_stageNumber, 2, false);
+    if (Input::GetKeyDown(KeyCode::Alpha3)) StartDebugCheckpoint(m_stageNumber, 3, false);
+    if (Input::GetKeyDown(KeyCode::B)) StartDebugCheckpoint(m_stageNumber, 3, true);
 
     if (m_clear && Input::GetKeyDown(KeyCode::R)) {
         Reset(false);
