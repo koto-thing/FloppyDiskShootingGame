@@ -211,50 +211,6 @@ protected:
     }
 };
 
-/**
- * @brief ステージ2用
- */
-class SideScrollingShooter::Stage2 final : public SideScrollingShooter::Stage {
-public:
-    int StageIndex() const override {
-        return 2;
-    }
-
-    bool TrySelectEnemySpawn(int frame, EnemySpawnRule& spawn, int& chapterNumber) const override {
-        static constexpr EnemySpawnRule Chapter1[] = {{0, 30, 62, 1.08f, -0.85f, -0.68f, 60.0f}, {3, 120, 300, 1.10f, -0.82f, 0.88f, 50.0f}};
-        static constexpr EnemySpawnRule Chapter2[] = {{0, 510, 58, 1.12f, 0.05f, -0.18f, 60.0f}, {5, 570, 190, 1.14f, 0.28f, 0.32f, 56.0f}, {4, 650, 260, 1.16f, 0.82f, 0.68f, 60.0f}};
-        static constexpr EnemySpawnRule Chapter3[] = {{3, 1010, 145, 1.10f, -0.82f, -0.88f, 40.0f}, {5, 1080, 175, 1.14f, -0.28f, 0.86f, 50.0f}, {4, 1140, 200, 1.16f, 0.82f, -0.52f, 60.0f}};
-        constexpr Chapter Chapters[] = {{0, 500, Chapter1, 2}, {500, 1000, Chapter2, 3}, {1000, 1500, Chapter3, 3}};
-        return TrySelectByChapters(Chapters, 3, frame, spawn, chapterNumber);
-    }
-
-    int BossBulletCount(bool) const override {
-        return 5;
-    }
-
-    BossBullet GetBossBullet(int index, bool railMode) const override {
-        if (railMode) {
-            constexpr BossBullet RailPattern[5] = {
-                {0.0f, 0.0f, -0.010f, -0.020f},
-                {0.0f, 0.0f, 0.000f, -0.012f},
-                {0.0f, 0.0f, 0.000f, 0.000f},
-                {0.0f, 0.0f, 0.000f, 0.012f},
-                {0.0f, 0.0f, 0.010f, 0.020f}
-            };
-            return RailPattern[index % 5];
-        }
-
-        constexpr BossBullet SidePattern[5] = {
-            {-0.12f, 0.0f, -0.018f, -0.018f},
-            {-0.12f, 0.0f, -0.021f, -0.009f},
-            {-0.12f, 0.0f, -0.023f, 0.000f},
-            {-0.12f, 0.0f, -0.021f, 0.009f},
-            {-0.12f, 0.0f, -0.018f, 0.018f}
-        };
-        return SidePattern[index % 5];
-    }
-};
-
 /** @brief ステージ3の敵出現と弾幕を定義する */
 class SideScrollingShooter::Stage3 final : public SideScrollingShooter::Stage {
 public:

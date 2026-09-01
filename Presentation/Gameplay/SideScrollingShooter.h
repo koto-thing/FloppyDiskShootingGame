@@ -70,7 +70,10 @@ private:
     class Stage1EnemySheetEasy;
     class Stage1EnemySheetNormal;
     class Stage1EnemySheetHard;
-    class Stage2;
+    class Stage2EnemySheet;
+    class Stage2EnemySheetEasy;
+    class Stage2EnemySheetNormal;
+    class Stage2EnemySheetHard;
     class Stage3;
     class Stage4;
     class Stage5;
@@ -273,7 +276,7 @@ private:
      * @return 難易度に対応するステージ1敵出現シート
      */
     static const Stage& Stage1EnemySheetInstance(DifficultyType difficulty);
-    static const Stage& Stage2Instance();
+    static const Stage& Stage2EnemySheetInstance(DifficultyType difficulty);
     static const Stage& Stage3Instance();
     static const Stage& Stage4Instance();
     static const Stage& Stage5Instance();

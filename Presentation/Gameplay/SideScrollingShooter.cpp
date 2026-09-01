@@ -177,6 +177,10 @@ Vector3 RotateYawOffset(float x, float y, float z, float yaw) {
 #include "Stage1EnemySheetEasy.h"
 #include "Stage1EnemySheetHard.h"
 #include "Stage1EnemySheetNormal.h"
+#include "Stage2EnemySheet.h"
+#include "Stage2EnemySheetEasy.h"
+#include "Stage2EnemySheetHard.h"
+#include "Stage2EnemySheetNormal.h"
 #include "Stage1Story.h"
 
 /**
@@ -195,9 +199,20 @@ const SideScrollingShooter::Stage& SideScrollingShooter::Stage1EnemySheetInstanc
     }
 }
 
-const SideScrollingShooter::Stage& SideScrollingShooter::Stage2Instance() {
-    static const Stage2 stage;
-    return stage;
+/**
+ * @brief 指定難易度のステージ2敵出現シートを取得する
+ * @param difficulty 取得する難易度
+ * @return 難易度に対応するステージ2敵出現シート
+ */
+const SideScrollingShooter::Stage& SideScrollingShooter::Stage2EnemySheetInstance(DifficultyType difficulty) {
+    static const Stage2EnemySheetEasy easyStage;
+    static const Stage2EnemySheetNormal normalStage;
+    static const Stage2EnemySheetHard hardStage;
+    switch (difficulty) {
+    case Hard: return hardStage;
+    case Normal: return normalStage;
+    default: return easyStage;
+    }
 }
 
 /**
@@ -234,7 +249,7 @@ const SideScrollingShooter::Stage& SideScrollingShooter::Stage5Instance() {
  */
 const SideScrollingShooter::Stage& SideScrollingShooter::StageForNumber(int stageNumber, DifficultyType difficulty) {
     switch (stageNumber) {
-    case 2: return Stage2Instance();
+    case 2: return Stage2EnemySheetInstance(difficulty);
     case 3: return Stage3Instance();
     case 4: return Stage4Instance();
     case 5: return Stage5Instance();
