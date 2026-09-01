@@ -828,6 +828,26 @@ void SideScrollingShooter::InitializeRailObjects() {
         if (!shot.active) continue;
         shot.transitionSideX = shot.x;
         shot.transitionSideY = shot.y;
+        if (shot.enemy && shot.barrageCount > 0) {
+            constexpr float Radius = 0.22f;
+            constexpr float RingShotSpeed = 0.58f;
+            constexpr float RingSpreadSpeed = 0.010f;
+            const float angle = static_cast<float>(shot.barrageIndex) * Math::TwoPi /
+                static_cast<float>(shot.barrageCount);
+            const float cx = std::cos(angle);
+            const float sy = std::sin(angle);
+            const float lineOffsetY = (static_cast<float>(shot.barrageIndex) -
+                static_cast<float>(shot.barrageCount - 1) * 0.5f) * 0.075f;
+            const float centerX = (std::clamp)(shot.x, -0.76f, 0.76f);
+            const float centerY = shot.y - lineOffsetY;
+            shot.x = centerX + cx * Radius;
+            shot.y = centerY + sy * Radius;
+            shot.z = ToRailZFromSideX(centerX);
+            shot.vx = cx * RingSpreadSpeed;
+            shot.vy = sy * RingSpreadSpeed * 1.4f;
+            shot.vz = -RingShotSpeed;
+            continue;
+        }
         const float sideVx = shot.vx;
         if (shot.z <= 0.0f) {
             shot.z = ToRailZFromSideX(shot.x);
@@ -860,9 +880,25 @@ void SideScrollingShooter::InitializeSideObjects() {
     }
     for (auto& shot : m_shots) {
         if (!shot.active) continue;
-        // レール奥行きの移動量を2D画面の横移動量へ変換する
         shot.transitionSideX = shot.x;
         shot.transitionSideY = shot.y;
+        if (shot.enemy && shot.barrageCount > 0) {
+            constexpr float Radius = 0.22f;
+            constexpr float AimedShotSpeed = 0.018f;
+            const float angle = static_cast<float>(shot.barrageIndex) * Math::TwoPi /
+                static_cast<float>(shot.barrageCount);
+            const float sy = std::sin(angle);
+            const float lineOffsetY = (static_cast<float>(shot.barrageIndex) -
+                static_cast<float>(shot.barrageCount - 1) * 0.5f) * 0.075f;
+            shot.x = ToSideXFromRailZ(shot.z);
+            shot.y = shot.y - sy * Radius + lineOffsetY;
+            shot.z = ToRailZFromSideX(shot.x);
+            shot.vx = -AimedShotSpeed;
+            shot.vy = 0.0f;
+            shot.vz = 0.0f;
+            continue;
+        }
+        // レール奥行きの移動量を2D画面の横移動量へ変換する
         shot.x = ToSideXFromRailZ(shot.z);
         shot.z = ToRailZFromSideX(shot.x);
         shot.vx = shot.vz / 18.0f;
@@ -1239,7 +1275,8 @@ void SideScrollingShooter::SpawnScoreItem(float x, float y, float z, int value) 
     }
 }
 
-void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy) {
+void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy,
+    int barrageIndex, int barrageCount) {
     for (auto& shot : m_shots) {
         if (shot.active) continue;
         shot = {};
@@ -1251,6 +1288,8 @@ void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, 
         shot.vx = vx;
         shot.vy = vy;
         shot.vz = vz;
+        shot.barrageIndex = barrageIndex;
+        shot.barrageCount = barrageCount;
         shot.enemy = enemy;
         shot.active = true;
         return;

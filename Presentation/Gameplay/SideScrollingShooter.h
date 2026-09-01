@@ -93,6 +93,8 @@ private:
         float vz = 0.0f;
         float hitRadius = 0.025f;
         int damage = 1;
+        int barrageIndex = -1;
+        int barrageCount = 0;
         PlayerType playerType = Homing;
         bool enemy = false;
         bool special = false;
@@ -356,7 +358,8 @@ private:
     void StartNextStage();
     void SpawnShot(float x, float y, float vx, float vy, bool enemy,
         float z = -1.0f, float railSpeed = -1.0f, int damage = 1);
-    void SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy);
+    void SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy,
+        int barrageIndex = -1, int barrageCount = 0);
     /** @brief 弾の命中位置へ爆発エフェクトを生成する */
     void SpawnExplosion(float x, float y, float z);
     /** @brief 機体モデルを構成する部品を飛散エフェクトとして生成する */

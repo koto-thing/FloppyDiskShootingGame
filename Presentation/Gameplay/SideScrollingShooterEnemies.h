@@ -426,7 +426,7 @@ public:
                 const float cx = std::cos(angle);
                 const float sy = std::sin(angle);
                 shooter.SpawnShotDirect(enemy.x + cx * Radius, enemy.y + sy * Radius, enemy.z,
-                    cx * RingSpreadSpeed(), sy * RingSpreadSpeed() * 1.4f, -RingShotSpeed(), true);
+                    cx * RingSpreadSpeed(), sy * RingSpreadSpeed() * 1.4f, -RingShotSpeed(), true, i, BulletCount);
             }
             return;
         }
@@ -434,7 +434,7 @@ public:
         for (int i = 0; i < BulletCount; ++i) {
             const float offsetY = (static_cast<float>(i) - 3.5f) * 0.075f;
             shooter.SpawnShotDirect(enemy.x - 0.06f, enemy.y + offsetY, ToRailZFromSideX(enemy.x),
-                -AimedShotSpeed(), 0.0f, 0.0f, true);
+                -AimedShotSpeed(), 0.0f, 0.0f, true, i, BulletCount);
         }
     }
 
