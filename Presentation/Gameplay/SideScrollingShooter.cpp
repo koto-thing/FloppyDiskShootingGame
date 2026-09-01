@@ -177,6 +177,10 @@ Vector3 RotateYawOffset(float x, float y, float z, float yaw) {
 #include "Stage1EnemySheetEasy.h"
 #include "Stage1EnemySheetHard.h"
 #include "Stage1EnemySheetNormal.h"
+#include "Stage2EnemySheet.h"
+#include "Stage2EnemySheetEasy.h"
+#include "Stage2EnemySheetHard.h"
+#include "Stage2EnemySheetNormal.h"
 #include "Stage1Story.h"
 
 /**
@@ -195,9 +199,20 @@ const SideScrollingShooter::Stage& SideScrollingShooter::Stage1EnemySheetInstanc
     }
 }
 
-const SideScrollingShooter::Stage& SideScrollingShooter::Stage2Instance() {
-    static const Stage2 stage;
-    return stage;
+/**
+ * @brief 指定難易度のステージ2敵出現シートを取得する
+ * @param difficulty 取得する難易度
+ * @return 難易度に対応するステージ2敵出現シート
+ */
+const SideScrollingShooter::Stage& SideScrollingShooter::Stage2EnemySheetInstance(DifficultyType difficulty) {
+    static const Stage2EnemySheetEasy easyStage;
+    static const Stage2EnemySheetNormal normalStage;
+    static const Stage2EnemySheetHard hardStage;
+    switch (difficulty) {
+    case Hard: return hardStage;
+    case Normal: return normalStage;
+    default: return easyStage;
+    }
 }
 
 /**
@@ -234,7 +249,7 @@ const SideScrollingShooter::Stage& SideScrollingShooter::Stage5Instance() {
  */
 const SideScrollingShooter::Stage& SideScrollingShooter::StageForNumber(int stageNumber, DifficultyType difficulty) {
     switch (stageNumber) {
-    case 2: return Stage2Instance();
+    case 2: return Stage2EnemySheetInstance(difficulty);
     case 3: return Stage3Instance();
     case 4: return Stage4Instance();
     case 5: return Stage5Instance();
@@ -346,6 +361,62 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
     m_viewTransitionProgress = 0.0f;
 }
 
+/**
+ * @brief デバッグ用に指定ステージとチャプターから開始する
+ * @param stageNumber 開始するステージ番号
+ * @param chapterNumber 開始するチャプター番号
+ * @param bossBattle ボス戦から開始する場合true
+ * @return なし
+ */
+void SideScrollingShooter::StartDebugCheckpoint(int stageNumber, int chapterNumber, bool bossBattle) {
+    m_shots = {};
+    m_enemies = {};
+    m_items = {};
+    m_explosions = {};
+    m_debris = {};
+    ResetStageGimmicks();
+
+    // 指定範囲をゲーム内の進行範囲へ収める
+    m_stageNumber = (std::clamp)(stageNumber, 1, 5);
+    m_chapterNumber = (std::clamp)(chapterNumber, 1, 3);
+    m_stage = &StageForNumber(m_stageNumber, m_difficulty);
+    m_chapterRetryCounts = {};
+    m_chapterResult = {};
+    m_chapterStartPower = m_power;
+    m_chapterStartScore = m_score;
+    m_chapterStartKills = m_kills;
+    m_chapterResultTimer = 0;
+    m_frame = bossBattle ? m_stage->ChapterEndFrame(3) : m_stage->ChapterEndFrame(m_chapterNumber - 1);
+    m_scroll = static_cast<float>(m_frame) * 0.008f;
+    m_spawnCooldown = 35;
+    m_shotCooldown = 0;
+    m_specialShotCooldown = 0;
+    m_invincible = 90;
+    m_bossHp = 0;
+    m_displayBossHp = 0.0f;
+    m_bossStoryLine = 0;
+    m_bossStoryActive = false;
+    m_clearTimer = 0;
+    m_clear = false;
+    m_bossBattle = false;
+    m_bossBattlePending = false;
+    m_chapterResultActive = false;
+    m_restartTimer = 0;
+    m_viewToggleRequested = false;
+    m_viewMode = ViewMode::Side2D;
+    m_nextViewMode = ViewMode::Side2D;
+    m_viewTransitionTimer = 0;
+    m_viewTransitionProgress = 0.0f;
+    m_playerX = -0.72f;
+    m_playerY = 0.0f;
+
+    if (bossBattle) {
+        m_chapterNumber = 3;
+        StartBossBattle();
+        m_bossStoryActive = false;
+    }
+}
+
 void SideScrollingShooter::ProcessInput() {
     m_moveLeft = Input::GetKey(KeyCode::LeftArrow) || Input::GetKey(KeyCode::A);
     m_moveRight = Input::GetKey(KeyCode::RightArrow) || Input::GetKey(KeyCode::D);
@@ -353,6 +424,17 @@ void SideScrollingShooter::ProcessInput() {
     m_moveDown = Input::GetKey(KeyCode::DownArrow) || Input::GetKey(KeyCode::S);
     m_fire = Input::GetKey(KeyCode::Z) || Input::GetKey(KeyCode::Space);
     m_viewToggleRequested = Input::GetKeyDown(KeyCode::X);
+
+    // デバッグ用に任意の進行地点へ移動する
+    if (Input::GetKeyDown(KeyCode::F1)) StartDebugCheckpoint(1, 1, false);
+    if (Input::GetKeyDown(KeyCode::F2)) StartDebugCheckpoint(2, 1, false);
+    if (Input::GetKeyDown(KeyCode::F3)) StartDebugCheckpoint(3, 1, false);
+    if (Input::GetKeyDown(KeyCode::F4)) StartDebugCheckpoint(4, 1, false);
+    if (Input::GetKeyDown(KeyCode::F5)) StartDebugCheckpoint(5, 1, false);
+    if (Input::GetKeyDown(KeyCode::Alpha1)) StartDebugCheckpoint(m_stageNumber, 1, false);
+    if (Input::GetKeyDown(KeyCode::Alpha2)) StartDebugCheckpoint(m_stageNumber, 2, false);
+    if (Input::GetKeyDown(KeyCode::Alpha3)) StartDebugCheckpoint(m_stageNumber, 3, false);
+    if (Input::GetKeyDown(KeyCode::B)) StartDebugCheckpoint(m_stageNumber, 3, true);
 
     if (m_clear && Input::GetKeyDown(KeyCode::R)) {
         Reset(false);
@@ -370,6 +452,9 @@ void SideScrollingShooter::Tick() {
     } else {
         m_displayBossHp = static_cast<float>(m_bossHp);
     }
+    if (m_viewTransitionTimer > 0) {
+        return;
+    }
     if (m_clear) {
         TickExplosions();
         TickDebris();
@@ -378,8 +463,7 @@ void SideScrollingShooter::Tick() {
     }
     if (m_restartTimer > 0) {
         --m_restartTimer;
-        // リスタート表示中はチャプター進行と敵出現を止め、背景と自機弾だけを更新する
-        m_scroll += 0.008f;
+        // リスタート表示中は距離とチャプター進行を止め、画面上の弾と演出だけを更新する
         TickPlayer();
         TickShots();
         TickExplosions();
@@ -389,8 +473,7 @@ void SideScrollingShooter::Tick() {
     if (m_chapterResultActive) {
         TickChapterResult();
         if (m_chapterResultActive) {
-            // 戦闘進行は止めたまま、結果画面の背後と画面上の弾・破壊演出・アイテムを動かす
-            m_scroll += 0.008f;
+            // 戦闘進行は止めたまま、画面上の弾・破壊演出・アイテムを動かす
             TickPlayer();
             TickShots();
             TickExplosions();
@@ -416,7 +499,7 @@ void SideScrollingShooter::Tick() {
     m_shotCooldown = (std::max)(0, m_shotCooldown - 1);
     m_specialShotCooldown = (std::max)(0, m_specialShotCooldown - 1);
     m_invincible = (std::max)(0, m_invincible - 1);
-    if (!m_bossBattle && !m_chapterResultActive && m_frame >= m_chapterNumber * ChapterLengthFrames) {
+    if (!m_bossBattle && !m_chapterResultActive && m_frame >= m_stage->ChapterEndFrame(m_chapterNumber)) {
         FinishChapter();
     }
 
@@ -446,11 +529,6 @@ void SideScrollingShooter::Tick() {
         firedPlayerShot = true;
     }
     if (firedPlayerShot) PlayShotSound();
-
-    // 規定スクロール距離へ到達したら通常区間を終了してボス戦を開始する
-    if (!m_bossBattle && m_scroll >= m_stage->BossStartDistance()) {
-        StartBossBattle();
-    }
 
     Stage::EnemySpawnRule spawn;
     if (!m_bossBattle && !m_chapterResultActive &&
@@ -491,7 +569,11 @@ void SideScrollingShooter::TickEnemies() {
         if (enemy.shotInterval <= 0) {
             enemy.shotInterval = enemy.behavior->AimedShotInterval();
         }
-        enemy.behavior->Tick(*this, enemy);
+        if (enemy.type == 2) {
+            m_stage->TickBoss(*this, enemy);
+        } else {
+            enemy.behavior->Tick(*this, enemy);
+        }
 
         // 巨大障害物へ接触した通常敵はスコアやアイテムを発生させず、その場で破壊する。ボス(type 2)は対象外
         const float boneHitRadius = IsRailGameplayActive() ? enemy.behavior->CollisionRadius3D(enemy) / WorldXScale :
@@ -506,7 +588,8 @@ void SideScrollingShooter::TickEnemies() {
         }
 
         const int aimedShotInterval = enemy.shotInterval;
-        if (aimedShotInterval > 0 && enemy.age % aimedShotInterval == 0) {
+        if (aimedShotInterval > 0 && enemy.age % aimedShotInterval == 0 &&
+            !(enemy.type == 2 && m_stage->IsBossSpecialAttackActive(enemy))) {
             const float dxToPlayer = m_playerX - enemy.x;
             const float dyToPlayer = m_playerY - enemy.y;
             const float length = std::sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
@@ -518,12 +601,13 @@ void SideScrollingShooter::TickEnemies() {
         }
 
         // ボスは通常・特殊フェーズごとの間隔で、未破壊の各部位から弾幕を発射する
-        if (enemy.type == 2 && enemy.age % (enemy.bossPhase % 2 == 0 ? 120 : 84) == 0) {
+        if (enemy.type == 2 &&
+            !m_stage->IsBossSpecialAttackActive(enemy) &&
+            enemy.age % m_stage->BossAttackInterval(static_cast<BossPhase>(enemy.bossPhase)) == 0) {
             FireBossPartBarrage(enemy);
         }
 
-        if (enemy.type != 2 && !IsRailGameplayActive() && enemy.x < -1.08f) enemy.active = false;
-        if (enemy.type == 3 && !IsRailGameplayActive() && enemy.z < 16.0f) enemy.active = false;
+        if (enemy.type != 2 && !IsRailGameplayActive() && enemy.x < -2.6f) enemy.active = false;
         if (enemy.type != 2 && IsRailGameplayActive() && enemy.z < 2.0f) enemy.active = false;
         const float enemyRadius = enemy.behavior->CollisionRadius(enemy);
         const bool playerHit = IsRailGameplayActive() ?
@@ -823,8 +907,13 @@ void SideScrollingShooter::InitializeRailObjects() {
         if (!enemy.active) continue;
         enemy.transitionSideX = enemy.x;
         enemy.transitionSideY = enemy.y;
+        enemy.transitionRailZ = enemy.z;
         if (enemy.z <= 0.0f) {
             enemy.z = ToRailZFromSideX(enemy.x);
+        }
+        if (enemy.type == 2) {
+            m_stage->ConfigureBossRailAnchor(enemy);
+            continue;
         }
         enemy.baseX = enemy.type == 2 ? 0.0f : (std::clamp)(enemy.baseX, -0.76f, 0.76f);
         enemy.x = enemy.baseX;
@@ -833,6 +922,26 @@ void SideScrollingShooter::InitializeRailObjects() {
         if (!shot.active) continue;
         shot.transitionSideX = shot.x;
         shot.transitionSideY = shot.y;
+        if (shot.enemy && shot.barrageCount > 0) {
+            constexpr float Radius = 0.22f;
+            constexpr float RingShotSpeed = 0.58f;
+            constexpr float RingSpreadSpeed = 0.010f;
+            const float angle = static_cast<float>(shot.barrageIndex) * Math::TwoPi /
+                static_cast<float>(shot.barrageCount);
+            const float cx = std::cos(angle);
+            const float sy = std::sin(angle);
+            const float lineOffsetY = (static_cast<float>(shot.barrageIndex) -
+                static_cast<float>(shot.barrageCount - 1) * 0.5f) * 0.075f;
+            const float centerX = (std::clamp)(shot.x, -0.76f, 0.76f);
+            const float centerY = shot.y - lineOffsetY;
+            shot.x = centerX + cx * Radius;
+            shot.y = centerY + sy * Radius;
+            shot.z = ToRailZFromSideX(centerX);
+            shot.vx = cx * RingSpreadSpeed;
+            shot.vy = sy * RingSpreadSpeed * 1.4f;
+            shot.vz = -RingShotSpeed;
+            continue;
+        }
         const float sideVx = shot.vx;
         if (shot.z <= 0.0f) {
             shot.z = ToRailZFromSideX(shot.x);
@@ -859,15 +968,36 @@ void SideScrollingShooter::InitializeSideObjects() {
         if (!enemy.active) continue;
         enemy.transitionSideX = enemy.x;
         enemy.transitionSideY = enemy.y;
+        enemy.transitionRailZ = enemy.z;
+        if (enemy.type == 2) {
+            m_stage->ConfigureBossSideAnchor(enemy);
+            continue;
+        }
         enemy.x = ToSideXFromRailZ(enemy.z);
         enemy.baseX = enemy.x;
         enemy.z = ToRailZFromSideX(enemy.x);
     }
     for (auto& shot : m_shots) {
         if (!shot.active) continue;
-        // レール奥行きの移動量を2D画面の横移動量へ変換する
         shot.transitionSideX = shot.x;
         shot.transitionSideY = shot.y;
+        if (shot.enemy && shot.barrageCount > 0) {
+            constexpr float Radius = 0.22f;
+            constexpr float AimedShotSpeed = 0.018f;
+            const float angle = static_cast<float>(shot.barrageIndex) * Math::TwoPi /
+                static_cast<float>(shot.barrageCount);
+            const float sy = std::sin(angle);
+            const float lineOffsetY = (static_cast<float>(shot.barrageIndex) -
+                static_cast<float>(shot.barrageCount - 1) * 0.5f) * 0.075f;
+            shot.x = ToSideXFromRailZ(shot.z);
+            shot.y = shot.y - sy * Radius + lineOffsetY;
+            shot.z = ToRailZFromSideX(shot.x);
+            shot.vx = -AimedShotSpeed;
+            shot.vy = 0.0f;
+            shot.vz = 0.0f;
+            continue;
+        }
+        // レール奥行きの移動量を2D画面の横移動量へ変換する
         shot.x = ToSideXFromRailZ(shot.z);
         shot.z = ToRailZFromSideX(shot.x);
         shot.vx = shot.vz / 18.0f;
@@ -892,8 +1022,6 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
 
 void SideScrollingShooter::StartBossBattle() {
     m_bossBattle = true;
-    m_bossHp = m_stage->BossMaxHp();
-    m_displayBossHp = static_cast<float>(m_bossHp);
     m_bossStoryLine = 0;
     m_bossStoryActive = true;
 
@@ -907,8 +1035,9 @@ void SideScrollingShooter::StartBossBattle() {
 
     Enemy& boss = m_enemies[0];
     m_stage->ConfigureBoss(boss, IsRailGameplayActive());
-    // 機首、主翼、エンジンは本体とは別HPで管理する
-    boss.bossPartHp = { 120, 180, 180, 150, 150 };
+    m_stage->ConfigureBossPartHp(boss);
+    m_bossHp = boss.hp;
+    m_displayBossHp = static_cast<float>(m_bossHp);
     boss.bossPhase = BossNormalPhase1;
     m_invincible = (std::max)(m_invincible, 60);
 
@@ -1084,7 +1213,7 @@ void SideScrollingShooter::FireBossPartBarrage(const Enemy& boss) {
 bool SideScrollingShooter::DamageBoss(Enemy& boss, int damage) {
     boss.hp -= damage;
     m_bossHp = (std::max)(0, boss.hp);
-    const int nextPhase = BossPhaseForHp(boss.hp, boss.maxHp);
+    const int nextPhase = m_stage->BossPhaseForHp(boss.hp, boss.maxHp);
     if (nextPhase != boss.bossPhase) {
         boss.bossPhase = nextPhase;
         // フェーズ切り替え時は画面上の敵弾を消して次の弾幕を読みやすくする
@@ -1244,7 +1373,8 @@ void SideScrollingShooter::SpawnScoreItem(float x, float y, float z, int value) 
     }
 }
 
-void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy) {
+void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy,
+    int barrageIndex, int barrageCount) {
     for (auto& shot : m_shots) {
         if (shot.active) continue;
         shot = {};
@@ -1256,6 +1386,8 @@ void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, 
         shot.vx = vx;
         shot.vy = vy;
         shot.vz = vz;
+        shot.barrageIndex = barrageIndex;
+        shot.barrageCount = barrageCount;
         shot.enemy = enemy;
         shot.active = true;
         return;
@@ -1412,8 +1544,8 @@ void SideScrollingShooter::RestartCurrentChapter() {
     m_kills = m_chapterStartKills;
     m_playerX = -0.72f;
     m_playerY = 0.0f;
-    m_scroll = static_cast<float>(m_chapterNumber - 1) * ChapterLengthFrames * 0.008f;
-    m_frame = (m_chapterNumber - 1) * ChapterLengthFrames;
+    m_frame = m_stage->ChapterEndFrame(m_chapterNumber - 1);
+    m_scroll = static_cast<float>(m_frame) * 0.008f;
     m_spawnCooldown = 35;
     m_shotCooldown = 0;
     m_specialShotCooldown = 0;
@@ -2803,8 +2935,9 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
             (exitingRail ? enemy.x : ToSideXFromRailZ(enemy.z));
         const float sideY = enteringRail ? enemy.transitionSideY : enemy.y;
         drawEnemy.x = Math::Lerp(sideX, exitingRail ? enemy.transitionSideX : enemy.x, railWeight);
-        drawEnemy.y = Math::Lerp(sideY, enemy.y, railWeight);
-        drawEnemy.z = Math::Lerp(SidePlaneZ + (enemy.type == 2 ? 2.2f : 1.5f), enemy.z, railWeight);
+        drawEnemy.y = Math::Lerp(sideY, exitingRail ? enemy.transitionSideY : enemy.y, railWeight);
+        const float railZ = exitingRail ? enemy.transitionRailZ : enemy.z;
+        drawEnemy.z = Math::Lerp(SidePlaneZ + (enemy.type == 2 ? 2.2f : 1.5f), railZ, railWeight);
         if (enemy.type != 2) {
             const float groundTopY = (isDesert || isOcean || isCity) ? -3.65f : -3.275f;
             const float minimumRailY = FromWorldY(groundTopY + 0.32f);

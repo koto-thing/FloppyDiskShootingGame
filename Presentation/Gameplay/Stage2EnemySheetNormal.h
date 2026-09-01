@@ -1,10 +1,10 @@
 #pragma once
 
 #include "GameplayRandom.h"
-#include "Stage1EnemySheet.h"
+#include "Stage2EnemySheet.h"
 
-/** @brief NORMAL用のステージ1敵出現シートを定義する */
-class SideScrollingShooter::Stage1EnemySheetNormal final : public SideScrollingShooter::Stage1EnemySheet {
+/** @brief NORMAL用のステージ2敵出現シートを定義する */
+class SideScrollingShooter::Stage2EnemySheetNormal final : public SideScrollingShooter::Stage2EnemySheet {
 public:
     /**
      * @brief 指定チャプターの終了フレームを取得する

@@ -70,7 +70,10 @@ private:
     class Stage1EnemySheetEasy;
     class Stage1EnemySheetNormal;
     class Stage1EnemySheetHard;
-    class Stage2;
+    class Stage2EnemySheet;
+    class Stage2EnemySheetEasy;
+    class Stage2EnemySheetNormal;
+    class Stage2EnemySheetHard;
     class Stage3;
     class Stage4;
     class Stage5;
@@ -93,6 +96,8 @@ private:
         float vz = 0.0f;
         float hitRadius = 0.025f;
         int damage = 1;
+        int barrageIndex = -1;
+        int barrageCount = 0;
         PlayerType playerType = Homing;
         bool enemy = false;
         bool special = false;
@@ -145,13 +150,19 @@ private:
         float z = 0.0f;
         float transitionSideX = 0.0f;
         float transitionSideY = 0.0f;
+        float transitionRailZ = 0.0f;
         float baseX = 0.0f;
         float baseY = 0.0f;
+        float baseZ = 0.0f;
+        float actionX = 0.0f;
+        float actionY = 0.0f;
+        float actionZ = 0.0f;
         float phase = 0.0f;
         int hp = 0;
         int maxHp = 0;
         int type = 0;
         int age = 0;
+        int motionAge = 0;
         int shotInterval = 0;
         int bossPhase = BossNormalPhase1;
         std::array<int, BossPartCount> bossPartHp {};
@@ -252,12 +263,20 @@ private:
 
     void Reset(bool resetRetryCounts = true);
     /**
+     * @brief デバッグ用に指定ステージとチャプターから開始する
+     * @param stageNumber 開始するステージ番号
+     * @param chapterNumber 開始するチャプター番号
+     * @param bossBattle ボス戦から開始する場合true
+     * @return なし
+     */
+    void StartDebugCheckpoint(int stageNumber, int chapterNumber, bool bossBattle);
+    /**
      * @brief 指定難易度のステージ1敵出現シートを取得する
      * @param difficulty 取得する難易度
      * @return 難易度に対応するステージ1敵出現シート
      */
     static const Stage& Stage1EnemySheetInstance(DifficultyType difficulty);
-    static const Stage& Stage2Instance();
+    static const Stage& Stage2EnemySheetInstance(DifficultyType difficulty);
     static const Stage& Stage3Instance();
     static const Stage& Stage4Instance();
     static const Stage& Stage5Instance();
@@ -356,7 +375,8 @@ private:
     void StartNextStage();
     void SpawnShot(float x, float y, float vx, float vy, bool enemy,
         float z = -1.0f, float railSpeed = -1.0f, int damage = 1);
-    void SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy);
+    void SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy,
+        int barrageIndex = -1, int barrageCount = 0);
     /** @brief 弾の命中位置へ爆発エフェクトを生成する */
     void SpawnExplosion(float x, float y, float z);
     /** @brief 機体モデルを構成する部品を飛散エフェクトとして生成する */

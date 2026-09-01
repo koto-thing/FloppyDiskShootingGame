@@ -56,6 +56,14 @@ public:
     virtual bool HasDebrisGravity() const {
         return false;
     }
+    /**
+     * @brief 指定チャプターの終了フレームを取得する
+     * @param chapterNumber チャプター番号
+     * @return 指定チャプターの終了フレーム
+     */
+    virtual int ChapterEndFrame(int chapterNumber) const {
+        return chapterNumber * SideScrollingShooter::ChapterLengthFrames;
+    }
     virtual bool TrySelectEnemySpawn(int frame, EnemySpawnRule& spawn, int& chapterNumber) const = 0;
     virtual void ConfigureEnemy(SideScrollingShooter& shooter, Enemy& enemy,
         int enemyType, int frame, int kills, bool railMode) const {
@@ -64,6 +72,75 @@ public:
     }
     virtual void ConfigureBoss(Enemy& boss, bool railMode) const {
         BossEnemyBehaviorInstance().ConfigureBossSpawn(boss, railMode, StageIndex());
+    }
+    /**
+     * @brief ボスの3Dモード基準点を設定する
+     * @param boss 基準点へ移動するボス
+     * @return なし
+     */
+    virtual void ConfigureBossRailAnchor(Enemy& boss) const {
+        boss.x = 0.0f;
+        boss.y = 0.0f;
+        boss.z = 48.0f;
+        boss.baseX = boss.x;
+        boss.baseY = boss.y;
+        boss.baseZ = boss.z;
+    }
+    /**
+     * @brief ボスの2Dモード基準点を設定する
+     * @param boss 基準点へ移動するボス
+     * @return なし
+     */
+    virtual void ConfigureBossSideAnchor(Enemy& boss) const {
+        boss.x = 1.80f;
+        boss.y = 0.0f;
+        boss.z = ToRailZFromSideX(boss.x);
+        boss.baseX = boss.x;
+        boss.baseY = boss.y;
+        boss.baseZ = boss.z;
+    }
+    /**
+     * @brief ボス部位HPを設定する
+     * @param boss 部位HPを設定するボス
+     * @return なし
+     */
+    virtual void ConfigureBossPartHp(Enemy& boss) const {
+        boss.bossPartHp = { 120, 180, 180, 150, 150 };
+    }
+    /**
+     * @brief ボスの移動を更新する
+     * @param shooter ゲーム本体
+     * @param boss 更新するボス
+     * @return なし
+     */
+    virtual void TickBoss(SideScrollingShooter& shooter, Enemy& boss) const {
+        BossEnemyBehaviorInstance().Tick(shooter, boss);
+    }
+    /**
+     * @brief ボスが弾幕を止める特殊攻撃中か取得する
+     * @param boss 判定するボス
+     * @return 特殊攻撃中の場合true
+     */
+    virtual bool IsBossSpecialAttackActive(const Enemy& boss) const {
+        (void)boss;
+        return false;
+    }
+    /**
+     * @brief ボス弾幕の発射間隔を取得する
+     * @param phase 現在のボス攻撃フェーズ
+     * @return 発射間隔
+     */
+    virtual int BossAttackInterval(BossPhase phase) const {
+        return phase == BossNormalPhase1 || phase == BossNormalPhase2 ? 120 : 84;
+    }
+    /**
+     * @brief 本体HPからボス攻撃フェーズを取得する
+     * @param hp 現在の本体HP
+     * @param maxHp 本体の最大HP
+     * @return ボス攻撃フェーズ
+     */
+    virtual int BossPhaseForHp(int hp, int maxHp) const {
+        return SideScrollingShooter::BossPhaseForHp(hp, maxHp);
     }
     virtual int BossBulletCount(bool railMode) const = 0;
     virtual BossBullet GetBossBullet(int index, bool railMode) const = 0;
@@ -131,50 +208,6 @@ protected:
     bool TrySelectByRules(const EnemySpawnRule* rules, int ruleCount, int frame, int kills, EnemySpawnRule& spawn) const {
         (void)kills;
         return TrySelectByRules(rules, ruleCount, frame, spawn);
-    }
-};
-
-/**
- * @brief ステージ2用
- */
-class SideScrollingShooter::Stage2 final : public SideScrollingShooter::Stage {
-public:
-    int StageIndex() const override {
-        return 2;
-    }
-
-    bool TrySelectEnemySpawn(int frame, EnemySpawnRule& spawn, int& chapterNumber) const override {
-        static constexpr EnemySpawnRule Chapter1[] = {{0, 30, 62, 1.08f, -0.85f, -0.68f, 60.0f}, {3, 120, 300, 1.10f, -0.82f, 0.88f, 50.0f}};
-        static constexpr EnemySpawnRule Chapter2[] = {{0, 510, 58, 1.12f, 0.05f, -0.18f, 60.0f}, {5, 570, 190, 1.14f, 0.28f, 0.32f, 56.0f}, {4, 650, 260, 1.16f, 0.82f, 0.68f, 60.0f}};
-        static constexpr EnemySpawnRule Chapter3[] = {{3, 1010, 145, 1.10f, -0.82f, -0.88f, 40.0f}, {5, 1080, 175, 1.14f, -0.28f, 0.86f, 50.0f}, {4, 1140, 200, 1.16f, 0.82f, -0.52f, 60.0f}};
-        constexpr Chapter Chapters[] = {{0, 500, Chapter1, 2}, {500, 1000, Chapter2, 3}, {1000, 1500, Chapter3, 3}};
-        return TrySelectByChapters(Chapters, 3, frame, spawn, chapterNumber);
-    }
-
-    int BossBulletCount(bool) const override {
-        return 5;
-    }
-
-    BossBullet GetBossBullet(int index, bool railMode) const override {
-        if (railMode) {
-            constexpr BossBullet RailPattern[5] = {
-                {0.0f, 0.0f, -0.010f, -0.020f},
-                {0.0f, 0.0f, 0.000f, -0.012f},
-                {0.0f, 0.0f, 0.000f, 0.000f},
-                {0.0f, 0.0f, 0.000f, 0.012f},
-                {0.0f, 0.0f, 0.010f, 0.020f}
-            };
-            return RailPattern[index % 5];
-        }
-
-        constexpr BossBullet SidePattern[5] = {
-            {-0.12f, 0.0f, -0.018f, -0.018f},
-            {-0.12f, 0.0f, -0.021f, -0.009f},
-            {-0.12f, 0.0f, -0.023f, 0.000f},
-            {-0.12f, 0.0f, -0.021f, 0.009f},
-            {-0.12f, 0.0f, -0.018f, 0.018f}
-        };
-        return SidePattern[index % 5];
     }
 };
 

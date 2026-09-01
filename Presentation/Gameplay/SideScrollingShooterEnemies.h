@@ -77,6 +77,7 @@ protected:
         enemy.maxHp = enemy.hp;
         enemy.shotInterval = AimedShotIntervalForStage(stageIndex);
         enemy.age = 0;
+        enemy.motionAge = 0;
     }
 
     int SelectEntryCandidateIndex(int frame, int kills, int stageIndex) const {
@@ -153,7 +154,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 1;
+        return 10;
     }
 
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
@@ -198,7 +199,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 3;
+        return 30;
     }
 
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
@@ -247,7 +248,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 4;
+        return 50;
     }
 
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
@@ -292,7 +293,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 2;
+        return 20;
     }
 
     void ConfigureSpawn(SideScrollingShooter& shooter, Enemy& enemy,
@@ -310,8 +311,13 @@ public:
     }
 
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
-        enemy.z -= 0.36f;
-        enemy.x = shooter.IsRailGameplayActive() ? enemy.baseX : ToSideXFromRailZ(enemy.z);
+        if (shooter.IsRailGameplayActive()) {
+            enemy.z -= 0.36f;
+            enemy.x = enemy.baseX;
+        } else {
+            enemy.x -= 0.020f;
+            enemy.z = ToRailZFromSideX(enemy.x);
+        }
         enemy.y = enemy.baseY;
     }
 
@@ -359,7 +365,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 3;
+        return 50;
     }
 
     void ConfigureSpawn(SideScrollingShooter& shooter, Enemy& enemy,
@@ -421,7 +427,7 @@ public:
                 const float cx = std::cos(angle);
                 const float sy = std::sin(angle);
                 shooter.SpawnShotDirect(enemy.x + cx * Radius, enemy.y + sy * Radius, enemy.z,
-                    cx * RingSpreadSpeed(), sy * RingSpreadSpeed() * 1.4f, -RingShotSpeed(), true);
+                    cx * RingSpreadSpeed(), sy * RingSpreadSpeed() * 1.4f, -RingShotSpeed(), true, i, BulletCount);
             }
             return;
         }
@@ -429,7 +435,7 @@ public:
         for (int i = 0; i < BulletCount; ++i) {
             const float offsetY = (static_cast<float>(i) - 3.5f) * 0.075f;
             shooter.SpawnShotDirect(enemy.x - 0.06f, enemy.y + offsetY, ToRailZFromSideX(enemy.x),
-                -AimedShotSpeed(), 0.0f, 0.0f, true);
+                -AimedShotSpeed(), 0.0f, 0.0f, true, i, BulletCount);
         }
     }
 
