@@ -101,6 +101,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     AudioService audio;
     // 保存済み音量をオーディオ初期化前に反映する
     const GameSettings settings = SettingsRepository().Load();
+    renderer.SetRetroEffectEnabled(settings.retroEffectEnabled);
     audio.SetMasterVolume(settings.masterVolume);
     audio.SetBGMVolume(settings.bgmVolume);
     audio.SetSEVolume(settings.seVolume);

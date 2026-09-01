@@ -45,6 +45,14 @@ struct PlayerShotVisual {
 struct ExplosionVisual {
     Matrix4x4 wvpMatrix = Matrix4x4::Identity;
     float progress = 0.0f;
+    int effectType = 0;
+};
+
+/** @brief HLSLで描画するレールガン軌跡の描画情報 */
+struct RailgunVisual {
+    Matrix4x4 wvpMatrix = Matrix4x4::Identity;
+    float progress = 0.0f;
+    int effectType = 0;
 };
 
 /**
@@ -68,6 +76,8 @@ public:
     virtual void DrawPlayerShot(const PlayerShotVisual& shot) { (void)shot; }
     /** @brief HLSLで生成する爆発エフェクトを描画する */
     virtual void DrawExplosion(const ExplosionVisual& explosion) { (void)explosion; }
+    /** @brief HLSLで生成するレールガン軌跡を描画する */
+    virtual void DrawRailgun(const RailgunVisual& railgun) { (void)railgun; }
     /**
      * @brief 文字をNDC座標系へ描画する
      * @param characterSpacing 文字ごとに追加する字間
@@ -82,6 +92,8 @@ public:
     virtual void ResetCamera() {}
     /** @brief バックエンドのフレーム終了処理を行う */
     virtual void EndFrame() = 0;
+    /** @brief 低解像度のレトロ映像効果を切り替える */
+    virtual void SetRetroEffectEnabled(bool enabled) { (void)enabled; }
     /** @brief 描画領域の幅を取得する */
     virtual int Width() const { return 0; }
     /** @brief 描画領域の高さを取得する */

@@ -10,6 +10,7 @@
 #include "../../Engine/Input/KeyCode.h"
 #include "../../Infrastructure/ExternalServices/AudioService.h"
 #include "BossModelView.h"
+#include "Stage5ModelView.h"
 
 namespace {
 constexpr float ModeTextColor[4] = { 0.55f, 0.85f, 1.0f, 1.0f };
@@ -42,6 +43,10 @@ constexpr float OceanSunColor[4] = { 1.00f, 0.82f, 0.20f, 1.0f };
 constexpr float SeaSerpentColor[4] = { 0.05f, 0.24f, 0.20f, 1.0f };
 constexpr float SeaSerpentBellyColor[4] = { 0.28f, 0.62f, 0.48f, 1.0f };
 constexpr float SeaSerpentEyeColor[4] = { 1.00f, 0.84f, 0.16f, 1.0f };
+constexpr float SeaSerpentSideEyeSurfaceOffset = 0.90f;
+constexpr float SeaSerpentRailEyeSurfaceOffset = 1.70f;
+static_assert(SeaSerpentSideEyeSurfaceOffset > 1.35f * 1.25f * 0.5f);
+static_assert(SeaSerpentRailEyeSurfaceOffset > 2.50f * 1.25f * 0.5f);
 constexpr float CityStreetColor[4] = { 0.025f, 0.05f, 0.11f, 1.0f };
 constexpr float CityBuildingColor[4] = { 0.055f, 0.10f, 0.20f, 1.0f };
 constexpr float CityWindowCyanColor[4] = { 0.12f, 0.82f, 0.98f, 1.0f };
@@ -57,14 +62,93 @@ constexpr float TowerRoofColor[4] = { 0.12f, 0.14f, 0.20f, 1.0f };
 constexpr float SatelliteBodyColor[4] = { 0.58f, 0.68f, 0.78f, 1.0f };
 constexpr float SatellitePanelColor[4] = { 0.16f, 0.48f, 0.88f, 1.0f };
 constexpr float SatelliteLightColor[4] = { 0.82f, 0.94f, 1.0f, 1.0f };
+constexpr float SearchlightColor[4] = { 1.00f, 0.82f, 0.20f, 0.24f };
+constexpr float SearchlightLockedColor[4] = { 1.00f, 0.08f, 0.08f, 0.50f };
+constexpr float StormCloudColor[4] = { 0.05f, 0.07f, 0.13f, 1.0f };
 constexpr float SideCameraZ = -16.0f;
 constexpr float SideCameraFieldOfView = 38.0f;
 constexpr int Stage2NightStartFrame = 500;
 constexpr int Stage2NightFrame = 750;
 constexpr int Stage3DawnStartFrame = 500;
 constexpr int Stage3DawnFrame = 750;
-constexpr int Stage5WallClimbStartFrame = 750;
-constexpr int Stage5WallClimbEndFrame = 1000;
+constexpr int MissionBannerGlyphDelayFrames = 4;
+constexpr int MissionBannerGlyphPopFrames = 8;
+constexpr int Stage1BossRushSegmentFrames = 36;
+constexpr int Stage1BossRushSegmentCount = 4;
+constexpr int Stage1BossRushFrames = Stage1BossRushSegmentFrames * Stage1BossRushSegmentCount;
+constexpr int Stage1BossSettleFrames = 96;
+constexpr int Stage1BossEntranceFrames = Stage1BossRushFrames + Stage1BossSettleFrames;
+constexpr int Phase3FunnelEngineStartFrame = 26;
+constexpr float Phase3FunnelLaunchVelocity = 0.09f;
+constexpr float Phase3FunnelGravity = 0.0035f;
+constexpr float Phase3FunnelRise = Phase3FunnelEngineStartFrame * Phase3FunnelLaunchVelocity -
+    Phase3FunnelGravity * Phase3FunnelEngineStartFrame * (Phase3FunnelEngineStartFrame + 1) * 0.5f;
+static_assert(Phase3FunnelRise > 0.63f);
+static_assert(Phase3FunnelLaunchVelocity -
+    Phase3FunnelGravity * Phase3FunnelEngineStartFrame < 0.0f);
+constexpr int Stage2BossApproachFrames = 90;
+constexpr int Stage2BossAssemblyFrames = 90;
+constexpr int Stage2BossEntranceFrames = Stage2BossApproachFrames + Stage2BossAssemblyFrames;
+constexpr int BossNameRevealFrames = 150;
+constexpr int EastsourceIntroFrames = 210;
+constexpr int EastsourceFallFrames = 180;
+
+enum Stage5Cue {
+    Stage5DistantThunder,
+    Stage5Thunder,
+    Stage5SearchlightDetect,
+    Stage5SearchlightLocked,
+    Stage5BarrageWarning,
+    Stage5EastsourceEntrance,
+    Stage5SignalLost,
+    Stage5Transformation,
+    Stage5WeakpointDestroyed,
+    Stage5CoreWarning,
+    Stage5ChainExplosion,
+    Stage5FinalExplosion
+};
+
+/**
+ * @brief 値を一フレームの最大移動量以内で目標へ近づける
+ * @param current 現在値
+ * @param target 目標値
+ * @param maxDelta 最大移動量
+ * @return 更新後の値
+ */
+float MoveTowards(float current, float target, float maxDelta) {
+    return current < target ? (std::min)(current + maxDelta, target) :
+        (std::max)(current - maxDelta, target);
+}
+
+/**
+ * @brief ステージ1ボス出現演出の高速移動区間を取得する
+ * @param age 出現演出の経過フレーム
+ * @return 0から3までの高速移動区間
+ */
+constexpr int Stage1BossRushSegment(int age) {
+    if (age <= 0) return 0;
+    const int segment = age / Stage1BossRushSegmentFrames;
+    return segment < Stage1BossRushSegmentCount ? segment : Stage1BossRushSegmentCount - 1;
+}
+
+static_assert(Stage1BossRushSegment(0) == 0);
+static_assert(Stage1BossRushSegment(Stage1BossRushFrames - 1) == 3);
+static_assert(Stage1BossEntranceFrames == 240);
+static_assert(Stage2BossEntranceFrames == 180);
+
+/**
+ * @brief 文字の登場経過に対応する拡大率を取得する
+ * @param glyphAge 文字が登場してからのフレーム数
+ * @return 登場前は0、登場中は縮小する拡大率、登場後は1
+ */
+constexpr float MissionBannerGlyphScale(int glyphAge) {
+    if (glyphAge < 0) return 0.0f;
+    if (glyphAge >= MissionBannerGlyphPopFrames) return 1.0f;
+    return 1.0f + static_cast<float>(MissionBannerGlyphPopFrames - glyphAge) * 0.16f;
+}
+
+static_assert(MissionBannerGlyphScale(-1) == 0.0f);
+static_assert(MissionBannerGlyphScale(MissionBannerGlyphPopFrames) == 1.0f);
 
 struct SeaSerpentMotion {
     int segmentCount;
@@ -295,6 +379,11 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::BossEnemyBehavi
     return behavior;
 }
 
+const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::Stage2BossEnemyBehaviorInstance() {
+    static const Stage2BossEnemyBehavior behavior;
+    return behavior;
+}
+
 const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::StraightShooterEnemyBehaviorInstance() {
     static const StraightShooterEnemyBehavior behavior;
     return behavior;
@@ -351,6 +440,7 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
     m_chapterStartScore = 0;
     m_chapterStartKills = 0;
     m_chapterResultTimer = 0;
+    m_missionStartTimer = MissionBannerDisplayFrames;
     m_power = 0.0f;
     m_stage = &StageForNumber(m_stageNumber, m_difficulty);
     m_playerX = -0.72f;
@@ -367,16 +457,49 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
     m_displayBossHp = 0.0f;
     m_bossStoryLine = 0;
     m_bossStoryActive = false;
+    m_bossIntroductionPhase = BossIntroductionPhase::None;
+    m_bossIntroductionTimer = 0;
     m_clearTimer = 0;
     m_clear = false;
     m_bossBattle = false;
     m_bossBattlePending = false;
     m_chapterResultActive = false;
+    m_playerDestructionTimer = 0;
     m_viewToggleRequested = false;
     m_viewMode = ViewMode::Side2D;
     m_nextViewMode = ViewMode::Side2D;
     m_viewTransitionTimer = 0;
+    m_viewToggleCooldown = 0;
     m_viewTransitionProgress = 0.0f;
+    ResetStage5();
+}
+
+/**
+ * @brief Stage 5専用状態を初期化する
+ * @return なし
+ */
+void SideScrollingShooter::ResetStage5() {
+    m_stage5Phase = Stage5Phase::Approach;
+    m_stage5Checkpoint = Stage5Checkpoint::Chapter1;
+    m_stage5PhaseTimer = 0;
+    m_stage5CheckpointPower = m_power;
+    m_stage5CheckpointScore = m_score;
+    m_stage5CheckpointKills = m_kills;
+    m_stage5SoundCooldown = 0;
+    m_stage5AttackTimer = 0;
+    m_stage5GuardSpawnCooldown = 0;
+    m_stage5CoreTargetX = 0.0f;
+    m_stage5CoreTargetY = 0.0f;
+    m_tayamaTransformation = 0.0f;
+    m_searchlights = {};
+    m_tayamaWeakpoints = {{
+        {TayamaWeakpoint::LeftSearchlight, 180, 180, false, false, 0},
+        {TayamaWeakpoint::RightSearchlight, 180, 180, false, false, 0},
+        {TayamaWeakpoint::FireControlRadar, 260, 260, false, false, 0},
+        {TayamaWeakpoint::LeftLiftEngine, 360, 360, false, false, 0},
+        {TayamaWeakpoint::RightLiftEngine, 360, 360, false, false, 0},
+        {TayamaWeakpoint::CommandCore, 900, 900, false, false, 0}
+    }};
 }
 
 /**
@@ -404,6 +527,7 @@ void SideScrollingShooter::StartDebugCheckpoint(int stageNumber, int chapterNumb
     m_chapterStartScore = m_score;
     m_chapterStartKills = m_kills;
     m_chapterResultTimer = 0;
+    m_missionStartTimer = MissionBannerDisplayFrames;
     m_frame = bossBattle ? m_stage->ChapterEndFrame(3) : m_stage->ChapterEndFrame(m_chapterNumber - 1);
     m_scroll = static_cast<float>(m_frame) * 0.008f;
     m_spawnCooldown = 35;
@@ -414,25 +538,84 @@ void SideScrollingShooter::StartDebugCheckpoint(int stageNumber, int chapterNumb
     m_displayBossHp = 0.0f;
     m_bossStoryLine = 0;
     m_bossStoryActive = false;
+    m_bossIntroductionPhase = BossIntroductionPhase::None;
+    m_bossIntroductionTimer = 0;
     m_clearTimer = 0;
     m_clear = false;
     m_bossBattle = false;
     m_bossBattlePending = false;
     m_chapterResultActive = false;
+    m_playerDestructionTimer = 0;
     m_restartTimer = 0;
     m_viewToggleRequested = false;
     m_viewMode = ViewMode::Side2D;
     m_nextViewMode = ViewMode::Side2D;
     m_viewTransitionTimer = 0;
+    m_viewToggleCooldown = 0;
     m_viewTransitionProgress = 0.0f;
     m_playerX = -0.72f;
     m_playerY = 0.0f;
+    ResetStage5();
 
     if (bossBattle) {
         m_chapterNumber = 3;
-        StartBossBattle();
+        if (m_stageNumber == 5) {
+            m_missionStartTimer = 0;
+            m_viewMode = ViewMode::Rail3D;
+            m_nextViewMode = ViewMode::Rail3D;
+            StartStage5Phase(Stage5Phase::EastsourceBattle);
+        } else {
+            StartBossBattle();
+        }
         m_bossStoryActive = false;
+        m_bossIntroductionPhase = BossIntroductionPhase::None;
+        m_bossIntroductionTimer = 0;
     }
+}
+
+/**
+ * @brief Stage 5の指定状態からデバッグ開始する
+ * @param phase 開始する状態
+ * @return なし
+ */
+void SideScrollingShooter::StartDebugStage5Phase(Stage5Phase phase) {
+    StartDebugCheckpoint(5, 3, false);
+    m_chapterNumber = 3;
+    m_frame = m_stage->ChapterEndFrame(3);
+    m_scroll = static_cast<float>(m_frame) * 0.008f;
+    m_missionStartTimer = 0;
+    m_viewMode = ViewMode::Rail3D;
+    m_nextViewMode = ViewMode::Rail3D;
+    m_viewTransitionTimer = 0;
+    m_viewTransitionProgress = 0.0f;
+
+    // 後半地点は到達済みの弱点を破壊状態へ合わせてから開始する
+    if (phase == Stage5Phase::TayamaLiftEngines ||
+        phase == Stage5Phase::TayamaCommandCore || phase == Stage5Phase::TayamaCollapse) {
+        for (int i = 0; i <= static_cast<int>(TayamaWeakpoint::FireControlRadar); ++i) {
+            m_tayamaWeakpoints[i].hp = 0;
+            m_tayamaWeakpoints[i].destroyed = true;
+        }
+    }
+    if (phase == Stage5Phase::TayamaCommandCore || phase == Stage5Phase::TayamaCollapse) {
+        for (int i = static_cast<int>(TayamaWeakpoint::LeftLiftEngine);
+            i <= static_cast<int>(TayamaWeakpoint::RightLiftEngine); ++i) {
+            m_tayamaWeakpoints[i].hp = 0;
+            m_tayamaWeakpoints[i].destroyed = true;
+        }
+    }
+    if (phase == Stage5Phase::TayamaCollapse) {
+        TayamaWeakpointState& core =
+            m_tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::CommandCore)];
+        core.hp = 0;
+        core.destroyed = true;
+    }
+    m_tayamaTransformation = phase >= Stage5Phase::TayamaFireControl ? 1.0f : 0.0f;
+    StartStage5Phase(phase);
+#ifdef _DEBUG
+    // デバッグ直行後に各フェーズの演出と当たり判定を確認できる時間を確保する
+    m_invincible = (std::max)(m_invincible, 600);
+#endif
 }
 
 void SideScrollingShooter::ProcessInput() {
@@ -441,7 +624,9 @@ void SideScrollingShooter::ProcessInput() {
     m_moveUp = Input::GetKey(KeyCode::UpArrow) || Input::GetKey(KeyCode::W);
     m_moveDown = Input::GetKey(KeyCode::DownArrow) || Input::GetKey(KeyCode::S);
     m_fire = Input::GetKey(KeyCode::Z) || Input::GetKey(KeyCode::Space);
-    m_viewToggleRequested = Input::GetKeyDown(KeyCode::X);
+    m_viewToggleRequested = Input::GetKeyDown(KeyCode::X) && m_viewToggleCooldown == 0 &&
+        !IsStage5ViewLocked() &&
+        m_bossIntroductionPhase == BossIntroductionPhase::None;
 
     // デバッグ用に任意の進行地点へ移動する
     if (Input::GetKeyDown(KeyCode::F1)) StartDebugCheckpoint(1, 1, false);
@@ -452,7 +637,19 @@ void SideScrollingShooter::ProcessInput() {
     if (Input::GetKeyDown(KeyCode::Alpha1)) StartDebugCheckpoint(m_stageNumber, 1, false);
     if (Input::GetKeyDown(KeyCode::Alpha2)) StartDebugCheckpoint(m_stageNumber, 2, false);
     if (Input::GetKeyDown(KeyCode::Alpha3)) StartDebugCheckpoint(m_stageNumber, 3, false);
-    if (Input::GetKeyDown(KeyCode::B)) StartDebugCheckpoint(m_stageNumber, 3, true);
+    if (Input::GetKeyDown(KeyCode::B)) {
+        if (m_stageNumber == 5) StartDebugStage5Phase(Stage5Phase::EastsourceBattle);
+        else StartDebugCheckpoint(m_stageNumber, 3, true);
+    }
+#ifdef _DEBUG
+    if (Input::GetKeyDown(KeyCode::F6)) StartDebugStage5Phase(Stage5Phase::WallClimbLower);
+    if (Input::GetKeyDown(KeyCode::F7)) StartDebugStage5Phase(Stage5Phase::WallClimbMiddle);
+    if (Input::GetKeyDown(KeyCode::F8)) StartDebugStage5Phase(Stage5Phase::WallClimbUpper);
+    if (Input::GetKeyDown(KeyCode::F9)) StartDebugStage5Phase(Stage5Phase::TayamaFireControl);
+    if (Input::GetKeyDown(KeyCode::F10)) StartDebugStage5Phase(Stage5Phase::TayamaLiftEngines);
+    if (Input::GetKeyDown(KeyCode::F11)) StartDebugStage5Phase(Stage5Phase::TayamaCommandCore);
+    if (Input::GetKeyDown(KeyCode::F12)) StartDebugStage5Phase(Stage5Phase::TayamaCollapse);
+#endif
 
     if (m_clear && Input::GetKeyDown(KeyCode::R)) {
         Reset(false);
@@ -460,6 +657,12 @@ void SideScrollingShooter::ProcessInput() {
 }
 
 void SideScrollingShooter::Tick() {
+    // ミッション開始表示中は背景を維持したまま戦闘進行と操作を止める
+    if (m_missionStartTimer > 0) {
+        --m_missionStartTimer;
+        return;
+    }
+
     const bool completingRailToSideTransition = m_viewTransitionTimer == 1 &&
         m_viewMode == ViewMode::Rail3D && m_nextViewMode == ViewMode::Side2D;
     TickViewTransition();
@@ -472,14 +675,18 @@ void SideScrollingShooter::Tick() {
     } else {
         m_displayBossHp = static_cast<float>(m_bossHp);
     }
-    // 3Dから2Dへ確定するフレームは、座標変換直後の特殊障害物との接触を判定しない
-    if (m_viewTransitionTimer > 0 || completingRailToSideTransition) {
-        return;
-    }
     if (m_clear) {
         TickExplosions();
         TickDebris();
-        if (m_stageNumber < 5 && --m_clearTimer <= 0) StartNextStage();
+        --m_clearTimer;
+        if (m_stageNumber < 5 && m_clearTimer <= 0) StartNextStage();
+        return;
+    }
+    if (m_playerDestructionTimer > 0) {
+        // 自機の破壊演出中は戦闘進行を止め、爆発と飛散物だけを更新する
+        TickExplosions();
+        TickDebris();
+        if (--m_playerDestructionTimer == 0) RestartCurrentChapter();
         return;
     }
     if (m_restartTimer > 0) {
@@ -496,6 +703,7 @@ void SideScrollingShooter::Tick() {
         if (m_chapterResultActive) {
             // 戦闘進行は止めたまま、画面上の弾・破壊演出・アイテムを動かす
             TickPlayer();
+            TickChapterExitEnemies();
             TickShots();
             TickExplosions();
             TickDebris();
@@ -508,29 +716,51 @@ void SideScrollingShooter::Tick() {
         StartBossBattle();
         return;
     }
+    if (m_bossIntroductionPhase == BossIntroductionPhase::Entrance ||
+        m_bossIntroductionPhase == BossIntroductionPhase::NameReveal) {
+        TickBossIntroduction();
+        return;
+    }
     if (m_bossStoryActive) {
         TickBossStory();
         return;
     }
 
-    ++m_frame;
-    if (!m_bossBattle) {
-        m_scroll += 0.008f;
+    // Stage 5後半は絶対フレームではなく専用状態と経過時間で進行する
+    if (m_stageNumber == 5 && m_stage5Phase != Stage5Phase::Approach) {
+        TickStage5();
+    } else if (m_stageNumber == 5 && m_chapterNumber == 3 && m_frame % 150 == 30) {
+        // TAYAMA浮上に同期して道路上の小型構造物を決定的な間隔で崩す
+        const float side = (m_frame / 150) % 2 == 0 ? -1.0f : 1.0f;
+        SpawnExplosion(side * 0.88f, -0.72f, 52.0f, true);
     }
+
+    ++m_frame;
+    if (ShouldAdvanceStageScroll()) m_scroll += 0.008f;
     m_shotCooldown = (std::max)(0, m_shotCooldown - 1);
     m_specialShotCooldown = (std::max)(0, m_specialShotCooldown - 1);
     m_invincible = (std::max)(0, m_invincible - 1);
-    if (!m_bossBattle && !m_chapterResultActive && m_frame >= m_stage->ChapterEndFrame(m_chapterNumber)) {
+    m_viewToggleCooldown = (std::max)(0, m_viewToggleCooldown - 1);
+    m_stage5SoundCooldown = (std::max)(0, m_stage5SoundCooldown - 1);
+    if (m_stageNumber == 5 && m_stage5Phase < Stage5Phase::TayamaCommandCore &&
+        m_stage5SoundCooldown == 0) {
+        if (m_frame % 397 == 0) PlayStage5Cue(Stage5DistantThunder);
+        if (m_chapterNumber >= 2 && m_frame % 241 == 0) PlayStage5Cue(Stage5Thunder);
+    }
+    if (!m_bossBattle && !m_chapterResultActive &&
+        (m_stageNumber != 5 || m_stage5Phase == Stage5Phase::Approach) &&
+        m_frame >= m_stage->ChapterEndFrame(m_chapterNumber)) {
         FinishChapter();
     }
 
     TickPlayer();
     TickStageGimmicks();
 
-    // ステージ固有の巨大障害物は無敵時間を無視して自機を破壊する
-    if ((m_stageNumber == 1 && HitsStage1Meteor(m_playerX, m_playerY, PlayerRailZ, 0.055f)) ||
+    // 3Dから2Dへ確定するフレームだけは、座標変換直後の特殊障害物との誤接触を除外する
+    if (!completingRailToSideTransition &&
+        ((m_stageNumber == 1 && HitsStage1Meteor(m_playerX, m_playerY, PlayerRailZ, 0.055f)) ||
         (m_stageNumber == 2 && HitsDesertBoneArch(m_playerX, m_playerY, PlayerRailZ, 0.055f)) ||
-        (m_stageNumber == 3 && HitsOceanSeaSerpent(m_playerX, m_playerY, PlayerRailZ, 0.055f))) {
+        (m_stageNumber == 3 && HitsOceanSeaSerpent(m_playerX, m_playerY, PlayerRailZ, 0.055f)))) {
         DamagePlayer();
         return;
     }
@@ -553,6 +783,7 @@ void SideScrollingShooter::Tick() {
 
     Stage::EnemySpawnRule spawn;
     if (!m_bossBattle && !m_chapterResultActive &&
+        (m_stageNumber != 5 || m_stage5Phase == Stage5Phase::Approach) &&
         m_stage->TrySelectEnemySpawn(m_frame, spawn, m_chapterNumber)) {
         SpawnEnemy(spawn.enemyType, spawn.sideX, spawn.railX, spawn.y, spawn.railZ);
     }
@@ -574,7 +805,7 @@ void SideScrollingShooter::TickPlayer() {
     /** @brief 2D画面ではHUDを除くプレイ領域全体を移動可能にする */
     const float minX = IsRailGameplayActive() ? -1.2f : Side2DPlayerMinX;
     const float maxX = IsRailGameplayActive() ? 1.2f : Side2DPlayerMaxX;
-    const float minY = IsRailGameplayActive() ? -0.9f : Side2DPlayerMinY;
+    const float minY = IsRailGameplayActive() ? PlayerRailMinY() : Side2DPlayerMinY;
     const float maxY = IsRailGameplayActive() ? 0.9f : Side2DPlayerMaxY;
     m_playerX = (std::clamp)(m_playerX + dx * 0.018f, minX, maxX);
     m_playerY = (std::clamp)(m_playerY + dy * 0.024f, minY, maxY);
@@ -584,6 +815,9 @@ void SideScrollingShooter::TickEnemies() {
     for (auto& enemy : m_enemies) {
         if (!enemy.active) continue;
         ++enemy.age;
+        for (int& frames : enemy.bossPartHitFlashFrames) {
+            if (frames > 0) --frames;
+        }
         if (enemy.behavior == nullptr) {
             enemy.behavior = &EnemyBehaviorForType(enemy.type);
         }
@@ -596,13 +830,65 @@ void SideScrollingShooter::TickEnemies() {
             enemy.behavior->Tick(*this, enemy);
         }
 
-        // 巨大障害物へ接触した通常敵はスコアやアイテムを発生させず、その場で破壊する。ボス(type 2)は対象外
+        // Phase3レールガンは発射フレームの一瞬だけ固定照準線へ当たり判定を通す
+        const int beamCycle = enemy.stage2BossActionAge % Stage2RailgunCycleFrames;
+        if (enemy.type == 2 && m_stageNumber == 2 && enemy.phase >= 3.0f &&
+            enemy.bossPartHp[BossNose] > 0 && beamCycle == Stage2RailgunFireFrame && m_invincible == 0) {
+            constexpr float BossScale = 1.92f;
+            const float yaw = IsRailGameplayActive() ? 0.0f : Math::HalfPi;
+            const float cosine = std::cos(yaw);
+            const float sine = std::sin(yaw);
+            const float patrolX = std::sin(static_cast<float>(enemy.age) * 0.018f) * 2.4f * RailBlend();
+            const float battleshipX = ToWorldX(enemy.x + enemy.landBattleshipOffsetX) + patrolX;
+            const float battleshipY = Stage2BattleshipWorldY(enemy);
+            const float battleshipZ = enemy.z + enemy.landBattleshipOffsetZ;
+            const float startX = battleshipX - 1.55f * cosine * BossScale;
+            const float startY = battleshipY + 2.08f * BossScale;
+            const float startZ = battleshipZ + 1.55f * sine * BossScale;
+            const float targetX = ToWorldX(enemy.actionX);
+            const float targetY = ToWorldY(enemy.actionY);
+            const float targetZ = IsRailGameplayActive() ? enemy.actionZ : SidePlaneZ;
+            const Vector3 direction = Vector3 {targetX - startX, targetY - startY, targetZ - startZ}.Normalized();
+            if (Hit3DSegment(startX, startY, startZ,
+                targetX + direction.x * 18.0f, targetY + direction.y * 18.0f,
+                targetZ + direction.z * 18.0f, 0.52f,
+                ToWorldX(m_playerX), ToWorldY(m_playerY), IsRailGameplayActive() ? PlayerRailZ : SidePlaneZ, 0.38f)) {
+                DamagePlayer();
+                return;
+            }
+        }
+
+        // Phase3は上部戦艦の船体だけで骨アーチとの接触を判定する
+        if (enemy.type == 2 && m_stageNumber == 2 && enemy.phase >= 3.0f && !m_boneArchDestroyed) {
+            constexpr float BodyLocalX = 0.55f;
+            constexpr float BodyLocalY = 0.95f;
+            constexpr float ModelScale = 1.92f;
+            constexpr float BodyRadius = 4.25f;
+            const float yaw = IsRailGameplayActive() ? 0.0f : Math::HalfPi;
+            const float patrolWorldX = std::sin(static_cast<float>(enemy.age) * 0.018f) *
+                2.4f * RailBlend();
+            const Vector3 bodyCenter {
+                ToWorldX(enemy.x + enemy.landBattleshipOffsetX) + patrolWorldX +
+                    std::cos(yaw) * BodyLocalX * ModelScale,
+                Stage2BattleshipWorldY(enemy) + BodyLocalY * ModelScale,
+                enemy.z + enemy.landBattleshipOffsetZ - std::sin(yaw) * BodyLocalX * ModelScale
+            };
+            if (HitsDesertBoneArch(FromWorldX(bodyCenter.x), FromWorldY(bodyCenter.y),
+                bodyCenter.z, BodyRadius / WorldXScale)) {
+                DestroyDesertBoneArch();
+                SpawnExplosion(FromWorldX(bodyCenter.x), FromWorldY(bodyCenter.y), bodyCenter.z);
+                PlayHitSound();
+            }
+        }
+
+        // 巨大障害物へ接触した通常敵はスコアやアイテムを発生させず、その場で破壊する
+        // ボス(type 2)は対象外
         const float boneHitRadius = IsRailGameplayActive() ? enemy.behavior->CollisionRadius3D(enemy) / WorldXScale :
             enemy.behavior->CollisionRadius(enemy);
         if (enemy.type != 2 && ((m_stageNumber == 1 && HitsStage1Meteor(enemy.x, enemy.y, enemy.z, boneHitRadius)) ||
             (m_stageNumber == 2 && HitsDesertBoneArch(enemy.x, enemy.y, enemy.z, boneHitRadius)) ||
             (m_stageNumber == 3 && HitsOceanSeaSerpent(enemy.x, enemy.y, enemy.z, boneHitRadius)))) {
-            SpawnExplosion(enemy.x, enemy.y, enemy.z);
+            SpawnExplosion(enemy.x, enemy.y, enemy.z, true);
             SpawnEnemyDebris(enemy);
             enemy.active = false;
             continue;
@@ -638,6 +924,7 @@ void SideScrollingShooter::TickEnemies() {
 
         if (enemy.type != 2 && !IsRailGameplayActive() && enemy.x < -2.6f) enemy.active = false;
         if (enemy.type != 2 && IsRailGameplayActive() && enemy.z < 2.0f) enemy.active = false;
+        if (enemy.type == 2 && !enemy.collisionEnabled) continue;
         const float enemyRadius = enemy.behavior->CollisionRadius(enemy);
         const bool playerHit = IsRailGameplayActive() ?
             Hit3D(ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ, 0.42f,
@@ -645,7 +932,7 @@ void SideScrollingShooter::TickEnemies() {
             Hit(m_playerX, m_playerY, 0.055f, enemy.x, enemy.y, enemyRadius);
         if (enemy.active && m_invincible == 0 && playerHit) {
             if (enemy.type != 2) {
-                SpawnExplosion(enemy.x, enemy.y, enemy.z);
+                SpawnExplosion(enemy.x, enemy.y, enemy.z, true);
                 SpawnEnemyDebris(enemy);
                 enemy.active = false;
             }
@@ -705,7 +992,7 @@ bool SideScrollingShooter::TryDamageStageGimmick(Shot& shot) {
         SpawnExplosion(shot.x, shot.y, shot.z);
         shot.active = false;
         m_boneArchHp -= shot.damage;
-        if (m_boneArchHp <= 0) m_boneArchDestroyed = true;
+        if (m_boneArchHp <= 0) DestroyDesertBoneArch();
         PlayHitSound();
         return true;
     }
@@ -715,6 +1002,40 @@ bool SideScrollingShooter::TryDamageStageGimmick(Shot& shot) {
 void SideScrollingShooter::TickShots() {
     for (auto& shot : m_shots) {
         if (!shot.active) continue;
+        if (shot.funnelDustAge >= 0) ++shot.funnelDustAge;
+        const float previousY = shot.y;
+
+        // Phase3ファンネルは短く自由落下してから補助エンジンで自機へ向かう
+        if (shot.funnel) ++shot.age;
+        if (shot.enemy && shot.funnelDelayedEngine) {
+            constexpr int FunnelEngineStartFrame = Phase3FunnelEngineStartFrame;
+            constexpr int FunnelLaunchCullGraceFrames = 45;
+            constexpr float FunnelGravity = Phase3FunnelGravity;
+            static_assert(FunnelEngineStartFrame < FunnelLaunchCullGraceFrames);
+            if (shot.age < FunnelEngineStartFrame) {
+                shot.vy -= FunnelGravity;
+            } else {
+                constexpr float FunnelSpeed = 0.72f;
+                constexpr float EngineAcceleration = 0.085f;
+                if (shot.age == FunnelEngineStartFrame) {
+                    // 点火時の自機位置から進行方向を一度だけ固定する
+                    const float dx = ToWorldX(m_playerX - shot.x);
+                    const float dy = ToWorldY(m_playerY - shot.y);
+                    const float dz = IsRailGameplayActive() ? PlayerRailZ - shot.z : 0.0f;
+                    const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
+                    shot.funnelEngineVx = FromWorldX(dx / length * FunnelSpeed);
+                    shot.funnelEngineVy = FromWorldY(dy / length * FunnelSpeed);
+                    shot.funnelEngineVz = dz / length * FunnelSpeed;
+                }
+                shot.vx += (shot.funnelEngineVx - shot.vx) * EngineAcceleration;
+                shot.vy += (shot.funnelEngineVy - shot.vy) * EngineAcceleration;
+                shot.vz += (shot.funnelEngineVz - shot.vz) * EngineAcceleration;
+            }
+        }
+        // Phase2ファンネルは進路を変えず、上方向へ徐々に加速する
+        if (shot.enemy && shot.funnel && !shot.funnelDelayedEngine) {
+            shot.vy = (std::min)(0.115f, shot.vy + 0.0018f);
+        }
 
         /** @brief 追尾弾を最寄りの前方敵へ旋回させる */
         if (!shot.enemy && shot.special && shot.playerType == Homing) {
@@ -724,10 +1045,22 @@ void SideScrollingShooter::TickShots() {
         shot.x += shot.vx;
         shot.y += shot.vy;
         shot.z += shot.vz;
+        if (shot.funnel && shot.funnelDustAge < 0) {
+            const float groundY = FromWorldY(Math::Lerp(-6.0f, -3.65f, RailBlend()));
+            if (previousY < groundY && shot.y >= groundY) {
+                shot.funnelDustAge = 0;
+                shot.funnelDustX = shot.x;
+                shot.funnelDustY = groundY;
+                shot.funnelDustZ = shot.z;
+            }
+        }
         if (!IsRailGameplayActive()) {
             shot.z = ToRailZFromSideX(shot.x);
         }
-        if (!IsRailGameplayActive() &&
+        // ハッチから出た直後は船体外へ抜けるまで通常弾の画面外カリングを猶予する
+        constexpr int FunnelLaunchCullGraceFrames = 45;
+        const bool funnelLaunching = shot.funnel && shot.age <= FunnelLaunchCullGraceFrames;
+        if (!funnelLaunching && !IsRailGameplayActive() &&
             (shot.x < Side2DPlayerMinX - Side2DShotCullMargin ||
                 shot.x > Side2DPlayerMaxX + Side2DShotCullMargin ||
                 shot.y < Side2DPlayerMinY - Side2DShotCullMargin ||
@@ -736,7 +1069,7 @@ void SideScrollingShooter::TickShots() {
             continue;
         }
         // 端から出る円形弾幕が生成直後に欠けないよう、弾のY消滅範囲だけ少し広げる
-        if (IsRailGameplayActive() && (shot.z < 0.0f || shot.z > 72.0f ||
+        if (!funnelLaunching && IsRailGameplayActive() && (shot.z < 0.0f || shot.z > 72.0f ||
             std::abs(shot.x) > 1.2f || std::abs(shot.y) > 1.24f)) {
             shot.active = false;
             continue;
@@ -745,8 +1078,8 @@ void SideScrollingShooter::TickShots() {
         if (shot.enemy) {
             const bool playerHit = IsRailGameplayActive() ?
                 Hit3D(ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ, 0.38f,
-                    ToWorldX(shot.x), ToWorldY(shot.y), shot.z, 0.28f) :
-                Hit(m_playerX, m_playerY, 0.050f, shot.x, shot.y, 0.022f);
+                    ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.funnel ? 0.42f : 0.28f) :
+                Hit(m_playerX, m_playerY, 0.050f, shot.x, shot.y, shot.funnel ? 0.055f : 0.022f);
             const bool grazed = IsRailGameplayActive() ?
                 Hit3D(ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ, 0.80f,
                     ToWorldX(shot.x), ToWorldY(shot.y), shot.z, 0.28f) :
@@ -763,10 +1096,14 @@ void SideScrollingShooter::TickShots() {
             continue;
         }
 
+        if (m_stageNumber == 5 &&
+            (TryDamageTayama(shot) || TryDamageWallSearchlight(shot))) continue;
         if (TryDamageStageGimmick(shot)) continue;
 
         for (auto& enemy : m_enemies) {
             if (!enemy.active) continue;
+            if (m_chapterResultActive && !enemy.collisionEnabled) continue;
+            if (enemy.type == 2 && !enemy.collisionEnabled && m_stageNumber != 2) continue;
             if (enemy.behavior == nullptr) {
                 enemy.behavior = &EnemyBehaviorForType(enemy.type);
             }
@@ -774,12 +1111,13 @@ void SideScrollingShooter::TickShots() {
             if (enemy.type == 2 && TryHitBossPart(shot, enemy, hitPart)) {
                 SpawnExplosion(shot.x, shot.y, shot.z);
                 if (!shot.piercing) shot.active = false;
+                enemy.bossPartHitFlashFrames[hitPart] = BossPartHitFlashFrames;
                 enemy.bossPartHp[hitPart] -= shot.damage;
                 if (enemy.bossPartHp[hitPart] <= 0) {
                     enemy.bossPartHp[hitPart] = 0;
                     SpawnEnemyDebris(enemy, hitPart);
-                    // 部位破壊の報酬として、本体へ大ダメージを与える
-                    const bool bossDefeated = DamageBoss(enemy, 120);
+                    const int partDamage = m_stage->BossPartBreakDamage(hitPart);
+                    const bool bossDefeated = DamageBoss(enemy, partDamage);
                     PlayHitSound();
                     if (bossDefeated) DefeatBoss(enemy);
                 }
@@ -790,6 +1128,16 @@ void SideScrollingShooter::TickShots() {
                 }
                 break;
             }
+            if (enemy.type == 2 && m_stageNumber == 2 && TryHitStage2BossBody(shot, enemy)) {
+                SpawnExplosion(shot.x, shot.y, shot.z);
+                if (!shot.piercing) shot.active = false;
+                if (DamageBoss(enemy, shot.damage)) DefeatBoss(enemy);
+                else m_bossHp = enemy.hp;
+                PlayHitSound();
+                break;
+            }
+            // Stage2のcollisionEnabledは潜航中の本体接触だけを無効化し、露出中の上部戦艦は部位判定を維持する
+            if (enemy.type == 2 && !enemy.collisionEnabled) continue;
             const float enemyRadius = enemy.behavior->CollisionRadius(enemy);
             const bool enemyHit = IsRailGameplayActive() ?
                 Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
@@ -805,6 +1153,7 @@ void SideScrollingShooter::TickShots() {
                 if (enemy.type == 2) {
                     DefeatBoss(enemy);
                 } else {
+                    SpawnExplosion(enemy.x, enemy.y, enemy.z, true);
                     SpawnEnemyDebris(enemy);
                     enemy.active = false;
                     ++m_kills;
@@ -889,6 +1238,10 @@ void SideScrollingShooter::TickChapterResult() {
         if (shot.enemy) shot.active = false;
     }
     if (m_chapterNumber == 3) {
+        if (m_stageNumber == 5) {
+            StartStage5Phase(Stage5Phase::EastsourceIntro);
+            return;
+        }
         m_bossBattlePending = true;
         return;
     }
@@ -898,6 +1251,34 @@ void SideScrollingShooter::TickChapterResult() {
     m_chapterStartPower = m_power;
     m_chapterStartScore = m_score;
     m_chapterStartKills = m_kills;
+    if (m_stageNumber == 5) {
+        SaveStage5Checkpoint(m_chapterNumber == 2 ?
+            Stage5Checkpoint::Chapter2 : Stage5Checkpoint::Chapter3);
+    }
+}
+
+/**
+ * @brief チャプター終了中の敵を当たり判定なしで画面外へ退避させる
+ * @return なし
+ */
+void SideScrollingShooter::TickChapterExitEnemies() {
+    constexpr float SideExitSpeed = 0.10f;
+    constexpr float RailExitSpeed = 1.4f;
+    static_assert(SideExitSpeed > 0.0f && RailExitSpeed > 0.0f);
+
+    // 敵AIと射撃を止めたまま進行方向へ高速移動させる
+    for (auto& enemy : m_enemies) {
+        if (!enemy.active || enemy.type == 2) continue;
+        enemy.collisionEnabled = false;
+        if (IsRailGameplayActive()) {
+            enemy.z -= RailExitSpeed;
+            if (enemy.z < 2.0f) enemy.active = false;
+        } else {
+            enemy.x -= SideExitSpeed;
+            enemy.z = ToRailZFromSideX(enemy.x);
+            if (enemy.x < -2.6f) enemy.active = false;
+        }
+    }
 }
 
 /**
@@ -909,9 +1290,16 @@ void SideScrollingShooter::FinishChapter() {
     m_chapterResultTimer = 0;
     m_chapterResultActive = true;
 
-    // 次のチャプターの出現へ戦闘中の敵が持ち越されないようにする
+    // 敵弾をその場で爆発へ変換して当たり判定を消す
+    for (auto& shot : m_shots) {
+        if (!shot.active || !shot.enemy) continue;
+        SpawnExplosion(shot.x, shot.y, shot.z);
+        shot.active = false;
+    }
+
+    // 通常敵は当たり判定を無効化し、結果表示中に画面外へ退避させる
     for (auto& enemy : m_enemies) {
-        if (enemy.type != 2) enemy.active = false;
+        if (enemy.active && enemy.type != 2) enemy.collisionEnabled = false;
     }
 }
 
@@ -932,14 +1320,53 @@ void SideScrollingShooter::TickViewTransition() {
         return;
     }
 
+    RequestViewMode(m_viewMode == ViewMode::Side2D ? ViewMode::Rail3D : ViewMode::Side2D);
+}
+
+/**
+ * @brief 入力を偽装せず表示モード変更を要求する
+ * @param mode 切り替え先
+ * @return なし
+ */
+void SideScrollingShooter::RequestViewMode(ViewMode mode) {
+    if ((m_viewTransitionTimer > 0 && m_nextViewMode == mode) ||
+        (m_viewTransitionTimer == 0 && m_viewMode == mode)) {
+        return;
+    }
+
     // 遷移開始時に座標系を切り替え、遷移中も切替先のゲームルールで更新する
-    m_nextViewMode = m_viewMode == ViewMode::Side2D ? ViewMode::Rail3D : ViewMode::Side2D;
+    m_nextViewMode = mode;
     m_viewTransitionTimer = ViewTransitionFrames;
-    if (m_nextViewMode == ViewMode::Rail3D) {
+    m_viewTransitionProgress = 0.0f;
+
+    // 切り替え開始から3秒間の無敵と8秒間の再入力待ちを付与する
+    m_invincible = (std::max)(m_invincible, ViewToggleInvincibleFrames);
+    m_viewToggleCooldown = ViewToggleCooldownFrames;
+    if (mode == ViewMode::Rail3D) {
+        // 遷移中はTickPlayerを通らないため、開始時点で機体を地面上へ戻す
+        m_playerY = (std::max)(m_playerY, PlayerRailMinY());
         InitializeRailObjects();
     } else {
         InitializeSideObjects();
     }
+}
+
+/**
+ * @brief Stage 5後半で3D表示が固定されているか取得する
+ * @return 3D表示が固定されている場合true
+ */
+bool SideScrollingShooter::IsStage5ViewLocked() const {
+    return m_stageNumber == 5 && m_stage5Phase != Stage5Phase::Approach;
+}
+
+/**
+ * @brief 現在の進行状態で背景スクロールを更新するか取得する
+ * @return 背景スクロールを更新する場合true
+ */
+bool SideScrollingShooter::ShouldAdvanceStageScroll() const {
+    if (m_stageNumber != 5) return true;
+    return m_stage5Phase <= Stage5Phase::WallClimbUpper ||
+        m_stage5Phase == Stage5Phase::EastsourceFall;
 }
 
 void SideScrollingShooter::InitializeRailObjects() {
@@ -1075,7 +1502,9 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
 void SideScrollingShooter::StartBossBattle() {
     m_bossBattle = true;
     m_bossStoryLine = 0;
-    m_bossStoryActive = true;
+    m_bossStoryActive = false;
+    m_bossIntroductionPhase = BossIntroductionPhase::Entrance;
+    m_bossIntroductionTimer = 0;
 
     // 通常敵と敵弾を消去してボス戦へ切り替える
     for (auto& enemy : m_enemies) {
@@ -1088,6 +1517,7 @@ void SideScrollingShooter::StartBossBattle() {
     Enemy& boss = m_enemies[0];
     m_stage->ConfigureBoss(boss, IsRailGameplayActive());
     m_stage->ConfigureBossPartHp(boss);
+    boss.bossPartMaxHp = boss.bossPartHp;
     m_bossHp = boss.hp;
     m_displayBossHp = static_cast<float>(m_bossHp);
     boss.bossPhase = BossNormalPhase1;
@@ -1226,10 +1656,10 @@ bool SideScrollingShooter::HitsOceanSeaSerpent(float x, float y, float z, float 
 
 /**
  * @brief 全ステージをクリア済みか取得する
- * @return 最終ステージのクリア演出中ならtrue
+ * @return TAYAMA崩壊と静かな飛行が完了した場合true
  */
 bool SideScrollingShooter::IsAllStagesCleared() const {
-    return m_clear && m_stageNumber == 5;
+    return m_stageNumber == 5 && m_stage5Phase == Stage5Phase::EndingReady;
 }
 
 /**
@@ -1244,24 +1674,138 @@ int SideScrollingShooter::Score() const {
 void SideScrollingShooter::TickExplosions() {
     for (auto& explosion : m_explosions) {
         if (!explosion.active) continue;
-        if (++explosion.age >= ExplosionLifetimeFrames) explosion.active = false;
+        const int lifetime = explosion.destruction ?
+            DestructionExplosionLifetimeFrames : ExplosionLifetimeFrames;
+        if (++explosion.age >= lifetime) explosion.active = false;
     }
 }
 
 /** @brief 飛散中の機体部品を更新する */
 void SideScrollingShooter::TickDebris() {
+    constexpr int Stage2FirstSinkEndFrame = 108;
+    constexpr int Stage2ResurfaceStartFrame = 148;
+    static_assert(Stage2FirstSinkEndFrame < Stage2ResurfaceStartFrame);
+    Debris* stage2LowerHull = nullptr;
+    for (auto& debris : m_debris) {
+        if (debris.active && debris.effect == Debris::Effect::Stage2Sink) {
+            stage2LowerHull = &debris;
+            break;
+        }
+    }
     for (auto& debris : m_debris) {
         if (!debris.active) continue;
+
+        // Stage2下部船体は一旦沈み、最後の再浮上後に上部船体へ押し戻される
+        if (debris.effect == Debris::Effect::Stage2Sink) {
+            if (debris.effectAge >= 0) {
+                debris.y -= 0.018f;
+                ++debris.effectAge;
+            } else if (debris.age < Stage2FirstSinkEndFrame) {
+                debris.y -= 0.0075f;
+            } else if (debris.age >= Stage2ResurfaceStartFrame) {
+                const float groundTopY = Math::Lerp(-6.0f, -3.65f, RailBlend());
+                const float visibleTargetY = groundTopY - debris.height * 0.12f;
+                debris.y = (std::min)(visibleTargetY, debris.y + 0.026f);
+            }
+            if (++debris.age >= debris.lifetime) debris.active = false;
+            continue;
+        }
+
+        // 船底が再浮上した下部船体の上面へ届くまで、上部船体をゆっくり降下させる
+        if ((debris.effect == Debris::Effect::Stage2Impact ||
+            debris.effect == Debris::Effect::Stage2ImpactPiece) && debris.effectAge < 0) {
+            const bool lowerHullHit = stage2LowerHull != nullptr &&
+                debris.effect == Debris::Effect::Stage2Impact &&
+                stage2LowerHull->age >= Stage2ResurfaceStartFrame &&
+                debris.y - debris.height * 0.5f <=
+                    stage2LowerHull->y + stage2LowerHull->height * 0.5f;
+            const bool collisionStarted = stage2LowerHull != nullptr && stage2LowerHull->effectAge >= 0;
+            if (lowerHullHit) {
+                // 船体同士が衝突した瞬間に最後の大爆発音を重ねる
+                stage2LowerHull->effectAge = 0;
+                PlayStage2DefeatSound(true);
+            }
+            if (!lowerHullHit && !collisionStarted) {
+                debris.y -= 0.012f;
+                debris.yaw += debris.spin * 0.18f;
+                if (++debris.age >= debris.lifetime) debris.active = false;
+                continue;
+            }
+        }
+
         debris.x += debris.vx;
         debris.y += debris.vy;
         debris.z += debris.vz;
-        if (m_stage->HasDebrisGravity()) debris.vy -= 0.006f;
+        if (debris.gravity || m_stage->HasDebrisGravity()) debris.vy -= 0.006f;
         debris.yaw += debris.spin;
-        if (++debris.age >= DebrisLifetimeFrames) debris.active = false;
+
+        // 衝突後は上部船体を大きく飛散させ、主船体の衝突時刻を爆発演出へ渡す
+        if (debris.effect == Debris::Effect::Stage2Impact ||
+            debris.effect == Debris::Effect::Stage2ImpactPiece) {
+            if (debris.effectAge < 0) {
+                debris.effectAge = 0;
+                debris.vx += debris.effect == Debris::Effect::Stage2Impact ? 0.025f :
+                    (debris.x < 0.0f ? -0.055f : 0.055f);
+                debris.vy = 0.075f;
+                debris.vz += debris.effect == Debris::Effect::Stage2Impact ? 0.0f :
+                    (debris.z < 0.0f ? -0.040f : 0.040f);
+                debris.spin *= 3.5f;
+            }
+            const float groundTopY = Math::Lerp(-6.0f, -3.65f, RailBlend());
+            const float minimumY = groundTopY + debris.height * 0.5f;
+            if (debris.y <= minimumY) {
+                debris.y = minimumY;
+                debris.vx *= 0.86f;
+                debris.vy = 0.0f;
+                debris.vz *= 0.86f;
+                debris.spin *= 0.78f;
+            }
+            ++debris.effectAge;
+        }
+        if (++debris.age >= debris.lifetime) debris.active = false;
     }
 }
 
 void SideScrollingShooter::FireBossPartBarrage(const Enemy& boss) {
+    if (m_stageNumber == 2) {
+        constexpr float ModelScale = 1.92f;
+        constexpr Vector3 PartPosition[] = {
+            {-2.30f, 2.08f, 0.0f}, {-0.55f, 2.60f, -0.92f},
+            {0.65f, 2.60f, 0.0f}, {2.85f, 2.18f, 0.92f}, {0.25f, 1.42f, 0.0f}
+        };
+        const bool railMode = IsRailGameplayActive();
+        const float yaw = railMode ? 0.0f : Math::HalfPi;
+        const float cosine = std::cos(yaw);
+        const float sine = std::sin(yaw);
+        const float patrolX = boss.phase >= 2.0f ?
+            std::sin(static_cast<float>(boss.age) * 0.018f) * 2.4f * Math::Clamp01(1.0f - yaw / Math::HalfPi) : 0.0f;
+        const Vector3 battleshipPosition {
+            ToWorldX(boss.x + boss.landBattleshipOffsetX) + patrolX,
+            Stage2BattleshipWorldY(boss),
+            boss.z + boss.landBattleshipOffsetZ
+        };
+
+        // 毎フレーム移動する上部戦艦の描画位置へローカル砲塔座標を合成する
+        for (int part = 0; part < BossRightEngine; ++part) {
+            if (boss.bossPartHp[part] <= 0) continue;
+            const Vector3& local = PartPosition[part];
+            const Vector3 world {
+                battleshipPosition.x + (local.x * cosine + local.z * sine) * ModelScale,
+                battleshipPosition.y + local.y * ModelScale,
+                battleshipPosition.z + (-local.x * sine + local.z * cosine) * ModelScale
+            };
+            const int bulletCount = m_stage->BossPartBulletCount(
+                static_cast<BossPart>(part), static_cast<BossPhase>(boss.bossPhase), railMode);
+            for (int index = 0; index < bulletCount; ++index) {
+                const Stage::BossBullet bullet = m_stage->GetBossPartBullet(
+                    static_cast<BossPart>(part), static_cast<BossPhase>(boss.bossPhase), index, railMode);
+                SpawnShot(FromWorldX(world.x) + bullet.offsetX, FromWorldY(world.y) + bullet.offsetY,
+                    bullet.vx, bullet.vy, true, world.z, boss.behavior->RailAimedShotSpeed());
+            }
+        }
+        return;
+    }
+
     constexpr float ModelScale = 0.14f;
     constexpr float PartX[] = { 0.0f, 17.0f, -17.0f, 6.0f, -6.0f };
     constexpr float PartY[] = { 3.0f, 2.0f, 2.0f, -6.0f, -6.0f };
@@ -1302,14 +1846,20 @@ bool SideScrollingShooter::DamageBoss(Enemy& boss, int damage) {
 
 void SideScrollingShooter::DefeatBoss(Enemy& boss) {
     if (!boss.active) return;
-    SpawnExplosion(boss.x, boss.y, boss.z);
+    if (m_stageNumber == 5 && m_stage5Phase == Stage5Phase::EastsourceBattle) {
+        DefeatEastsource(boss);
+        return;
+    }
+    SpawnExplosion(boss.x, boss.y, boss.z, true);
     SpawnEnemyDebris(boss);
     boss.active = false;
     SpawnPowerItem(boss.x, boss.y, boss.z, 1.00f);
     m_bossHp = 0;
     m_score += 5000;
     m_clear = true;
-    m_clearTimer = 120;
+    // Stage2は上下船体の沈下、再浮上、衝突、大破まで見届けてから次ステージへ進む
+    m_clearTimer = m_stageNumber == 2 ? 440 : ClearWaitFrames;
+    if (m_stageNumber == 2) PlayStage2DefeatSound(false);
 }
 
 /** @brief ボス戦前会話を進行する */
@@ -1327,6 +1877,1235 @@ void SideScrollingShooter::TickBossStory() {
 
     ++m_bossStoryLine;
     m_bossStoryActive = m_bossStoryLine < story.lineCount;
+    if (!m_bossStoryActive) {
+        m_bossIntroductionPhase = BossIntroductionPhase::NameReveal;
+        m_bossIntroductionTimer = 0;
+    }
+}
+
+/**
+ * @brief 現在状態をStage 5チェックポイントとして保存する
+ * @param checkpoint 保存するチェックポイント
+ * @return なし
+ */
+void SideScrollingShooter::SaveStage5Checkpoint(Stage5Checkpoint checkpoint) {
+    m_stage5Checkpoint = checkpoint;
+    m_stage5CheckpointPower = m_power;
+    m_stage5CheckpointScore = m_score;
+    m_stage5CheckpointKills = m_kills;
+}
+
+/**
+ * @brief Stage 5状態を開始する
+ * @param phase 開始する状態
+ * @param saveCheckpoint 復帰地点として保存する場合true
+ * @return なし
+ */
+void SideScrollingShooter::StartStage5Phase(Stage5Phase phase, bool saveCheckpoint) {
+    m_stage5Phase = phase;
+    m_stage5PhaseTimer = 0;
+    m_stage5AttackTimer = 0;
+    m_stage5CoreTargetX = m_playerX;
+    m_stage5CoreTargetY = m_playerY;
+    m_stage5GuardSpawnCooldown = 0;
+
+    if (phase != Stage5Phase::Approach) RequestViewMode(ViewMode::Rail3D);
+
+    // TAYAMA攻略は専用初期化へ委譲する
+    if (phase == Stage5Phase::TayamaFireControl ||
+        phase == Stage5Phase::TayamaLiftEngines ||
+        phase == Stage5Phase::TayamaCommandCore) {
+        StartTayamaPhase(phase, true);
+        return;
+    }
+
+    if (phase == Stage5Phase::EastsourceIntro) {
+        m_shots = {};
+        m_enemies = {};
+        m_items = {};
+        m_bossBattle = true;
+        Enemy& eastsource = m_enemies[0];
+        m_stage->ConfigureBoss(eastsource, true);
+        m_stage->ConfigureBossPartHp(eastsource);
+        eastsource.bossPartMaxHp = eastsource.bossPartHp;
+        eastsource.x = 1.45f;
+        eastsource.y = 0.30f;
+        eastsource.z = 66.0f;
+        eastsource.collisionEnabled = false;
+        m_bossHp = eastsource.hp;
+        m_displayBossHp = static_cast<float>(m_bossHp);
+        if (saveCheckpoint) SaveStage5Checkpoint(Stage5Checkpoint::Eastsource);
+        PlayStage5Cue(Stage5EastsourceEntrance);
+        return;
+    }
+    if (phase == Stage5Phase::EastsourceBattle) {
+        StartEastsourceBattle();
+        if (saveCheckpoint) SaveStage5Checkpoint(Stage5Checkpoint::Eastsource);
+        return;
+    }
+    if (phase == Stage5Phase::EastsourceFall) {
+        m_bossBattle = false;
+        for (auto& shot : m_shots) {
+            if (shot.enemy) shot.active = false;
+        }
+        PlayStage5Cue(Stage5SignalLost);
+        return;
+    }
+
+    // 壁面区画へ入るたび、その区画固有のライトを初期化する
+    if (phase >= Stage5Phase::WallClimbTransition && phase <= Stage5Phase::CarrierTransformation) {
+        m_bossBattle = false;
+        for (auto& enemy : m_enemies) enemy.active = false;
+        for (auto& shot : m_shots) {
+            if (shot.enemy) shot.active = false;
+        }
+        int lightCount = 0;
+        Stage5Checkpoint checkpoint = Stage5Checkpoint::WallClimbLower;
+        if (phase == Stage5Phase::WallClimbLower) {
+            lightCount = 1;
+            m_tayamaTransformation = 0.10f;
+        } else if (phase == Stage5Phase::WallClimbMiddle) {
+            lightCount = 2;
+            checkpoint = Stage5Checkpoint::WallClimbMiddle;
+            m_tayamaTransformation = 0.34f;
+        } else if (phase == Stage5Phase::WallClimbUpper) {
+            lightCount = 3;
+            checkpoint = Stage5Checkpoint::WallClimbUpper;
+            m_tayamaTransformation = 0.64f;
+        } else if (phase == Stage5Phase::RooftopArrival) {
+            m_tayamaTransformation = 0.90f;
+        } else if (phase == Stage5Phase::CarrierTransformation) {
+            m_tayamaTransformation = 0.96f;
+            PlayStage5Cue(Stage5Transformation);
+        }
+        ResetWallSearchlights(lightCount);
+        if (saveCheckpoint && lightCount > 0) SaveStage5Checkpoint(checkpoint);
+        m_invincible = (std::max)(m_invincible, 60);
+        return;
+    }
+
+    if (phase == Stage5Phase::TayamaCollapse) {
+        m_bossBattle = false;
+        m_bossHp = 0;
+        m_displayBossHp = 0.0f;
+        for (auto& enemy : m_enemies) enemy.active = false;
+        for (auto& shot : m_shots) {
+            if (shot.enemy) shot.active = false;
+        }
+        m_invincible = TayamaCollapseFrames + Stage5QuietFlightFrames + 60;
+        PlayStage5Cue(Stage5ChainExplosion);
+        return;
+    }
+
+    if (phase == Stage5Phase::EndingReady) {
+        m_clear = true;
+        m_clearTimer = 0;
+    }
+}
+
+/**
+ * @brief EASTSOURCE戦を戦闘可能な状態で開始する
+ * @return なし
+ */
+void SideScrollingShooter::StartEastsourceBattle() {
+    m_bossBattle = true;
+    Enemy& eastsource = m_enemies[0];
+    if (!eastsource.active || eastsource.type != Stage::BossEnemy) {
+        eastsource = {};
+        m_stage->ConfigureBoss(eastsource, true);
+        m_stage->ConfigureBossPartHp(eastsource);
+        eastsource.bossPartMaxHp = eastsource.bossPartHp;
+    }
+    eastsource.collisionEnabled = true;
+    eastsource.age = 0;
+    eastsource.motionAge = 0;
+    eastsource.bossPhase = BossNormalPhase1;
+    eastsource.x = 0.42f;
+    eastsource.y = 0.0f;
+    eastsource.z = 45.0f;
+    eastsource.baseX = eastsource.x;
+    eastsource.baseY = eastsource.y;
+    eastsource.baseZ = eastsource.z;
+    m_bossHp = eastsource.hp;
+    m_displayBossHp = static_cast<float>(m_bossHp);
+    m_invincible = (std::max)(m_invincible, 60);
+    ResetWallSearchlights(1);
+}
+
+/**
+ * @brief 指定地点へ向かう敵弾を生成する
+ * @param sourceX 発射元ゲーム座標X
+ * @param sourceY 発射元ゲーム座標Y
+ * @param sourceZ 発射元レール座標Z
+ * @param targetX 固定目標ゲーム座標X
+ * @param targetY 固定目標ゲーム座標Y
+ * @param targetZ 固定目標レール座標Z
+ * @param speed ワールド空間の弾速
+ * @return なし
+ */
+void SideScrollingShooter::SpawnEnemyShotAt(float sourceX, float sourceY, float sourceZ,
+    float targetX, float targetY, float targetZ, float speed) {
+    const float dx = ToWorldX(targetX - sourceX);
+    const float dy = ToWorldY(targetY - sourceY);
+    const float dz = targetZ - sourceZ;
+    const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
+    SpawnShotDirect(sourceX, sourceY, sourceZ,
+        FromWorldX(dx / length * speed), FromWorldY(dy / length * speed),
+        dz / length * speed, true);
+}
+
+/**
+ * @brief EASTSOURCEの移動と攻撃を更新する
+ * @param eastsource 更新するEASTSOURCE
+ * @return なし
+ */
+void SideScrollingShooter::TickEastsource(Enemy& eastsource) {
+    if (m_stage5Phase == Stage5Phase::EastsourceIntro) {
+        const float progress = SmoothStep(static_cast<float>(m_stage5PhaseTimer) / EastsourceIntroFrames);
+        eastsource.x = Math::Lerp(1.45f, 0.42f, progress);
+        eastsource.y = Math::Lerp(0.30f, 0.0f, progress) + std::sin(progress * Math::Pi * 5.0f) * 0.08f;
+        eastsource.z = Math::Lerp(66.0f, 45.0f, progress);
+        eastsource.collisionEnabled = false;
+        return;
+    }
+    if (m_stage5Phase == Stage5Phase::EastsourceFall) {
+        eastsource.collisionEnabled = false;
+        eastsource.x -= 0.004f;
+        eastsource.y -= 0.018f + static_cast<float>(m_stage5PhaseTimer) * 0.00008f;
+        eastsource.z += 0.08f;
+        return;
+    }
+    if (m_stage5Phase != Stage5Phase::EastsourceBattle) return;
+
+    const bool leftEngine = eastsource.bossPartHp[BossLeftEngine] > 0;
+    const bool rightEngine = eastsource.bossPartHp[BossRightEngine] > 0;
+    const float engineRate = (static_cast<float>(leftEngine) + static_cast<float>(rightEngine)) * 0.5f;
+    const float moveAmplitude = 0.20f + engineRate * 0.38f;
+    const float moveSpeed = 0.009f + engineRate * 0.009f;
+    eastsource.x = std::sin(static_cast<float>(eastsource.age) * moveSpeed) * moveAmplitude;
+    eastsource.y = std::sin(static_cast<float>(eastsource.age) * 0.021f) * 0.42f;
+    eastsource.z = 43.0f + std::sin(static_cast<float>(eastsource.age) * 0.013f) * 3.0f;
+
+    const bool nose = eastsource.bossPartHp[BossNose] > 0;
+    const int phase = eastsource.bossPhase;
+    if (phase == BossNormalPhase2 || phase == BossSpecialPhase2) {
+        const int pursuitCycle = eastsource.age % 180;
+        const bool fromLeft = (eastsource.age / 180) % 2 == 0;
+        const BossPart wingPart = fromLeft ? BossLeftWing : BossRightWing;
+        const BossPart enginePart = fromLeft ? BossLeftEngine : BossRightEngine;
+        const bool wing = eastsource.bossPartHp[wingPart] > 0;
+        const bool engine = eastsource.bossPartHp[enginePart] > 0;
+        const float side = fromLeft ? -1.0f : 1.0f;
+        const int passEnd = 112 + (engine ? 36 : 52);
+
+        // 索敵中は遠ざかり、予告後だけ画面外から固定方向へ高速再進入する
+        if (!wing) {
+            eastsource.collisionEnabled = true;
+        } else if (pursuitCycle < 82) {
+            eastsource.z = Math::Lerp(43.0f, 59.0f,
+                SmoothStep(static_cast<float>(pursuitCycle) / 82.0f));
+        } else if (pursuitCycle < 112) {
+            eastsource.x = side * 1.48f;
+            eastsource.z = 59.0f;
+            eastsource.collisionEnabled = false;
+        } else if (pursuitCycle < passEnd) {
+            const float pass = SmoothStep(static_cast<float>(pursuitCycle - 112) / (engine ? 36.0f : 52.0f));
+            eastsource.x = Math::Lerp(side * 1.48f, -side * 1.48f, pass);
+            eastsource.y = eastsource.attackWarningTargetY;
+            eastsource.z = Math::Lerp(31.0f, 19.0f, std::sin(pass * Math::Pi));
+            eastsource.collisionEnabled = false;
+        } else {
+            const float settle = SmoothStep(static_cast<float>(pursuitCycle - passEnd) /
+                static_cast<float>(180 - passEnd));
+            eastsource.x = Math::Lerp(-side * 1.48f, 0.0f, settle);
+            eastsource.z = Math::Lerp(28.0f, 43.0f, settle);
+            eastsource.collisionEnabled = settle > 0.55f;
+        }
+    } else {
+        eastsource.collisionEnabled = true;
+    }
+    if (phase == BossNormalPhase1 || phase == BossSpecialPhase2) {
+        const int cycleLength = nose ? 118 : 148;
+        const int cycle = eastsource.age % cycleLength;
+        const int warningFrames = nose ? 34 : 54;
+        if (cycle == 0) {
+            const float error = nose ? 0.0f : std::sin(static_cast<float>(eastsource.age) * 0.37f) * 0.24f;
+            eastsource.attackWarningTargetX = m_playerX + error;
+            eastsource.attackWarningTargetY = m_playerY - error * 0.45f;
+            eastsource.attackWarningFrames = warningFrames;
+            PlayStage5Cue(Stage5BarrageWarning);
+        }
+        const int shotCount = nose ? 3 : 1;
+        for (int shotIndex = 0; shotIndex < shotCount; ++shotIndex) {
+            if (cycle == warningFrames + shotIndex * 10) {
+                SpawnEnemyShotAt(eastsource.x, eastsource.y, eastsource.z,
+                    eastsource.attackWarningTargetX, eastsource.attackWarningTargetY,
+                    PlayerRailZ, 0.72f);
+            }
+        }
+    }
+
+    if (phase == BossSpecialPhase1 || phase == BossSpecialPhase2) {
+        const int cycle = eastsource.age % 96;
+        if (cycle == 22 && eastsource.bossPartHp[BossLeftWing] > 0) {
+            for (int lane = -2; lane <= 2; ++lane) {
+                if (lane == 0) continue;
+                SpawnEnemyShotAt(eastsource.x - 0.42f, eastsource.y + 0.12f, eastsource.z,
+                    m_playerX + 0.25f, static_cast<float>(lane) * 0.25f, PlayerRailZ, 0.64f);
+            }
+        }
+        if (cycle == 48 && eastsource.bossPartHp[BossRightWing] > 0) {
+            for (int lane = -2; lane <= 2; ++lane) {
+                if (lane == 0) continue;
+                SpawnEnemyShotAt(eastsource.x + 0.42f, eastsource.y - 0.12f, eastsource.z,
+                    m_playerX - 0.25f, static_cast<float>(lane) * 0.25f, PlayerRailZ, 0.64f);
+            }
+        }
+    }
+
+    if (phase == BossNormalPhase2 || phase == BossSpecialPhase2) {
+        const int cycle = eastsource.age % 180;
+        if (cycle == 92) {
+            eastsource.attackWarningTargetX = m_playerX;
+            eastsource.attackWarningTargetY = m_playerY;
+            eastsource.attackWarningFrames = 30;
+        }
+        if (cycle >= 120 && cycle < 138) {
+            const bool fromLeft = (eastsource.age / 180) % 2 == 0;
+            const bool wing = eastsource.bossPartHp[fromLeft ? BossLeftWing : BossRightWing] > 0;
+            const bool engine = eastsource.bossPartHp[fromLeft ? BossLeftEngine : BossRightEngine] > 0;
+            if (wing && cycle % (engine ? 4 : 7) == 0) {
+                const float sourceX = fromLeft ? -1.25f : 1.25f;
+                SpawnEnemyShotAt(sourceX, eastsource.attackWarningTargetY, 18.0f,
+                    eastsource.attackWarningTargetX, eastsource.attackWarningTargetY,
+                    PlayerRailZ, engine ? 0.82f : 0.58f);
+            }
+        }
+    }
+}
+
+/**
+ * @brief EASTSOURCE撃破後の信号消失演出へ移行する
+ * @param eastsource 撃破状態へ移行するEASTSOURCE
+ * @return なし
+ */
+void SideScrollingShooter::DefeatEastsource(Enemy& eastsource) {
+    if (m_stage5Phase != Stage5Phase::EastsourceBattle) return;
+    eastsource.hp = 0;
+    eastsource.collisionEnabled = false;
+    m_bossHp = 0;
+    m_displayBossHp = 0.0f;
+    m_score += 5000;
+    const BossPart detachedPart = eastsource.bossPartHp[BossLeftWing] > 0 ? BossLeftWing :
+        (eastsource.bossPartHp[BossRightWing] > 0 ? BossRightWing :
+            (eastsource.bossPartHp[BossLeftEngine] > 0 ? BossLeftEngine : BossRightEngine));
+    SpawnEnemyDebris(eastsource, detachedPart);
+    eastsource.bossPartHp[detachedPart] = 0;
+    StartStage5Phase(Stage5Phase::EastsourceFall, false);
+}
+
+/**
+ * @brief 壁面区画のサーチライトを初期化する
+ * @param activeCount 有効化するサーチライト数
+ * @return なし
+ */
+void SideScrollingShooter::ResetWallSearchlights(int activeCount) {
+    m_searchlights = {};
+    for (int i = 0; i < Stage5SearchlightCount; ++i) {
+        SearchlightState& light = m_searchlights[i];
+        light.beamX = (static_cast<float>(i) - 1.0f) * 0.62f;
+        light.beamY = i % 2 == 0 ? 0.34f : -0.28f;
+        light.hp = i < activeCount ? 90 : 0;
+        light.destroyed = i >= activeCount;
+        light.timer = i * 27;
+    }
+}
+
+/**
+ * @brief サーチライトの保存済み地点へ集中砲火を生成する
+ * @param light 集中砲火に使用するサーチライト状態
+ * @param lightIndex 発射元を決めるサーチライト番号
+ * @return なし
+ */
+void SideScrollingShooter::FireSearchlightVolley(const SearchlightState& light, int lightIndex) {
+    float sourceX = (static_cast<float>(lightIndex) - 1.0f) * 0.72f;
+    float sourceY = 0.72f - static_cast<float>(lightIndex) * 0.22f;
+    float sourceZ = 46.0f;
+    if (m_stage5Phase == Stage5Phase::TayamaFireControl) {
+        const TayamaPartGroup group = lightIndex == 0 ?
+            TayamaPartGroup::LeftSearchlight : TayamaPartGroup::RightSearchlight;
+        const Stage5GroupBounds bounds = TayamaModelView::GroupBounds(
+            TayamaTransform(), m_tayamaTransformation, TayamaState(), group);
+        if (bounds.valid) {
+            sourceX = FromWorldX(bounds.center.x);
+            sourceY = FromWorldY(bounds.center.y);
+            sourceZ = bounds.center.z;
+        }
+    }
+    for (int bullet = -2; bullet <= 2; ++bullet) {
+        const float spread = static_cast<float>(bullet) * 0.065f;
+        SpawnEnemyShotAt(sourceX, sourceY, sourceZ,
+            light.lockedX + spread, light.lockedY + std::abs(spread) * 0.35f,
+            PlayerRailZ, 0.78f);
+    }
+}
+
+/**
+ * @brief 指定数のサーチライトを更新する
+ * @param activeCount 更新するライト数
+ * @param tayamaWeakpoints TAYAMA弱点と破壊状態を共有する場合true
+ * @return なし
+ */
+void SideScrollingShooter::TickSearchlights(int activeCount, bool tayamaWeakpoints) {
+    const bool radarDestroyed = tayamaWeakpoints &&
+        m_tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::FireControlRadar)].destroyed;
+    const int difficultyOffset = m_difficulty == Easy ? 9 : (m_difficulty == Hard ? -9 : 0);
+    const int lockFrames = SearchlightLockFrames + difficultyOffset + (radarDestroyed ? 18 : 0);
+
+    for (int i = 0; i < activeCount; ++i) {
+        SearchlightState& light = m_searchlights[i];
+        if (tayamaWeakpoints) {
+            const TayamaWeakpoint type = i == 0 ? TayamaWeakpoint::LeftSearchlight :
+                TayamaWeakpoint::RightSearchlight;
+            light.destroyed = m_tayamaWeakpoints[static_cast<int>(type)].destroyed;
+        }
+        if (light.destroyed) continue;
+
+        const float scanTargetX = std::sin(static_cast<float>(m_stage5PhaseTimer + i * 67) *
+            (0.018f + static_cast<float>(i) * 0.002f)) * 0.92f;
+        const float scanTargetY = std::sin(static_cast<float>(m_stage5PhaseTimer + i * 43) *
+            (0.013f + static_cast<float>(i) * 0.003f)) * 0.66f;
+        if (light.phase == SearchlightPhase::Searching || light.phase == SearchlightPhase::Detecting) {
+            const float trackingLimit = radarDestroyed ? 0.010f : 0.016f;
+            light.beamX = MoveTowards(light.beamX, scanTargetX, trackingLimit);
+            light.beamY = MoveTowards(light.beamY, scanTargetY, trackingLimit * 0.78f);
+        }
+
+        const bool illuminated = Hit(m_playerX, m_playerY, 0.055f,
+            light.beamX, light.beamY, SearchlightDetectionRadius);
+        if (light.phase == SearchlightPhase::Searching) {
+            if (illuminated) {
+                light.phase = SearchlightPhase::Detecting;
+                light.detectionFrames = 1;
+                PlayStage5Cue(Stage5SearchlightDetect);
+            }
+            continue;
+        }
+        if (light.phase == SearchlightPhase::Detecting) {
+            light.detectionFrames = illuminated ? light.detectionFrames + 1 :
+                (std::max)(0, light.detectionFrames - 2);
+            if (light.detectionFrames == 0) {
+                light.phase = SearchlightPhase::Searching;
+            } else if (light.detectionFrames >= lockFrames) {
+                light.lockedX = m_playerX;
+                light.lockedY = m_playerY;
+                light.phase = SearchlightPhase::Locked;
+                light.timer = SearchlightWarningFrames;
+                PlayStage5Cue(Stage5SearchlightLocked);
+            }
+            continue;
+        }
+        if (light.phase == SearchlightPhase::Locked) {
+            if (--light.timer <= 0) {
+                light.phase = SearchlightPhase::Firing;
+                light.timer = 0;
+                light.volley = 0;
+                PlayStage5Cue(Stage5BarrageWarning);
+            }
+            continue;
+        }
+        if (light.phase == SearchlightPhase::Firing) {
+            if (light.timer % SearchlightVolleyIntervalFrames == 0 &&
+                light.volley < SearchlightVolleyCount) {
+                FireSearchlightVolley(light, i);
+                ++light.volley;
+            }
+            ++light.timer;
+            if (light.volley >= SearchlightVolleyCount &&
+                light.timer >= SearchlightVolleyIntervalFrames * SearchlightVolleyCount) {
+                light.phase = SearchlightPhase::Cooldown;
+                light.timer = 90 + i * 24 + (m_difficulty == Easy ? 30 : 0);
+                light.detectionFrames = 0;
+            }
+            continue;
+        }
+        if (--light.timer <= 0) light.phase = SearchlightPhase::Searching;
+    }
+}
+
+/**
+ * @brief EASTSOURCEの描画と当たり判定で共有する親Transformを取得する
+ * @param eastsource EASTSOURCE本体
+ * @return ワールド座標へ変換する親Transform
+ */
+Stage5ModelTransform SideScrollingShooter::EastsourceTransform(const Enemy& eastsource) const {
+    const float fallRoll = m_stage5Phase == Stage5Phase::EastsourceFall ?
+        static_cast<float>(m_stage5PhaseTimer) * 0.035f : 0.0f;
+    return {{ToWorldX(eastsource.x), ToWorldY(eastsource.y), eastsource.z},
+        {0.0f, Math::Lerp(Math::HalfPi, 0.0f, RailBlend()), fallRoll}, 0.72f};
+}
+
+/**
+ * @brief EASTSOURCEの部位状態をモデルグループへ変換する
+ * @param eastsource EASTSOURCE本体
+ * @return 描画と当たり判定へ渡すモデル状態
+ */
+EastsourceModelState SideScrollingShooter::EastsourceState(const Enemy& eastsource) const {
+    EastsourceModelState state;
+    constexpr EastsourcePartGroup Groups[] = {
+        EastsourcePartGroup::Nose,
+        EastsourcePartGroup::LeftWing,
+        EastsourcePartGroup::RightWing,
+        EastsourcePartGroup::LeftEngine,
+        EastsourcePartGroup::RightEngine
+    };
+
+    // 既存BossPartの固定順をEASTSOURCEのモデルグループへ一度だけ写す
+    for (int part = BossNose; part <= BossRightEngine; ++part) {
+        const std::size_t group = static_cast<std::size_t>(Groups[part]);
+        state.destroyed[group] = eastsource.bossPartHp[part] <= 0;
+        const int flash = eastsource.bossPartHitFlashFrames[part];
+        state.hitFlash[group] = flash > 0 && (flash / 2) % 2 != 0;
+    }
+    return state;
+}
+
+/**
+ * @brief TAYAMAの描画と当たり判定で共有する親Transformを取得する
+ * @return 現在の進行に対応する親Transform
+ */
+Stage5ModelTransform SideScrollingShooter::TayamaTransform() const {
+    float y = 3.0f;
+    float z = 57.0f;
+    float scale = 1.34f;
+    float pitch = 0.0f;
+    float roll = 0.0f;
+
+    // 通常チャプターでは遠景の都市構造として見せ、後半ほど接近させる
+    if (m_stage5Phase == Stage5Phase::Approach) {
+        const float chapterProgress = Math::Clamp01(
+            static_cast<float>(m_frame - (m_chapterNumber - 1) * ChapterLengthFrames) /
+            static_cast<float>(ChapterLengthFrames));
+        y = -9.0f + static_cast<float>(m_chapterNumber - 1) * 2.4f + chapterProgress * 1.2f;
+        z = 88.0f - static_cast<float>(m_chapterNumber - 1) * 6.0f;
+        scale = 0.82f + static_cast<float>(m_chapterNumber - 1) * 0.12f;
+    } else if (m_stage5Phase <= Stage5Phase::EastsourceFall) {
+        const float approach = m_stage5Phase == Stage5Phase::EastsourceIntro ?
+            SmoothStep(Math::Clamp01(static_cast<float>(m_stage5PhaseTimer) / EastsourceIntroFrames)) : 1.0f;
+        y = Math::Lerp(-3.0f, -1.5f, approach);
+        z = Math::Lerp(76.0f, 59.0f, approach);
+        scale = Math::Lerp(1.06f, 1.42f, approach);
+    } else if (m_stage5Phase <= Stage5Phase::WallClimbUpper) {
+        y = -1.5f + m_tayamaTransformation * 4.0f;
+        z = 59.0f;
+        scale = 1.42f;
+    } else if (m_stage5Phase == Stage5Phase::TayamaCollapse) {
+        z = 57.0f + static_cast<float>((std::min)(m_stage5PhaseTimer, 450)) * 0.004f;
+        scale = 1.34f + static_cast<float>((std::max)(0, m_stage5PhaseTimer - 330)) * 0.0006f;
+    }
+    if (m_stage5Phase == Stage5Phase::RooftopArrival) {
+        const float arrival = SmoothStep(Math::Clamp01(
+            static_cast<float>(m_stage5PhaseTimer) / RooftopArrivalFrames));
+        pitch = Math::Lerp(0.0f, 0.58f, arrival);
+        y = Math::Lerp(2.1f, 0.0f, arrival);
+        z = Math::Lerp(59.0f, 57.0f, arrival);
+        scale = Math::Lerp(1.42f, 1.08f, arrival);
+    } else if (m_stage5Phase >= Stage5Phase::CarrierTransformation) {
+        pitch = 0.58f;
+        y = 0.0f;
+        scale = m_stage5Phase == Stage5Phase::TayamaCollapse ?
+            1.08f + static_cast<float>((std::max)(0, m_stage5PhaseTimer - 330)) * 0.0006f : 1.08f;
+    }
+    if (m_stage5Phase == Stage5Phase::TayamaCommandCore) {
+        y = Math::Lerp(0.0f, 1.8f, SmoothStep(Math::Clamp01(
+            static_cast<float>(m_stage5PhaseTimer) / 180.0f)));
+    } else if (m_stage5Phase == Stage5Phase::TayamaCollapse) {
+        y = 1.8f - static_cast<float>((std::min)(m_stage5PhaseTimer, 450)) * 0.002f;
+    }
+
+    // 揚力エンジンの片側破壊を艦体ロールへ反映するが入力軸は回転させない
+    if (m_stage5Phase >= Stage5Phase::TayamaLiftEngines) {
+        const bool left = m_tayamaWeakpoints[
+            static_cast<int>(TayamaWeakpoint::LeftLiftEngine)].destroyed;
+        const bool right = m_tayamaWeakpoints[
+            static_cast<int>(TayamaWeakpoint::RightLiftEngine)].destroyed;
+        if (left != right) roll = left ? -0.12f : 0.12f;
+    }
+    return {{0.0f, y, z}, {pitch, 0.0f, roll}, scale};
+}
+
+/**
+ * @brief 現在の弱点と崩壊状態をTAYAMAモデルグループへ変換する
+ * @return 描画と当たり判定へ渡すモデル状態
+ */
+TayamaModelState SideScrollingShooter::TayamaState() const {
+    TayamaModelState state;
+    if (m_stage5Phase == Stage5Phase::EndingReady) {
+        state.visible.fill(false);
+        return state;
+    }
+    constexpr TayamaPartGroup Groups[] = {
+        TayamaPartGroup::LeftSearchlight,
+        TayamaPartGroup::RightSearchlight,
+        TayamaPartGroup::FireControlRadar,
+        TayamaPartGroup::LeftLiftEngine,
+        TayamaPartGroup::RightLiftEngine,
+        TayamaPartGroup::CommandCore
+    };
+
+    // 弱点の破壊と点滅を同名モデルグループへ反映する
+    for (const TayamaWeakpointState& weakpoint : m_tayamaWeakpoints) {
+        const std::size_t index = static_cast<std::size_t>(weakpoint.type);
+        const std::size_t group = static_cast<std::size_t>(Groups[index]);
+        state.destroyed[group] = weakpoint.destroyed;
+        state.hitFlash[group] = weakpoint.hitFlashFrames > 0 &&
+            (weakpoint.hitFlashFrames / 2) % 2 != 0;
+    }
+    state.visible[static_cast<std::size_t>(TayamaPartGroup::CommandCore)] =
+        m_stage5Phase >= Stage5Phase::TayamaCommandCore;
+    if (m_stage5Phase == Stage5Phase::TayamaCommandCore) {
+        state.visible[static_cast<std::size_t>(TayamaPartGroup::ArmorPanel)] = false;
+    }
+
+    if (m_stage5Phase != Stage5Phase::TayamaCollapse) return state;
+
+    // 大型構造はDebrisへ分解せずグループ単位のTransformで画面内崩壊させる
+    const float deckFall = Math::Clamp01(static_cast<float>(m_stage5PhaseTimer - 180) / 270.0f);
+    const float bridgeFall = Math::Clamp01(static_cast<float>(m_stage5PhaseTimer - 300) / 190.0f);
+    const float engineFall = Math::Clamp01(static_cast<float>(m_stage5PhaseTimer - 60) / 180.0f);
+    const float armorFall = Math::Clamp01(static_cast<float>(m_stage5PhaseTimer - 210) / 210.0f);
+    auto SetOffset = [&](TayamaPartGroup group, const Vector3& position,
+        const Vector3& rotation, float scale) {
+        state.collapseOffsets[static_cast<std::size_t>(group)] =
+            {position, rotation, {scale, scale, scale}};
+    };
+    SetOffset(TayamaPartGroup::LeftFlightDeck,
+        {-deckFall * 12.0f, -deckFall * 13.0f, deckFall * 3.0f},
+        {deckFall * 0.18f, 0.0f, deckFall * 1.05f}, 1.0f - deckFall * 0.22f);
+    SetOffset(TayamaPartGroup::RightFlightDeck,
+        {deckFall * 12.0f, -deckFall * 14.0f, deckFall * 2.0f},
+        {-deckFall * 0.16f, 0.0f, -deckFall * 1.12f}, 1.0f - deckFall * 0.22f);
+    SetOffset(TayamaPartGroup::Bridge,
+        {bridgeFall * 2.0f, -bridgeFall * 10.0f, -bridgeFall * 2.0f},
+        {bridgeFall * 0.32f, bridgeFall * 0.24f, bridgeFall * 0.82f}, 1.0f - bridgeFall * 0.30f);
+    SetOffset(TayamaPartGroup::LeftLiftEngine,
+        {-engineFall * 3.0f, -engineFall * 16.0f, engineFall * 2.0f},
+        {0.0f, engineFall * 0.35f, engineFall * 0.55f}, 1.0f - engineFall * 0.35f);
+    SetOffset(TayamaPartGroup::RightLiftEngine,
+        {engineFall * 3.0f, -engineFall * 16.0f, engineFall * 2.0f},
+        {0.0f, -engineFall * 0.35f, -engineFall * 0.55f}, 1.0f - engineFall * 0.35f);
+    SetOffset(TayamaPartGroup::ArmorPanel,
+        {0.0f, -armorFall * 9.0f, armorFall * 4.0f},
+        {armorFall * 0.24f, armorFall * 0.45f, 0.0f}, 1.0f - armorFall * 0.32f);
+    SetOffset(TayamaPartGroup::Hangar,
+        {0.0f, -armorFall * 11.0f, -armorFall * 3.0f},
+        {-armorFall * 0.22f, -armorFall * 0.30f, armorFall * 0.20f}, 1.0f - armorFall * 0.34f);
+
+    // 最終爆発後は全グループを消し、60フレームの静かな飛行だけを残す
+    if (m_stage5PhaseTimer >= TayamaCollapseFrames) state.visible.fill(false);
+    return state;
+}
+
+/**
+ * @brief 自機弾を壁面サーチライトへ適用する
+ * @param shot 判定する自機弾
+ * @return ライトへ命中した場合true
+ */
+bool SideScrollingShooter::TryDamageWallSearchlight(Shot& shot) {
+    if (m_stage5Phase < Stage5Phase::WallClimbLower ||
+        m_stage5Phase > Stage5Phase::WallClimbUpper) return false;
+    const int activeCount = m_stage5Phase == Stage5Phase::WallClimbLower ? 1 :
+        (m_stage5Phase == Stage5Phase::WallClimbMiddle ? 2 : 3);
+
+    // 描画する壁面ライト基部と同じ固定配置へ線分判定する
+    for (int index = 0; index < activeCount; ++index) {
+        SearchlightState& light = m_searchlights[index];
+        if (light.destroyed) continue;
+        const float sourceX = (static_cast<float>(index) - 1.0f) * 0.72f;
+        const float sourceY = 0.72f - static_cast<float>(index) * 0.22f;
+        if (!Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
+            ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
+            ToWorldX(sourceX), ToWorldY(sourceY), 46.0f, 0.72f)) continue;
+
+        if (!shot.piercing) shot.active = false;
+        light.hp -= shot.damage;
+        SpawnExplosion(sourceX, sourceY, 46.0f, light.hp <= 0);
+        if (light.hp <= 0) {
+            light.hp = 0;
+            light.destroyed = true;
+            light.phase = SearchlightPhase::Cooldown;
+            m_score += 300;
+            PlayStage5Cue(Stage5WeakpointDestroyed);
+        } else {
+            PlayHitSound();
+        }
+        return true;
+    }
+    return false;
+}
+
+/**
+ * @brief 自機弾をTAYAMAの有効弱点へ適用する
+ * @param shot 判定する自機弾
+ * @return TAYAMAへ命中した場合true
+ */
+bool SideScrollingShooter::TryDamageTayama(Shot& shot) {
+    if (m_stage5Phase < Stage5Phase::TayamaFireControl ||
+        m_stage5Phase > Stage5Phase::TayamaCommandCore) return false;
+    const Stage5ModelTransform transform = TayamaTransform();
+    const TayamaModelState modelState = TayamaState();
+    constexpr TayamaPartGroup Groups[] = {
+        TayamaPartGroup::LeftSearchlight,
+        TayamaPartGroup::RightSearchlight,
+        TayamaPartGroup::FireControlRadar,
+        TayamaPartGroup::LeftLiftEngine,
+        TayamaPartGroup::RightLiftEngine,
+        TayamaPartGroup::CommandCore
+    };
+    const Vector3 shotStart {ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz};
+    const Vector3 shotEnd {ToWorldX(shot.x), ToWorldY(shot.y), shot.z};
+
+    // 現フェーズの弱点だけを先に判定し、後続フェーズへの先行ダメージを防ぐ
+    for (TayamaWeakpointState& weakpoint : m_tayamaWeakpoints) {
+        if (!weakpoint.active || weakpoint.destroyed) continue;
+        const TayamaPartGroup group = Groups[static_cast<std::size_t>(weakpoint.type)];
+        const Stage5GroupBounds bounds = TayamaModelView::GroupBounds(
+            transform, m_tayamaTransformation, modelState, group);
+        if (!bounds.valid || !Hit3DSegment(shotStart.x, shotStart.y, shotStart.z,
+            shotEnd.x, shotEnd.y, shotEnd.z, shot.hitRadius * WorldXScale,
+            bounds.center.x, bounds.center.y, bounds.center.z, bounds.radius)) continue;
+
+        if (!shot.piercing) shot.active = false;
+        weakpoint.hp -= shot.damage;
+        weakpoint.hitFlashFrames = BossPartHitFlashFrames;
+        SpawnExplosion(FromWorldX(bounds.center.x), FromWorldY(bounds.center.y), bounds.center.z,
+            weakpoint.hp <= 0);
+        if (weakpoint.hp <= 0) {
+            weakpoint.hp = 0;
+            weakpoint.destroyed = true;
+            m_score += weakpoint.type == TayamaWeakpoint::CommandCore ? 5000 : 750;
+            if (weakpoint.type == TayamaWeakpoint::LeftSearchlight) m_searchlights[0].destroyed = true;
+            if (weakpoint.type == TayamaWeakpoint::RightSearchlight) m_searchlights[1].destroyed = true;
+            PlayStage5Cue(Stage5WeakpointDestroyed);
+        } else {
+            PlayHitSound();
+        }
+
+        bool phaseComplete = true;
+        for (const TayamaWeakpointState& current : m_tayamaWeakpoints) {
+            if (IsTayamaWeakpointActiveForPhase(current.type, m_stage5Phase) && !current.destroyed) {
+                phaseComplete = false;
+                break;
+            }
+        }
+        if (phaseComplete) {
+            if (m_stage5Phase == Stage5Phase::TayamaFireControl) {
+                StartTayamaPhase(Stage5Phase::TayamaLiftEngines);
+            } else if (m_stage5Phase == Stage5Phase::TayamaLiftEngines) {
+                StartTayamaPhase(Stage5Phase::TayamaCommandCore);
+            } else {
+                StartStage5Phase(Stage5Phase::TayamaCollapse, false);
+            }
+        } else {
+            UpdateTayamaBossHp();
+        }
+        return true;
+    }
+
+    // 無効な装甲への命中は小さな着弾だけを出し、HPとスコアを変えない
+    for (int group = 0; group < static_cast<int>(TayamaPartGroup::Count); ++group) {
+        const Stage5GroupBounds bounds = TayamaModelView::GroupBounds(transform,
+            m_tayamaTransformation, modelState, static_cast<TayamaPartGroup>(group));
+        if (!bounds.valid || !Hit3DSegment(shotStart.x, shotStart.y, shotStart.z,
+            shotEnd.x, shotEnd.y, shotEnd.z, shot.hitRadius * WorldXScale,
+            bounds.center.x, bounds.center.y, bounds.center.z, bounds.radius)) continue;
+        if (!shot.piercing) shot.active = false;
+        SpawnExplosion(shot.x, shot.y, shot.z);
+        PlayHitSound();
+        return true;
+    }
+    return false;
+}
+
+/**
+ * @brief 現在フェーズで有効なTAYAMA弱点HP合計をHUDへ反映する
+ * @return なし
+ */
+void SideScrollingShooter::UpdateTayamaBossHp() {
+    int currentHp = 0;
+    int currentMaxHp = 0;
+    for (const TayamaWeakpointState& weakpoint : m_tayamaWeakpoints) {
+        if (!IsTayamaWeakpointActiveForPhase(weakpoint.type, m_stage5Phase)) continue;
+        currentHp += (std::max)(0, weakpoint.hp);
+        currentMaxHp += weakpoint.maxHp;
+    }
+    m_bossHp = currentHp;
+    if (m_displayBossHp <= 0.0f || m_displayBossHp > static_cast<float>(currentMaxHp)) {
+        m_displayBossHp = static_cast<float>(currentHp);
+    }
+}
+
+/**
+ * @brief TAYAMAの攻略フェーズを開始する
+ * @param phase 開始する攻略状態
+ * @param resetCurrentHp 現在フェーズのHPを初期値へ戻す場合true
+ * @return なし
+ */
+void SideScrollingShooter::StartTayamaPhase(Stage5Phase phase, bool resetCurrentHp) {
+    m_stage5Phase = phase;
+    m_stage5PhaseTimer = 0;
+    m_stage5AttackTimer = 0;
+    m_stage5CoreTargetX = m_playerX;
+    m_stage5CoreTargetY = m_playerY;
+    m_bossBattle = false;
+    m_tayamaTransformation = 1.0f;
+    for (auto& enemy : m_enemies) enemy.active = false;
+    for (auto& shot : m_shots) {
+        if (shot.enemy) shot.active = false;
+    }
+
+    // 前フェーズの破壊結果を維持し、現在フェーズだけを有効化する
+    for (TayamaWeakpointState& weakpoint : m_tayamaWeakpoints) {
+        weakpoint.active = IsTayamaWeakpointActiveForPhase(weakpoint.type, phase) && !weakpoint.destroyed;
+        if (weakpoint.active && resetCurrentHp) weakpoint.hp = weakpoint.maxHp;
+        weakpoint.hitFlashFrames = 0;
+    }
+    if (phase == Stage5Phase::TayamaFireControl) {
+        ResetWallSearchlights(2);
+        SaveStage5Checkpoint(Stage5Checkpoint::TayamaFireControl);
+    } else if (phase == Stage5Phase::TayamaLiftEngines) {
+        SaveStage5Checkpoint(Stage5Checkpoint::TayamaLiftEngines);
+    } else {
+        SaveStage5Checkpoint(Stage5Checkpoint::TayamaCommandCore);
+        PlayStage5Cue(Stage5CoreWarning);
+    }
+    UpdateTayamaBossHp();
+    m_displayBossHp = static_cast<float>(m_bossHp);
+    m_invincible = (std::max)(m_invincible, 75);
+}
+
+/**
+ * @brief TAYAMA戦の更新処理
+ * @return なし
+ */
+void SideScrollingShooter::TickTayama() {
+    for (TayamaWeakpointState& weakpoint : m_tayamaWeakpoints) {
+        if (weakpoint.hitFlashFrames > 0) --weakpoint.hitFlashFrames;
+    }
+    ++m_stage5AttackTimer;
+    m_stage5GuardSpawnCooldown = (std::max)(0, m_stage5GuardSpawnCooldown - 1);
+
+    if (m_stage5Phase == Stage5Phase::TayamaFireControl) {
+        TickSearchlights(2, true);
+        if (m_stage5AttackTimer % 120 == 72) {
+            for (int lane = -3; lane <= 3; ++lane) {
+                if (lane == 0) continue;
+                SpawnEnemyShotAt(static_cast<float>(lane) * 0.18f, 0.62f, 58.0f,
+                    m_playerX + static_cast<float>(lane) * 0.10f,
+                    m_playerY + static_cast<float>(lane) * 0.09f, PlayerRailZ, 0.60f);
+            }
+        }
+        if (m_stage5GuardSpawnCooldown == 0 && m_stage5PhaseTimer > 120) {
+            SpawnEnemy(Stage::ArmoredEnemy, 1.16f, (m_stage5PhaseTimer / 240) % 2 == 0 ? -0.72f : 0.72f,
+                0.58f, 60.0f);
+            m_stage5GuardSpawnCooldown = 300;
+        }
+        const int sweepCycle = m_stage5AttackTimer % 210;
+        if (sweepCycle == 0) {
+            m_stage5CoreTargetY = m_playerY;
+            PlayStage5Cue(Stage5BarrageWarning);
+        }
+        if (sweepCycle == 36) {
+            for (int lane = -4; lane <= 4; ++lane) {
+                SpawnEnemyShotAt(static_cast<float>(lane) * 0.27f, 0.70f, 58.0f,
+                    static_cast<float>(lane) * 0.27f, m_stage5CoreTargetY,
+                    PlayerRailZ, 0.76f);
+            }
+        }
+        return;
+    }
+
+    if (m_stage5Phase == Stage5Phase::TayamaLiftEngines) {
+        const int cycle = m_stage5AttackTimer % 132;
+        if (cycle == 0) {
+            m_stage5CoreTargetX = m_playerX;
+            m_stage5CoreTargetY = m_playerY;
+            PlayStage5Cue(Stage5BarrageWarning);
+        }
+        if (cycle == 32) {
+            for (int engine = 0; engine < 2; ++engine) {
+                const TayamaWeakpoint type = engine == 0 ?
+                    TayamaWeakpoint::LeftLiftEngine : TayamaWeakpoint::RightLiftEngine;
+                if (m_tayamaWeakpoints[static_cast<int>(type)].destroyed) continue;
+                const float side = engine == 0 ? -1.0f : 1.0f;
+                for (int lane = -2; lane <= 2; ++lane) {
+                    SpawnEnemyShotAt(side * 0.72f, -0.42f, 55.0f,
+                        m_stage5CoreTargetX + static_cast<float>(lane) * 0.13f,
+                        m_stage5CoreTargetY, PlayerRailZ, 0.72f);
+                }
+            }
+        }
+        if (m_stage5GuardSpawnCooldown == 0 && m_stage5PhaseTimer > 150) {
+            SpawnEnemy(Stage::StraightShooterEnemy, 1.16f,
+                (m_stage5PhaseTimer / 360) % 2 == 0 ? -0.58f : 0.58f, 0.54f, 59.0f);
+            m_stage5GuardSpawnCooldown = 360;
+        }
+        return;
+    }
+
+    if (m_stage5Phase == Stage5Phase::TayamaCommandCore) {
+        const int cycle = m_stage5AttackTimer % 180;
+        if (cycle == 0) {
+            m_stage5CoreTargetX = m_playerX;
+            m_stage5CoreTargetY = m_playerY;
+            PlayStage5Cue(Stage5CoreWarning);
+        }
+        if (cycle == 42 || cycle == 52 || cycle == 62) {
+            SpawnEnemyShotAt(0.0f, 0.35f, 55.0f,
+                m_stage5CoreTargetX, m_stage5CoreTargetY, PlayerRailZ, 0.92f);
+        }
+        if (cycle == 104) {
+            for (int ray = 0; ray < 12; ++ray) {
+                const float angle = static_cast<float>(ray) * Math::TwoPi / 12.0f;
+                SpawnEnemyShotAt(0.0f, 0.35f, 55.0f,
+                    m_playerX + std::cos(angle) * 0.72f,
+                    m_playerY + std::sin(angle) * 0.56f, PlayerRailZ, 0.66f);
+            }
+        }
+        if (cycle == 138) {
+            for (int lane = -4; lane <= 4; ++lane) {
+                SpawnEnemyShotAt(static_cast<float>(lane) * 0.22f, -0.62f, 54.0f,
+                    static_cast<float>(lane) * 0.22f,
+                    -0.52f + std::abs(static_cast<float>(lane)) * 0.10f,
+                    PlayerRailZ, 0.58f);
+            }
+        }
+    }
+}
+
+/**
+ * @brief Stage 5専用シーケンスを更新する
+ * @return なし
+ */
+void SideScrollingShooter::TickStage5() {
+    ++m_stage5PhaseTimer;
+
+    if (m_stage5Phase == Stage5Phase::EastsourceIntro) {
+        if (m_stage5PhaseTimer == 58) {
+            SpawnExplosion(0.78f, 0.22f, 61.0f, true);
+            constexpr float PanelColor[] = {0.20f, 0.22f, 0.30f, 1.0f};
+            for (int i = 0; i < 8; ++i) {
+                SpawnDebrisPiece(5.2f + static_cast<float>(i) * 0.28f, 1.0f + static_cast<float>(i % 3),
+                    61.0f, 0.03f + static_cast<float>(i) * 0.004f, 0.02f,
+                    -0.04f - static_cast<float>(i % 2) * 0.02f, 0.0f, 0.08f,
+                    1, 0.8f, 0.35f, 0.16f, PanelColor, 120, 90, false);
+            }
+        }
+        if (m_stage5PhaseTimer >= EastsourceIntroFrames) {
+            StartStage5Phase(Stage5Phase::EastsourceBattle);
+        }
+        return;
+    }
+    if (m_stage5Phase == Stage5Phase::EastsourceBattle) {
+        const Enemy& eastsource = m_enemies[0];
+        const int phase = eastsource.bossPhase;
+        const int pursuitCycle = eastsource.age % 180;
+        if ((phase == BossNormalPhase2 || phase == BossSpecialPhase2) && pursuitCycle < 90) {
+            TickSearchlights(1, false);
+        }
+        if (pursuitCycle == 90) ResetWallSearchlights(1);
+        return;
+    }
+    if (m_stage5Phase == Stage5Phase::EastsourceFall) {
+        if (m_stage5PhaseTimer >= EastsourceFallFrames) {
+            m_enemies[0].active = false;
+            StartStage5Phase(Stage5Phase::WallClimbTransition, false);
+        }
+        return;
+    }
+    if (m_stage5Phase == Stage5Phase::WallClimbTransition) {
+        m_tayamaTransformation = Math::Lerp(0.0f, 0.10f,
+            SmoothStep(static_cast<float>(m_stage5PhaseTimer) / WallClimbTransitionFrames));
+        if (m_stage5PhaseTimer >= WallClimbTransitionFrames) {
+            StartStage5Phase(Stage5Phase::WallClimbLower);
+        }
+        return;
+    }
+    if (m_stage5Phase == Stage5Phase::WallClimbLower) {
+        m_tayamaTransformation = Math::Lerp(0.10f, 0.34f,
+            SmoothStep(static_cast<float>(m_stage5PhaseTimer) / WallClimbLowerFrames));
+        TickSearchlights(1, false);
+        if (m_stage5PhaseTimer >= WallClimbLowerFrames) {
+            StartStage5Phase(Stage5Phase::WallClimbMiddle);
+        }
+        return;
+    }
+    if (m_stage5Phase == Stage5Phase::WallClimbMiddle) {
+        m_tayamaTransformation = Math::Lerp(0.34f, 0.64f,
+            SmoothStep(static_cast<float>(m_stage5PhaseTimer) / WallClimbMiddleFrames));
+        TickSearchlights(2, false);
+        if (m_stage5GuardSpawnCooldown-- <= 0) {
+            SpawnEnemy(Stage::ArmoredEnemy, 1.16f,
+                (m_stage5PhaseTimer / 180) % 2 == 0 ? -0.76f : 0.76f, 0.42f, 58.0f);
+            m_stage5GuardSpawnCooldown = 210;
+        }
+        if (m_stage5PhaseTimer >= WallClimbMiddleFrames) {
+            StartStage5Phase(Stage5Phase::WallClimbUpper);
+        }
+        return;
+    }
+    if (m_stage5Phase == Stage5Phase::WallClimbUpper) {
+        m_tayamaTransformation = Math::Lerp(0.64f, 0.90f,
+            SmoothStep(static_cast<float>(m_stage5PhaseTimer) / WallClimbUpperFrames));
+        TickSearchlights(3, false);
+        if (m_stage5GuardSpawnCooldown-- <= 0) {
+            SpawnEnemy(Stage::StraightShooterEnemy, 1.16f,
+                (m_stage5PhaseTimer / 150) % 2 == 0 ? -0.82f : 0.82f, -0.34f, 60.0f);
+            m_stage5GuardSpawnCooldown = 180;
+        }
+        if (m_stage5PhaseTimer >= WallClimbUpperFrames) {
+            StartStage5Phase(Stage5Phase::RooftopArrival, false);
+        }
+        return;
+    }
+    if (m_stage5Phase == Stage5Phase::RooftopArrival) {
+        m_tayamaTransformation = Math::Lerp(0.90f, 0.96f,
+            SmoothStep(static_cast<float>(m_stage5PhaseTimer) / RooftopArrivalFrames));
+        if (m_stage5PhaseTimer >= RooftopArrivalFrames) {
+            StartStage5Phase(Stage5Phase::CarrierTransformation, false);
+        }
+        return;
+    }
+    if (m_stage5Phase == Stage5Phase::CarrierTransformation) {
+        m_tayamaTransformation = Math::Lerp(0.96f, 1.0f,
+            SmoothStep(static_cast<float>(m_stage5PhaseTimer) / CarrierTransformationFrames));
+        if (m_stage5PhaseTimer >= CarrierTransformationFrames) {
+            StartTayamaPhase(Stage5Phase::TayamaFireControl);
+        }
+        return;
+    }
+    if (m_stage5Phase == Stage5Phase::TayamaFireControl ||
+        m_stage5Phase == Stage5Phase::TayamaLiftEngines ||
+        m_stage5Phase == Stage5Phase::TayamaCommandCore) {
+        TickTayama();
+        return;
+    }
+    if (m_stage5Phase == Stage5Phase::TayamaCollapse) {
+        // 艦尾から艦首へ連鎖させ、最終フレームまで画面内で輪郭を崩す
+        if (m_stage5PhaseTimer < TayamaCollapseFrames && m_stage5PhaseTimer % 36 == 0) {
+            const int burst = m_stage5PhaseTimer / 36;
+            SpawnExplosion(-0.85f + static_cast<float>((burst * 7) % 17) * 0.10f,
+                -0.34f + static_cast<float>((burst * 5) % 9) * 0.09f, 54.0f, true);
+            PlayStage5Cue(Stage5ChainExplosion);
+        }
+        if (m_stage5PhaseTimer == 450) PlayStage5Cue(Stage5FinalExplosion);
+        if (m_stage5PhaseTimer >= TayamaCollapseFrames + Stage5QuietFlightFrames) {
+            StartStage5Phase(Stage5Phase::EndingReady, false);
+        }
+    }
+}
+
+/**
+ * @brief 現在のStage 5チェックポイントへ復帰する
+ * @return なし
+ */
+void SideScrollingShooter::RestartStage5Checkpoint() {
+    ++m_chapterRetryCounts[2];
+    m_shots = {};
+    m_enemies = {};
+    m_items = {};
+    m_explosions = {};
+    m_debris = {};
+    m_power = m_stage5CheckpointPower;
+    m_score = m_stage5CheckpointScore;
+    m_kills = m_stage5CheckpointKills;
+    m_playerX = -0.72f;
+    m_playerY = 0.0f;
+    m_viewMode = ViewMode::Rail3D;
+    m_nextViewMode = ViewMode::Rail3D;
+    m_viewTransitionTimer = 0;
+    m_viewTransitionProgress = 0.0f;
+    m_invincible = 120;
+    m_restartTimer = RestartDisplayFrames;
+
+    if (m_stage5Checkpoint == Stage5Checkpoint::Eastsource) {
+        StartStage5Phase(Stage5Phase::EastsourceBattle, false);
+        return;
+    }
+    if (m_stage5Checkpoint == Stage5Checkpoint::WallClimbLower ||
+        m_stage5Checkpoint == Stage5Checkpoint::WallClimbMiddle ||
+        m_stage5Checkpoint == Stage5Checkpoint::WallClimbUpper) {
+        const Stage5Phase phase = m_stage5Checkpoint == Stage5Checkpoint::WallClimbLower ?
+            Stage5Phase::WallClimbLower :
+            (m_stage5Checkpoint == Stage5Checkpoint::WallClimbMiddle ?
+                Stage5Phase::WallClimbMiddle : Stage5Phase::WallClimbUpper);
+        StartStage5Phase(phase, false);
+        return;
+    }
+
+    // TAYAMAは前フェーズを破壊済みとし、現在フェーズのHPだけを戻す
+    const Stage5Phase phase = m_stage5Checkpoint == Stage5Checkpoint::TayamaFireControl ?
+        Stage5Phase::TayamaFireControl :
+        (m_stage5Checkpoint == Stage5Checkpoint::TayamaLiftEngines ?
+            Stage5Phase::TayamaLiftEngines : Stage5Phase::TayamaCommandCore);
+    for (TayamaWeakpointState& weakpoint : m_tayamaWeakpoints) {
+        const bool previousPhase =
+            (phase >= Stage5Phase::TayamaLiftEngines &&
+                static_cast<int>(weakpoint.type) <= static_cast<int>(TayamaWeakpoint::FireControlRadar)) ||
+            (phase >= Stage5Phase::TayamaCommandCore &&
+                (weakpoint.type == TayamaWeakpoint::LeftLiftEngine ||
+                    weakpoint.type == TayamaWeakpoint::RightLiftEngine));
+        weakpoint.destroyed = previousPhase;
+        weakpoint.hp = previousPhase ? 0 : weakpoint.maxHp;
+    }
+    StartTayamaPhase(phase, true);
+}
+
+/**
+ * @brief Stage 5用の効果音をクールダウン付きで再生する
+ * @param cue 効果音種別
+ * @return なし
+ */
+void SideScrollingShooter::PlayStage5Cue(int cue) {
+    if (!m_audio || m_stage5SoundCooldown > 0) return;
+    switch (cue) {
+    case Stage5DistantThunder:
+        m_audio->PlayMMLSE("t90 o2 l8 v7 c r g");
+        m_stage5SoundCooldown = 90;
+        break;
+    case Stage5Thunder:
+        m_audio->PlayMMLSE("t180 o2 l32 v13 c>c<g c");
+        m_stage5SoundCooldown = 45;
+        break;
+    case Stage5SearchlightDetect:
+        m_audio->PlayMMLSE("t220 o6 l32 v8 c r c");
+        m_stage5SoundCooldown = 18;
+        break;
+    case Stage5SearchlightLocked:
+        m_audio->PlayMMLSE("t240 o6 l16 v11 c>g");
+        m_stage5SoundCooldown = 24;
+        break;
+    case Stage5BarrageWarning:
+        m_audio->PlayMMLSE("t180 o4 l32 v10 c c c");
+        m_stage5SoundCooldown = 18;
+        break;
+    case Stage5EastsourceEntrance:
+        m_audio->PlayMMLSE("t200 o3 l16 v13 c g > c g");
+        m_stage5SoundCooldown = 60;
+        break;
+    case Stage5SignalLost:
+        m_audio->PlayMMLSE("t140 o5 l32 v8 g f e c");
+        m_stage5SoundCooldown = 60;
+        break;
+    case Stage5Transformation:
+        m_audio->PlayMMLSE("t110 o2 l16 v12 c d e g");
+        m_stage5SoundCooldown = 75;
+        break;
+    case Stage5WeakpointDestroyed:
+        m_audio->PlaySE(Audio::SfxrPreset::Explosion);
+        m_stage5SoundCooldown = 20;
+        break;
+    case Stage5CoreWarning:
+        m_audio->PlayMMLSE("t240 o3 l16 v12 c > c < c > c");
+        m_stage5SoundCooldown = 36;
+        break;
+    case Stage5FinalExplosion:
+        m_audio->PlayMMLSE("t80 o1 l2 v15 c g c");
+        m_stage5SoundCooldown = 90;
+        break;
+    default:
+        m_audio->PlaySE(Audio::SfxrPreset::Explosion);
+        m_stage5SoundCooldown = 16;
+        break;
+    }
+}
+
+/**
+ * @brief Stage2ボス撃破演出の振動音または最終爆発音を再生する
+ * @param finalExplosion 最終爆発音を再生する場合true
+ * @return なし
+ */
+void SideScrollingShooter::PlayStage2DefeatSound(bool finalExplosion) {
+    if (!m_audio) return;
+
+    // 低域ノイズの長さと落下量を切り替えてゴゴゴ音とドカーン音を作る
+    Audio::SfxrParams sound;
+    sound.waveType = Audio::SfxrWaveType::Noise;
+    sound.startFrequency = finalExplosion ? 0.24f : 0.10f;
+    sound.minFrequency = finalExplosion ? 0.01f : 0.06f;
+    sound.slide = finalExplosion ? -0.32f : -0.015f;
+    sound.attackTime = finalExplosion ? 0.0f : 0.08f;
+    sound.sustainTime = finalExplosion ? 0.42f : 1.10f;
+    sound.decayTime = finalExplosion ? 0.90f : 0.72f;
+    sound.masterVolume = finalExplosion ? 0.95f : 0.42f;
+    m_audio->PlaySE(sound);
+
+    // 最終爆発だけ低い衝撃音を足して爆発の芯を強める
+    if (finalExplosion) m_audio->PlayMMLSE("t72 o1 l2 v15 c g c");
+}
+
+/**
+ * @brief ボス出現と名前表示の時間演出を進行する
+ * @return なし
+ */
+void SideScrollingShooter::TickBossIntroduction() {
+    Enemy& boss = m_enemies[0];
+
+    // ステージ1は画面の上下を交互に横断してから端から低速で定位置へ入る
+    if (m_bossIntroductionPhase == BossIntroductionPhase::Entrance && m_stageNumber == 1) {
+        constexpr float SideX[] = {3.25f, -3.25f, 3.25f, -3.25f, 3.25f};
+        constexpr float SideY[] = {1.05f, -1.08f, -0.82f, 1.05f, 0.0f};
+        constexpr float RailX[] = {1.45f, -1.45f, 1.45f, -1.45f, 1.45f};
+        constexpr float RailY[] = {1.05f, -1.08f, -0.82f, 1.05f, 0.0f};
+        if (m_bossIntroductionTimer < Stage1BossRushFrames) {
+            const int segment = Stage1BossRushSegment(m_bossIntroductionTimer);
+            const float segmentProgress = SmoothStep(static_cast<float>(
+                m_bossIntroductionTimer - segment * Stage1BossRushSegmentFrames) /
+                static_cast<float>(Stage1BossRushSegmentFrames));
+            if (IsRailGameplayActive()) {
+                boss.x = Math::Lerp(RailX[segment], RailX[segment + 1], segmentProgress);
+                boss.y = Math::Lerp(RailY[segment], RailY[segment + 1], segmentProgress);
+                boss.z = 32.0f;
+            } else {
+                boss.x = Math::Lerp(SideX[segment], SideX[segment + 1], segmentProgress);
+                boss.y = Math::Lerp(SideY[segment], SideY[segment + 1], segmentProgress);
+                boss.z = ToRailZFromSideX(boss.x);
+            }
+        } else {
+            const float settleProgress = SmoothStep(static_cast<float>(
+                m_bossIntroductionTimer - Stage1BossRushFrames) /
+                static_cast<float>(Stage1BossSettleFrames));
+            if (IsRailGameplayActive()) {
+                boss.x = Math::Lerp(RailX[4], 0.0f, settleProgress);
+                boss.y = 0.0f;
+                boss.z = Math::Lerp(32.0f, 48.0f, settleProgress);
+            } else {
+                boss.x = Math::Lerp(SideX[4], 1.80f, settleProgress);
+                boss.y = 0.0f;
+                boss.z = ToRailZFromSideX(boss.x);
+            }
+        }
+    }
+
+    ++m_bossIntroductionTimer;
+    const int entranceFrames = m_stageNumber == 1 ? Stage1BossEntranceFrames :
+        (m_stageNumber == 2 ? Stage2BossEntranceFrames : 1);
+    if (m_bossIntroductionPhase == BossIntroductionPhase::Entrance &&
+        m_bossIntroductionTimer >= entranceFrames) {
+        // 定位置を既存ステージ定義へ戻して会話へ移行する
+        if (IsRailGameplayActive()) m_stage->ConfigureBossRailAnchor(boss);
+        else m_stage->ConfigureBossSideAnchor(boss);
+        m_bossIntroductionPhase = BossIntroductionPhase::Dialogue;
+        m_bossIntroductionTimer = 0;
+        m_bossStoryActive = true;
+        return;
+    }
+    if (m_bossIntroductionPhase == BossIntroductionPhase::NameReveal &&
+        m_bossIntroductionTimer >= BossNameRevealFrames) {
+        // 名前表示完了後に初めて通常の戦闘更新へ戻す
+        m_bossIntroductionPhase = BossIntroductionPhase::None;
+        m_bossIntroductionTimer = 0;
+    }
 }
 
 /** @brief 次のステージの戦闘状態を初期化する */
@@ -1351,6 +3130,7 @@ void SideScrollingShooter::StartNextStage() {
     m_chapterStartScore = m_score;
     m_chapterStartKills = m_kills;
     m_chapterResultTimer = 0;
+    m_missionStartTimer = MissionBannerDisplayFrames;
     m_scroll = 0.0f;
     m_frame = 0;
     m_spawnCooldown = 35;
@@ -1360,12 +3140,15 @@ void SideScrollingShooter::StartNextStage() {
     m_displayBossHp = 0.0f;
     m_bossStoryLine = 0;
     m_bossStoryActive = false;
+    m_bossIntroductionPhase = BossIntroductionPhase::None;
+    m_bossIntroductionTimer = 0;
     m_clear = false;
     m_clearTimer = 0;
     m_bossBattle = false;
     m_bossBattlePending = false;
     m_chapterResultActive = false;
     m_invincible = (std::max)(m_invincible, 90);
+    ResetStage5();
 }
 
 void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool enemy,
@@ -1449,8 +3232,57 @@ void SideScrollingShooter::SpawnScoreItem(float x, float y, float z, int value) 
     }
 }
 
+/**
+ * @brief XYZ速度を指定して固定長プールへ弾を生成する
+ * @param x 発射元ゲーム座標X
+ * @param y 発射元ゲーム座標Y
+ * @param z 発射元レール座標Z
+ * @param vx ゲーム座標X方向速度
+ * @param vy ゲーム座標Y方向速度
+ * @param vz レール座標Z方向速度
+ * @param enemy 敵弾の場合true
+ * @param barrageIndex 弾幕内の弾番号
+ * @param barrageCount 弾幕の総弾数
+ * @return なし
+ */
 void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy,
     int barrageIndex, int barrageCount) {
+    Shot* available = nullptr;
+    for (auto& shot : m_shots) {
+        if (!shot.active) {
+            available = &shot;
+            break;
+        }
+    }
+
+    // Stage 5の予告済み攻撃は満杯時に古い自機弾を置換して欠落を防ぐ
+    if (!available && enemy && m_stageNumber == 5) {
+        for (auto& shot : m_shots) {
+            if (!shot.enemy) {
+                available = &shot;
+                break;
+            }
+        }
+    }
+    if (!available) return;
+
+    Shot& shot = *available;
+    shot = {};
+    shot.x = x;
+    shot.y = y;
+    shot.z = z;
+    shot.transitionSideX = x;
+    shot.transitionSideY = y;
+    shot.vx = vx;
+    shot.vy = vy;
+    shot.vz = vz;
+    shot.barrageIndex = barrageIndex;
+    shot.barrageCount = barrageCount;
+    shot.enemy = enemy;
+    shot.active = true;
+}
+
+void SideScrollingShooter::SpawnStage2Funnel(float x, float y, float z, bool delayedEngine) {
     for (auto& shot : m_shots) {
         if (shot.active) continue;
         shot = {};
@@ -1459,12 +3291,41 @@ void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, 
         shot.z = z;
         shot.transitionSideX = x;
         shot.transitionSideY = y;
-        shot.vx = vx;
-        shot.vy = vy;
-        shot.vz = vz;
-        shot.barrageIndex = barrageIndex;
-        shot.barrageCount = barrageCount;
-        shot.enemy = enemy;
+        shot.vx = 0.0f;
+        // Phase3は砂面を越えてから短く落下する高さまで、点火前の射出初速を与える
+        shot.vy = delayedEngine ? Phase3FunnelLaunchVelocity : 0.018f;
+        shot.vz = 0.0f;
+        shot.hitRadius = 0.055f;
+        shot.damage = 2;
+        shot.enemy = true;
+        shot.funnel = true;
+        shot.funnelDelayedEngine = delayedEngine;
+        shot.active = true;
+        return;
+    }
+}
+
+void SideScrollingShooter::SpawnStage2Missile(float x, float y, float z, float side) {
+    for (auto& shot : m_shots) {
+        if (shot.active) continue;
+        shot = {};
+        shot.x = x;
+        shot.y = y;
+        shot.z = z;
+        shot.transitionSideX = x;
+        shot.transitionSideY = y;
+        const float dx = ToWorldX(m_playerX - x);
+        const float dy = ToWorldY(m_playerY - y);
+        const float dz = IsRailGameplayActive() ? PlayerRailZ - z : 0.0f;
+        const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
+        constexpr float MissileSpeed = 0.68f;
+        shot.vx = FromWorldX(dx / length * MissileSpeed) + side * 0.006f;
+        shot.vy = FromWorldY(dy / length * MissileSpeed);
+        shot.vz = dz / length * MissileSpeed;
+        shot.hitRadius = 0.045f;
+        shot.damage = 2;
+        shot.enemy = true;
+        shot.missile = true;
         shot.active = true;
         return;
     }
@@ -1598,8 +3459,17 @@ void SideScrollingShooter::UpdateHomingShot(Shot& shot) {
  * @return なし
  */
 void SideScrollingShooter::DamagePlayer() {
+    if (m_stageNumber == 5 &&
+        (m_stage5Phase == Stage5Phase::TayamaCollapse ||
+            m_stage5Phase == Stage5Phase::EndingReady)) {
+        return;
+    }
+    if (m_playerDestructionTimer > 0) return;
+
+    // 敵撃破と同じ破壊爆発を自機位置へ生成してから復帰を待つ
+    SpawnExplosion(m_playerX, m_playerY, PlayerRailZ, true);
     PlayHitSound();
-    RestartCurrentChapter();
+    m_playerDestructionTimer = PlayerDestructionWaitFrames;
 }
 
 /**
@@ -1607,6 +3477,10 @@ void SideScrollingShooter::DamagePlayer() {
  * @return なし
  */
 void SideScrollingShooter::RestartCurrentChapter() {
+    if (m_stageNumber == 5 && m_stage5Phase != Stage5Phase::Approach) {
+        RestartStage5Checkpoint();
+        return;
+    }
     ++m_chapterRetryCounts[m_chapterNumber - 1];
     m_shots = {};
     m_enemies = {};
@@ -1630,13 +3504,222 @@ void SideScrollingShooter::RestartCurrentChapter() {
     m_displayBossHp = 0.0f;
     m_bossStoryLine = 0;
     m_bossStoryActive = false;
+    m_bossIntroductionPhase = BossIntroductionPhase::None;
+    m_bossIntroductionTimer = 0;
     m_bossBattle = false;
     m_bossBattlePending = false;
     m_chapterResultActive = false;
+    m_playerDestructionTimer = 0;
     m_restartTimer = RestartDisplayFrames;
 }
 
+/**
+ * @brief Stage2潜砂艦のPhase1接地基準Y座標を取得する
+ * @param boss 座標を求めるStage2ボス
+ * @return 切削爪が地中へ収まる潜砂艦のワールドY座標
+ */
+float SideScrollingShooter::Stage2Phase1SubmarineWorldY(const Enemy& boss) const {
+    constexpr float SideGroundTopY = -6.0f;
+    constexpr float RailGroundTopY = -3.65f;
+    constexpr float CutterTopLocalY = -0.99f;
+    constexpr float CutterEmbedDepth = 0.55f;
+    constexpr float ModelScale = 1.92f;
+    constexpr float Phase1BobWorldAmplitude = 0.10f * WorldYScale;
+    static_assert(CutterEmbedDepth > Phase1BobWorldAmplitude);
+
+    // 2Dと3Dの地面上面を補間し、上下動の最高点でも切削爪を地中へ残す
+    const float groundTopY = Math::Lerp(SideGroundTopY, RailGroundTopY, RailBlend());
+    return groundTopY - CutterTopLocalY * ModelScale - CutterEmbedDepth + ToWorldY(boss.y);
+}
+
+/**
+ * @brief Stage2潜砂艦の現在の親Y座標を取得する
+ * @param boss 座標を求めるStage2ボス
+ * @return 描画と当たり判定で共有するワールドY座標
+ */
+float SideScrollingShooter::Stage2SubmarineWorldY(const Enemy& boss) const {
+    const float assembledY = boss.phase < 2.0f ? Stage2Phase1SubmarineWorldY(boss) :
+        ToWorldY(boss.y) - 1.45f + boss.sandSubmarineOffsetY;
+    if (m_stageNumber != 2 || m_bossIntroductionPhase != BossIntroductionPhase::Entrance) {
+        return assembledY;
+    }
+
+    // 前半で地中から砂面直下まで掘り進み、後半で上部戦艦との合体位置まで浮上する
+    const float approach = SmoothStep(static_cast<float>(m_bossIntroductionTimer) /
+        static_cast<float>(Stage2BossApproachFrames));
+    const float assembly = SmoothStep(static_cast<float>(m_bossIntroductionTimer - Stage2BossApproachFrames) /
+        static_cast<float>(Stage2BossAssemblyFrames));
+    return assembledY + Math::Lerp(-7.0f, -2.4f, approach) * (1.0f - assembly);
+}
+
+/**
+ * @brief Stage2上部戦艦の親Y座標を取得する
+ * @param boss 座標を求めるStage2ボス
+ * @return 描画と当たり判定で共有するワールドY座標
+ */
+float SideScrollingShooter::Stage2BattleshipWorldY(const Enemy& boss) const {
+    constexpr float SideGroundTopY = -6.0f;
+    constexpr float RailGroundTopY = -3.65f;
+    constexpr float HullBottomLocalY = 0.02f;
+    constexpr float HoverHeight = 0.18f;
+    constexpr float ModelScale = 1.92f;
+    constexpr float AssembledUnitOffsetY = 0.77f;
+    if (boss.phase >= 2.0f && boss.phase < 3.0f) {
+        // Phase2開始時の高度から地表付近まで滑らかに下降する
+        constexpr float DescentFrames = 120.0f;
+        const float t = Math::Clamp01(static_cast<float>(boss.stage2BossActionAge) / DescentFrames);
+        const float smooth = t * t * (3.0f - 2.0f * t);
+        const float startY = Stage2Phase1SubmarineWorldY(boss) + AssembledUnitOffsetY;
+        const float targetY = Math::Lerp(SideGroundTopY, RailGroundTopY, RailBlend()) +
+            HoverHeight - HullBottomLocalY * ModelScale;
+        return Math::Lerp(startY, targetY, smooth);
+    }
+    const float assembledY = boss.phase < 2.0f ?
+        Stage2Phase1SubmarineWorldY(boss) + AssembledUnitOffsetY :
+        ToWorldY(boss.y) + 1.32f + boss.landBattleshipOffsetY;
+    if (m_stageNumber != 2 || m_bossIntroductionPhase != BossIntroductionPhase::Entrance) {
+        return assembledY;
+    }
+
+    // 前半で上空から降下し、後半で潜砂艦との合体位置へ接近する
+    const float approach = SmoothStep(static_cast<float>(m_bossIntroductionTimer) /
+        static_cast<float>(Stage2BossApproachFrames));
+    const float assembly = SmoothStep(static_cast<float>(m_bossIntroductionTimer - Stage2BossApproachFrames) /
+        static_cast<float>(Stage2BossAssemblyFrames));
+    return assembledY + Math::Lerp(13.0f, 4.2f, approach) * (1.0f - assembly);
+}
+
+/**
+ * @brief Stage2上部戦艦の船体へ弾が命中したか判定する
+ * @param shot 判定する自機弾
+ * @param boss 判定するStage2ボス
+ * @return 船体へ命中した場合true
+ */
+bool SideScrollingShooter::TryHitStage2BossBody(const Shot& shot, const Enemy& boss) const {
+    constexpr float BodyLocalX = 0.55f;
+    constexpr float BodyLocalY = 0.95f;
+    constexpr float ModelScale = 1.92f;
+    constexpr float BodyRadius = 4.25f;
+    const bool railMode = IsRailGameplayActive();
+    const float yaw = railMode ? 0.0f : Math::HalfPi;
+    const float patrolX = boss.phase >= 2.0f ?
+        std::sin(static_cast<float>(boss.age) * 0.018f) * 2.4f * RailBlend() : 0.0f;
+    const Vector3 center {
+        ToWorldX(boss.x + boss.landBattleshipOffsetX) + patrolX + std::cos(yaw) * BodyLocalX * ModelScale,
+        Stage2BattleshipWorldY(boss) + BodyLocalY * ModelScale,
+        boss.z + boss.landBattleshipOffsetZ - std::sin(yaw) * BodyLocalX * ModelScale
+    };
+    return railMode ?
+        Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
+            ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
+            center.x, center.y, center.z, BodyRadius) :
+        Hit(shot.x, shot.y, shot.hitRadius, FromWorldX(center.x), FromWorldY(center.y),
+            BodyRadius / WorldXScale);
+}
+
 bool SideScrollingShooter::TryHitBossPart(const Shot& shot, const Enemy& boss, BossPart& part) const {
+    if (m_stageNumber == 5) {
+        constexpr EastsourcePartGroup Groups[] = {
+            EastsourcePartGroup::Nose,
+            EastsourcePartGroup::LeftWing,
+            EastsourcePartGroup::RightWing,
+            EastsourcePartGroup::LeftEngine,
+            EastsourcePartGroup::RightEngine
+        };
+        const Stage5ModelTransform transform = EastsourceTransform(boss);
+        const EastsourceModelState state = EastsourceState(boss);
+
+        // 描画と同じ26パーツから集約した各グループ境界へ線分判定する
+        for (int index = BossNose; index <= BossRightEngine; ++index) {
+            if (boss.bossPartHp[index] <= 0) continue;
+            const Stage5GroupBounds bounds = EastsourceModelView::GroupBounds(
+                transform, state, Groups[index]);
+            if (!bounds.valid || !Hit3DSegment(
+                ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
+                ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
+                bounds.center.x, bounds.center.y, bounds.center.z, bounds.radius)) continue;
+            part = static_cast<BossPart>(index);
+            return true;
+        }
+        return false;
+    }
+
+    if (m_stageNumber == 2) {
+        constexpr float ModelScale = 1.92f;
+        constexpr Vector3 PartPosition[] = {
+            {-2.30f, 2.08f, 0.0f}, {-0.55f, 2.60f, -0.92f},
+            {0.65f, 2.60f, 0.0f}, {2.85f, 2.18f, 0.92f}, {0.25f, 1.42f, 0.0f}
+        };
+        constexpr float PartRadius[] = {2.20f, 1.05f, 1.05f, 1.05f, 1.35f};
+        bool weaponsDestroyed = true;
+        for (int i = 0; i < BossPartCount; ++i) {
+            if (i != BossRightEngine && boss.bossPartHp[i] > 0) weaponsDestroyed = false;
+        }
+        const bool railMode = IsRailGameplayActive();
+        const float battleshipYaw = railMode ? 0.0f : Math::HalfPi;
+        const bool separated = boss.phase >= 2.0f;
+        const float battleshipPatrolX = separated ?
+            std::sin(static_cast<float>(boss.age) * 0.018f) * 2.4f * RailBlend() : 0.0f;
+
+        // 武装全破壊までは装甲内の接続コアを命中対象にしない
+        for (int i = 0; i <= BossRightEngine; ++i) {
+            if (boss.bossPartHp[i] <= 0 || (i == BossRightEngine && !weaponsDestroyed)) continue;
+            const Vector3& local = PartPosition[i];
+            const bool submarinePart = i == BossRightEngine;
+            const float yaw = battleshipYaw + (submarinePart && separated ? Math::HalfPi : 0.0f);
+            const float cosine = std::cos(yaw);
+            const float sine = std::sin(yaw);
+            const float unitOffsetX = submarinePart ? ToWorldX(boss.sandSubmarineOffsetX) :
+                ToWorldX(boss.landBattleshipOffsetX) + battleshipPatrolX;
+            const float worldY = submarinePart ?
+                Stage2SubmarineWorldY(boss) :
+                Stage2BattleshipWorldY(boss);
+            const float unitOffsetZ = submarinePart ? boss.sandSubmarineOffsetZ : boss.landBattleshipOffsetZ;
+            const Vector3 world {
+                ToWorldX(boss.x) + unitOffsetX + (local.x * cosine + local.z * sine) * ModelScale,
+                worldY + local.y * ModelScale,
+                boss.z + unitOffsetZ + (-local.x * sine + local.z * cosine) * ModelScale
+            };
+            const bool hit = railMode ?
+                Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
+                    ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
+                    world.x, world.y, world.z, PartRadius[i]) :
+                Hit(shot.x, shot.y, shot.hitRadius, FromWorldX(world.x), FromWorldY(world.y),
+                    PartRadius[i] / WorldXScale);
+            if (!hit) continue;
+            part = static_cast<BossPart>(i);
+            return true;
+        }
+
+        // 側面のオレンジ色の小窓十二基を、描画と同じローカル座標で個別判定する
+        for (int hatch = 0; hatch < BossFunnelHatchCount; ++hatch) {
+            const int partIndex = BossFunnelHatch0 + hatch;
+            if (boss.bossPartHp[partIndex] <= 0) continue;
+            const float localX = -2.65f + static_cast<float>(hatch % 6) * 1.05f;
+            const float localZ = (hatch < 6 ? -1.0f : 1.0f) * 1.80f;
+            const float submarineYaw = battleshipYaw + (separated ? Math::HalfPi : 0.0f);
+            const float cosine = std::cos(submarineYaw);
+            const float sine = std::sin(submarineYaw);
+            const Vector3 world {
+                ToWorldX(boss.x + boss.sandSubmarineOffsetX) +
+                    (localX * cosine + localZ * sine) * ModelScale,
+                Stage2SubmarineWorldY(boss) - 0.22f * ModelScale,
+                boss.z + boss.sandSubmarineOffsetZ +
+                    (-localX * sine + localZ * cosine) * ModelScale
+            };
+            const bool hit = railMode ?
+                Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
+                    ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
+                    world.x, world.y, world.z, 0.58f) :
+                Hit(shot.x, shot.y, shot.hitRadius, FromWorldX(world.x), FromWorldY(world.y),
+                    0.58f / WorldXScale);
+            if (!hit) continue;
+            part = static_cast<BossPart>(partIndex);
+            return true;
+        }
+        return false;
+    }
+
     // 既存ボスモデルのローカル座標に対応する、破壊可能部位の中心と当たり判定半径
     constexpr float ModelScale = 0.14f;
     constexpr float PartX[] = { 0.0f, 17.0f, -17.0f, 6.0f, -6.0f };
@@ -1676,6 +3759,36 @@ void SideScrollingShooter::PlayShotSound() {
 
 void SideScrollingShooter::PlayHitSound() {
     if (m_audio) m_audio->PlayMMLSE("t180 o4 l32 v10 g e c");
+}
+
+/**
+ * @brief 鋭い放電音と短い雷鳴を重ねたStage2レールガンSEを再生する
+ * @return なし
+ */
+void SideScrollingShooter::PlayRailgunSound() {
+    if (!m_audio) return;
+
+    // 高周波の亀裂音を急降下させて雷の鋭い立ち上がりを作る
+    Audio::SfxrParams crack;
+    crack.waveType = Audio::SfxrWaveType::Sawtooth;
+    crack.startFrequency = 0.92f;
+    crack.minFrequency = 0.06f;
+    crack.slide = -0.72f;
+    crack.sustainTime = 0.025f;
+    crack.decayTime = 0.16f;
+    crack.masterVolume = 0.75f;
+    m_audio->PlaySE(crack);
+
+    // 短いノイズを重ねて雷撃の破裂感を足す
+    Audio::SfxrParams thunder;
+    thunder.waveType = Audio::SfxrWaveType::Noise;
+    thunder.startFrequency = 0.68f;
+    thunder.minFrequency = 0.04f;
+    thunder.slide = -0.58f;
+    thunder.sustainTime = 0.035f;
+    thunder.decayTime = 0.22f;
+    thunder.masterVolume = 0.82f;
+    m_audio->PlaySE(thunder);
 }
 
 bool SideScrollingShooter::Hit(float ax, float ay, float ar, float bx, float by, float br) {
@@ -1747,6 +3860,16 @@ float SideScrollingShooter::ToSideXFromRailZ(float z) {
 }
 
 /**
+ * @brief 3Dレール視点で機体底面が地面上面に接するY座標下限を取得する
+ * @return ゲーム座標系のY座標下限
+ */
+float SideScrollingShooter::PlayerRailMinY() const {
+    constexpr float PlayerHalfHeight = 0.16f;
+    const float groundTopY = m_stageNumber == 1 ? -3.275f : -3.65f;
+    return FromWorldY(groundTopY + PlayerHalfHeight);
+}
+
+/**
  * @brief 現在のPowerから弾強化段階を取得する
  * @return 0から4までの弾強化段階
  */
@@ -1802,13 +3925,40 @@ void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, Renderer& rende
     // 2Dモードと同じカメラ状態から、3Dレールの追従カメラへ補間する
     const Vector3 sidePosition{0.0f, 0.0f, SideCameraZ};
     const Vector3 sideTarget{0.0f, 0.0f, SidePlaneZ};
-    const Vector3 railPosition{playerPosition.x * 0.18f, playerPosition.y * 0.12f + 1.0f, PlayerRailZ - 15.5f};
-    const Vector3 railTarget{playerPosition.x * 0.28f, playerPosition.y * 0.18f, PlayerRailZ + 22.0f};
+    Vector3 railPosition{playerPosition.x * 0.18f, playerPosition.y * 0.12f + 1.0f, PlayerRailZ - 15.5f};
+    Vector3 railTarget{playerPosition.x * 0.28f, playerPosition.y * 0.18f, PlayerRailZ + 22.0f};
+
+    // 壁面上昇だけ視線を上へ向け、屋上で水平へ戻す
+    if (m_stageNumber == 5 && m_stage5Phase >= Stage5Phase::WallClimbTransition) {
+        float climbWeight = 0.0f;
+        if (m_stage5Phase == Stage5Phase::WallClimbTransition) {
+            climbWeight = Math::Clamp01(static_cast<float>(m_stage5PhaseTimer) /
+                static_cast<float>(WallClimbTransitionFrames));
+        } else if (m_stage5Phase == Stage5Phase::WallClimbLower) {
+            climbWeight = 0.42f;
+        } else if (m_stage5Phase == Stage5Phase::WallClimbMiddle) {
+            climbWeight = 0.68f;
+        } else if (m_stage5Phase == Stage5Phase::WallClimbUpper) {
+            climbWeight = 0.92f;
+        } else if (m_stage5Phase == Stage5Phase::RooftopArrival) {
+            climbWeight = 1.0f - SmoothStep(Math::Clamp01(
+                static_cast<float>(m_stage5PhaseTimer) / RooftopArrivalFrames));
+        }
+        railPosition.y -= climbWeight * 1.8f;
+        railTarget.y += climbWeight * 13.0f;
+        railTarget.z += climbWeight * 8.0f;
+    }
+    if (m_stageNumber == 5 && m_stage5Phase == Stage5Phase::TayamaCollapse) {
+        const float pullBack = Math::Clamp01(static_cast<float>(m_stage5PhaseTimer - 60) / 390.0f);
+        railPosition.z -= pullBack * 8.0f;
+        railPosition.y += pullBack * 2.0f;
+        railTarget.z += pullBack * 7.0f;
+    }
     camera.SetViewport({0, 0, renderer.Width(), renderer.Height()});
     camera.SetProjectionMode(ProjectionMode::Perspective);
     camera.SetFieldOfView(Math::ToRadians(38.0f + (8.0f * railWeight)));
     camera.SetNearClip(0.1f);
-    camera.SetFarClip(120.0f);
+    camera.SetFarClip(m_stageNumber == 5 ? 220.0f : 120.0f);
     camera.SetPosition(Vector3::Lerp(sidePosition, railPosition, railWeight));
     camera.LookAt(Vector3::Lerp(sideTarget, railTarget, railWeight));
 }
@@ -1830,7 +3980,8 @@ void SideScrollingShooter::DrawAttackWarnings2D(Renderer& renderer) const {
         if (!enemy.active || enemy.attackWarningFrames <= 0) continue;
 
         // 残り時間に合わせて拡大する十字を、攻撃を行う敵機へ重ねる
-        const float progress = 1.0f - static_cast<float>(enemy.attackWarningFrames) / AttackWarningFrames;
+        const float progress = Math::Clamp01(
+            1.0f - static_cast<float>(enemy.attackWarningFrames) / AttackWarningFrames);
         const float armLength = 0.035f + progress * 0.055f;
         DrawShape(renderer, enemy.x, enemy.y, armLength, 0.008f, FlashColor);
         DrawShape(renderer, enemy.x, enemy.y, 0.008f, armLength, FlashColor);
@@ -1850,8 +4001,18 @@ void SideScrollingShooter::DrawAttackWarnings3D(Renderer& renderer, const Camera
         if (!enemy.active || enemy.attackWarningFrames <= 0) continue;
 
         // 2Dと3Dのカメラ遷移中も、予告を敵機の発射位置へ追従させる
-        const float progress = 1.0f - static_cast<float>(enemy.attackWarningFrames) / AttackWarningFrames;
+        const float progress = Math::Clamp01(
+            1.0f - static_cast<float>(enemy.attackWarningFrames) / AttackWarningFrames);
         const float size = 0.20f + progress * 0.35f;
+        if (m_stageNumber == 5 && enemy.type == Stage::BossEnemy &&
+            m_stage5Phase >= Stage5Phase::EastsourceIntro &&
+            m_stage5Phase <= Stage5Phase::EastsourceBattle) {
+            // 固定した照準地点をプレイヤー面へ表示して発射後の追尾と誤認させない
+            DrawModelPrimitive(renderer, camera, 1,
+                ToWorldX(enemy.attackWarningTargetX), ToWorldY(enemy.attackWarningTargetY),
+                PlayerRailZ + 0.3f, size, size, size, FlashColor);
+            continue;
+        }
         const bool enteringRail = m_viewTransitionTimer > 0 && m_nextViewMode == ViewMode::Rail3D;
         const bool exitingRail = m_viewTransitionTimer > 0 && m_viewMode == ViewMode::Rail3D;
         const float sideX = enteringRail ? enemy.transitionSideX :
@@ -1867,10 +4028,10 @@ void SideScrollingShooter::DrawAttackWarnings3D(Renderer& renderer, const Camera
 }
 
 void SideScrollingShooter::DrawModelPrimitive(Renderer& renderer, const Camera3D& camera, int shape,
-    float x, float y, float z, float w, float h, float d, const float color[4], float yaw) {
+    float x, float y, float z, float w, float h, float d, const float color[4], float yaw, float pitch) {
     // プリミティブ形状を実3DカメラのViewProjectionへ乗せて描画する
     const Matrix4x4 world = Matrix4x4::Translation({x, y, z}) *
-        Matrix4x4::RotationY(yaw) * Matrix4x4::Scale({w, h, d});
+        Matrix4x4::RotationY(yaw) * Matrix4x4::RotationZ(pitch) * Matrix4x4::Scale({w, h, d});
     const PrimitiveShape primitiveShape = shape == 0 ? PrimitiveShape::Plate :
         shape == 1 ? PrimitiveShape::Box :
         shape == 2 ? PrimitiveShape::Cylinder :
@@ -1882,6 +4043,45 @@ void SideScrollingShooter::DrawModelPrimitive(Renderer& renderer, const Camera3D
         Vector3::One,
         {color[0], color[1], color[2], color[3]},
         yaw
+    });
+}
+
+/**
+ * @brief XYZ回転を維持して3Dプリミティブを描画する
+ * @param renderer 描画先
+ * @param camera 使用するカメラ
+ * @param shape PrimitiveShapeの列挙値
+ * @param position ワールド座標
+ * @param scale 寸法
+ * @param rotation XYZ回転
+ * @param color 色
+ * @return なし
+ */
+void SideScrollingShooter::DrawModelPrimitive(Renderer& renderer, const Camera3D& camera, int shape,
+    const Vector3& position, const Vector3& scale, const Vector3& rotation, const float color[4]) {
+    const Matrix4x4 world = Matrix4x4::Translation(position) *
+        Matrix4x4::RotationY(rotation.y) * Matrix4x4::RotationX(rotation.x) *
+        Matrix4x4::RotationZ(rotation.z) * Matrix4x4::Scale(scale);
+    DrawModelPrimitive(renderer, camera, shape, world, color);
+}
+
+/**
+ * @brief 合成済みワールド行列で3Dプリミティブを描画する
+ * @param renderer 描画先
+ * @param camera 使用するカメラ
+ * @param shape PrimitiveShapeの列挙値
+ * @param world 合成済みワールド行列
+ * @param color 色
+ * @return なし
+ */
+void SideScrollingShooter::DrawModelPrimitive(Renderer& renderer, const Camera3D& camera, int shape,
+    const Matrix4x4& world, const float color[4]) {
+    renderer.Draw({
+        static_cast<PrimitiveShape>(shape),
+        camera.ProjectionMatrix() * camera.ViewMatrix() * world,
+        Vector3::One,
+        {color[0], color[1], color[2], color[3]},
+        0.0f
     });
 }
 
@@ -2070,9 +4270,14 @@ void SideScrollingShooter::DrawOceanSeaSerpent(Renderer& renderer, const Camera3
         }
     }
     if (headSideVisibleHeight >= 1.35f * headScale || headRailVisibleHeight >= 2.50f * headScale) {
-        DrawModelPrimitive(renderer, camera, 5, headX + Math::Lerp(0.36f, 0.82f, railWeight) * motion.scale,
-            headY + Math::Lerp(0.30f, 0.72f, railWeight) * motion.scale,
-            headZ - Math::Lerp(0.60f, 1.30f, railWeight) * motion.scale,
+        // 目をカメラ側の頭部表面より前へ置き、移動で視線が斜めになっても胴体へ埋まらないようにする
+        const Vector3 headPosition {headX, headY, headZ};
+        const Vector3 eyePosition = headPosition +
+            camera.Right() * (Math::Lerp(0.36f, 0.82f, railWeight) * motion.scale) +
+            camera.Up() * (Math::Lerp(0.30f, 0.72f, railWeight) * motion.scale) +
+            (camera.Position() - headPosition).Normalized() *
+                (Math::Lerp(SeaSerpentSideEyeSurfaceOffset, SeaSerpentRailEyeSurfaceOffset, railWeight) * motion.scale);
+        DrawModelPrimitive(renderer, camera, 5, eyePosition.x, eyePosition.y, eyePosition.z,
             Math::Lerp(0.24f, 0.48f, railWeight) * motion.scale, Math::Lerp(0.24f, 0.48f, railWeight) * motion.scale,
             Math::Lerp(0.10f, 0.20f, railWeight) * motion.scale, SeaSerpentEyeColor);
     }
@@ -2102,18 +4307,222 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
     const float x = ToWorldX(enemy.x);
     const float y = ToWorldY(enemy.y);
     const float z = enemy.z;
+    auto DrawDamageSmoke = [&](BossPart part, const Vector3& position, float size) {
+        const int maxHp = enemy.bossPartMaxHp[part];
+        if (maxHp <= 0 || enemy.bossPartHp[part] <= 0 || enemy.bossPartHp[part] * 100 > maxHp * 35) return;
+        const Matrix4x4 world = Matrix4x4::Translation(position) * Matrix4x4::Scale({size, size * 1.7f, 1.0f});
+        renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * world,
+            static_cast<float>(enemy.age) / 30.0f + static_cast<float>(part) * 0.37f, 1});
+    };
+    if (enemy.type == 2 && m_stageNumber == 5) {
+        const Stage5ModelTransform transform = EastsourceTransform(enemy);
+        const EastsourceModelState state = EastsourceState(enemy);
+
+        // 参照ブランチdrawBoss1の26パーツとXYZ回転を変更せず描画する
+        EastsourceModelView::VisitParts(transform, state,
+            [&](PrimitiveShape shape, const Matrix4x4& world, const ColorF& color, EastsourcePartGroup) {
+                const float partColor[] = {color.r, color.g, color.b, color.a};
+                DrawModelPrimitive(renderer, camera, static_cast<int>(shape), world, partColor);
+            });
+
+        constexpr EastsourcePartGroup Groups[] = {
+            EastsourcePartGroup::Nose,
+            EastsourcePartGroup::LeftWing,
+            EastsourcePartGroup::RightWing,
+            EastsourcePartGroup::LeftEngine,
+            EastsourcePartGroup::RightEngine
+        };
+        for (int part = BossNose; part <= BossRightEngine; ++part) {
+            const Stage5GroupBounds bounds = EastsourceModelView::GroupBounds(
+                transform, state, Groups[part]);
+            if (bounds.valid) DrawDamageSmoke(static_cast<BossPart>(part), bounds.center, 0.82f);
+        }
+        return;
+    }
     if (enemy.type == 2 && m_stageNumber == 2) {
         // 上下ユニットへ別Transformを渡し、合体状態を描画する
         constexpr float BossScale = 1.92f;
-        const BossModelTransform submarine {{x, y - 0.45f, z}, yaw, BossScale};
-        const BossModelTransform battleship {{x, y + 0.78f, z}, yaw, BossScale};
-        auto DrawBossPart = [&](int shape, const Vector3& position, const Vector3& scale,
-            const float color[4], float partYaw) {
-            DrawModelPrimitive(renderer, camera, shape, position.x, position.y, position.z,
-                scale.x, scale.y, scale.z, color, partYaw);
+        const float railWeight = Math::Clamp01(1.0f - yaw / Math::HalfPi);
+        const int railgunCycle = enemy.stage2BossActionAge % Stage2RailgunCycleFrames;
+        const bool railgunLocked = railgunCycle < Stage2RailgunFireFrame + Stage2RailgunVisualFrames;
+        const Vector3 aimTarget {
+            ToWorldX(railgunLocked ? enemy.actionX : enemy.turretAimX),
+            ToWorldY(railgunLocked ? enemy.actionY : enemy.turretAimY),
+            railgunLocked ? Math::Lerp(SidePlaneZ, enemy.actionZ, railWeight) :
+                Math::Lerp(SidePlaneZ, enemy.turretAimZ, railWeight)
         };
-        SandSubmarineView::Draw(submarine, DrawBossPart);
-        LandBattleshipView::Draw(battleship, DrawBossPart);
+        bool weaponsDestroyed = true;
+        for (int i = 0; i < BossPartCount; ++i) {
+            if (i != BossRightEngine && enemy.bossPartHp[i] > 0) weaponsDestroyed = false;
+        }
+        const bool separated = enemy.phase >= 2.0f;
+        const float battleshipPatrolX = enemy.phase >= 2.0f ?
+            std::sin(static_cast<float>(enemy.age) * 0.018f) * 2.4f * railWeight : 0.0f;
+        const BossModelTransform submarine {{x + ToWorldX(enemy.sandSubmarineOffsetX),
+            Stage2SubmarineWorldY(enemy),
+            z + enemy.sandSubmarineOffsetZ}, aimTarget, yaw + (separated ? Math::HalfPi : 0.0f), BossScale};
+        BossModelTransform battleship {{x + ToWorldX(enemy.landBattleshipOffsetX) + battleshipPatrolX,
+            Stage2BattleshipWorldY(enemy),
+            z + enemy.landBattleshipOffsetZ}, aimTarget, yaw, BossScale,
+            enemy.phase >= 3.0f && enemy.stage2BossAction != Stage2BossAction::Separating, true};
+        battleship.secondaryAimTarget = {ToWorldX(enemy.turretAimX), ToWorldY(enemy.turretAimY),
+            Math::Lerp(SidePlaneZ, enemy.turretAimZ, railWeight)};
+        BossModelDamageState damage {
+            enemy.bossPartHp[BossNose] > 0,
+            {enemy.bossPartHp[BossLeftWing] > 0, enemy.bossPartHp[BossRightWing] > 0,
+                enemy.bossPartHp[BossLeftEngine] > 0},
+            enemy.bossPartHp[BossRightEngine] > 0,
+            weaponsDestroyed,
+            enemy.bossPartHitFlashFrames[BossNose] > 0 && (enemy.bossPartHitFlashFrames[BossNose] / 2) % 2 != 0,
+            {enemy.bossPartHitFlashFrames[BossLeftWing] > 0 && (enemy.bossPartHitFlashFrames[BossLeftWing] / 2) % 2 != 0,
+                enemy.bossPartHitFlashFrames[BossRightWing] > 0 && (enemy.bossPartHitFlashFrames[BossRightWing] / 2) % 2 != 0,
+                enemy.bossPartHitFlashFrames[BossLeftEngine] > 0 && (enemy.bossPartHitFlashFrames[BossLeftEngine] / 2) % 2 != 0},
+            enemy.bossPartHitFlashFrames[BossRightEngine] > 0 && (enemy.bossPartHitFlashFrames[BossRightEngine] / 2) % 2 != 0
+        };
+        for (int i = 0; i < BossFunnelHatchCount; ++i) {
+            damage.funnelHatches[i] = enemy.bossPartHp[BossFunnelHatch0 + i] > 0;
+            const int frames = enemy.bossPartHitFlashFrames[BossFunnelHatch0 + i];
+            damage.funnelHatchesHit[i] = frames > 0 && (frames / 2) % 2 != 0;
+        }
+        auto DrawBossPart = [&](int shape, const Vector3& position, const Vector3& scale,
+            const float color[4], float partYaw, float partPitch) {
+            DrawModelPrimitive(renderer, camera, shape, position.x, position.y, position.z,
+                scale.x, scale.y, scale.z, color, partYaw, partPitch);
+        };
+        SandSubmarineView::Draw(submarine, DrawBossPart, damage);
+        LandBattleshipView::Draw(battleship, DrawBossPart, damage);
+
+        const bool introducing = m_bossIntroductionPhase == BossIntroductionPhase::Entrance;
+
+        // 登場中とPhase2以降は潜砂艦の移動位置へファンネル出現時と同じ砂埃を連続発生させる
+        if (separated || introducing) {
+            constexpr int DustLifetimeFrames = 28;
+            constexpr float SideGroundTopY = -6.0f;
+            constexpr float RailGroundTopY = -3.65f;
+            constexpr float EdgeLocalX[] = {-4.2f, 0.0f, 4.2f};
+            constexpr float HullHalfWidth = 1.58f;
+            const float groundTopY = Math::Lerp(SideGroundTopY, RailGroundTopY, railWeight);
+            const float cosine = std::cos(submarine.yaw);
+            const float sine = std::sin(submarine.yaw);
+            const int effectAge = introducing ? m_bossIntroductionTimer : enemy.age;
+            for (int edge = 0; edge < 6; ++edge) {
+                const float localX = EdgeLocalX[edge / 2];
+                const float localZ = (edge % 2 == 0 ? -1.0f : 1.0f) * HullHalfWidth * railWeight;
+                const int dustAge = (effectAge + edge * DustLifetimeFrames / 6) % DustLifetimeFrames;
+                DrawSandDust(renderer, camera, {
+                    submarine.position.x + (localX * cosine + localZ * sine) * submarine.scale,
+                    groundTopY,
+                    submarine.position.z + (-localX * sine + localZ * cosine) * submarine.scale
+                }, dustAge, railWeight);
+            }
+        }
+
+        // 合体接近の後半は補助エンジンを止め、炎が潜砂艦を貫通しないようにする
+        const bool introductionEngineVisible = introducing &&
+            m_bossIntroductionTimer < Stage2BossApproachFrames + Stage2BossAssemblyFrames / 2;
+        if (separated || introductionEngineVisible) {
+            constexpr float EngineLocalX[] = {-1.80f, -1.80f, 1.70f, 1.70f};
+            constexpr float EngineLocalZ[] = {-0.78f, 0.78f, -0.78f, 0.78f};
+            constexpr int EngineFlameEffectType = 3;
+            const float cosine = std::cos(battleship.yaw);
+            const float sine = std::sin(battleship.yaw);
+            for (int engine = 0; engine < 4; ++engine) {
+                const Vector3 nozzle {
+                    battleship.position.x +
+                        (EngineLocalX[engine] * cosine + EngineLocalZ[engine] * sine) * battleship.scale,
+                    battleship.position.y + 0.02f * battleship.scale,
+                    battleship.position.z +
+                        (-EngineLocalX[engine] * sine + EngineLocalZ[engine] * cosine) * battleship.scale
+                };
+                const float flameHalfLength = 0.82f + static_cast<float>(engine % 2) * 0.10f;
+                const Matrix4x4 world = Matrix4x4::Translation({
+                    nozzle.x, nozzle.y - flameHalfLength, nozzle.z
+                }) * Matrix4x4::Scale({0.34f, flameHalfLength, 1.0f});
+                renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * world,
+                    static_cast<float>(introducing ? m_bossIntroductionTimer : enemy.age) / 12.0f +
+                        static_cast<float>(engine) * 0.71f,
+                    EngineFlameEffectType});
+            }
+        }
+
+        // 各武装の損傷位置から煙を上げる
+        constexpr Vector3 SmokeOffsets[] = {
+            {-1.55f, 2.55f, 0.0f}, {-0.55f, 2.70f, -0.92f},
+            {0.65f, 2.70f, 0.0f}, {2.85f, 2.28f, 0.92f}
+        };
+        for (int part = BossNose; part <= BossLeftEngine; ++part) {
+            const Vector3& offset = SmokeOffsets[part];
+            const float cosine = std::cos(battleship.yaw);
+            const float sine = std::sin(battleship.yaw);
+            DrawDamageSmoke(static_cast<BossPart>(part), {
+                battleship.position.x + (offset.x * cosine + offset.z * sine) * battleship.scale,
+                battleship.position.y + offset.y * battleship.scale,
+                battleship.position.z + (-offset.x * sine + offset.z * cosine) * battleship.scale
+            }, 1.25f);
+        }
+        const float submarineCosine = std::cos(submarine.yaw);
+        const float submarineSine = std::sin(submarine.yaw);
+        DrawDamageSmoke(BossRightEngine, {
+            submarine.position.x + 0.25f * submarineCosine * submarine.scale,
+            submarine.position.y + 1.75f * submarine.scale,
+            submarine.position.z - 0.25f * submarineSine * submarine.scale
+        }, 1.35f);
+        for (int hatch = 0; hatch < BossFunnelHatchCount; ++hatch) {
+            const float side = hatch < 6 ? -1.0f : 1.0f;
+            const float localX = -2.65f + static_cast<float>(hatch % 6) * 1.05f;
+            const float cosine = std::cos(submarine.yaw);
+            const float sine = std::sin(submarine.yaw);
+            DrawDamageSmoke(static_cast<BossPart>(BossFunnelHatch0 + hatch), {
+                submarine.position.x + (localX * cosine + side * 1.8f * sine) * submarine.scale,
+                submarine.position.y + 0.10f * submarine.scale,
+                submarine.position.z + (-localX * sine + side * 1.8f * cosine) * submarine.scale
+            }, 0.65f);
+        }
+
+        // Phase3では発射直後だけ、専用HLSLで固定照準の軌跡を急速に消す
+        const int beamCycle = enemy.stage2BossActionAge % Stage2RailgunCycleFrames;
+        const int beamAge = beamCycle - Stage2RailgunFireFrame;
+        const bool pointerVisible = beamCycle < Stage2RailgunFireFrame &&
+            enemy.stage2BossAction != Stage2BossAction::Separating;
+        const bool beamVisible = beamAge >= 0 && beamAge < Stage2RailgunVisualFrames;
+        const bool mirageVisible = beamAge >= 0 && beamAge < Stage2RailgunMirageFrames;
+        if (enemy.phase >= 3.0f && damage.mainGun && (pointerVisible || beamVisible || mirageVisible)) {
+            const float cosine = std::cos(battleship.yaw);
+            const float sine = std::sin(battleship.yaw);
+            const Vector3 pivot {
+                battleship.position.x + (-1.55f * cosine) * battleship.scale,
+                battleship.position.y + 2.08f * battleship.scale,
+                battleship.position.z + (1.55f * sine) * battleship.scale
+            };
+            const Vector3 lockedTarget {ToWorldX(enemy.actionX), ToWorldY(enemy.actionY),
+                railWeight > 0.5f ? enemy.actionZ : SidePlaneZ};
+            const Vector3 delta = lockedTarget - pivot;
+            const float horizontal = (std::max)(0.001f, std::sqrt(delta.x * delta.x + delta.z * delta.z));
+            const float targetLength = (std::max)(0.001f, std::sqrt(horizontal * horizontal + delta.y * delta.y));
+            const Vector3 direction = delta / targetLength;
+            const float beamLength = targetLength + 18.0f;
+            const Vector3 beamCenter = pivot + direction * (beamLength * 0.5f);
+            const float beamYaw = std::atan2(direction.z, -direction.x);
+            const float beamPitch = -std::asin(direction.y);
+            auto DrawRailgunLayer = [&](float width, float progress, int effectType) {
+                const Matrix4x4 world = Matrix4x4::Translation(beamCenter) *
+                    Matrix4x4::RotationY(beamYaw) * Matrix4x4::RotationZ(beamPitch) *
+                    Matrix4x4::Scale({beamLength * 0.5f, width, 1.0f});
+                renderer.DrawRailgun({camera.ProjectionMatrix() * camera.ViewMatrix() * world,
+                    progress, effectType});
+            };
+            if (mirageVisible) {
+                DrawRailgunLayer(1.75f,
+                    static_cast<float>(beamAge) / static_cast<float>(Stage2RailgunMirageFrames), 2);
+            }
+            if (pointerVisible) {
+                DrawRailgunLayer(0.10f,
+                    static_cast<float>(beamCycle) / static_cast<float>(Stage2RailgunFireFrame), 1);
+            } else if (beamVisible) {
+                DrawRailgunLayer(0.85f,
+                    static_cast<float>(beamAge) / static_cast<float>(Stage2RailgunVisualFrames), 0);
+            }
+        }
         return;
     }
 
@@ -2123,6 +4532,11 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
         constexpr float Gray[] = {0.50f, 0.50f, 0.50f, 1.0f};
         constexpr float White[] = {0.60f, 0.60f, 0.60f, 1.0f};
         constexpr float Black[] = {0.20f, 0.20f, 0.20f, 1.0f};
+        constexpr float HitColor[] = {1.0f, 0.03f, 0.03f, 1.0f};
+        auto PartColor = [&](BossPart part, const float color[4]) {
+            const int frames = enemy.bossPartHitFlashFrames[part];
+            return frames > 0 && (frames / 2) % 2 != 0 ? HitColor : color;
+        };
         auto DrawBossPart = [&](int shape, float localX, float localY, float localZ,
             float width, float height, float depth, const float color[4]) {
             const Vector3 offset = RotateYawOffset(localX * ModelScale, localY * ModelScale,
@@ -2133,9 +4547,9 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
 
         // 機首と上部メインボディを描画する
         if (enemy.bossPartHp[BossNose] > 0) {
-            DrawBossPart(2, 0.0f, 3.0f, -14.0f, 6.0f, 6.0f, 4.0f, Gray);
-            DrawBossPart(2, 0.0f, 2.0f, -17.5f, 2.0f, 2.0f, 3.0f, Gray);
-            DrawBossPart(2, 0.0f, 4.5f, -20.0f, 1.0f, 1.0f, 8.0f, Black);
+            DrawBossPart(2, 0.0f, 3.0f, -14.0f, 6.0f, 6.0f, 4.0f, PartColor(BossNose, Gray));
+            DrawBossPart(2, 0.0f, 2.0f, -17.5f, 2.0f, 2.0f, 3.0f, PartColor(BossNose, Gray));
+            DrawBossPart(2, 0.0f, 4.5f, -20.0f, 1.0f, 1.0f, 8.0f, PartColor(BossNose, Black));
         }
         DrawBossPart(2, 0.0f, 2.0f, 0.0f, 18.0f, 18.0f, 16.0f, Gray);
         DrawBossPart(2, 0.0f, 2.0f, -10.0f, 14.0f, 14.0f, 4.0f, Gray);
@@ -2150,12 +4564,12 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
         DrawBossPart(1, 2.0f, -8.0f, 0.0f, 1.0f, 5.0f, 1.0f, Black);
         DrawBossPart(1, -2.0f, -8.0f, 0.0f, 1.0f, 5.0f, 1.0f, Black);
         if (enemy.bossPartHp[BossLeftWing] > 0) {
-            DrawBossPart(1, 13.0f, 2.0f, 0.0f, 8.0f, 4.0f, 12.0f, White);
-            DrawBossPart(1, 21.0f, 2.0f, 0.0f, 12.0f, 2.0f, 10.0f, White);
+            DrawBossPart(1, 13.0f, 2.0f, 0.0f, 8.0f, 4.0f, 12.0f, PartColor(BossLeftWing, White));
+            DrawBossPart(1, 21.0f, 2.0f, 0.0f, 12.0f, 2.0f, 10.0f, PartColor(BossLeftWing, White));
         }
         if (enemy.bossPartHp[BossRightWing] > 0) {
-            DrawBossPart(1, -13.0f, 2.0f, 0.0f, 8.0f, 4.0f, 12.0f, White);
-            DrawBossPart(1, -21.0f, 2.0f, 0.0f, 12.0f, 2.0f, 10.0f, White);
+            DrawBossPart(1, -13.0f, 2.0f, 0.0f, 8.0f, 4.0f, 12.0f, PartColor(BossRightWing, White));
+            DrawBossPart(1, -21.0f, 2.0f, 0.0f, 12.0f, 2.0f, 10.0f, PartColor(BossRightWing, White));
         }
 
         // 主エンジンと左右エンジンを描画する
@@ -2165,12 +4579,21 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
         DrawBossPart(1, 0.0f, -6.0f, 16.5f, 2.0f, 8.0f, 3.0f, White);
         DrawBossPart(1, 0.0f, 12.0f, 16.5f, 2.0f, 8.0f, 3.0f, White);
         if (enemy.bossPartHp[BossLeftEngine] > 0) {
-            DrawBossPart(2, 6.0f, -6.0f, 10.0f, 4.0f, 4.0f, 10.0f, Black);
-            DrawBossPart(2, 6.0f, -6.0f, 16.0f, 2.0f, 2.0f, 2.0f, Black);
+            DrawBossPart(2, 6.0f, -6.0f, 10.0f, 4.0f, 4.0f, 10.0f, PartColor(BossLeftEngine, Black));
+            DrawBossPart(2, 6.0f, -6.0f, 16.0f, 2.0f, 2.0f, 2.0f, PartColor(BossLeftEngine, Black));
         }
         if (enemy.bossPartHp[BossRightEngine] > 0) {
-            DrawBossPart(2, -6.0f, -6.0f, 10.0f, 4.0f, 4.0f, 10.0f, Black);
-            DrawBossPart(2, -6.0f, -6.0f, 16.0f, 2.0f, 2.0f, 2.0f, Black);
+            DrawBossPart(2, -6.0f, -6.0f, 10.0f, 4.0f, 4.0f, 10.0f, PartColor(BossRightEngine, Black));
+            DrawBossPart(2, -6.0f, -6.0f, 16.0f, 2.0f, 2.0f, 2.0f, PartColor(BossRightEngine, Black));
+        }
+        // 従来ボスの主要部位位置から煙を上げる
+        constexpr float SmokeX[] = {0.0f, 17.0f, -17.0f, 6.0f, -6.0f};
+        constexpr float SmokeY[] = {4.5f, 3.0f, 3.0f, -4.0f, -4.0f};
+        constexpr float SmokeZ[] = {-17.0f, 0.0f, 0.0f, 13.0f, 13.0f};
+        for (int part = BossNose; part <= BossRightEngine; ++part) {
+            const Vector3 offset = RotateYawOffset(SmokeX[part] * ModelScale,
+                SmokeY[part] * ModelScale, SmokeZ[part] * ModelScale, yaw);
+            DrawDamageSmoke(static_cast<BossPart>(part), {x + offset.x, y + offset.y, z + offset.z}, 0.75f);
         }
         return;
     }
@@ -2191,8 +4614,78 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
         0.9f * scale, 0.10f, 0.5f * scale, EnemyAccent, yaw);
 }
 
+/**
+ * @brief 砂面から放物線状に舞う砂埃を描画する
+ * @param renderer 描画先レンダラー
+ * @param camera 現在の3Dカメラ
+ * @param position 発生地点のワールド座標
+ * @param age 発生からの経過フレーム
+ * @param railWeight 3D表示の補間率
+ * @return なし
+ */
+void SideScrollingShooter::DrawSandDust(Renderer& renderer, const Camera3D& camera,
+    const Vector3& position, int age, float railWeight) {
+    constexpr int DustLifetimeFrames = 28;
+    constexpr int DustParticleCount = 13;
+    constexpr float DustColor[] = {0.62f, 0.43f, 0.20f, 1.0f};
+    static_assert(DustLifetimeFrames > 0 && DustParticleCount > 0);
+    if (age < 0 || age >= DustLifetimeFrames) return;
+
+    // ウミヘビの水しぶきと同じ放物線で、2Dでは横方向、3Dでは円形へ砂粒を広げる
+    const float progress = static_cast<float>(age) / static_cast<float>(DustLifetimeFrames);
+    const float fade = 1.0f - progress;
+    for (int i = 0; i < DustParticleCount; ++i) {
+        const float angle = Math::HalfPi * 2.0f * static_cast<float>(i) /
+            static_cast<float>(DustParticleCount);
+        const float launchVelocity = 1.10f + static_cast<float>((i * 5) % 4) * 0.18f;
+        const float height = launchVelocity * progress - launchVelocity * progress * progress;
+        const float radius = (0.28f + static_cast<float>(i % 3) * 0.10f) * progress;
+        const float sideOffsetX = static_cast<float>(i - 6) * 0.12f * progress;
+        const float offsetX = Math::Lerp(sideOffsetX, std::cos(angle) * radius, railWeight);
+        const float offsetZ = Math::Lerp(0.0f, std::sin(angle) * radius, railWeight);
+        const float size = (0.14f + static_cast<float>(i % 4) * 0.035f) * fade;
+        const float color[4] = {DustColor[0], DustColor[1], DustColor[2], fade * 0.82f};
+        DrawModelPrimitive(renderer, camera, 5, position.x + offsetX,
+            position.y + 0.06f + height, position.z + offsetZ,
+            size, size * 1.35f, size, color);
+    }
+}
+
 void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw) const {
     if (shot.enemy) {
+        if (shot.funnel || shot.missile) {
+            // 砂地を抜けた地点へ砂埃を発生させる
+            constexpr int DustLifetimeFrames = 28;
+            if (shot.funnel && shot.funnelDustAge >= 0 && shot.funnelDustAge < DustLifetimeFrames) {
+                const float railWeight = Math::Clamp01(1.0f - yaw / Math::HalfPi);
+                DrawSandDust(renderer, camera, {ToWorldX(shot.funnelDustX),
+                    ToWorldY(shot.funnelDustY), shot.funnelDustZ}, shot.funnelDustAge, railWeight);
+            }
+            constexpr float FunnelBody[] = {0.18f, 0.16f, 0.14f, 1.0f};
+            constexpr float FunnelEdge[] = {0.72f, 0.20f, 0.08f, 1.0f};
+            const float dx = ToWorldX(shot.vx);
+            const float dy = ToWorldY(shot.vy);
+            const float dz = shot.vz;
+            const float horizontal = (std::max)(0.001f, std::sqrt(dx * dx + dz * dz));
+            const float length = (std::max)(0.001f, std::sqrt(horizontal * horizontal + dy * dy));
+            const float funnelYaw = std::atan2(dz, -dx);
+            const float funnelPitch = -std::asin(dy / length);
+            DrawModelPrimitive(renderer, camera, 3, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
+                0.72f, 0.30f, 0.30f, FunnelBody, funnelYaw, funnelPitch);
+            DrawModelPrimitive(renderer, camera, 4, ToWorldX(shot.x) - dx / length * 0.28f,
+                ToWorldY(shot.y) - dy / length * 0.28f, shot.z - dz / length * 0.28f,
+                0.44f, 0.42f, 0.42f, FunnelEdge, funnelYaw, funnelPitch);
+            if (shot.funnel) {
+                // 推進方向の後方へ既存の煙シェーダーを置き、ロケット噴出煙として流用する
+                const Vector3 smokeCenter {ToWorldX(shot.x) - dx / length * 0.72f,
+                    ToWorldY(shot.y) - dy / length * 0.72f, shot.z - dz / length * 0.72f};
+                const Matrix4x4 smokeWorld = Matrix4x4::Translation(smokeCenter) *
+                    Matrix4x4::Scale({0.42f, 0.62f, 1.0f});
+                renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * smokeWorld,
+                    static_cast<float>(shot.age) / 9.0f, 1});
+            }
+            return;
+        }
         DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
             0.16f, 0.16f, 0.65f, EnemyShotColor, yaw);
         return;
@@ -2232,6 +4725,32 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
  * @return なし
  */
 void SideScrollingShooter::DrawExplosion(Renderer& renderer, const Camera3D& camera, const Explosion& explosion) {
+    if (explosion.destruction) {
+        const float progress = static_cast<float>(explosion.age) / DestructionExplosionLifetimeFrames;
+        const float fireProgress = Math::Clamp01(progress * 2.55f);
+        const float fireSize = 0.72f + fireProgress * 1.55f;
+        const Vector3 center {ToWorldX(explosion.x), ToWorldY(explosion.y), explosion.z};
+
+        // 中心火球とずらした火球を重ね、撃破直後の爆発炎を厚くする
+        const Matrix4x4 fireWorld = Matrix4x4::Translation(center) *
+            Matrix4x4::Scale({fireSize, fireSize, 1.0f});
+        renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * fireWorld, fireProgress});
+        constexpr Vector3 FireOffsets[] = {{-0.52f, 0.18f, 0.0f}, {0.46f, 0.34f, 0.0f}};
+        for (int i = 0; i < 2; ++i) {
+            const float lobeProgress = Math::Clamp01(fireProgress * 1.18f - static_cast<float>(i) * 0.10f);
+            const Matrix4x4 lobeWorld = Matrix4x4::Translation(center + FireOffsets[i] * fireSize) *
+                Matrix4x4::Scale({fireSize * 0.68f, fireSize * 0.68f, 1.0f});
+            renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * lobeWorld, lobeProgress});
+        }
+
+        // 炎が消える頃から大きな黒煙を残す
+        const float smokeSize = 1.15f + progress * 1.85f;
+        const Matrix4x4 smokeWorld = Matrix4x4::Translation(center) *
+            Matrix4x4::Scale({smokeSize, smokeSize * 1.28f, 1.0f});
+        renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * smokeWorld, progress, 2});
+        return;
+    }
+
     const float progress = static_cast<float>(explosion.age) / ExplosionLifetimeFrames;
     const float size = 0.36f + progress * 0.72f;
     const Matrix4x4 world = Matrix4x4::Translation({ToWorldX(explosion.x), ToWorldY(explosion.y), explosion.z}) *
@@ -2246,9 +4765,76 @@ void SideScrollingShooter::DrawExplosion(Renderer& renderer, const Camera3D& cam
  * @param debris 描画対象の飛散部品
  * @return なし
  */
-void SideScrollingShooter::DrawDebris(Renderer& renderer, const Camera3D& camera, const Debris& debris) {
+void SideScrollingShooter::DrawDebris(Renderer& renderer, const Camera3D& camera,
+    const Debris& debris, float railWeight) {
+    const float scale = debris.age > debris.shrinkStartAge ?
+        1.0f - Math::Clamp01(static_cast<float>(debris.age - debris.shrinkStartAge) /
+            static_cast<float>(debris.lifetime - debris.shrinkStartAge)) : 1.0f;
     DrawModelPrimitive(renderer, camera, debris.shape, debris.x, debris.y, debris.z,
-        debris.width, debris.height, debris.depth, debris.color.data(), debris.yaw);
+        debris.width * scale, debris.height * scale, debris.depth * scale, debris.color.data(), debris.yaw);
+
+    // 沈下と再浮上の各区間で砂埃を絶えず重ね、船体幅全体から大量に噴き上げる
+    if (debris.effect == Debris::Effect::Stage2Sink) {
+        constexpr int FirstSinkEndFrame = 108;
+        constexpr int ResurfaceStartFrame = 148;
+        const bool movingThroughSand = debris.age < FirstSinkEndFrame ||
+            debris.age >= ResurfaceStartFrame || debris.effectAge >= 0;
+        const float groundTopY = Math::Lerp(-6.0f, -3.65f, railWeight);
+        if (movingThroughSand) {
+            for (int wave = 0; wave < 4; ++wave) {
+                const int dustAge = (debris.age + wave * 7) % 28;
+                for (int side = -2; side <= 2; ++side) {
+                    DrawSandDust(renderer, camera,
+                        {debris.x + side * debris.width * 0.16f, groundTopY, debris.z}, dustAge, railWeight);
+                }
+            }
+        }
+    }
+
+    // 降下中は連続爆発と煙を引き、下部船体との衝突後に大爆発へ切り替える
+    if (debris.effect == Debris::Effect::Stage2Impact) {
+        constexpr int EffectFrames = 72;
+        const Matrix4x4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
+        if (debris.effectAge < 0) {
+            for (int i = 0; i < 3; ++i) {
+                const int cycleAge = (debris.age + i * 17) % 54;
+                const float cycle = static_cast<float>(cycleAge) / 54.0f;
+                const float offsetX = static_cast<float>(i - 1) * debris.width * 0.22f;
+                const float size = debris.width * (0.18f + cycle * 0.24f);
+                const Matrix4x4 fireWorld = Matrix4x4::Translation(
+                    {debris.x + offsetX, debris.y + debris.height * 0.18f, debris.z}) *
+                    Matrix4x4::Scale({size, size, 1.0f});
+                renderer.DrawExplosion({viewProjection * fireWorld, cycle});
+            }
+            const float smokeCycle = static_cast<float>(debris.age % 72) / 72.0f;
+            const float smokeSize = debris.width * (0.34f + smokeCycle * 0.38f);
+            const Matrix4x4 smokeWorld = Matrix4x4::Translation(
+                {debris.x, debris.y + debris.height * (0.45f + smokeCycle * 0.75f), debris.z}) *
+                Matrix4x4::Scale({smokeSize, smokeSize * 1.45f, 1.0f});
+            renderer.DrawExplosion({viewProjection * smokeWorld, smokeCycle, 2});
+            return;
+        }
+
+        const float progress = Math::Clamp01(static_cast<float>(debris.effectAge) / EffectFrames);
+        for (int i = 0; i < 5; ++i) {
+            const float delayed = Math::Clamp01(progress * 1.55f - static_cast<float>(i) * 0.10f);
+            const float offsetX = static_cast<float>(i - 2) * debris.width * 0.16f;
+            const float size = debris.width * (0.34f + delayed * 0.42f);
+            const Matrix4x4 fireWorld = Matrix4x4::Translation(
+                {debris.x + offsetX, debris.y + debris.height * 0.22f, debris.z}) *
+                Matrix4x4::Scale({size, size, 1.0f});
+            renderer.DrawExplosion({viewProjection * fireWorld, delayed});
+        }
+        const float smokeSize = debris.width * (0.58f + progress * 0.72f);
+        const Matrix4x4 smokeWorld = Matrix4x4::Translation(
+            {debris.x, debris.y + debris.height * (0.35f + progress * 0.85f), debris.z}) *
+            Matrix4x4::Scale({smokeSize, smokeSize * 1.35f, 1.0f});
+        renderer.DrawExplosion({viewProjection * smokeWorld, progress, 2});
+        for (int side = -2; side <= 2; ++side) {
+            DrawSandDust(renderer, camera, {debris.x + side * debris.width * 0.18f,
+                debris.y - debris.height * 0.5f, debris.z}, debris.effectAge, railWeight);
+        }
+    }
 }
 
 /**
@@ -2316,8 +4902,44 @@ void SideScrollingShooter::DrawRestart(Renderer& renderer) const {
     renderer.DrawText(text, TextAlign::Center, 0.038f, { 1.0f, 0.88f, 0.25f, 1.0f }, { 0.0f, 0.12f });
 }
 
+/**
+ * @brief ミッション開始または終了の文字アニメーションを描画する
+ * @param renderer 描画先レンダラー
+ * @return なし
+ */
+void SideScrollingShooter::DrawMissionBanner(Renderer& renderer) const {
+    if ((!m_clear && m_missionStartTimer <= 0) || (m_clear && m_clearTimer <= 0)) return;
+
+    char startText[24];
+    std::snprintf(startText, sizeof(startText), "MISSION %d START", m_stageNumber);
+    const std::string_view text = m_clear ? "ARRESTED" : startText;
+    const int remainingFrames = m_clear ? (std::max)(0, m_clearTimer) : m_missionStartTimer;
+    const int elapsedFrames = (m_clear ? ClearWaitFrames : MissionBannerDisplayFrames) - remainingFrames;
+    const float fade = remainingFrames < 20 ? static_cast<float>(remainingFrames) / 20.0f : 1.0f;
+    constexpr float BaseSize = 0.050f;
+    constexpr float Advance = 0.078f;
+    const float firstX = -static_cast<float>(text.size() - 1) * Advance * 0.5f;
+
+    // 各文字を時間差で大きく出し、中央の定位置へ収束させる
+    for (size_t i = 0; i < text.size(); ++i) {
+        if (text[i] == ' ') continue;
+        const float scale = MissionBannerGlyphScale(elapsedFrames - static_cast<int>(i) * MissionBannerGlyphDelayFrames);
+        if (scale <= 0.0f) continue;
+        const char glyph[] = {text[i], '\0'};
+        const float size = BaseSize * scale;
+        const Vector2 position {firstX + static_cast<float>(i) * Advance, 0.10f};
+        renderer.DrawText(glyph, position + Vector2 {0.012f, -0.014f}, size,
+            {0.05f, 0.02f, 0.01f, fade * 0.85f});
+        renderer.DrawText(glyph, position, size, {1.0f, 0.78f, 0.12f, fade});
+    }
+}
+
 void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
-    if (!m_bossBattle || m_clear) {
+    if (m_stageNumber == 5 && m_stage5Phase != Stage5Phase::Approach) {
+        DrawStage5Hud(renderer);
+        return;
+    }
+    if (!m_bossBattle || m_clear || m_bossIntroductionPhase != BossIntroductionPhase::None) {
         return;
     }
 
@@ -2333,7 +4955,7 @@ void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
         BossBarWidth * hpRate, 0.018f, BossBarFill);
     // 4フェーズの境界をHPバー上に常時表示する
     for (int phase = 1; phase < BossPhaseCount; ++phase) {
-        DrawShape(renderer, -BossBarWidth * 0.5f + BossBarWidth * static_cast<float>(phase) / static_cast<float>(BossPhaseCount),
+        DrawShape(renderer, -BossBarWidth + BossBarWidth * 2.0f * static_cast<float>(phase) / static_cast<float>(BossPhaseCount),
             0.755f, 0.008f, 0.035f, BossBarDivider);
     }
     const BossStory story = BossStories::ForStage(m_stageNumber);
@@ -2359,10 +4981,10 @@ void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
  * @param z 3Dレール座標系のZ座標
  * @return なし
  */
-void SideScrollingShooter::SpawnExplosion(float x, float y, float z) {
+void SideScrollingShooter::SpawnExplosion(float x, float y, float z, bool destruction) {
     for (auto& explosion : m_explosions) {
         if (explosion.active) continue;
-        explosion = {x, y, IsRailGameplayActive() ? z : ToRailZFromSideX(x), 0, true};
+        explosion = {x, y, IsRailGameplayActive() ? z : ToRailZFromSideX(x), 0, destruction, true};
         return;
     }
 }
@@ -2382,16 +5004,58 @@ void SideScrollingShooter::SpawnExplosion(float x, float y, float z) {
  * @param height 部品の高さ
  * @param depth 部品の奥行き
  * @param color 部品の色
+ * @param lifetime 部品が消滅するまでのフレーム数
+ * @param shrinkStartAge 縮小を開始するフレーム
+ * @param gravity 重力を適用する場合true
  * @return なし
  */
 void SideScrollingShooter::SpawnDebrisPiece(float x, float y, float z, float vx, float vy, float vz,
-    float yaw, float spin, int shape, float width, float height, float depth, const float color[4]) {
+    float yaw, float spin, int shape, float width, float height, float depth, const float color[4],
+    int lifetime, int shrinkStartAge, bool gravity, Debris::Effect effect) {
     for (auto& debris : m_debris) {
         if (debris.active) continue;
         debris = {x, y, z, vx, vy, vz, yaw, spin, width, height, depth,
-            {color[0], color[1], color[2], color[3]}, shape, 0, true};
+            {color[0], color[1], color[2], color[3]}, shape, 0, lifetime, shrinkStartAge,
+            -1, effect, gravity, true};
         return;
     }
+}
+
+/**
+ * @brief 砂漠の骨アーチを破壊して小さな骨を飛散させる
+ * @return なし
+ */
+void SideScrollingShooter::DestroyDesertBoneArch() {
+    constexpr int BoneCount = 13;
+    constexpr int Lifetime = 150;
+    constexpr int ShrinkStartAge = 90;
+    constexpr float RailCenterY = -3.65f;
+    constexpr float RailRadius = 10.0f;
+    constexpr float SideZ = SidePlaneZ + 1.2f;
+    const float railWeight = RailBlend();
+    const float phase = std::fmod(m_scroll * 20.0f, 72.0f);
+    const float sideCenterX = 1.90f - std::fmod(m_scroll * 0.50f, 4.30f);
+    const float railZ = 72.0f - phase;
+
+    // 描画中の各関節位置から小さな骨を外向きに飛散させる
+    for (int i = 0; i < BoneCount; ++i) {
+        const float angle = Math::HalfPi * 2.0f * static_cast<float>(i) / static_cast<float>(BoneCount - 1);
+        const float x = Math::Lerp(ToWorldX(sideCenterX), std::cos(angle) * RailRadius, railWeight);
+        const float y = Math::Lerp(ToWorldY(-1.30f + static_cast<float>(i) * 0.24f),
+            RailCenterY + std::sin(angle) * RailRadius, railWeight);
+        const float z = Math::Lerp(SideZ, railZ, railWeight);
+        const float scatterAngle = angle + static_cast<float>(i % 3 - 1) * 0.35f;
+        const float size = 0.30f + static_cast<float>(i % 3) * 0.08f;
+        SpawnDebrisPiece(x, y, z, std::cos(scatterAngle) * 0.055f,
+            0.055f + static_cast<float>(i % 4) * 0.012f,
+            railWeight > 0.5f ? std::sin(scatterAngle) * 0.055f : 0.0f,
+            angle, (i % 2 == 0 ? 0.08f : -0.08f) * (1.0f + i * 0.04f),
+            5, size, size * 1.35f, size * 0.75f, DesertBoneColor,
+            Lifetime, ShrinkStartAge, true);
+    }
+
+    m_boneArchHp = 0;
+    m_boneArchDestroyed = true;
 }
 
 /**
@@ -2457,6 +5121,118 @@ void SideScrollingShooter::SpawnEnemyDebris(const Enemy& enemy, int bossPart) {
         AddPiece(3, 0.0f, 0.0f, -0.68f, 0.45f, 0.45f, 0.68f, EnemyAccent, scale);
         AddPiece(4, -0.75f, 0.0f, 0.0f, 0.9f, 0.10f, 0.5f, EnemyAccent, scale);
         AddPiece(4, 0.75f, 0.0f, 0.0f, 0.9f, 0.10f, 0.5f, EnemyAccent, scale);
+        return;
+    }
+
+    if (m_stageNumber == 5) {
+        constexpr EastsourcePartGroup Groups[] = {
+            EastsourcePartGroup::Nose,
+            EastsourcePartGroup::LeftWing,
+            EastsourcePartGroup::RightWing,
+            EastsourcePartGroup::LeftEngine,
+            EastsourcePartGroup::RightEngine
+        };
+        const EastsourcePartGroup detached = bossPart >= BossNose && bossPart <= BossRightEngine ?
+            Groups[bossPart] : EastsourcePartGroup::Body;
+        EastsourceModelState intact;
+        const Stage5ModelTransform transform = EastsourceTransform(enemy);
+
+        // 破壊グループの実モデルパーツだけを既存の小型Debrisプールへ送る
+        EastsourceModelView::VisitParts(transform, intact,
+            [&](PrimitiveShape shape, const Matrix4x4& world, const ColorF& color,
+                EastsourcePartGroup group) {
+                if (group != detached) return;
+                const Vector3 center = world.TransformPoint(Vector3::Zero);
+                const float radius = (std::max)(0.24f,
+                    (std::min)(1.2f, Stage5ModelDetail::WorldPartRadius(world) * 0.55f));
+                const float direction = center.x < ToWorldX(enemy.x) ? -1.0f : 1.0f;
+                const float pieceColor[] = {color.r, color.g, color.b, color.a};
+                const int debrisShape = shape == PrimitiveShape::Box ? 1 :
+                    (shape == PrimitiveShape::Cylinder ? 2 :
+                        (shape == PrimitiveShape::Cone ? 3 :
+                            (shape == PrimitiveShape::Prism ? 4 : 5)));
+                SpawnDebrisPiece(center.x, center.y, center.z,
+                    direction * (0.035f + static_cast<float>(pieceNumber % 3) * 0.008f),
+                    0.018f + static_cast<float>(pieceNumber % 2) * 0.012f,
+                    -0.025f + static_cast<float>(pieceNumber % 3) * 0.018f,
+                    0.0f, direction * 0.10f, debrisShape,
+                    radius, radius * 0.65f, radius, pieceColor, 90, 64, false);
+                ++pieceNumber;
+            });
+        return;
+    }
+
+    if (m_stageNumber == 2) {
+        constexpr float ModelScale = 1.92f;
+        constexpr float Hull[] = {0.28f, 0.24f, 0.17f, 1.0f};
+        constexpr float Armor[] = {0.36f, 0.31f, 0.22f, 1.0f};
+        constexpr float Metal[] = {0.48f, 0.45f, 0.36f, 1.0f};
+        constexpr float Dark[] = {0.07f, 0.065f, 0.055f, 1.0f};
+        constexpr float Core[] = {0.95f, 0.28f, 0.055f, 1.0f};
+        auto AddStage2Piece = [&](int shape, const Vector3& local, const Vector3& size,
+            const float color[4], float unitOffsetY) {
+            AddPiece(shape, local.x, local.y + unitOffsetY / ModelScale, local.z,
+                size.x, size.y, size.z, color, ModelScale);
+        };
+
+        // 個別部位は描画と同じ構成の主要プリミティブを飛散させる
+        if (bossPart == BossNose) {
+            AddStage2Piece(2, {-1.55f, 2.03f, 0.0f}, {1.75f, 1.10f, 1.75f}, Dark, 0.78f);
+            AddStage2Piece(4, {-2.30f, 2.08f, 0.0f}, {1.85f, 1.08f, 1.55f}, Armor, 0.78f);
+            AddStage2Piece(2, {-4.25f, 2.08f, 0.0f}, {2.95f, 0.54f, 0.54f}, Metal, 0.78f);
+            return;
+        }
+        if (bossPart == BossLeftWing || bossPart == BossRightWing || bossPart == BossLeftEngine) {
+            constexpr Vector3 Positions[] = {
+                {-0.55f, 2.34f, -0.92f}, {0.65f, 2.34f, 0.0f}, {2.85f, 1.92f, 0.92f}
+            };
+            const int index = bossPart == BossLeftWing ? 0 :
+                (bossPart == BossRightWing ? 1 : 2);
+            const Vector3& position = Positions[index];
+            AddStage2Piece(2, position, {0.76f, 0.46f, 0.76f}, Dark, 0.78f);
+            AddStage2Piece(1, {position.x - 0.20f, position.y + 0.26f, position.z},
+                {0.82f, 0.46f, 0.64f}, Armor, 0.78f);
+            AddStage2Piece(2, {position.x - 1.10f, position.y + 0.26f, position.z},
+                {1.35f, 0.20f, 0.20f}, Metal, 0.78f);
+            return;
+        }
+        if (bossPart == BossRightEngine) {
+            AddStage2Piece(2, {0.25f, 1.42f, 0.0f}, {1.35f, 0.22f, 1.35f}, Core, -0.45f);
+            return;
+        }
+        if (bossPart >= BossFunnelHatch0) {
+            const int hatch = bossPart - BossFunnelHatch0;
+            const float localX = -2.65f + static_cast<float>(hatch % 6) * 1.05f;
+            const float localZ = (hatch < 6 ? -1.0f : 1.0f) * 1.80f;
+            AddStage2Piece(1, {localX, -0.22f, localZ}, {0.38f, 0.34f, 0.08f}, Core, -0.45f);
+            return;
+        }
+
+        // 撃破時は下部の沈下と再浮上、上部の緩やかな降下を同じ時間軸で開始する
+        const float submarineY = Stage2SubmarineWorldY(enemy);
+        const float battleshipY = Stage2BattleshipWorldY(enemy);
+        const Vector3 lowerOffset = RotateYawOffset(0.0f, -0.45f, 0.0f, yaw);
+        SpawnDebrisPiece(x + lowerOffset.x, submarineY + lowerOffset.y, enemy.z + lowerOffset.z,
+            0.0f, 0.0f, 0.0f, yaw, 0.0f, 5, 8.8f * ModelScale, 2.05f * ModelScale,
+            3.15f * ModelScale, Hull, 420, 420, false, Debris::Effect::Stage2Sink);
+        auto AddFallingUpper = [&](int shape, const Vector3& local, const Vector3& size,
+            const float color[4], Debris::Effect effect) {
+            const Vector3 offset = RotateYawOffset(local.x * ModelScale, local.y * ModelScale,
+                local.z * ModelScale, yaw);
+            SpawnDebrisPiece(x + offset.x, battleshipY + offset.y + 3.25f, enemy.z + offset.z,
+                0.0f, 0.0f, 0.0f, yaw,
+                0.018f + local.x * 0.004f, shape, size.x * ModelScale, size.y * ModelScale,
+                size.z * ModelScale, color, 420, 420, true, effect);
+        };
+        AddFallingUpper(1, {0.20f, 0.95f, 0.0f}, {2.65f, 1.30f, 2.70f}, Hull,
+            Debris::Effect::Stage2Impact);
+        AddFallingUpper(4, {-1.65f, 0.70f, 0.0f}, {2.70f, 1.08f, 2.55f}, Hull,
+            Debris::Effect::Stage2ImpactPiece);
+        AddFallingUpper(4, {2.65f, 1.62f, 0.0f}, {1.45f, 0.76f, 1.78f}, Armor,
+            Debris::Effect::Stage2ImpactPiece);
+        for (int part = 0; part < BossPartCount; ++part) {
+            if (enemy.bossPartHp[part] > 0) SpawnEnemyDebris(enemy, part);
+        }
         return;
     }
 
@@ -2538,13 +5314,426 @@ void SideScrollingShooter::DrawBossStory(Renderer& renderer) const {
         {0.65f, 0.75f, 0.82f, 1.0f}, CharacterSpacing);
 }
 
+/**
+ * @brief 墨の筆跡を模したボス名演出を画面へ描画する
+ * @param renderer 描画先レンダラー
+ * @return なし
+ */
+void SideScrollingShooter::DrawBossNameReveal(Renderer& renderer) const {
+    if (m_bossIntroductionPhase != BossIntroductionPhase::NameReveal) return;
+
+    const float age = static_cast<float>(m_bossIntroductionTimer);
+    const float inkProgress = SmoothStep(Math::Clamp01(age / 34.0f));
+    const float fadeOut = SmoothStep(Math::Clamp01(
+        static_cast<float>(BossNameRevealFrames - m_bossIntroductionTimer) / 24.0f));
+    const float alpha = inkProgress * fadeOut;
+    renderer.Draw(Rect {{0.0f, 0.0f}, {2.0f, 2.0f}}, {0.0f, 0.0f, 0.0f, 0.52f * alpha});
+
+    // 高さと濃さの異なる筆跡を横へ走らせて、乾いた墨のかすれを作る
+    constexpr float StrokeY[] = {-0.22f, -0.14f, -0.07f, 0.01f, 0.09f, 0.16f, 0.22f};
+    constexpr float StrokeHeight[] = {0.08f, 0.10f, 0.12f, 0.13f, 0.11f, 0.09f, 0.06f};
+    for (int i = 0; i < 7; ++i) {
+        const float reveal = SmoothStep(Math::Clamp01(
+            inkProgress * 1.30f - static_cast<float>(i) * 0.035f));
+        const float width = (1.35f + static_cast<float>((i * 7) % 4) * 0.11f) * reveal;
+        const float strokeColor[4] = {
+            0.01f, 0.008f, 0.006f, alpha * (0.78f + static_cast<float>(i % 2) * 0.16f)
+        };
+        DrawShape(renderer, 0.0f, StrokeY[i], width, StrokeHeight[i], strokeColor);
+    }
+
+    // 筆の始点と終点へ不揃いな飛沫を置き、矩形だけの帯に見えないよう崩す
+    constexpr Vector2 SplatterPositions[] = {
+        {-0.82f, 0.27f}, {-0.72f, -0.31f}, {-0.60f, 0.34f},
+        {0.66f, 0.31f}, {0.78f, -0.27f}, {0.88f, 0.13f}, {0.57f, -0.36f}
+    };
+    for (int i = 0; i < 7; ++i) {
+        const float radius = (0.018f + static_cast<float>((i * 5) % 4) * 0.009f) * inkProgress;
+        renderer.Draw(Circle {SplatterPositions[i], radius},
+            {0.01f, 0.008f, 0.006f, alpha * 0.90f});
+    }
+
+    // 墨が広がった後にボス名を打ち込み、短い朱色の見得線を添える
+    const float nameAlpha = SmoothStep(Math::Clamp01((age - 24.0f) / 18.0f)) * fadeOut;
+    const BossStory story = BossStories::ForStage(m_stageNumber);
+    renderer.DrawText(story.bossName, TextAlign::Center, 0.064f,
+        {0.94f, 0.92f, 0.84f, nameAlpha}, {0.0f, -0.015f}, 0.008f);
+    const float redLine[4] = {0.72f, 0.04f, 0.025f, nameAlpha};
+    DrawShape(renderer, 0.0f, -0.33f, 0.84f * inkProgress, 0.018f, redLine);
+}
+
+/**
+ * @brief Stage 5の要塞、照明、崩壊演出を3D空間へ描画する
+ * @param renderer 描画先レンダラー
+ * @param camera 現在の3Dカメラ
+ * @return なし
+ */
+void SideScrollingShooter::RenderStage5(Renderer& renderer, const Camera3D& camera) const {
+    const Stage5ModelTransform transform = TayamaTransform();
+    TayamaModelState state = TayamaState();
+    const bool lightning = m_stage5Phase < Stage5Phase::TayamaCommandCore &&
+        ((m_frame % 241) < 3 || ((m_frame + 73) % 389) < 2);
+    if (lightning) {
+        for (bool& flash : state.hitFlash) flash = true;
+    }
+
+    // 同じ46パーツをビル端点から空母端点まで補間して描画する
+    TayamaModelView::VisitParts(transform, m_tayamaTransformation, state,
+        [&](PrimitiveShape shape, const Matrix4x4& world, const ColorF& color, TayamaPartGroup) {
+            const float brightness = lightning ? 1.55f : 1.0f;
+            const float partColor[] = {
+                (std::min)(1.0f, color.r * brightness),
+                (std::min)(1.0f, color.g * brightness),
+                (std::min)(1.0f, color.b * brightness), color.a
+            };
+            DrawModelPrimitive(renderer, camera, static_cast<int>(shape), world, partColor);
+        });
+
+    // 変形終盤から既存のエンジン炎HLSLを主推進機と生存中の揚力機関へ付ける
+    if (m_stage5Phase >= Stage5Phase::CarrierTransformation &&
+        m_stage5Phase < Stage5Phase::TayamaCollapse) {
+        constexpr TayamaPartGroup EngineGroups[] = {
+            TayamaPartGroup::MainThruster,
+            TayamaPartGroup::LeftLiftEngine,
+            TayamaPartGroup::RightLiftEngine
+        };
+        for (int engine = 0; engine < 3; ++engine) {
+            const Stage5GroupBounds bounds = TayamaModelView::GroupBounds(transform,
+                m_tayamaTransformation, state, EngineGroups[engine]);
+            if (!bounds.valid) continue;
+            const float width = engine == 0 ? 2.2f : 1.25f;
+            const Matrix4x4 flameWorld = Matrix4x4::Translation(
+                bounds.center + Vector3 {0.0f, -1.0f - static_cast<float>(engine) * 0.12f, 0.0f}) *
+                Matrix4x4::Scale({width, 2.8f, 1.0f});
+            renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * flameWorld,
+                static_cast<float>((m_frame + engine * 7) % 24) / 24.0f, 3});
+        }
+    }
+
+    if (m_stage5Phase == Stage5Phase::EastsourceIntro) {
+        // 破裂前は赤色警告灯と左右へ押し出される格納庫装甲を段階表示する
+        const float warningColor[] = {1.0f, 0.04f, 0.03f,
+            (m_stage5PhaseTimer / 5) % 2 == 0 ? 1.0f : 0.28f};
+        for (int light = -2; light <= 2; ++light) {
+            DrawModelPrimitive(renderer, camera, 1,
+                static_cast<float>(light) * 1.35f, 1.5f, 61.5f,
+                0.34f, 0.18f, 0.16f, warningColor);
+        }
+        const float deformation = SmoothStep(Math::Clamp01(
+            static_cast<float>(m_stage5PhaseTimer - 18) / 40.0f));
+        DrawModelPrimitive(renderer, camera, 1, -1.5f - deformation * 2.2f, -0.2f, 61.0f,
+            3.0f, 4.2f, 0.35f, TowerFacadeColor,
+            0.0f, deformation * 0.16f);
+        DrawModelPrimitive(renderer, camera, 1, 1.5f + deformation * 2.2f, -0.2f, 61.0f,
+            3.0f, 4.2f, 0.35f, TowerFacadeColor, 0.0f, -deformation * 0.16f);
+    }
+
+    // 嵐の上層とCOMMAND CORE以降の雲海を少数のCube帯で表現する
+    const bool aboveStorm = m_stage5Phase >= Stage5Phase::TayamaCommandCore;
+    const int cloudCount = aboveStorm ? 22 : 14;
+    for (int i = 0; i < cloudCount; ++i) {
+        const float x = -34.0f + static_cast<float>((i * 47) % 680) / 10.0f;
+        const float z = 24.0f + static_cast<float>((i * 31 + m_frame / 3) % 760) / 10.0f;
+        const float y = aboveStorm ? -5.8f + static_cast<float>(i % 3) * 0.32f :
+            12.0f + static_cast<float>(i % 4) * 1.1f;
+        const float cloudColor[] = {
+            aboveStorm ? 0.32f : StormCloudColor[0],
+            aboveStorm ? 0.38f : StormCloudColor[1],
+            aboveStorm ? 0.48f : StormCloudColor[2],
+            aboveStorm ? 0.82f : 0.72f
+        };
+        DrawModelPrimitive(renderer, camera, 1, x, y, z,
+            8.0f + static_cast<float>(i % 4) * 2.0f, 0.75f, 3.5f, cloudColor);
+    }
+
+    // 現フェーズのサーチライト基部と、追尾上限を持つ光軸を同じ座標で描画する
+    int activeLights = 0;
+    bool tayamaLights = false;
+    if (m_stage5Phase == Stage5Phase::WallClimbLower) activeLights = 1;
+    if (m_stage5Phase == Stage5Phase::WallClimbMiddle) activeLights = 2;
+    if (m_stage5Phase == Stage5Phase::WallClimbUpper) activeLights = 3;
+    if (m_stage5Phase == Stage5Phase::TayamaFireControl) {
+        activeLights = 2;
+        tayamaLights = true;
+    }
+    if (m_stage5Phase == Stage5Phase::EastsourceBattle && m_enemies[0].active &&
+        m_enemies[0].bossPhase >= BossNormalPhase2 && m_enemies[0].age % 180 < 90) {
+        activeLights = 1;
+    }
+    for (int index = 0; index < activeLights; ++index) {
+        const SearchlightState& light = m_searchlights[index];
+        if (light.destroyed) continue;
+        Vector3 source {
+            ToWorldX((static_cast<float>(index) - 1.0f) * 0.72f),
+            ToWorldY(0.72f - static_cast<float>(index) * 0.22f),
+            tayamaLights ? 57.0f : 46.0f
+        };
+        if (tayamaLights) {
+            const TayamaPartGroup group = index == 0 ?
+                TayamaPartGroup::LeftSearchlight : TayamaPartGroup::RightSearchlight;
+            const Stage5GroupBounds bounds = TayamaModelView::GroupBounds(
+                transform, m_tayamaTransformation, state, group);
+            if (bounds.valid) source = bounds.center;
+        }
+        const bool locked = light.phase == SearchlightPhase::Locked ||
+            light.phase == SearchlightPhase::Firing;
+        const Vector3 target {
+            ToWorldX(locked ? light.lockedX : light.beamX),
+            ToWorldY(locked ? light.lockedY : light.beamY), PlayerRailZ
+        };
+        const Vector3 delta = target - source;
+        const float length = (std::max)(0.001f, delta.Length());
+        const Vector3 direction = delta / length;
+        const float yaw = std::atan2(direction.z, -direction.x);
+        const float pitch = -std::asin(direction.y);
+        const float* beamColor = locked ? SearchlightLockedColor : SearchlightColor;
+        const Matrix4x4 beamWorld = Matrix4x4::Translation(source + direction * (length * 0.5f)) *
+            Matrix4x4::RotationY(yaw) * Matrix4x4::RotationZ(pitch) *
+            Matrix4x4::Scale({length, locked ? 0.12f : 0.18f, locked ? 0.12f : 0.18f});
+        DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box), beamWorld, beamColor);
+        DrawModelPrimitive(renderer, camera, 2, source.x, source.y, source.z,
+            0.72f, 0.42f, 0.72f, locked ? SearchlightLockedColor : SatelliteLightColor);
+    }
+
+    // 有効弱点へ小さな発光リングを重ねて攻略対象を明示する
+    if (m_stage5Phase >= Stage5Phase::TayamaFireControl &&
+        m_stage5Phase <= Stage5Phase::TayamaCommandCore) {
+        constexpr TayamaPartGroup Groups[] = {
+            TayamaPartGroup::LeftSearchlight, TayamaPartGroup::RightSearchlight,
+            TayamaPartGroup::FireControlRadar, TayamaPartGroup::LeftLiftEngine,
+            TayamaPartGroup::RightLiftEngine, TayamaPartGroup::CommandCore
+        };
+        for (const TayamaWeakpointState& weakpoint : m_tayamaWeakpoints) {
+            if (!weakpoint.active || weakpoint.destroyed) continue;
+            const Stage5GroupBounds bounds = TayamaModelView::GroupBounds(transform,
+                m_tayamaTransformation, state, Groups[static_cast<std::size_t>(weakpoint.type)]);
+            if (!bounds.valid) continue;
+            const float size = (std::max)(0.75f, (std::min)(2.2f, bounds.radius * 0.45f));
+            const Matrix4x4 world = Matrix4x4::Translation(bounds.center + Vector3 {0.0f, 0.0f, -0.12f}) *
+                Matrix4x4::Scale({size, size, 1.0f});
+            renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * world,
+                static_cast<float>(m_frame % 30) / 30.0f, 0});
+        }
+    }
+
+    if (m_stage5Phase == Stage5Phase::TayamaCollapse && m_stage5PhaseTimer >= 330 &&
+        m_stage5PhaseTimer < TayamaCollapseFrames) {
+        // 最終90フレームは内部白光と二重衝撃波で輪郭ごと消滅させる
+        const float finalProgress = Math::Clamp01(static_cast<float>(m_stage5PhaseTimer - 450) / 90.0f);
+        const float glow = Math::Clamp01(static_cast<float>(m_stage5PhaseTimer - 330) / 120.0f);
+        const Matrix4x4 glowWorld = Matrix4x4::Translation(transform.position) *
+            Matrix4x4::Scale({3.0f + glow * 8.0f, 2.0f + glow * 5.0f, 1.0f});
+        renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * glowWorld,
+            static_cast<float>(m_frame % 24) / 24.0f, 0});
+        if (finalProgress > 0.0f) {
+            const Matrix4x4 shockwave = Matrix4x4::Translation(transform.position) *
+                Matrix4x4::Scale({4.0f + finalProgress * 24.0f,
+                    4.0f + finalProgress * 24.0f, 1.0f});
+            renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * shockwave,
+                finalProgress, 0});
+        }
+    }
+}
+
+/**
+ * @brief Stage 5の雨、稲光、照準表示を画面空間へ描画する
+ * @param renderer 描画先レンダラー
+ * @return なし
+ */
+void SideScrollingShooter::DrawStage5Weather(Renderer& renderer) const {
+    if (m_stageNumber != 5) return;
+    float intensity = 0.0f;
+    if (m_stage5Phase == Stage5Phase::Approach) {
+        intensity = 0.22f + static_cast<float>(m_chapterNumber - 1) * 0.27f;
+    } else if (m_stage5Phase <= Stage5Phase::EastsourceFall) {
+        intensity = 1.0f;
+    } else if (m_stage5Phase <= Stage5Phase::WallClimbUpper) {
+        intensity = 0.88f - m_tayamaTransformation * 0.28f;
+    } else if (m_stage5Phase <= Stage5Phase::TayamaFireControl) {
+        intensity = 0.42f;
+    } else if (m_stage5Phase == Stage5Phase::TayamaLiftEngines) {
+        intensity = 0.22f;
+    } else if (m_stage5Phase == Stage5Phase::TayamaCommandCore) {
+        intensity = 0.22f * (1.0f - Math::Clamp01(static_cast<float>(m_stage5PhaseTimer) / 180.0f));
+    }
+
+    // 最大96本の決定的な横殴り雨を画面空間へ流す
+    const int rainCount = intensity > 0.0f ? static_cast<int>(32.0f + intensity * 64.0f) : 0;
+    for (int index = 0; index < rainCount; ++index) {
+        const int phase = (index * 73 + m_frame * (3 + index % 3)) % 220;
+        const int row = (index * 47 + m_frame * (5 + index % 2)) % 210;
+        const float x = -1.10f + static_cast<float>(phase) * 0.010f;
+        const float y = 1.05f - static_cast<float>(row) * 0.010f;
+        const float rainColor[] = {0.50f, 0.72f, 0.90f, 0.16f + intensity * 0.34f};
+        DrawShape(renderer, x, y, 0.004f + intensity * 0.002f,
+            0.035f + intensity * 0.055f, rainColor);
+    }
+
+    // 稲光はTAYAMAの輪郭と警告灯を一瞬だけ強調する
+    if (intensity > 0.30f && ((m_frame % 241) < 3 || ((m_frame + 73) % 389) < 2)) {
+        const float alpha = (m_frame % 2 == 0 ? 0.30f : 0.16f) * intensity;
+        renderer.Draw(Rect {{0.0f, 0.0f}, {2.0f, 2.0f}}, {0.72f, 0.82f, 1.0f, alpha});
+    }
+
+    // 甲板掃射、排気レーン、コアレーザーは発射前だけ危険範囲を固定表示する
+    if (m_stage5Phase == Stage5Phase::TayamaFireControl && m_stage5AttackTimer % 210 < 36) {
+        renderer.Draw(Rect {{0.0f, m_stage5CoreTargetY}, {1.86f, 0.055f}},
+            {1.0f, 0.12f, 0.08f, 0.36f});
+    }
+    if (m_stage5Phase == Stage5Phase::TayamaLiftEngines && m_stage5AttackTimer % 132 < 32) {
+        renderer.Draw(Rect {{m_stage5CoreTargetX, m_stage5CoreTargetY}, {0.38f, 0.075f}},
+            {1.0f, 0.34f, 0.08f, 0.42f});
+        renderer.Draw(Circle {{m_stage5CoreTargetX, m_stage5CoreTargetY}, 0.12f},
+            {1.0f, 0.58f, 0.12f, 0.58f});
+    }
+    if (m_stage5Phase == Stage5Phase::TayamaCommandCore && m_stage5AttackTimer % 180 < 42) {
+        const Vector2 target {m_stage5CoreTargetX, m_stage5CoreTargetY};
+        renderer.Draw(Circle {target, 0.11f}, {1.0f, 0.08f, 0.04f, 0.62f});
+    }
+
+    // 検出円と固定ロック地点を表示し、光軸がロック後に追尾しないことを示す
+    const bool eastsourceSearchlight = m_stage5Phase == Stage5Phase::EastsourceBattle &&
+        m_enemies[0].active && m_enemies[0].bossPhase >= BossNormalPhase2 &&
+        m_enemies[0].age % 180 < 90;
+    const bool showSearchlights = eastsourceSearchlight ||
+        (m_stage5Phase >= Stage5Phase::WallClimbLower &&
+            m_stage5Phase <= Stage5Phase::WallClimbUpper) ||
+        m_stage5Phase == Stage5Phase::TayamaFireControl;
+    if (!showSearchlights) return;
+    for (const SearchlightState& light : m_searchlights) {
+        if (light.destroyed || light.phase == SearchlightPhase::Cooldown) continue;
+        const bool locked = light.phase == SearchlightPhase::Locked ||
+            light.phase == SearchlightPhase::Firing;
+        const Vector2 target {locked ? light.lockedX : light.beamX,
+            locked ? light.lockedY : light.beamY};
+        const bool detecting = light.phase == SearchlightPhase::Detecting;
+        const ColorF color = locked ? ColorF {1.0f, 0.08f, 0.08f, 0.86f} :
+            (detecting ? ColorF {1.0f, 0.78f, 0.18f, 0.34f} :
+                ColorF {0.92f, 0.82f, 0.42f, 0.16f});
+        renderer.Draw(Circle {target, locked ? 0.075f : SearchlightDetectionRadius}, color);
+        if (locked) {
+            renderer.Draw(Rect {{target.x - 0.10f, target.y}, {0.055f, 0.008f}}, color);
+            renderer.Draw(Rect {{target.x + 0.10f, target.y}, {0.055f, 0.008f}}, color);
+            renderer.Draw(Rect {{target.x, target.y - 0.10f}, {0.008f, 0.055f}}, color);
+            renderer.Draw(Rect {{target.x, target.y + 0.10f}, {0.008f, 0.055f}}, color);
+        }
+    }
+}
+
+/**
+ * @brief Stage 5専用HUDを描画する
+ * @param renderer 描画先レンダラー
+ * @return なし
+ */
+void SideScrollingShooter::DrawStage5Hud(Renderer& renderer) const {
+    if (m_stage5Phase == Stage5Phase::Approach ||
+        m_stage5Phase == Stage5Phase::TayamaCollapse ||
+        m_stage5Phase == Stage5Phase::EndingReady) return;
+    constexpr float Back[] = {0.08f, 0.05f, 0.12f, 0.90f};
+    constexpr float Fill[] = {0.96f, 0.14f, 0.24f, 1.0f};
+    constexpr float Accent[] = {0.16f, 0.82f, 1.0f, 1.0f};
+    constexpr float BarWidth = 0.62f;
+
+    if (m_stage5Phase == Stage5Phase::EastsourceBattle) {
+        const float hpRate = Math::Clamp01(m_displayBossHp / static_cast<float>(EastsourceMaxHp));
+        DrawShape(renderer, 0.0f, 0.76f, BarWidth, 0.025f, Back);
+        DrawShape(renderer, BarWidth * (1.0f - hpRate), 0.76f,
+            BarWidth * hpRate, 0.018f, Fill);
+        for (int phaseDivider = 1; phaseDivider < BossPhaseCount; ++phaseDivider) {
+            const float x = -BarWidth + BarWidth * 2.0f *
+                static_cast<float>(phaseDivider) / static_cast<float>(BossPhaseCount);
+            DrawShape(renderer, x, 0.755f, 0.008f, 0.035f, Accent);
+        }
+        renderer.DrawText("EASTSOURCE", TextAlign::Center, 0.017f,
+            {1.0f, 0.42f, 0.55f, 1.0f}, {0.0f, 0.86f});
+        constexpr const char* Labels[] = {"PRECISION", "CROSSFIRE", "PURSUIT", "LAST CONTRACT"};
+        const int phase = m_enemies[0].active ? m_enemies[0].bossPhase : 0;
+        renderer.DrawText(Labels[(std::clamp)(phase, 0, 3)], {-BarWidth, 0.81f}, 0.012f,
+            {1.0f, 0.82f, 0.30f, 1.0f});
+        return;
+    }
+    if (m_stage5Phase == Stage5Phase::EastsourceIntro) {
+        renderer.DrawText("HOSTILE SIGNAL APPROACHING", TextAlign::Center, 0.018f,
+            {1.0f, 0.34f, 0.32f, 1.0f}, {0.0f, 0.78f});
+        return;
+    }
+    if (m_stage5Phase == Stage5Phase::EastsourceFall) {
+        renderer.DrawText("SIGNAL LOST", TextAlign::Center, 0.030f,
+            {1.0f, 0.18f, 0.18f, 1.0f}, {0.0f, 0.12f});
+        return;
+    }
+    if (m_stage5Phase >= Stage5Phase::WallClimbTransition &&
+        m_stage5Phase <= Stage5Phase::WallClimbUpper) {
+        const char* section = m_stage5Phase <= Stage5Phase::WallClimbLower ?
+            "WALL CLIMB: LOWER" : (m_stage5Phase == Stage5Phase::WallClimbMiddle ?
+                "WALL CLIMB: MIDDLE" : "WALL CLIMB: UPPER");
+        renderer.DrawText(section, TextAlign::Center, 0.017f,
+            {0.85f, 0.94f, 1.0f, 1.0f}, {0.0f, 0.84f});
+        char status[40];
+        int remaining = 0;
+        for (const SearchlightState& light : m_searchlights) if (!light.destroyed) ++remaining;
+        std::snprintf(status, sizeof(status), "SEARCHLIGHTS ACTIVE %d", remaining);
+        renderer.DrawText(status, TextAlign::Center, 0.012f,
+            {1.0f, 0.74f, 0.20f, 1.0f}, {0.0f, 0.78f});
+        return;
+    }
+    if (m_stage5Phase == Stage5Phase::RooftopArrival ||
+        m_stage5Phase == Stage5Phase::CarrierTransformation) {
+        char status[48];
+        std::snprintf(status, sizeof(status), "MOBILE FORTRESS TAYAMA  %03d%%",
+            static_cast<int>(m_tayamaTransformation * 100.0f));
+        renderer.DrawText(status, TextAlign::Center, 0.018f,
+            {0.30f, 0.88f, 1.0f, 1.0f}, {0.0f, 0.82f});
+        return;
+    }
+
+    // TAYAMA戦は現在フェーズの有効弱点HP合計だけを表示する
+    int maxHp = 0;
+    for (const TayamaWeakpointState& weakpoint : m_tayamaWeakpoints) {
+        if (IsTayamaWeakpointActiveForPhase(weakpoint.type, m_stage5Phase)) {
+            maxHp += weakpoint.maxHp;
+        }
+    }
+    const float hpRate = maxHp > 0 ? Math::Clamp01(m_displayBossHp / static_cast<float>(maxHp)) : 0.0f;
+    DrawShape(renderer, 0.0f, 0.74f, BarWidth, 0.025f, Back);
+    DrawShape(renderer, BarWidth * (1.0f - hpRate), 0.74f,
+        BarWidth * hpRate, 0.018f, Accent);
+    renderer.DrawText("MOBILE FORTRESS", TextAlign::Center, 0.011f,
+        {0.65f, 0.82f, 0.90f, 1.0f}, {0.0f, 0.88f});
+    renderer.DrawText("TAYAMA", TextAlign::Center, 0.022f,
+        {0.20f, 0.88f, 1.0f, 1.0f}, {0.0f, 0.83f});
+    const char* phase = m_stage5Phase == Stage5Phase::TayamaFireControl ? "PHASE: FIRE CONTROL" :
+        (m_stage5Phase == Stage5Phase::TayamaLiftEngines ?
+            "PHASE: LIFT ENGINES" : "PHASE: COMMAND CORE");
+    renderer.DrawText(phase, {-BarWidth, 0.79f}, 0.012f,
+        {1.0f, 0.82f, 0.30f, 1.0f});
+    char components[96];
+    if (m_stage5Phase == Stage5Phase::TayamaFireControl) {
+        std::snprintf(components, sizeof(components), "L-LIGHT[%c]  R-LIGHT[%c]  RADAR[%c]",
+            m_tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::LeftSearchlight)].destroyed ? 'X' : ' ',
+            m_tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::RightSearchlight)].destroyed ? 'X' : ' ',
+            m_tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::FireControlRadar)].destroyed ? 'X' : ' ');
+    } else if (m_stage5Phase == Stage5Phase::TayamaLiftEngines) {
+        std::snprintf(components, sizeof(components), "L-ENGINE[%c]  R-ENGINE[%c]",
+            m_tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::LeftLiftEngine)].destroyed ? 'X' : ' ',
+            m_tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::RightLiftEngine)].destroyed ? 'X' : ' ');
+    } else {
+        std::snprintf(components, sizeof(components), "COMMAND CORE[%c]",
+            m_tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::CommandCore)].destroyed ? 'X' : ' ');
+    }
+    renderer.DrawText(components, TextAlign::Center, 0.010f,
+        {0.72f, 0.86f, 0.92f, 1.0f}, {0.0f, 0.68f});
+}
+
 void SideScrollingShooter::Render(Renderer& renderer) const {
     // 安定した2D表示では全オブジェクトを同じ奥行きへ固定する
     if (!IsRailRenderActive()) {
         Render2D(renderer);
-        return;
+    } else {
+        Render3D(renderer);
     }
-    Render3D(renderer);
+    DrawBossNameReveal(renderer);
+    DrawMissionBanner(renderer);
 }
 
 void SideScrollingShooter::Render2D(Renderer& renderer) const {
@@ -2755,7 +5944,7 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
         if (!debris.active) continue;
         Debris sideDebris = debris;
         sideDebris.z = SidePlaneZ - 0.6f;
-        DrawDebris(renderer, camera, sideDebris);
+        DrawDebris(renderer, camera, sideDebris, 0.0f);
     }
     for (const auto& item : m_items) {
         if (!item.active) continue;
@@ -2764,9 +5953,11 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
         DrawItemModel(renderer, camera, sideItem, Math::HalfPi);
     }
     DrawPlayerModel(renderer, camera, ToWorldX(m_playerX), ToWorldY(m_playerY),
-        SidePlaneZ, m_invincible == 0 || (m_invincible / 5) % 2 == 0, Math::HalfPi);
+        SidePlaneZ, m_playerDestructionTimer == 0 &&
+        (m_invincible == 0 || (m_invincible / 5) % 2 == 0), Math::HalfPi);
 
     renderer.ResetCamera();
+    DrawStage5Weather(renderer);
     DrawAttackWarnings2D(renderer);
 
     char stageStatus[48];
@@ -2783,16 +5974,15 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     renderer.DrawText(scoreStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.025f });
     renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
     renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
-    renderer.DrawText("MOVE: ARROWS/WASD  SHOT: Z/SPACE  MODE: X", { -0.92f, -0.92f }, 0.012f,
+    renderer.DrawText(IsStage5ViewLocked() ?
+        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  3D MODE LOCKED" :
+        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  MODE: X", { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
 
     DrawBossHud(renderer);
     DrawChapterResult(renderer);
     DrawRestart(renderer);
     DrawBossStory(renderer);
-    if (m_clear) {
-        renderer.DrawText(m_stageNumber == 5 ? "ALL STAGES CLEAR" : "STAGE CLEAR", { -0.32f, 0.12f }, 0.045f, { 0.2f, 1.0f, 0.5f, 1.0f });
-    }
 }
 
 void SideScrollingShooter::Render3D(Renderer& renderer) const {
@@ -2879,7 +6069,8 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
             const float sideX = WrapNdcX(i * 0.41f - m_scroll * 0.32f) * 17.0f;
             const float railX = -55.0f + static_cast<float>((i * 73) % 1100) / 10.0f;
             constexpr float sideZ = SidePlaneZ + 14.0f;
-            const float railZ = 8.0f + std::fmod(static_cast<float>(i * 43) - m_scroll * 28.0f + 110.0f, 110.0f);
+            const float railZ = 8.0f +
+                WrapDistance(static_cast<float>(i * 43) - m_scroll * 28.0f, 110.0f);
             const float x = Math::Lerp(sideX, railX, railWeight);
             const float y = Math::Lerp(-5.175f, -2.825f, railWeight);
             const float z = Math::Lerp(sideZ, railZ, railWeight);
@@ -2992,50 +6183,6 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
             moonZ - Math::Lerp(0.01f, 0.05f, railWeight),
             Math::Lerp(0.52f, 1.48f, railWeight), Math::Lerp(0.52f, 1.48f, railWeight),
             Math::Lerp(0.15f, 0.41f, railWeight), DesertNightSkyColor);
-        if (isTower) {
-            // 中盤から巨大ビルの壁面を流し、レール視点では垂直移動として展開する
-            const float wallClimb = m_bossBattle ? 1.0f : SmoothStep(Math::Clamp01(
-                static_cast<float>(m_frame - Stage5WallClimbStartFrame) /
-                static_cast<float>(Stage5WallClimbEndFrame - Stage5WallClimbStartFrame)));
-            // 2Dには壁面を出さず、3Dへの遷移に合わせて視認可能な距離へ展開する
-            const float towerBlend = SmoothStep(railWeight);
-            const float towerY = Math::Lerp(-3.65f, -10.0f - wallClimb * 30.0f, towerBlend);
-            constexpr float towerZ = 62.0f;
-            DrawModelPrimitive(renderer, camera, 1, 0.0f, towerY, towerZ,
-                90.0f * towerBlend, 100.0f * towerBlend, 2.0f * towerBlend, TowerFacadeColor);
-            for (int row = 0; row < 12; ++row) {
-                const float y = towerY - (34.0f - static_cast<float>(row) * 6.2f) * towerBlend;
-                for (int column = -3; column <= 3; ++column) {
-                    const float x = static_cast<float>(column) * 11.2f * towerBlend;
-                    const float* windowColor = (row + column) % 3 == 0 ? TowerNeonColor : CityWindowCyanColor;
-                    DrawModelPrimitive(renderer, camera, 1, x, y, towerZ - 1.10f * towerBlend,
-                        3.8f * towerBlend, 1.1f * towerBlend, 0.12f * towerBlend, windowColor);
-                }
-            }
-            // 壁面を照らすサテライト本体、太陽電池パネル、発光部を描画する
-            const float satelliteX = 24.0f * towerBlend;
-            const float satelliteY = 24.0f * towerBlend;
-            const float satelliteZ = 38.0f;
-            DrawModelPrimitive(renderer, camera, 5, satelliteX, satelliteY, satelliteZ,
-                1.6f * towerBlend, 1.6f * towerBlend, 1.6f * towerBlend, SatelliteBodyColor);
-            DrawModelPrimitive(renderer, camera, 1, satelliteX - 3.2f * towerBlend, satelliteY, satelliteZ,
-                4.8f * towerBlend, 0.16f * towerBlend, 1.1f * towerBlend, SatellitePanelColor);
-            DrawModelPrimitive(renderer, camera, 1, satelliteX + 3.2f * towerBlend, satelliteY, satelliteZ,
-                4.8f * towerBlend, 0.16f * towerBlend, 1.1f * towerBlend, SatellitePanelColor);
-            DrawModelPrimitive(renderer, camera, 5, satelliteX - 0.70f * towerBlend, satelliteY - 0.45f * towerBlend,
-                satelliteZ - 0.80f * towerBlend, 0.48f * towerBlend, 0.48f * towerBlend, 0.48f * towerBlend,
-                SatelliteLightColor);
-            if (m_bossBattle) {
-                DrawModelPrimitive(renderer, camera, 1, 0.0f,
-                    Math::Lerp(-5.60f, -3.55f, railWeight), Math::Lerp(SidePlaneZ + 13.45f, 45.0f, railWeight),
-                    Math::Lerp(34.0f, 64.0f, railWeight), Math::Lerp(0.60f, 0.20f, railWeight),
-                    Math::Lerp(0.45f, 64.0f, railWeight), TowerRoofColor);
-                DrawModelPrimitive(renderer, camera, 1, 0.0f,
-                    Math::Lerp(-5.22f, -3.42f, railWeight), Math::Lerp(SidePlaneZ + 13.40f, 45.0f, railWeight),
-                    Math::Lerp(9.0f, 18.0f, railWeight), Math::Lerp(0.10f, 0.05f, railWeight),
-                    Math::Lerp(0.15f, 18.0f, railWeight), TowerNeonColor);
-            }
-        }
         DrawModelPrimitive(renderer, camera, 1, 0.0f,
             Math::Lerp(-11.0f, -4.0f, railWeight), Math::Lerp(SidePlaneZ + 14.0f, 45.0f, railWeight),
             Math::Lerp(60.0f, 140.0f, railWeight), Math::Lerp(10.0f, 0.7f, railWeight),
@@ -3144,8 +6291,12 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     DrawStage1Meteor(renderer, camera, railWeight);
     }
 
+    if (isTower) RenderStage5(renderer, camera);
+
     for (const auto& enemy : m_enemies) {
         if (!enemy.active) continue;
+        if (m_stageNumber == 5 && m_stage5Phase == Stage5Phase::EastsourceIntro &&
+            m_stage5PhaseTimer < 58 && enemy.type == Stage::BossEnemy) continue;
         Enemy drawEnemy = enemy;
         const bool enteringRail = m_viewTransitionTimer > 0 && m_nextViewMode == ViewMode::Rail3D;
         const bool exitingRail = m_viewTransitionTimer > 0 && m_viewMode == ViewMode::Rail3D;
@@ -3190,13 +6341,14 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     }
     for (const auto& debris : m_debris) {
         if (!debris.active) continue;
-        DrawDebris(renderer, camera, debris);
+        DrawDebris(renderer, camera, debris, railWeight);
     }
     for (const auto& item : m_items) {
         if (!item.active) continue;
         DrawItemModel(renderer, camera, item, playerYaw);
     }
-    const bool playerVisible = m_invincible == 0 || (m_invincible / 5) % 2 == 0;
+    const bool playerVisible = m_playerDestructionTimer == 0 &&
+        (m_invincible == 0 || (m_invincible / 5) % 2 == 0);
     if (railWeight > 0.01f && playerVisible) {
         const float groundTopY = (isDesert || isOcean || isCity) ? -3.65f : -3.275f;
         DrawBlobShadow(renderer, camera, ToWorldX(m_playerX),
@@ -3209,6 +6361,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     DrawAttackWarnings3D(renderer, camera, railWeight);
 
     renderer.ResetCamera();
+    DrawStage5Weather(renderer);
 
     char stageStatus[48];
     char scoreStatus[32];
@@ -3224,7 +6377,9 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     renderer.DrawText(scoreStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.025f });
     renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
     renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
-    renderer.DrawText("MOVE: ARROWS/WASD  SHOT: Z/SPACE  MODE: X", { -0.92f, -0.92f }, 0.012f,
+    renderer.DrawText(IsStage5ViewLocked() ?
+        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  3D MODE LOCKED" :
+        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  MODE: X", { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
     if (m_viewTransitionTimer > 0) {
         renderer.DrawText("CAMERA SHIFT", { -0.16f, -0.02f }, 0.026f,
@@ -3234,7 +6389,4 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     DrawChapterResult(renderer);
     DrawRestart(renderer);
     DrawBossStory(renderer);
-    if (m_clear) {
-        renderer.DrawText(m_stageNumber == 5 ? "ALL STAGES CLEAR" : "STAGE CLEAR", { -0.32f, 0.12f }, 0.045f, { 0.2f, 1.0f, 0.5f, 1.0f });
-    }
 }

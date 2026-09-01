@@ -117,6 +117,65 @@ VS_OUTPUT VSExplosion(uint vertexId : SV_VertexID)
 
 float4 PSExplosion(VS_OUTPUT input) : SV_TARGET
 {
+    if (u_shapeType > 2.5f)
+    {
+        // 戦艦下面から下向きに噴射する補助エンジン炎を生成する
+        float2 uv = input.uv;
+        float distanceFromNozzle = saturate((1.0f - uv.y) * 0.5f);
+        float flicker = sin(u_progress * 19.0f + uv.y * 7.0f) * 0.08f +
+            sin(u_progress * 31.0f - uv.y * 11.0f) * 0.04f;
+        float flameLength = 0.90f + flicker;
+        float width = lerp(0.72f, 0.05f, distanceFromNozzle) *
+            (0.92f + sin(u_progress * 23.0f + distanceFromNozzle * 18.0f) * 0.08f);
+        float body = 1.0f - smoothstep(width * 0.70f, width, abs(uv.x));
+        float tip = 1.0f - smoothstep(flameLength - 0.12f, flameLength, distanceFromNozzle);
+        float core = (1.0f - smoothstep(0.02f, max(0.06f, width * 0.46f), abs(uv.x))) *
+            (1.0f - smoothstep(0.28f, 0.76f, distanceFromNozzle));
+        float alpha = saturate(body * tip * (0.78f + core * 0.42f));
+        if (alpha < 0.01f) discard;
+        float3 color = lerp(float3(1.0f, 0.08f, 0.005f), float3(1.0f, 0.52f, 0.025f),
+            1.0f - distanceFromNozzle);
+        color = lerp(color, float3(1.0f, 0.96f, 0.62f), core);
+        return float4(color, alpha);
+    }
+
+    if (u_shapeType > 1.5f)
+    {
+        // 撃破後半は膨張しながら上昇する黒煙を複数の塊で描く
+        float progress = saturate(u_progress);
+        float2 uv = input.uv;
+        float rise = progress * 0.72f;
+        float spread = 0.12f + progress * 0.34f;
+        float2 p0 = uv - float2(-spread, -0.22f + rise);
+        float2 p1 = uv - float2(spread * 0.75f, -0.05f + rise * 1.12f);
+        float2 p2 = uv - float2(sin(progress * 13.0f) * 0.12f, 0.22f + rise * 0.82f);
+        float smoke = 1.0f - smoothstep(0.22f, 0.58f, length(p0));
+        smoke += 1.0f - smoothstep(0.20f, 0.54f, length(p1));
+        smoke += 1.0f - smoothstep(0.18f, 0.50f, length(p2));
+        float fade = smoothstep(0.02f, 0.14f, progress) * (1.0f - smoothstep(0.68f, 1.0f, progress));
+        float alpha = saturate(smoke) * fade * 0.88f;
+        if (alpha < 0.02f) discard;
+        float shade = 0.025f + saturate(smoke) * 0.055f + progress * 0.035f;
+        return float4(shade.xxx, alpha);
+    }
+
+    if (u_shapeType > 0.5f)
+    {
+        // 上昇速度の異なる円を重ね、テクスチャなしで煙の揺らぎを作る
+        float time = u_progress;
+        float2 uv = input.uv;
+        float2 p0 = uv - float2(sin(time * 1.7f) * 0.16f, -0.38f + frac(time * 0.23f) * 1.35f);
+        float2 p1 = uv - float2(cos(time * 1.3f + 1.8f) * 0.22f, -0.55f + frac(time * 0.19f + 0.42f) * 1.45f);
+        float2 p2 = uv - float2(sin(time * 1.1f + 3.2f) * 0.18f, -0.48f + frac(time * 0.17f + 0.73f) * 1.40f);
+        float smoke = (1.0f - smoothstep(0.20f, 0.55f, length(p0))) * 0.58f;
+        smoke += (1.0f - smoothstep(0.18f, 0.50f, length(p1))) * 0.50f;
+        smoke += (1.0f - smoothstep(0.16f, 0.46f, length(p2))) * 0.42f;
+        float alpha = saturate(smoke) * saturate(1.0f - (uv.y + 0.25f) * 0.28f);
+        if (alpha < 0.02f) discard;
+        float shade = saturate(0.20f + uv.y * 0.13f + smoke * 0.18f);
+        return float4(shade.xxx, alpha * 0.72f);
+    }
+
     float distanceFromCenter = length(input.uv);
     float progress = saturate(u_progress);
     float core = 1.0f - smoothstep(0.03f, 0.34f + progress * 0.18f, distanceFromCenter);
@@ -126,6 +185,77 @@ float4 PSExplosion(VS_OUTPUT input) : SV_TARGET
     float alpha = saturate((core + ring * (0.75f + sparks * 0.25f)) * (1.0f - progress));
     if (alpha < 0.01f) discard;
     float3 color = lerp(float3(1.0f, 0.10f, 0.01f), float3(1.0f, 0.92f, 0.35f), core);
+    return float4(color, alpha);
+}
+)hlsl";
+
+/** @brief 瞬間発光して細く消えるレールガン軌跡の埋め込みHLSL */
+constexpr char RailgunShaderCode[] = R"hlsl(
+struct VS_OUTPUT
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+cbuffer RailgunBuffer : register(b0)
+{
+    float4x4 u_transform;
+    float4 u_color;
+    float u_progress;
+    float u_shapeType;
+    float u_rotation;
+    float u_padding;
+};
+
+VS_OUTPUT VSRailgun(uint vertexId : SV_VertexID)
+{
+    VS_OUTPUT output;
+    float2 localPosition;
+    localPosition.x = float(vertexId & 2) - 1.0f;
+    localPosition.y = float((vertexId & 1) << 1) - 1.0f;
+    output.position = mul(float4(localPosition, 0.0f, 1.0f), u_transform);
+    output.uv = localPosition;
+    return output;
+}
+
+float4 PSRailgun(VS_OUTPUT input) : SV_TARGET
+{
+    if (u_shapeType > 1.5f)
+    {
+        // 加熱された空気が軌跡周辺で蛇行する蜃気楼状の揺らぎを作る
+        float fade = pow(saturate(1.0f - u_progress), 1.35f);
+        float wave0 = sin(input.uv.x * 42.0f + u_progress * 31.0f) * 0.12f;
+        float wave1 = sin(input.uv.x * 67.0f - u_progress * 23.0f) * 0.07f;
+        float upperBand = 1.0f - smoothstep(0.025f, 0.13f, abs(input.uv.y - 0.34f - wave0));
+        float lowerBand = 1.0f - smoothstep(0.025f, 0.13f, abs(input.uv.y + 0.34f - wave1));
+        float centerHaze = 1.0f - smoothstep(0.05f, 0.72f, abs(input.uv.y + wave0 * 0.35f));
+        float endMask = 1.0f - smoothstep(0.88f, 1.0f, abs(input.uv.x));
+        float alpha = saturate((upperBand + lowerBand) * 0.16f + centerHaze * 0.055f) * endMask * fade;
+        if (alpha < 0.008f) discard;
+        float shimmer = 0.5f + 0.5f * sin(input.uv.x * 83.0f + u_progress * 37.0f);
+        return float4(lerp(float3(0.18f, 0.12f, 0.06f), float3(0.72f, 0.56f, 0.32f), shimmer), alpha);
+    }
+
+    if (u_shapeType > 0.5f)
+    {
+        // 発射予測位置を示す細い赤色レーザーポインタを弱く明滅させる
+        float endMask = 1.0f - smoothstep(0.96f, 1.0f, abs(input.uv.x));
+        float lineMask = 1.0f - smoothstep(0.05f, 0.24f, abs(input.uv.y));
+        float pulse = 0.55f + 0.30f * sin(u_progress * 18.0f) * sin(u_progress * 18.0f);
+        float alpha = lineMask * endMask * pulse;
+        if (alpha < 0.01f) discard;
+        return float4(1.0f, 0.015f, 0.005f, alpha);
+    }
+
+    // 発射直後の白い芯と橙色の残光を作り、短時間で急速に減衰させる
+    float fade = pow(saturate(1.0f - u_progress), 2.4f);
+    float endMask = 1.0f - smoothstep(0.90f, 1.0f, abs(input.uv.x));
+    float core = 1.0f - smoothstep(0.015f, 0.075f, abs(input.uv.y));
+    float glow = 1.0f - smoothstep(0.04f, 0.62f, abs(input.uv.y));
+    float flicker = 0.88f + 0.12f * sin(input.uv.x * 91.0f + u_progress * 47.0f);
+    float alpha = saturate(core + glow * 0.68f) * endMask * fade * flicker;
+    if (alpha < 0.01f) discard;
+    float3 color = lerp(float3(1.0f, 0.10f, 0.01f), float3(1.0f, 0.98f, 0.72f), core);
     return float4(color, alpha);
 }
 )hlsl";
@@ -339,7 +469,7 @@ bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
     
     // Depth Stencil View用のDescriptor Heap
     D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc = {};
-    dsvHeapDesc.NumDescriptors = 1;
+    dsvHeapDesc.NumDescriptors = 2;
     dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
     dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
     if (FAILED(m_device->CreateDescriptorHeap(&dsvHeapDesc, IID_PPV_ARGS(&m_dsvHeap)))) {
@@ -410,8 +540,8 @@ bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
     D3D12_RESOURCE_DESC depthDesc = {};
     depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     depthDesc.Alignment = 0;
-    depthDesc.Width = LOW_RES_WIDTH;
-    depthDesc.Height = LOW_RES_HEIGHT;
+    depthDesc.Width = static_cast<UINT64>(m_width);
+    depthDesc.Height = static_cast<UINT>(m_height);
     depthDesc.DepthOrArraySize = 1;
     depthDesc.MipLevels = 1;
     depthDesc.Format = DXGI_FORMAT_D32_FLOAT;
@@ -448,6 +578,24 @@ bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
     dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
     dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
     m_device->CreateDepthStencilView(m_depthStencil.Get(), &dsvDesc, m_dsvHeap->GetCPUDescriptorHandleForHeapStart());
+
+    // レトロ映像効果用の低解像度Depth Bufferを同じ定義から生成する
+    depthDesc.Width = LOW_RES_WIDTH;
+    depthDesc.Height = LOW_RES_HEIGHT;
+    depthHr = m_device->CreateCommittedResource(
+        &depthHeapProps,
+        D3D12_HEAP_FLAG_NONE,
+        &depthDesc,
+        D3D12_RESOURCE_STATE_DEPTH_WRITE,
+        &depthClearValue,
+        IID_PPV_ARGS(&m_lowResolutionDepthStencil));
+    if (FAILED(depthHr)) {
+        MessageBoxA(NULL, "CreateCommittedResource (Low Resolution DepthStencil) Failed", "Error", MB_OK);
+        return false;
+    }
+    D3D12_CPU_DESCRIPTOR_HANDLE lowResolutionDsvHandle = m_dsvHeap->GetCPUDescriptorHandleForHeapStart();
+    lowResolutionDsvHandle.ptr += m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+    m_device->CreateDepthStencilView(m_lowResolutionDepthStencil.Get(), &dsvDesc, lowResolutionDsvHandle);
 
     D3D12_RANGE readRange = { 0, 0 };
     if (FAILED(m_constantBuffer->Map(0, &readRange, reinterpret_cast<void**>(&m_cbvCpuData)))) {
@@ -851,6 +999,57 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
+    /** @brief C++文字列からレールガン軌跡シェーダーをコンパイルする */
+    ComPtr<ID3DBlob> railgunVertexShader;
+    ComPtr<ID3DBlob> railgunPixelShader;
+    error.Reset();
+    HRESULT hrRailgunVS = D3DCompile(
+        RailgunShaderCode, sizeof(RailgunShaderCode) - 1, "EmbeddedRailgunShader",
+        nullptr, nullptr, "VSRailgun", "vs_5_0", shaderCompileFlags, 0,
+        &railgunVertexShader, &error);
+    if (FAILED(hrRailgunVS)) {
+        if (error) MessageBoxA(NULL, static_cast<char*>(error->GetBufferPointer()),
+            "Railgun Shader Compile Error (VS)", MB_OK);
+        return false;
+    }
+
+    error.Reset();
+    HRESULT hrRailgunPS = D3DCompile(
+        RailgunShaderCode, sizeof(RailgunShaderCode) - 1, "EmbeddedRailgunShader",
+        nullptr, nullptr, "PSRailgun", "ps_5_0", shaderCompileFlags, 0,
+        &railgunPixelShader, &error);
+    if (FAILED(hrRailgunPS)) {
+        if (error) MessageBoxA(NULL, static_cast<char*>(error->GetBufferPointer()),
+            "Railgun Shader Compile Error (PS)", MB_OK);
+        return false;
+    }
+
+    // レールガン軌跡は加算ブレンドで背景へ発光を重ねる
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC railgunPsoDesc = playerShotPsoDesc;
+    railgunPsoDesc.VS = {railgunVertexShader->GetBufferPointer(), railgunVertexShader->GetBufferSize()};
+    railgunPsoDesc.PS = {railgunPixelShader->GetBufferPointer(), railgunPixelShader->GetBufferSize()};
+    if (FAILED(m_device->CreateGraphicsPipelineState(
+        &railgunPsoDesc, IID_PPV_ARGS(&m_pipelineStateRailgun)))) {
+        MessageBoxA(NULL, "CreateGraphicsPipelineState (Railgun) Failed",
+            "PSO Creation Error", MB_OK);
+        return false;
+    }
+
+    // 黒煙は背景を暗く覆える通常アルファブレンドで合成する
+    explosionPsoDesc.BlendState.RenderTarget[0] = {
+        TRUE, FALSE,
+        D3D12_BLEND_SRC_ALPHA, D3D12_BLEND_INV_SRC_ALPHA, D3D12_BLEND_OP_ADD,
+        D3D12_BLEND_ONE, D3D12_BLEND_INV_SRC_ALPHA, D3D12_BLEND_OP_ADD,
+        D3D12_LOGIC_OP_NOOP,
+        D3D12_COLOR_WRITE_ENABLE_ALL,
+    };
+    if (FAILED(m_device->CreateGraphicsPipelineState(
+        &explosionPsoDesc, IID_PPV_ARGS(&m_pipelineStateExplosionSmoke)))) {
+        MessageBoxA(NULL, "CreateGraphicsPipelineState (Explosion Smoke) Failed",
+            "PSO Creation Error", MB_OK);
+        return false;
+    }
+
     // Fullscreen Triangleで低解像度RenderTargetを拡大するPSOを生成する
     ComPtr<ID3DBlob> upscaleVertexShader;
     ComPtr<ID3DBlob> upscalePixelShader;
@@ -889,6 +1088,8 @@ bool D3D12RenderingService::InitPipeline() {
  * フレームの描画を開始する
  */
 void D3D12RenderingService::BeginFrame() {
+    // フレーム途中のRenderTarget切替を避けるため、要求値をフレーム単位で確定する
+    m_frameRetroEffectEnabled = m_retroEffectEnabled;
     // フレームごとに定数バッファのインデックスをリセット
     m_constantBufferCursor = 0;
     m_currentPipelineType = 0;
@@ -899,23 +1100,31 @@ void D3D12RenderingService::BeginFrame() {
 
     m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
 
-    D3D12_VIEWPORT viewport = { 0.0f, 0.0f, static_cast<float>(LOW_RES_WIDTH), static_cast<float>(LOW_RES_HEIGHT), 0.0f, 1.0f };
-    D3D12_RECT scissorRect = { 0, 0, static_cast<LONG>(LOW_RES_WIDTH), static_cast<LONG>(LOW_RES_HEIGHT) };
+    const UINT renderWidth = m_frameRetroEffectEnabled ? LOW_RES_WIDTH : static_cast<UINT>(m_width);
+    const UINT renderHeight = m_frameRetroEffectEnabled ? LOW_RES_HEIGHT : static_cast<UINT>(m_height);
+    D3D12_VIEWPORT viewport = { 0.0f, 0.0f, static_cast<float>(renderWidth), static_cast<float>(renderHeight), 0.0f, 1.0f };
+    D3D12_RECT scissorRect = { 0, 0, static_cast<LONG>(renderWidth), static_cast<LONG>(renderHeight) };
     m_commandList->RSSetViewports(1, &viewport);
     m_commandList->RSSetScissorRects(1, &scissorRect);
 
     D3D12_RESOURCE_BARRIER barrier = {};
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-    barrier.Transition.pResource = m_lowResolutionRenderTarget.Get();
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    barrier.Transition.pResource = m_frameRetroEffectEnabled
+        ? m_lowResolutionRenderTarget.Get() : m_renderTargets[m_frameIndex].Get();
+    barrier.Transition.StateBefore = m_frameRetroEffectEnabled
+        ? D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE : D3D12_RESOURCE_STATE_PRESENT;
     barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
     barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     m_commandList->ResourceBarrier(1, &barrier);
 
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
-    rtvHandle.ptr += static_cast<SIZE_T>(2) * m_rtvDescriptorSize;
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_frameRetroEffectEnabled
+        ? m_rtvHeap->GetCPUDescriptorHandleForHeapStart() : GetRtvCpuDescriptorHandle();
+    if (m_frameRetroEffectEnabled) rtvHandle.ptr += static_cast<SIZE_T>(2) * m_rtvDescriptorSize;
     D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = m_dsvHeap->GetCPUDescriptorHandleForHeapStart();
+    if (m_frameRetroEffectEnabled) {
+        dsvHandle.ptr += m_device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
+    }
     constexpr float clearColor[] = { 0.05f, 0.05f, 0.1f, 1.0f };
     m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
     m_commandList->ClearDepthStencilView(dsvHandle, D3D12_CLEAR_FLAG_DEPTH, 1.0f, 0, 0, nullptr);
@@ -927,7 +1136,7 @@ void D3D12RenderingService::BeginFrame() {
  * フレームの描画を終了する
  */
 void D3D12RenderingService::EndFrame() {
-    if (!m_sceneUpscaled) DrawLowResolutionToBackBuffer();
+    if (m_frameRetroEffectEnabled && !m_sceneUpscaled) DrawLowResolutionToBackBuffer();
 
     // BackBufferをPresent可能な状態へ戻す
     D3D12_RESOURCE_BARRIER barrier = {};
@@ -1059,8 +1268,10 @@ void D3D12RenderingService::SetCamera(const CameraMatrices& matrices, const View
     m_hasCamera = viewport.IsValid();
     if (m_hasCamera) {
         // ウィンドウ基準のカメラ領域を低解像度RenderTargetへ写像する
-        const float scaleX = static_cast<float>(LOW_RES_WIDTH) / static_cast<float>(m_width);
-        const float scaleY = static_cast<float>(LOW_RES_HEIGHT) / static_cast<float>(m_height);
+        const float scaleX = m_frameRetroEffectEnabled
+            ? static_cast<float>(LOW_RES_WIDTH) / static_cast<float>(m_width) : 1.0f;
+        const float scaleY = m_frameRetroEffectEnabled
+            ? static_cast<float>(LOW_RES_HEIGHT) / static_cast<float>(m_height) : 1.0f;
         const LONG left = static_cast<LONG>(viewport.x * scaleX);
         const LONG top = static_cast<LONG>(viewport.y * scaleY);
         const LONG right = static_cast<LONG>((viewport.x + viewport.width) * scaleX);
@@ -1076,7 +1287,7 @@ void D3D12RenderingService::SetCamera(const CameraMatrices& matrices, const View
 
 void D3D12RenderingService::ResetCamera() {
     // ワールド描画を確定し、以降のHUDをBackBufferへ直接描画する
-    if (!m_sceneUpscaled) DrawLowResolutionToBackBuffer();
+    if (m_frameRetroEffectEnabled && !m_sceneUpscaled) DrawLowResolutionToBackBuffer();
     m_hasCamera = false;
     D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height), 0.0f, 1.0f};
     D3D12_RECT scissor{0, 0, m_width, m_height};
@@ -1229,12 +1440,43 @@ void D3D12RenderingService::DrawExplosion(const ExplosionVisual& explosion) {
     }
     cbData->u_Color = {1.0f, 1.0f, 1.0f, 1.0f};
     cbData->u_time = explosion.progress;
-    cbData->u_shapeType = 0.0f;
+    cbData->u_shapeType = static_cast<float>(explosion.effectType);
     cbData->u_rotAngle = 0.0f;
 
     // 爆発専用PSOで画面正対クアッドを発行する
     const int previousPipelineType = m_currentPipelineType;
-    m_commandList->SetPipelineState(m_pipelineStateExplosion.Get());
+    m_commandList->SetPipelineState((explosion.effectType == 0 || explosion.effectType == 3) ?
+        m_pipelineStateExplosion.Get() : m_pipelineStateExplosionSmoke.Get());
+    m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
+    m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
+    const D3D12_GPU_VIRTUAL_ADDRESS address = m_constantBuffer->GetGPUVirtualAddress() +
+        static_cast<UINT64>(m_constantBufferCursor) * 256;
+    m_commandList->SetGraphicsRootConstantBufferView(0, address);
+    m_commandList->DrawInstanced(4, 1, 0, 0);
+    ++m_constantBufferCursor;
+    SetPipelineState(previousPipelineType);
+}
+
+/** @brief 埋め込みHLSLを使用してレールガン軌跡を描画する */
+void D3D12RenderingService::DrawRailgun(const RailgunVisual& railgun) {
+    if (m_constantBufferCursor >= MAX_CONSTANT_BUFFER_ELEMENTS) return;
+
+    // 3D空間の軌跡Transformと消滅進行率を定数バッファへ設定する
+    auto* cbData = reinterpret_cast<RendererTransformBufferData*>(
+        reinterpret_cast<char*>(m_cbvCpuData) + static_cast<size_t>(m_constantBufferCursor) * 256);
+    for (int row = 0; row < 4; ++row) {
+        for (int column = 0; column < 4; ++column) {
+            cbData->u_wvpMatrix.m[row][column] = railgun.wvpMatrix.m[row][column];
+        }
+    }
+    cbData->u_Color = {1.0f, 1.0f, 1.0f, 1.0f};
+    cbData->u_time = railgun.progress;
+    cbData->u_shapeType = static_cast<float>(railgun.effectType);
+    cbData->u_rotAngle = 0.0f;
+
+    // 専用加算ブレンドPSOで軌跡クアッドを描画する
+    const int previousPipelineType = m_currentPipelineType;
+    m_commandList->SetPipelineState(m_pipelineStateRailgun.Get());
     m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     const D3D12_GPU_VIRTUAL_ADDRESS address = m_constantBuffer->GetGPUVirtualAddress() +
@@ -1314,7 +1556,7 @@ void D3D12RenderingService::DrawTextCommand(
     const ColorF& color,
     float characterSpacing) {
     // ResetCameraを使わないUI専用Sceneでも文字だけはBackBuffer解像度を維持する
-    if (!m_sceneUpscaled) DrawLowResolutionToBackBuffer();
+    if (m_frameRetroEffectEnabled && !m_sceneUpscaled) DrawLowResolutionToBackBuffer();
     std::string ownedText(text);
     RenderText(ownedText.c_str(), {position.x, position.y}, size, {color.r, color.g, color.b, color.a},
                characterSpacing);

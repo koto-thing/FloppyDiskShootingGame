@@ -5,6 +5,7 @@ struct GameSettings {
     float masterVolume = 1.0f;
     float bgmVolume = 1.0f;
     float seVolume = 1.0f;
+    bool retroEffectEnabled = true;
 };
 
 /** @brief ゲーム設定をユーザーの永続データ領域へ保存するリポジトリ */

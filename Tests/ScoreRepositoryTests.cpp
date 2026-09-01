@@ -42,7 +42,7 @@ void RunScoreRepositoryTests() {
     std::filesystem::remove_all(testRoot, error);
     SetEnvironmentVariableW(L"LOCALAPPDATA", testRoot.c_str());
 
-    const GameSettings expectedSettings { 0.25f, 0.5f, 0.75f };
+    const GameSettings expectedSettings { 0.25f, 0.5f, 0.75f, false };
     SettingsRepository().Save(expectedSettings);
     const GameSettings loadedSettings = SettingsRepository().Load();
 
@@ -52,7 +52,8 @@ void RunScoreRepositoryTests() {
     std::filesystem::remove_all(testRoot, error);
     if (loadedSettings.masterVolume != expectedSettings.masterVolume ||
         loadedSettings.bgmVolume != expectedSettings.bgmVolume ||
-        loadedSettings.seVolume != expectedSettings.seVolume) {
+        loadedSettings.seVolume != expectedSettings.seVolume ||
+        loadedSettings.retroEffectEnabled != expectedSettings.retroEffectEnabled) {
         throw std::runtime_error("Settings must survive a save and load round trip");
     }
 }

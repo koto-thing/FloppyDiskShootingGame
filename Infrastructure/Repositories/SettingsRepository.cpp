@@ -37,6 +37,9 @@ GameSettings SettingsRepository::Load() const {
     if (!(input >> settings.masterVolume >> settings.bgmVolume >> settings.seVolume)) {
         return {};
     }
+    // 旧形式の音量3行だけの設定は、映像効果ONとして読み込む
+    int retroEffectEnabled = 1;
+    if (input >> retroEffectEnabled) settings.retroEffectEnabled = retroEffectEnabled != 0;
     return Sanitize(settings);
 }
 
@@ -56,7 +59,8 @@ void SettingsRepository::Save(const GameSettings& settings) const {
     if (!output) return;
     output << sanitized.masterVolume << '\n'
            << sanitized.bgmVolume << '\n'
-           << sanitized.seVolume << '\n';
+           << sanitized.seVolume << '\n'
+           << (sanitized.retroEffectEnabled ? 1 : 0) << '\n';
     output.close();
     if (!output) return;
 

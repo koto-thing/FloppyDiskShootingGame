@@ -381,15 +381,27 @@ public:
     }
 
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
-        const float stopX = (std::max)(enemy.baseX - 0.38f, -0.84f);
-        if (enemy.x > stopX) {
-            enemy.x -= shooter.IsRailGameplayActive() ? 0.010f : 0.012f;
+        if (shooter.IsRailGameplayActive()) {
+            // 3DではXはレーン位置として固定し、奥行き方向へ進んでから砲撃位置で停止する
+            constexpr float StopZ = PlayerRailZ + 24.0f;
+            static_assert(StopZ < EnemyRailFarZ);
+            enemy.x = enemy.baseX;
+            enemy.z = (std::max)(enemy.z - 0.30f, StopZ);
+            enemy.y = enemy.baseY;
+            FireSpecial(shooter, enemy);
+            return;
+        }
+
+        // 2Dでは画面右端から侵入し、砲撃後は左へ離脱する
+        constexpr float StopX = 0.75f;
+        constexpr int ExitAge = 288;
+        static_assert(ExitAge > 72);
+        if (enemy.age >= ExitAge || enemy.x > StopX) {
+            enemy.x -= 0.012f;
         } else {
-            enemy.x = stopX;
+            enemy.x = StopX;
         }
-        if (!shooter.IsRailGameplayActive()) {
-            enemy.z = ToRailZFromSideX(enemy.x);
-        }
+        enemy.z = ToRailZFromSideX(enemy.x);
         enemy.y = enemy.baseY;
         FireSpecial(shooter, enemy);
     }
@@ -551,5 +563,219 @@ public:
 
     float ShotHitRadius3D(const Enemy&) const override {
         return 1.5f;
+    }
+};
+
+/** @brief Stage2の巨大戦艦ボス専用挙動を制御する */
+class SideScrollingShooter::Stage2BossEnemyBehavior final : public SideScrollingShooter::EnemyBehavior {
+public:
+    int Type() const override { return 2; }
+    int MaxHp() const override { return 1200; }
+    int AimedShotInterval() const override { return 78; }
+    float AimedShotSpeed() const override { return 0.016f; }
+    float RailAimedShotSpeed() const override { return 0.58f; }
+    float CollisionRadius(const Enemy&) const override { return 0.72f; }
+    float CollisionRadius3D(const Enemy&) const override { return 5.8f; }
+    float ShotHitRadius3D(const Enemy&) const override { return 5.2f; }
+
+    /**
+     * @brief Stage2ボスを右側の合体状態へ初期配置する
+     * @param enemy 初期化するボス
+     * @param railMode レール表示中か
+     * @param stageIndex ステージ番号
+     * @return なし
+     */
+    void ConfigureBossSpawn(Enemy& enemy, bool railMode, int stageIndex) const override {
+        ConfigureStats(enemy, stageIndex);
+        enemy.active = true;
+        enemy.x = railMode ? 0.0f : 1.80f;
+        enemy.y = 0.0f;
+        enemy.z = railMode ? 48.0f : ToRailZFromSideX(enemy.x);
+        enemy.baseX = enemy.x;
+        enemy.baseY = enemy.y;
+        enemy.baseZ = enemy.z;
+        enemy.phase = 0.0f;
+        enemy.motionAge = 0;
+        enemy.stage2BossAction = Stage2BossAction::Idle;
+        enemy.stage2BossActionAge = 0;
+        enemy.landBattleshipOffsetX = 0.0f;
+        enemy.landBattleshipOffsetY = 0.0f;
+        enemy.landBattleshipOffsetZ = 0.0f;
+        enemy.sandSubmarineOffsetX = 0.0f;
+        enemy.sandSubmarineOffsetY = 0.0f;
+        enemy.sandSubmarineOffsetZ = 0.0f;
+        enemy.collisionEnabled = true;
+    }
+
+    /**
+     * @brief HP割合に応じたStage2ボスフェーズを更新する
+     * @param shooter ゲーム本体
+     * @param enemy 更新するボス
+     * @return なし
+     */
+    void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
+        // 砲塔の照準だけを遅れて追従させ、戦艦本体と主人公の動きから慣性を感じられるようにする
+        constexpr float TurretTrackingRate = 0.06f;
+        enemy.turretAimX += (shooter.m_playerX - enemy.turretAimX) * TurretTrackingRate;
+        enemy.turretAimY += (shooter.m_playerY - enemy.turretAimY) * TurretTrackingRate;
+        const float turretTargetZ = shooter.IsRailGameplayActive() ? PlayerRailZ : ToRailZFromSideX(shooter.m_playerX);
+        enemy.turretAimZ += (turretTargetZ - enemy.turretAimZ) * TurretTrackingRate;
+
+        const float hpRate = enemy.maxHp > 0 ? static_cast<float>(enemy.hp) / enemy.maxHp : 0.0f;
+        const int nextPhase = hpRate > 0.65f ? 1 : (hpRate > 0.35f ? 2 : 3);
+        if (static_cast<int>(enemy.phase) != nextPhase) {
+            const float previousSubmarineWorldY = shooter.Stage2SubmarineWorldY(enemy);
+            const bool startsSeparation = enemy.phase < 2.0f && nextPhase >= 2;
+            enemy.phase = static_cast<float>(nextPhase);
+            ChangeAction(enemy, nextPhase == 3 ? Stage2BossAction::Separating : Stage2BossAction::Idle);
+            if (nextPhase == 3) {
+                enemy.actionX = shooter.m_playerX;
+                enemy.actionY = shooter.m_playerY;
+                enemy.actionZ = shooter.IsRailGameplayActive() ? PlayerRailZ : ToRailZFromSideX(enemy.actionX);
+            }
+            enemy.collisionEnabled = true;
+            enemy.x = enemy.baseX;
+            enemy.y = enemy.baseY;
+            enemy.z = shooter.IsRailGameplayActive() ? enemy.baseZ : ToRailZFromSideX(enemy.x);
+            if (startsSeparation) {
+                // 接地済みのPhase1位置を初期オフセットへ移し、分離開始フレームの跳びを防ぐ
+                enemy.sandSubmarineOffsetY +=
+                    previousSubmarineWorldY - shooter.Stage2SubmarineWorldY(enemy);
+            }
+        }
+        if (nextPhase == 1) TickPhase1(shooter, enemy);
+        else if (nextPhase == 2) TickPhase2(shooter, enemy, false);
+        else TickPhase3(shooter, enemy);
+        ++enemy.stage2BossActionAge;
+    }
+
+private:
+    static constexpr float SubmarineBuriedOffsetY = -4.4f;
+
+    /**
+     * @brief 行動状態を切り替えて経過時間を初期化する
+     * @param enemy 切り替えるボス
+     * @param action 次の行動
+     * @return なし
+     */
+    static void ChangeAction(Enemy& enemy, Stage2BossAction action) {
+        enemy.stage2BossAction = action;
+        enemy.stage2BossActionAge = -1;
+    }
+
+    /**
+     * @brief 生存中の側面ハッチを選び、描画位置からファンネルを射出する
+     * @param shooter ゲーム本体
+     * @param enemy 射出元のボス
+     * @param sequence 射出順序
+     * @param delayedEngine 短い落下後に補助エンジンを起動する場合true
+     * @return なし
+     */
+    static void LaunchFunnel(SideScrollingShooter& shooter, Enemy& enemy, int sequence, bool delayedEngine) {
+        int hatch = -1;
+        for (int offset = 0; offset < BossFunnelHatchCount; ++offset) {
+            const int candidate = (sequence + offset) % BossFunnelHatchCount;
+            if (enemy.bossPartHp[BossFunnelHatch0 + candidate] > 0) {
+                hatch = candidate;
+                break;
+            }
+        }
+        if (hatch < 0) return;
+
+        // オレンジ色ハッチの外面からファンネル全体が見える位置を親Transformへ合成する
+        constexpr float ModelScale = 1.92f;
+        constexpr float HatchCenterZ = 1.80f;
+        constexpr float HatchHalfDepth = 0.04f;
+        constexpr float FunnelRadius = 0.30f;
+        constexpr float LaunchSurfaceZ = HatchCenterZ + HatchHalfDepth + FunnelRadius / ModelScale;
+        const float localX = -2.65f + static_cast<float>(hatch % 6) * 1.05f;
+        const float localZ = (hatch < 6 ? -1.0f : 1.0f) * LaunchSurfaceZ;
+        const bool railMode = shooter.IsRailGameplayActive();
+        const bool separated = enemy.phase >= 2.0f;
+        const float yaw = (railMode ? 0.0f : Math::HalfPi) + (separated ? Math::HalfPi : 0.0f);
+        const float offsetWorldX = (localX * std::cos(yaw) + localZ * std::sin(yaw)) * ModelScale;
+        const float offsetWorldZ = (-localX * std::sin(yaw) + localZ * std::cos(yaw)) * ModelScale;
+        shooter.SpawnStage2Funnel(
+            enemy.x + enemy.sandSubmarineOffsetX + FromWorldX(offsetWorldX),
+            FromWorldY(shooter.Stage2SubmarineWorldY(enemy) - 0.22f * ModelScale),
+            enemy.z + enemy.sandSubmarineOffsetZ + offsetWorldZ, delayedEngine);
+    }
+
+    /**
+     * @brief 合体状態の重量感ある移動と主砲周期を更新する
+     * @param shooter ゲーム本体
+     * @param enemy 更新するボス
+     * @return なし
+     */
+    static void TickPhase1(SideScrollingShooter& shooter, Enemy& enemy) {
+        enemy.collisionEnabled = true;
+        enemy.x = enemy.baseX + std::sin(enemy.age * 0.006f) * 0.045f;
+        enemy.y = enemy.baseY + std::sin(enemy.age * 0.012f) * 0.10f;
+        if (!shooter.IsRailGameplayActive()) enemy.z = ToRailZFromSideX(enemy.x);
+        // 潜砂艦の左右ハッチから交互に自機狙いミサイルを発射する
+        if (enemy.age % 90 == 0 || enemy.age % 90 == 10) {
+            const float side = enemy.age % 90 == 0 ? -1.0f : 1.0f;
+            shooter.SpawnStage2Missile(enemy.x, enemy.y - 0.10f, enemy.z + side * 1.55f, side);
+        }
+    }
+
+    /**
+     * @brief 潜砂艦を自機直下へ追従させて上空へファンネルを射出する
+     * @param shooter ゲーム本体
+     * @param enemy 更新するボス
+     * @param submarineOnly 互換用の未使用フラグ
+     * @return なし
+     */
+    static void TickPhase2(SideScrollingShooter& shooter, Enemy& enemy, bool) {
+        enemy.collisionEnabled = false;
+        enemy.sandSubmarineOffsetY += (SubmarineBuriedOffsetY - enemy.sandSubmarineOffsetY) * 0.08f;
+        enemy.sandSubmarineOffsetX += (shooter.m_playerX - enemy.x - enemy.sandSubmarineOffsetX) * 0.025f;
+        const float targetZ = shooter.IsRailGameplayActive() ? PlayerRailZ - enemy.z : 0.0f;
+        enemy.sandSubmarineOffsetZ += (targetZ - enemy.sandSubmarineOffsetZ) * 0.025f;
+        enemy.landBattleshipOffsetY += (-0.45f - enemy.landBattleshipOffsetY) * 0.06f;
+        if (enemy.age % 120 < 3) {
+            const int launchIndex = enemy.age % 120;
+            LaunchFunnel(shooter, enemy, enemy.age / 120 * 3 + launchIndex, false);
+        }
+    }
+
+    /**
+     * @brief 分離演出後に上部砲撃と下部潜航行動を並行して更新する
+     * @param shooter ゲーム本体
+     * @param enemy 更新するボス
+     * @return なし
+     */
+    static void TickPhase3(SideScrollingShooter& shooter, Enemy& enemy) {
+        if (enemy.stage2BossAction == Stage2BossAction::Separating) {
+            const float t = Math::Clamp01(static_cast<float>(enemy.stage2BossActionAge) / 60.0f);
+            const float smooth = t * t * (3.0f - 2.0f * t);
+            enemy.landBattleshipOffsetY += (0.45f - enemy.landBattleshipOffsetY) * 0.06f;
+            enemy.sandSubmarineOffsetY = Math::Lerp(enemy.sandSubmarineOffsetY, SubmarineBuriedOffsetY, smooth);
+            // 地中を掘り進む潜砂艦はPhase3移行中からゆっくり戦艦直下へ近づける
+            enemy.sandSubmarineOffsetX *= 0.995f;
+            enemy.sandSubmarineOffsetZ *= 0.995f;
+            if (enemy.stage2BossActionAge >= 60) ChangeAction(enemy, Stage2BossAction::Idle);
+            return;
+        }
+        // 潜砂艦は上面だけを砂上へ残し、生存中の側面ハッチからファンネルを連続射出する
+        enemy.collisionEnabled = false;
+        enemy.sandSubmarineOffsetX *= 0.985f;
+        enemy.sandSubmarineOffsetZ *= 0.985f;
+        enemy.sandSubmarineOffsetY += (SubmarineBuriedOffsetY - enemy.sandSubmarineOffsetY) * 0.08f;
+        const int beamCycle = enemy.stage2BossActionAge % Stage2RailgunCycleFrames;
+        if (beamCycle == 0) {
+            enemy.attackWarningFrames = Stage2RailgunFireFrame;
+            enemy.actionX = shooter.m_playerX;
+            enemy.actionY = shooter.m_playerY;
+            enemy.actionZ = shooter.IsRailGameplayActive() ? PlayerRailZ : ToRailZFromSideX(enemy.actionX);
+        }
+        if (beamCycle == Stage2RailgunFireFrame && enemy.bossPartHp[BossNose] > 0) {
+            shooter.PlayRailgunSound();
+        }
+        if (enemy.age % 150 < 3) {
+            const int launchIndex = enemy.age % 150;
+            LaunchFunnel(shooter, enemy, enemy.age / 150 * 3 + launchIndex, true);
+        }
+        if (enemy.age % 72 == 0) shooter.FireBossPartBarrage(enemy);
     }
 };

@@ -61,6 +61,8 @@
     <ClCompile Include="Tests\Geometry3DTests.cpp" />
     <ClCompile Include="Tests\UITests.cpp" />
     <ClCompile Include="Tests\ScoreRepositoryTests.cpp" />
+    <ClCompile Include="Tests\Stage4BossModelViewTests.cpp" />
+    <ClCompile Include="Tests\Stage5ModelViewTests.cpp" />
     <ClCompile Include="Infrastructure\Repositories\ScoreRepository.cpp" />
     <ClCompile Include="Infrastructure\Repositories\SettingsRepository.cpp" />
   </ItemGroup>

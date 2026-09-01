@@ -8,8 +8,25 @@
 /** @brief ボスモデルの親座標と向きを表す */
 struct BossModelTransform {
     Vector3 position {};
+    Vector3 aimTarget {};
     float yaw = 0.0f;
     float scale = 1.0f;
+    bool mainGunTracksTarget = false;
+    bool secondaryGunsTrackTarget = false;
+    Vector3 secondaryAimTarget {};
+};
+
+/** @brief Stage2ボスの破壊済み部位を描画へ反映する */
+struct BossModelDamageState {
+    bool mainGun = true;
+    bool secondaryGuns[3] = {true, true, true};
+    bool connectionCore = true;
+    bool connectionCoreExposed = false;
+    bool mainGunHit = false;
+    bool secondaryGunsHit[3] = {};
+    bool connectionCoreHit = false;
+    bool funnelHatches[12] = {true, true, true, true, true, true, true, true, true, true, true, true};
+    bool funnelHatchesHit[12] = {};
 };
 
 /** @brief 砂中潜航艦ユニットのプロシージャル描画 */
@@ -21,15 +38,18 @@ public:
      * @brief 砂中潜航艦をローカル部品の組み合わせで描画する
      * @param transform 潜航艦ユニットの親Transform
      * @param drawPart 形状、ワールド座標、寸法、色、向きを受け取る描画関数
+     * @param damage 破壊済み接続コアの描画状態
      * @return なし
      */
     template<class DrawPart>
-    static void Draw(const BossModelTransform& transform, DrawPart&& drawPart) {
+    static void Draw(const BossModelTransform& transform, DrawPart&& drawPart,
+        const BossModelDamageState& damage = {}) {
         constexpr float Hull[] = {0.20f, 0.24f, 0.19f, 1.0f};
         constexpr float Armor[] = {0.12f, 0.14f, 0.11f, 1.0f};
         constexpr float LightArmor[] = {0.27f, 0.29f, 0.23f, 1.0f};
         constexpr float Dark[] = {0.055f, 0.065f, 0.055f, 1.0f};
         constexpr float Core[] = {0.95f, 0.28f, 0.055f, 1.0f};
+        constexpr float Hit[] = {1.0f, 0.03f, 0.03f, 1.0f};
 
         // 中央を長い楕円、前後を小さめの丸い部品でつないでカプセル状の主船体を作る
         DrawLocal(transform, drawPart, 5, {0.0f, 0.0f, 0.0f}, {8.8f, 2.05f, 3.15f}, Hull);
@@ -48,11 +68,16 @@ public:
         DrawLocal(transform, drawPart, 3, {-6.08f, 0.10f, 0.0f}, {0.72f, 0.82f, 0.82f}, Dark);
 
         // 側面ファンノズルを左右に6基ずつ配置し、ユーザー案の四角い開口部を再現する
+        int hatchIndex = 0;
         for (float side : {-1.0f, 1.0f}) {
             for (int i = 0; i < 6; ++i) {
                 const float x = -2.65f + static_cast<float>(i) * 1.05f;
-                DrawLocal(transform, drawPart, 1, {x, -0.22f, side * 1.68f}, {0.62f, 0.58f, 0.20f}, Dark);
-                DrawLocal(transform, drawPart, 1, {x, -0.22f, side * 1.80f}, {0.38f, 0.34f, 0.08f}, Core);
+                if (damage.funnelHatches[hatchIndex]) {
+                    const float* color = damage.funnelHatchesHit[hatchIndex] ? Hit : Core;
+                    DrawLocal(transform, drawPart, 1, {x, -0.22f, side * 1.68f}, {0.62f, 0.58f, 0.20f}, Dark);
+                    DrawLocal(transform, drawPart, 1, {x, -0.22f, side * 1.80f}, {0.38f, 0.34f, 0.08f}, color);
+                }
+                ++hatchIndex;
             }
         }
 
@@ -73,12 +98,16 @@ public:
         DrawLocal(transform, drawPart, 3, {6.15f, -0.06f, 0.0f}, {0.80f, 0.92f, 0.92f}, LightArmor);
         DrawLocal(transform, drawPart, 2, {5.88f, -0.06f, 0.0f}, {0.18f, 0.66f, 0.66f}, Core);
 
-        // 分離境界に接続プレート、発光コア、左右クランプを置く
-        DrawLocal(transform, drawPart, 1, {0.45f, 1.22f, 0.0f}, {5.00f, 0.30f, 2.25f}, Dark);
-        DrawLocal(transform, drawPart, 2, {0.25f, 1.42f, 0.0f}, {1.35f, 0.22f, 1.35f}, Core);
-        for (float side : {-1.0f, 1.0f}) {
-            DrawLocal(transform, drawPart, 1, {-1.65f, 1.50f, side * 0.84f}, {0.58f, 0.50f, 0.30f}, Armor);
-            DrawLocal(transform, drawPart, 1, {2.00f, 1.50f, side * 0.84f}, {0.58f, 0.50f, 0.30f}, Armor);
+        // 全武装の破壊前は接続装甲でコアを覆い、破壊後だけ発光コアを露出する
+        if (!damage.connectionCoreExposed) {
+            DrawLocal(transform, drawPart, 1, {0.45f, 1.22f, 0.0f}, {5.00f, 0.30f, 2.25f}, Dark);
+            for (float side : {-1.0f, 1.0f}) {
+                DrawLocal(transform, drawPart, 1, {-1.65f, 1.50f, side * 0.84f}, {0.58f, 0.50f, 0.30f}, Armor);
+                DrawLocal(transform, drawPart, 1, {2.00f, 1.50f, side * 0.84f}, {0.58f, 0.50f, 0.30f}, Armor);
+            }
+        } else if (damage.connectionCore) {
+            DrawLocal(transform, drawPart, 2, {0.25f, 1.42f, 0.0f}, {1.35f, 0.22f, 1.35f},
+                damage.connectionCoreHit ? Hit : Core);
         }
 
         // 上面のサービスハッチで巨大な一枚物に見えるのを避ける
@@ -109,31 +138,35 @@ private:
             transform.position.y + localPosition.y * transform.scale,
             transform.position.z + (-localPosition.x * sine + localPosition.z * cosine) * transform.scale
         };
-        drawPart(shape, position, scale * transform.scale, color, transform.yaw + localYaw);
+        drawPart(shape, position, scale * transform.scale, color, transform.yaw + localYaw, 0.0f);
     }
 
     friend class LandBattleshipView;
+    friend class Stage4BossModelView;
 };
 
 /** @brief 陸上戦艦ユニットのプロシージャル描画 */
 class LandBattleshipView {
 public:
-    static constexpr int PrimitiveCount = 47;
+    static constexpr int PrimitiveCount = 53;
 
     /**
      * @brief 陸上戦艦をローカル部品の組み合わせで描画する
      * @param transform 陸上戦艦ユニットの親Transform
      * @param drawPart 形状、ワールド座標、寸法、色、向きを受け取る描画関数
+     * @param damage 破壊済み武装の描画状態
      * @return なし
      */
     template<class DrawPart>
-    static void Draw(const BossModelTransform& transform, DrawPart&& drawPart) {
+    static void Draw(const BossModelTransform& transform, DrawPart&& drawPart,
+        const BossModelDamageState& damage = {}) {
         constexpr float Hull[] = {0.28f, 0.24f, 0.17f, 1.0f};
         constexpr float Armor[] = {0.36f, 0.31f, 0.22f, 1.0f};
         constexpr float LightArmor[] = {0.43f, 0.38f, 0.28f, 1.0f};
         constexpr float Metal[] = {0.48f, 0.45f, 0.36f, 1.0f};
         constexpr float Dark[] = {0.07f, 0.065f, 0.055f, 1.0f};
         constexpr float Sensor[] = {0.72f, 0.22f, 0.08f, 1.0f};
+        constexpr float Hit[] = {1.0f, 0.03f, 0.03f, 1.0f};
 
         // 前方を低く、中央を厚く、艦橋を最高点、後方を再び低くする段階的な上部船体
         Part(transform, drawPart, 4, {-3.10f, 0.38f, 0.0f}, {2.00f, 0.72f, 2.25f}, Armor);
@@ -149,18 +182,30 @@ public:
             Part(transform, drawPart, 4, {1.65f, 1.42f, side * 1.04f}, {1.50f, 0.60f, 0.46f}, Armor, side * -0.08f);
         }
 
-        // 主砲は遠目でも読めるよう砲塔基部と砲身を従来より太くする
-        Part(transform, drawPart, 2, {-1.55f, 2.03f, 0.0f}, {1.75f, 1.10f, 1.75f}, Dark);
-        Part(transform, drawPart, 4, {-2.30f, 2.08f, 0.0f}, {1.85f, 1.08f, 1.55f}, Armor);
-        Part(transform, drawPart, 1, {-2.82f, 2.08f, 0.0f}, {0.82f, 0.82f, 1.22f}, LightArmor);
-        Part(transform, drawPart, 2, {-4.25f, 2.08f, 0.0f}, {2.95f, 0.54f, 0.54f}, Metal);
-        Part(transform, drawPart, 2, {-5.72f, 2.08f, 0.0f}, {0.58f, 0.72f, 0.72f}, Dark);
-        Part(transform, drawPart, 2, {-5.98f, 2.08f, 0.0f}, {0.16f, 0.58f, 0.58f}, Sensor);
+        // 主砲は破壊後に砲塔ごと消し、攻撃停止を輪郭でも示す
+        if (damage.mainGun) {
+            const float* color = damage.mainGunHit ? Hit : Dark;
+            Part(transform, drawPart, 2, {-1.55f, 2.03f, 0.0f}, {1.75f, 1.10f, 1.75f}, color);
+            GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, {-1.55f, 2.08f, 0.0f}, 4, 0.75f, {1.85f, 1.08f, 1.55f}, damage.mainGunHit ? Hit : Armor);
+            GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, {-1.55f, 2.08f, 0.0f}, 1, 1.27f, {0.82f, 0.82f, 1.22f}, damage.mainGunHit ? Hit : LightArmor);
+            GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, {-1.55f, 2.08f, 0.0f}, 2, 2.70f, {2.95f, 0.54f, 0.54f}, damage.mainGunHit ? Hit : Metal);
+            GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, {-1.55f, 2.08f, 0.0f}, 2, 4.17f, {0.58f, 0.72f, 0.72f}, color);
+            GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, {-1.55f, 2.08f, 0.0f}, 2, 4.43f, {0.16f, 0.58f, 0.58f}, damage.mainGunHit ? Hit : Sensor);
+        }
 
-        // スケッチにある単独副砲を艦橋前方へ配置する
-        Part(transform, drawPart, 2, {0.18f, 2.34f, -0.78f}, {0.76f, 0.46f, 0.76f}, Dark);
-        Part(transform, drawPart, 1, {-0.02f, 2.60f, -0.78f}, {0.82f, 0.46f, 0.64f}, Armor);
-        Part(transform, drawPart, 2, {-0.92f, 2.60f, -0.78f}, {1.35f, 0.20f, 0.20f}, Metal);
+        // 三基の副砲を独立描画し、破壊した砲だけ輪郭から取り除く
+        constexpr Vector3 SecondaryGunPositions[] = {
+            {-0.55f, 2.34f, -0.92f}, {0.65f, 2.34f, 0.0f}, {2.85f, 1.92f, 0.92f}
+        };
+        for (int i = 0; i < 3; ++i) {
+            if (!damage.secondaryGuns[i]) continue;
+            const Vector3& position = SecondaryGunPositions[i];
+            const float* darkColor = damage.secondaryGunsHit[i] ? Hit : Dark;
+            Part(transform, drawPart, 2, position, {0.76f, 0.46f, 0.76f}, darkColor);
+            const Vector3 pivot {position.x, position.y + 0.26f, position.z};
+            GunPart(transform, drawPart, transform.secondaryGunsTrackTarget, transform.secondaryAimTarget, pivot, 1, 0.20f, {0.82f, 0.46f, 0.64f}, damage.secondaryGunsHit[i] ? Hit : Armor);
+            GunPart(transform, drawPart, transform.secondaryGunsTrackTarget, transform.secondaryAimTarget, pivot, 2, 1.10f, {1.35f, 0.20f, 0.20f}, damage.secondaryGunsHit[i] ? Hit : Metal);
+        }
 
         // 艦橋は複数段の装甲塊として積み上げ、上部シルエットの最高点にする
         Part(transform, drawPart, 4, {1.45f, 2.08f, 0.0f}, {1.45f, 0.78f, 1.55f}, Armor);
@@ -196,6 +241,39 @@ public:
 
 private:
     /**
+     * @brief 砲塔基部を支点に照準先へ向けた部品を描画する
+     * @param transform 親Transformと照準先
+     * @param drawPart 描画関数
+     * @param tracksTarget 照準先へ向ける場合true
+     * @param aimTarget 照準先
+     * @param localPivot 砲塔基部のローカル座標
+     * @param shape 既存PrimitiveShapeに対応する番号
+     * @param distance 基部から砲口方向への距離
+     * @param scale ローカル寸法
+     * @param color 部品色
+     * @return なし
+     */
+    template<class DrawPart>
+    static void GunPart(const BossModelTransform& transform, DrawPart& drawPart, bool tracksTarget,
+        const Vector3& aimTarget,
+        const Vector3& localPivot, int shape, float distance, const Vector3& scale, const float color[4]) {
+        const float cosine = std::cos(transform.yaw);
+        const float sine = std::sin(transform.yaw);
+        const Vector3 pivot {
+            transform.position.x + (localPivot.x * cosine + localPivot.z * sine) * transform.scale,
+            transform.position.y + localPivot.y * transform.scale,
+            transform.position.z + (-localPivot.x * sine + localPivot.z * cosine) * transform.scale
+        };
+        const Vector3 delta = tracksTarget ? aimTarget - pivot : Vector3 {-cosine, 0.0f, sine};
+        const float horizontal = (std::max)(0.001f, std::sqrt(delta.x * delta.x + delta.z * delta.z));
+        const float length = (std::max)(0.001f, std::sqrt(horizontal * horizontal + delta.y * delta.y));
+        const float gunYaw = std::atan2(delta.z, -delta.x);
+        const float gunPitch = -std::asin(delta.y / length);
+        const Vector3 position = pivot + delta / length * (distance * transform.scale);
+        drawPart(shape, position, scale * transform.scale, color, gunYaw, gunPitch);
+    }
+
+    /**
      * @brief ローカル部品を共通の親Transform合成処理へ渡す
      * @param transform 親Transform
      * @param drawPart 描画関数
@@ -213,4 +291,4 @@ private:
     }
 };
 
-static_assert(SandSubmarineView::PrimitiveCount + LandBattleshipView::PrimitiveCount == 111);
+static_assert(SandSubmarineView::PrimitiveCount + LandBattleshipView::PrimitiveCount == 117);

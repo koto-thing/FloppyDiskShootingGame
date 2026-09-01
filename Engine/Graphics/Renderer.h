@@ -50,6 +50,7 @@ struct RenderCommand {
         Primitive3D,
         PlayerShot,
         Explosion,
+        Railgun,
         Text,
         Pipeline,
         SetCamera,
@@ -62,6 +63,7 @@ struct RenderCommand {
     Primitive3D primitive {};
     PlayerShotVisual playerShot {};
     ExplosionVisual explosion {};
+    RailgunVisual railgun {};
     Vector2 position {};
     float size = 0.0f;
     float characterSpacing = 0.0f;
@@ -112,6 +114,8 @@ public:
     void DrawPlayerShot(const PlayerShotVisual& shot);
     /** @brief プロシージャル爆発エフェクトを描画コマンドとして記録する */
     void DrawExplosion(const ExplosionVisual& explosion);
+    /** @brief プロシージャルレールガン軌跡を描画コマンドとして記録する */
+    void DrawRailgun(const RailgunVisual& railgun);
     /**
      * @brief 文字を描画コマンドとして記録する
      * @param characterSpacing 文字ごとに追加する字間
@@ -138,6 +142,10 @@ public:
     void Flush();
     /** @brief フレームの描画を終了する */
     void EndFrame();
+    /** @brief 低解像度のレトロ映像効果を切り替える */
+    void SetRetroEffectEnabled(bool enabled) {
+        if (m_backend != nullptr) m_backend->SetRetroEffectEnabled(enabled);
+    }
 
     /** @brief 記録済みコマンド数を取得する */
     std::size_t CommandCount() const { return m_commandCount; }

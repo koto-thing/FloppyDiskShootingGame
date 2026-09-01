@@ -204,5 +204,11 @@
     <ClInclude Include="Presentation\Gameplay\BossModelView.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stage4BossModelView.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stage5ModelView.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
