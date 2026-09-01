@@ -14,6 +14,7 @@ struct VS_OUTPUT
     float4 color : COLOR;
     float2 localPos : TEXCOORD0;
     float3 normal : TEXCOORD1;
+    float shapeType : TEXCOORD2;
 };
 
 cbuffer TransformBuffer : register(b0)
@@ -26,6 +27,9 @@ cbuffer TransformBuffer : register(b0)
     float u_pad1;
 };
 
+static const float LIGHT_LEVELS = 4.0;
+static const float MIN_BRIGHTNESS = 0.2;
+
 // 単位立方体の36頂点 (Triangle List)
 static const float3 cubeVertices[36] = {
     // Front face
@@ -33,7 +37,7 @@ static const float3 cubeVertices[36] = {
     float3(-0.5, -0.5, -0.5), float3( 0.5,  0.5, -0.5), float3( 0.5, -0.5, -0.5),
     // Back face
     float3(-0.5, -0.5,  0.5), float3( 0.5,  0.5,  0.5), float3(-0.5,  0.5,  0.5),
-    float3(-0.5, -0.5,  0.5), float3(-0.5,  0.5,  0.5), float3( 0.5, -0.5,  0.5),
+    float3(-0.5, -0.5,  0.5), float3( 0.5, -0.5,  0.5), float3( 0.5,  0.5,  0.5),
     // Left face
     float3(-0.5, -0.5,  0.5), float3(-0.5,  0.5,  0.5), float3(-0.5,  0.5, -0.5),
     float3(-0.5, -0.5,  0.5), float3(-0.5,  0.5, -0.5), float3(-0.5, -0.5, -0.5),
@@ -283,17 +287,32 @@ VS_OUTPUT VSMain(uint vID : SV_VertexID)
     // WVP行列による座標変換
     output.pos = mul(float4(localPos, 1.0f), u_wvpMatrix);
 
-    // ライト計算 (フラットシェーディング平行光源)
-    float3 lightDir = normalize(float3(0.4, 0.8, -0.4));
-    float diff = saturate(dot(normal, lightDir)) * 0.45 + 0.55;
-
-    output.color = float4(u_Color.rgb * diff, u_Color.a);
-    output.normal = normal;
+    // Y軸回転を法線へ反映する
+    float sinAngle;
+    float cosAngle;
+    sincos(u_rotAngle, sinAngle, cosAngle);
+    float3 rotatedNormal = float3(
+        normal.x * cosAngle + normal.z * sinAngle,
+        normal.y,
+        -normal.x * sinAngle + normal.z * cosAngle);
+    output.color = u_Color;
+    output.normal = rotatedNormal;
+    output.shapeType = u_shapeType;
     return output;
 }
 
 float4 PSObject(VS_OUTPUT input) : SV_TARGET
 {
     if (input.color.a < 0.01) discard;
-    return input.color;
+
+    // Sprite2Dはライティングせず、3Dプリミティブだけをピクセル単位で量子化する
+    float brightness = 1.0;
+    if (input.shapeType < 5.5) {
+        float3 lightDir = normalize(float3(0.4, 0.8, -0.4));
+        float diffuse = saturate(dot(normalize(input.normal), lightDir));
+        float quantizedDiffuse = floor(diffuse * (LIGHT_LEVELS - 1.0) + 0.5) / (LIGHT_LEVELS - 1.0);
+        brightness = lerp(MIN_BRIGHTNESS, 1.0, quantizedDiffuse);
+    }
+
+    return float4(input.color.rgb * brightness, input.color.a);
 }

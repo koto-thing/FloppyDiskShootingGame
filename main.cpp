@@ -15,6 +15,7 @@
 #include "Domain/ValueObjects/SceneType.h"
 #include "Infrastructure/ExternalServices/Win32WindowService.h"
 #include "Infrastructure/ExternalServices/AudioService.h"
+#include "Infrastructure/Repositories/SettingsRepository.h"
 #include "Infrastructure/ExternalServices/D3D12RenderingService.h"
 #include "Engine/Graphics/Renderer.h"
 #include "Presentation/Scenes/TitleScene.h"
@@ -98,6 +99,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     Renderer renderFacade(renderer);
 
     AudioService audio;
+    // 保存済み音量をオーディオ初期化前に反映する
+    const GameSettings settings = SettingsRepository().Load();
+    audio.SetMasterVolume(settings.masterVolume);
+    audio.SetBGMVolume(settings.bgmVolume);
+    audio.SetSEVolume(settings.seVolume);
     if (!audio.Initialize()) {
         MessageBox(NULL, L"Audio Initializing Failed", L"Error", MB_OK);
         return 0;
@@ -181,9 +187,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         renderFacade.EndFrame();
     }
 
+    app.Dispose();
     audio.Shutdown();
     renderer.Cleanup();
-    app.Dispose();
     Debug::Log("Application shutting down");
     Debug::Shutdown();
     CoUninitialize();

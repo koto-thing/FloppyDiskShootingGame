@@ -5,6 +5,7 @@
 
 #include "../../Engine/Graphics/Renderer.h"
 #include "../../Infrastructure/ExternalServices/AudioService.h"
+#include "../../Infrastructure/Repositories/SettingsRepository.h"
 
 void OptionScene::Initialize() {
     // タイトルに戻るボタン
@@ -89,6 +90,13 @@ void OptionScene::Tick() {
 }
 
 void OptionScene::Dispose() {
+    // 現在の音量設定をランキングと同じ永続データ領域へ保存する
+    const AudioService& audio = AudioService::Get();
+    SettingsRepository().Save({
+        audio.GetMasterVolume(),
+        audio.GetBGMVolume(),
+        audio.GetSEVolume()
+    });
     m_backToTitleButton.reset();
 }
 
