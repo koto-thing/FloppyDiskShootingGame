@@ -4,6 +4,12 @@
 #include "../../Engine/Input/Input.h"
 #include "../../Engine/Time/Time.h"
 
+// 度 → ラジアン変換
+constexpr float DegreesToRadians(float degrees)
+{
+    return degrees * Math::Pi / 180.0f;
+}
+
 /**
  * @brief テスト用カメラを円柱全体が見える位置へ設定する
  */
@@ -56,7 +62,8 @@ void ModelTestScene::Render(Renderer& renderer) {
         {0.12f, 0.16f, 0.22f, 1.0f}
         });
 
-    drawEnemy0(renderer);
+    //モデルの呼び出し
+    drawEnemy4(renderer);
 
     /** @brief 3D描画後にUI座標系へ戻して操作説明を重ねる */
     renderer.ResetCamera();
@@ -102,50 +109,457 @@ void ModelTestScene::DrawPart(Renderer& renderer, PrimitiveShape shape, const Ve
     });
 }
 
-void ModelTestScene::drawEnemy0(Renderer& renderer)
+//ステージ1敵機
+void ModelTestScene::drawEnemy1(Renderer& renderer)
 {
     // 色
-    const ColorF bodyColor = { 0.8f, 0.8f, 0.85f, 1.0f};
-    const ColorF noseColor = { 0.9f, 0.1f, 0.1f, 1.0f};
-    const ColorF wingColor = { 0.2f, 0.4f, 0.8f, 1.0f};
+    const ColorF redColor = { 0.9f, 0.1f, 0.1f, 1.0f};
 
     // 胴体
     DrawPart(
         renderer,
         PrimitiveShape::Cylinder,
         { 0.0f, 0.0f, 0.0f },
-        { 2.4f, 2.4f, 5.0f },
-        { 0.0f, 0.0f, 0.0f },
-        bodyColor
+        { 0.4f, 1.0f, 0.4f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        redColor
     );
 
     // 機首
     DrawPart(
         renderer,
         PrimitiveShape::Cone,
-        { 0.0f, 0.0f, 4.0f },
-        { 1.6f, 1.6f, 3.0f },
-        { 0.0f, 0.0f, 0.0f },
-        noseColor
+        { 0.0f, 0.0f, 0.75f },
+        { 0.4f, 0.5f, 0.4f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        redColor
     );
 
     // 左翼
     DrawPart(
         renderer,
         PrimitiveShape::Prism,
-        { -4.0f, 0.0f, 0.0f },
-        { 4.0f, 0.3f, 2.5f },
+        { -0.5f, 0.0f, 0.0f },
+        { 1.0f, 0.025f, 0.35f },
         { 0.0f, 0.0f, 0.0f },
-        wingColor
+        redColor
     );
 
     // 右翼
     DrawPart(
         renderer,
         PrimitiveShape::Prism,
-        { 4.0f, 0.0f, 0.0f },
-        { 4.0f, 0.3f, 2.5f },
+        { 0.5f, 0.0f, 0.0f },
+        { 1.0f, 0.025f, 0.35f },
         { 0.0f, 0.0f, 0.0f },
-        wingColor
+        redColor
+    );
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Box,
+        { 0.0f, 0.0f, 0.0f },
+        { 1.0f, 0.025f, 0.35f },
+        { 0.0f, 0.0f, 0.0f },
+        redColor
+    );
+}
+
+//ステージ2敵機
+void ModelTestScene::drawEnemy2(Renderer& renderer)
+{
+    const ColorF blueColor = { 0.0f, 0.0f, 1.0f, 1.0f };
+
+    // 胴体
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 0.0f, 0.0f, 0.0f },
+        { 0.6f, 1.0f, 0.6f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        blueColor
+    );
+
+    // 大砲
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 0.0f, 0.15f, 0.7f },
+        { 0.2f, 0.4f, 0.2f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        blueColor
+    );
+
+    // プロペラ
+    DrawPart(
+        renderer,
+        PrimitiveShape::Box,
+        { 0.0f, 0.0f, -0.5f },
+        { 0.4f, 1.6f, 0.05f },
+        { 0.0f, 0.0f, 0.0f },
+        blueColor
+    );
+    DrawPart(
+        renderer,
+        PrimitiveShape::Box,
+        { 0.0f, 0.0f, -0.5f },
+        { 1.6f, 0.4f, 0.05f },
+        { 0.0f, 0.0f, 0.0f },
+        blueColor
+    );
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 0.0f, 0.0f, -0.5f },
+        { 0.3f, 0.2f, 0.3f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        blueColor
+    );
+}
+
+//ステージ3敵機
+void ModelTestScene::drawEnemy3(Renderer& renderer)
+{
+    const ColorF yellowColor = { 1.0f, 1.0f, 0.0f, 1.0f };
+
+    // 胴体
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 0.0f, 0.0f, 0.0f },
+        { 1.0f, 0.5f, 1.0f },
+        { 0.0f, 0.0f, 0.0f },
+        yellowColor
+    );
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 0.0f, 0.4f, 0.0f },
+        { 0.5f, 0.3f, 0.5f },
+        { 0.0f, 0.0f, 0.0f },
+        yellowColor
+    );
+    // 大砲
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 0.0f, 0.4f, 0.45f },
+        { 0.2f, 0.4f, 0.2f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        yellowColor
+    );
+}
+
+//ステージ4敵機
+void ModelTestScene::drawEnemy4(Renderer& renderer)
+{
+    const ColorF greenColor = { 0.0f, 1.0f, 0.0f, 1.0f };
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Box,
+        { 0.0f, 0.0f, 0.0f },
+        { 0.5f, 0.5f, 0.5f },
+        { 0.0f, 0.0f, 0.0f },
+        greenColor
+    );
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cone,
+        { 0.0f, 0.75f, 0.0f },
+        { 0.5f, 1.0f, 0.5f },
+        { 0.0f, 0.0f, 0.0f },
+        greenColor
+    );
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cone,
+        { 0.0f, -0.75f, 0.0f },
+        { 0.5f, 1.0f, 0.5f },
+        { DegreesToRadians(180.0f), 0.0f, 0.0f },
+        greenColor
+    );
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cone,
+        { -0.75f, 0.0f, 0.0f },
+        { 0.5f, 1.0f, 0.5f },
+        { 0.0f, 0.0f, DegreesToRadians(90.0f) },
+        greenColor
+    );
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cone,
+        { 0.75f, 0.0f, 0.0f },
+        { 0.5f, 1.0f, 0.5f },
+        { 0.0f, 0.0f, DegreesToRadians(-90.0f) },
+        greenColor
+    );
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cone,
+        { 0.0f, 0.0f, -0.75f },
+        { 0.5f, 1.0f, 0.5f },
+        { DegreesToRadians(-90.0f), 0.0f, 0.0f },
+        greenColor
+    );
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cone,
+        { 0.0f, 0.0f, 0.75f },
+        { 0.5f, 1.0f, 0.5f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        greenColor
+    );
+}
+
+//ステージ1ボス
+void ModelTestScene::drawBoss1(Renderer& renderer)
+{
+    // 色
+    const ColorF grayColor = { 0.5f, 0.5f, 0.5f, 1.0f};
+    const ColorF whiteColor = { 0.6f, 0.6f, 0.6f, 1.0f};
+    const ColorF blackColor = { 0.2f, 0.2f, 0.2f, 1.0f};
+
+    // 機首ノーズ
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder, 
+        { 0.0f, 0.75f, -3.5f }, 
+        { 1.5f, 1.0f, 1.5f }, 
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        grayColor 
+    ); 
+
+    DrawPart(
+        renderer, 
+        PrimitiveShape::Cylinder, 
+        { 0.0f, 0.5f, -4.375f }, 
+        { 0.5f, 0.75f, 0.5f }, 
+        { DegreesToRadians(90.0f), 0.0f, 0.0f }, 
+        grayColor 
+    ); 
+    
+    DrawPart(
+        renderer, 
+        PrimitiveShape::Cylinder, 
+        { 0.0f, 1.125f, -5.0f }, 
+        { 0.25f, 2.0f, 0.25f }, 
+        { DegreesToRadians(90.0f), 0.0f, 0.0f }, 
+        blackColor 
+    );
+
+    // メインボディ（上部）
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 0.0f, 0.5f, 0.0f },
+        { 4.5f, 4.0f, 4.5f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        grayColor
+    );
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 0.0f, 0.5f, -2.5f },
+        { 3.5f, 1.0f, 3.5f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        grayColor
+    );
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 0.0f, 0.5f, 2.5f },
+        { 3.5f, 1.0f, 3.5f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        grayColor
+    );
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Box,
+        { 0.f, 2.75f, 0.0f },
+        { 1.0f, 1.0f, 1.0f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        grayColor
+    );
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 0.0f, 3.0f, 0.5f },
+        { 0.25f, 1.0f, 0.25f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        blackColor
+    );
+
+// サブボディ（下部）
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 0.0f, -3.0f, 0.0f },
+        { 1.0f, 2.5f, 1.0f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        grayColor
+    );
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 0.0f, -3.75f, 0.25f },
+        { 0.5f, 2.0f, 0.5f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        grayColor
+    );
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 0.0f, -3.0f, -1.75f },
+        { 0.25f, 1.5f, 0.25f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        blackColor
+    );
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Box,
+        { 0.5f, -2.0f, 0.0f },
+        { 1.25f, 0.25f, 0.25f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        blackColor
+    );
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Box,
+        { -0.5f, -2.0f, 0.0f },
+        { 1.25f, 0.25f, 0.25f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        blackColor
+    );
+
+    // 主翼
+    // 左翼
+    DrawPart(
+        renderer,
+        PrimitiveShape::Box,
+        { 3.25f, 0.5f, 0.0f },
+        { 3.0f, 1.0f, 3.0f },
+        { 0.0f, 0.0f, 0.0f },
+        whiteColor
+    );
+    DrawPart(
+        renderer,
+        PrimitiveShape::Box,
+        { 5.25f, 0.5f, 0.0f },
+        { 2.5f, 0.5f, 2.0f },
+        { 0.0f, 0.0f, 0.0f },
+        whiteColor
+    );
+
+    // 右翼
+    DrawPart(
+        renderer,
+        PrimitiveShape::Box,
+        { -3.25f, 0.5f, 0.0f },
+        { 3.0f, 1.0f, 3.0f },
+        { 0.0f, 0.0f, 0.0f },
+        whiteColor
+    );
+    DrawPart(
+        renderer,
+        PrimitiveShape::Box,
+        { -5.25f, 0.5f, 0.0f },
+        { 2.5f, 0.5f, 2.0f },
+        { 0.0f, 0.0f, 0.0f },
+        whiteColor
+    );
+
+    // メインエンジン
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 0.0f, 0.75f, 3.75f },
+        { 2.5f, 1.5f, 2.5f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        grayColor
+    );
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 1.75f, 0.75f, 4.5f },
+        { 1.0f, 1.5f, 1.0f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        blackColor
+    );
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { -1.75f, 0.75f, 4.5f },
+        { 1.0f, 1.5f, 1.0f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        blackColor
+    );
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Box,
+        { 0.0f, -1.0f, 4.125f },
+        { 0.75f, 2.0f, 0.2f },
+        { 0.0f, 0.0f, 0.0f },
+        whiteColor
+    );
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Box,
+        { 0.0f, 2.5f, 4.125f },
+        { 0.75f, 2.0f, 0.2f },
+        { 0.0f, 0.0f, 0.0f },
+        whiteColor
+    );
+
+    // サブエンジン
+    // 左
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 1.5f, -1.5f, 2.5f },
+        { 1.0f, 2.5f, 1.0f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        blackColor
+    );
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { 1.5f, -1.5f, 4.0f },
+        { 0.5f, 0.5f, 0.5f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        blackColor
+    );
+
+    // 右
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { -1.5f, -1.5f, 2.5f },
+        { 1.0f, 2.5f, 1.0f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        blackColor
+    );
+
+    DrawPart(
+        renderer,
+        PrimitiveShape::Cylinder,
+        { -1.5f, -1.5f, 4.0f },
+        { 0.5f, 0.5f, 0.5f },
+        { DegreesToRadians(90.0f), 0.0f, 0.0f },
+        blackColor
     );
 }

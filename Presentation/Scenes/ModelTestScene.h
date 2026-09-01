@@ -40,7 +40,7 @@ private:
     void DrawPart(
         Renderer& renderer,
         PrimitiveShape shape,
-        const Vector3& position,
+        const Vector3& position,//左右、高さ、前後
         const Vector3& scale,
         const Vector3& rotation,
         const ColorF& color
