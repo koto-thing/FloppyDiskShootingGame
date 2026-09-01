@@ -77,6 +77,7 @@ protected:
         enemy.maxHp = enemy.hp;
         enemy.shotInterval = AimedShotIntervalForStage(stageIndex);
         enemy.age = 0;
+        enemy.motionAge = 0;
     }
 
     int SelectEntryCandidateIndex(int frame, int kills, int stageIndex) const {

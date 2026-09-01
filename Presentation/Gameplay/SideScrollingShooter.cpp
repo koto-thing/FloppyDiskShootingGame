@@ -573,7 +573,8 @@ void SideScrollingShooter::TickEnemies() {
         }
 
         const int aimedShotInterval = enemy.shotInterval;
-        if (aimedShotInterval > 0 && enemy.age % aimedShotInterval == 0) {
+        if (aimedShotInterval > 0 && enemy.age % aimedShotInterval == 0 &&
+            !(enemy.type == 2 && m_stage->IsBossSpecialAttackActive(enemy))) {
             const float dxToPlayer = m_playerX - enemy.x;
             const float dyToPlayer = m_playerY - enemy.y;
             const float length = std::sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
@@ -586,6 +587,7 @@ void SideScrollingShooter::TickEnemies() {
 
         // ボスは通常・特殊フェーズごとの間隔で、未破壊の各部位から弾幕を発射する
         if (enemy.type == 2 &&
+            !m_stage->IsBossSpecialAttackActive(enemy) &&
             enemy.age % m_stage->BossAttackInterval(static_cast<BossPhase>(enemy.bossPhase)) == 0) {
             FireBossPartBarrage(enemy);
         }
@@ -890,8 +892,13 @@ void SideScrollingShooter::InitializeRailObjects() {
         if (!enemy.active) continue;
         enemy.transitionSideX = enemy.x;
         enemy.transitionSideY = enemy.y;
+        enemy.transitionRailZ = enemy.z;
         if (enemy.z <= 0.0f) {
             enemy.z = ToRailZFromSideX(enemy.x);
+        }
+        if (enemy.type == 2) {
+            m_stage->ConfigureBossRailAnchor(enemy);
+            continue;
         }
         enemy.baseX = enemy.type == 2 ? 0.0f : (std::clamp)(enemy.baseX, -0.76f, 0.76f);
         enemy.x = enemy.baseX;
@@ -946,6 +953,11 @@ void SideScrollingShooter::InitializeSideObjects() {
         if (!enemy.active) continue;
         enemy.transitionSideX = enemy.x;
         enemy.transitionSideY = enemy.y;
+        enemy.transitionRailZ = enemy.z;
+        if (enemy.type == 2) {
+            m_stage->ConfigureBossSideAnchor(enemy);
+            continue;
+        }
         enemy.x = ToSideXFromRailZ(enemy.z);
         enemy.baseX = enemy.x;
         enemy.z = ToRailZFromSideX(enemy.x);
@@ -2908,8 +2920,9 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
             (exitingRail ? enemy.x : ToSideXFromRailZ(enemy.z));
         const float sideY = enteringRail ? enemy.transitionSideY : enemy.y;
         drawEnemy.x = Math::Lerp(sideX, exitingRail ? enemy.transitionSideX : enemy.x, railWeight);
-        drawEnemy.y = Math::Lerp(sideY, enemy.y, railWeight);
-        drawEnemy.z = Math::Lerp(SidePlaneZ + (enemy.type == 2 ? 2.2f : 1.5f), enemy.z, railWeight);
+        drawEnemy.y = Math::Lerp(sideY, exitingRail ? enemy.transitionSideY : enemy.y, railWeight);
+        const float railZ = exitingRail ? enemy.transitionRailZ : enemy.z;
+        drawEnemy.z = Math::Lerp(SidePlaneZ + (enemy.type == 2 ? 2.2f : 1.5f), railZ, railWeight);
         if (enemy.type != 2) {
             const float groundTopY = (isDesert || isOcean || isCity) ? -3.65f : -3.275f;
             const float minimumRailY = FromWorldY(groundTopY + 0.32f);

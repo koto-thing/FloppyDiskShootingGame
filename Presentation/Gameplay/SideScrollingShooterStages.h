@@ -74,6 +74,32 @@ public:
         BossEnemyBehaviorInstance().ConfigureBossSpawn(boss, railMode, StageIndex());
     }
     /**
+     * @brief ボスの3Dモード基準点を設定する
+     * @param boss 基準点へ移動するボス
+     * @return なし
+     */
+    virtual void ConfigureBossRailAnchor(Enemy& boss) const {
+        boss.x = 0.0f;
+        boss.y = 0.0f;
+        boss.z = 48.0f;
+        boss.baseX = boss.x;
+        boss.baseY = boss.y;
+        boss.baseZ = boss.z;
+    }
+    /**
+     * @brief ボスの2Dモード基準点を設定する
+     * @param boss 基準点へ移動するボス
+     * @return なし
+     */
+    virtual void ConfigureBossSideAnchor(Enemy& boss) const {
+        boss.x = 1.80f;
+        boss.y = 0.0f;
+        boss.z = ToRailZFromSideX(boss.x);
+        boss.baseX = boss.x;
+        boss.baseY = boss.y;
+        boss.baseZ = boss.z;
+    }
+    /**
      * @brief ボス部位HPを設定する
      * @param boss 部位HPを設定するボス
      * @return なし
@@ -89,6 +115,15 @@ public:
      */
     virtual void TickBoss(SideScrollingShooter& shooter, Enemy& boss) const {
         BossEnemyBehaviorInstance().Tick(shooter, boss);
+    }
+    /**
+     * @brief ボスが弾幕を止める特殊攻撃中か取得する
+     * @param boss 判定するボス
+     * @return 特殊攻撃中の場合true
+     */
+    virtual bool IsBossSpecialAttackActive(const Enemy& boss) const {
+        (void)boss;
+        return false;
     }
     /**
      * @brief ボス弾幕の発射間隔を取得する
