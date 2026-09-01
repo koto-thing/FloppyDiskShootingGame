@@ -50,6 +50,38 @@ public:
         return BossEnemyBehaviorInstance().MaxHpForStage(StageIndex());
     }
     /**
+     * @brief ボス機体で個別に破壊できる部位数を取得する
+     * @return ボス部位数
+     */
+    virtual int BossPartTotal() const {
+        return SideScrollingShooter::BossPartCapacity;
+    }
+    /**
+     * @brief ボス戦の攻撃フェーズ数を取得する
+     * @return ボスフェーズ数
+     */
+    virtual int BossPhaseTotal() const {
+        return 4;
+    }
+    /**
+     * @brief ボス戦開始時の攻撃フェーズを取得する
+     * @return 初期攻撃フェーズ
+     */
+    virtual int BossInitialPhase() const {
+        return 0;
+    }
+    virtual int BossNosePart() const { return 0; }
+    virtual int BossLeftWingPart() const { return 1; }
+    virtual int BossRightWingPart() const { return 2; }
+    virtual int BossLeftEnginePart() const { return 3; }
+    virtual int BossRightEnginePart() const { return 4; }
+    virtual const char* BossPhaseLabel(int phase) const {
+        constexpr const char* PhaseLabels[] = {
+            "NORMAL 1", "SPECIAL 1", "NORMAL 2", "SPECIAL 2"
+        };
+        return PhaseLabels[phase % 4];
+    }
+    /**
      * @brief 撃破時の飛散部品に重力を適用するか取得する
      * @return 重力を適用するステージの場合true
      */
@@ -130,8 +162,8 @@ public:
      * @param phase 現在のボス攻撃フェーズ
      * @return 発射間隔
      */
-    virtual int BossAttackInterval(BossPhase phase) const {
-        return phase == BossNormalPhase1 || phase == BossNormalPhase2 ? 120 : 84;
+    virtual int BossAttackInterval(int phase) const {
+        return phase == 0 || phase == 2 ? 120 : 84;
     }
     /**
      * @brief 本体HPからボス攻撃フェーズを取得する
@@ -140,7 +172,19 @@ public:
      * @return ボス攻撃フェーズ
      */
     virtual int BossPhaseForHp(int hp, int maxHp) const {
-        return SideScrollingShooter::BossPhaseForHp(hp, maxHp);
+        if (maxHp <= 0) return BossInitialPhase();
+        const int clampedHp = hp < 0 ? 0 : (hp > maxHp ? maxHp : hp);
+        const int phase = (maxHp - clampedHp) * BossPhaseTotal() / maxHp;
+        return phase < BossPhaseTotal() ? phase : BossPhaseTotal() - 1;
+    }
+    /**
+     * @brief ボス部位破壊時に本体へ与えるダメージを取得する
+     * @param part 破壊されたボス部位
+     * @return 本体へ与えるダメージ
+     */
+    virtual int BossPartBreakDamage(int part) const {
+        (void)part;
+        return 120;
     }
     virtual int BossBulletCount(bool railMode) const = 0;
     virtual BossBullet GetBossBullet(int index, bool railMode) const = 0;
@@ -151,12 +195,12 @@ public:
      * @param railMode レール表示中か
     * @return 発射する弾数
     */
-    virtual int BossPartBulletCount(BossPart part, BossPhase phase, bool railMode) const {
-        if (part == BossNose) return BossBulletCount(railMode);
-        if (part == BossLeftWing || part == BossRightWing) {
-            return phase == BossSpecialPhase1 || phase == BossSpecialPhase2 ? 3 : 2;
+    virtual int BossPartBulletCount(int part, int phase, bool railMode) const {
+        if (part == BossNosePart()) return BossBulletCount(railMode);
+        if (part == BossLeftWingPart() || part == BossRightWingPart()) {
+            return phase == 1 || phase == 3 ? 3 : 2;
         }
-        return phase == BossSpecialPhase1 || phase == BossSpecialPhase2 ? 2 : 1;
+        return phase == 1 || phase == 3 ? 2 : 1;
     }
     /**
      * @brief 指定部位・フェーズの弾幕内の弾を取得する
@@ -166,12 +210,12 @@ public:
      * @param railMode レール表示中か
      * @return 発射位置オフセットと速度
      */
-    virtual BossBullet GetBossPartBullet(BossPart part, BossPhase phase, int index, bool railMode) const {
+    virtual BossBullet GetBossPartBullet(int part, int phase, int index, bool railMode) const {
         const int baseCount = BossBulletCount(railMode);
-        const int patternIndex = part == BossNose ? index :
-            (part == BossLeftWing ? 0 : (part == BossRightWing ? baseCount - 1 : baseCount / 2));
+        const int patternIndex = part == BossNosePart() ? index :
+            (part == BossLeftWingPart() ? 0 : (part == BossRightWingPart() ? baseCount - 1 : baseCount / 2));
         BossBullet bullet = GetBossBullet(patternIndex, railMode);
-        if (phase == BossSpecialPhase1 || phase == BossSpecialPhase2) {
+        if (phase == 1 || phase == 3) {
             bullet.vx *= 1.35f;
             bullet.vy += (index - BossPartBulletCount(part, phase, railMode) / 2) * 0.010f;
         }

@@ -106,43 +106,7 @@ private:
         bool active = false;
     };
 
-    /** @brief ボス機体で個別に破壊できる部位 */
-    enum BossPart {
-        BossNose,
-        BossLeftWing,
-        BossRightWing,
-        BossLeftEngine,
-        BossRightEngine,
-        BossPartCount
-    };
-    static_assert(BossPartCount == 5);
-
-    /** @brief ボス戦の攻撃フェーズ */
-    enum BossPhase {
-        BossNormalPhase1,
-        BossSpecialPhase1,
-        BossNormalPhase2,
-        BossSpecialPhase2,
-        BossPhaseCount
-    };
-    static_assert(BossPhaseCount == 4);
-
-    /**
-     * @brief 本体HPから現在の攻撃フェーズを取得する
-     * @param hp 現在の本体HP
-     * @param maxHp 本体の最大HP
-     * @return 通常、特殊、通常、特殊の順で進むフェーズ番号
-     */
-    static constexpr int BossPhaseForHp(int hp, int maxHp) {
-        if (maxHp <= 0) return BossNormalPhase1;
-        const int clampedHp = hp < 0 ? 0 : (hp > maxHp ? maxHp : hp);
-        const int phase = (maxHp - clampedHp) * BossPhaseCount / maxHp;
-        return phase < BossPhaseCount ? phase : BossPhaseCount - 1;
-    }
-    static_assert((480 - 480) * BossPhaseCount / 480 == BossNormalPhase1);
-    static_assert((480 - 360) * BossPhaseCount / 480 == BossSpecialPhase1);
-    static_assert((480 - 240) * BossPhaseCount / 480 == BossNormalPhase2);
-    static_assert((480 - 1) * BossPhaseCount / 480 == BossSpecialPhase2);
+    static constexpr int BossPartCapacity = 5;
 
     struct Enemy {
         float x = 0.0f;
@@ -164,8 +128,8 @@ private:
         int age = 0;
         int motionAge = 0;
         int shotInterval = 0;
-        int bossPhase = BossNormalPhase1;
-        std::array<int, BossPartCount> bossPartHp {};
+        int bossPhase = 0;
+        std::array<int, BossPartCapacity> bossPartHp {};
         const EnemyBehavior* behavior = nullptr;
         bool active = false;
     };
@@ -397,7 +361,7 @@ private:
      * @param part 命中した部位の格納先
      * @return 部位へ命中した場合true
      */
-    bool TryHitBossPart(const Shot& shot, const Enemy& boss, BossPart& part) const;
+    bool TryHitBossPart(const Shot& shot, const Enemy& boss, int& part) const;
     void PlayShotSound();
     void PlayHitSound();
     static bool Hit(float ax, float ay, float ar, float bx, float by, float br);
@@ -453,7 +417,7 @@ private:
         float x, float y, float z, float w, float h, float d, const float color[4], float yaw = 0.0f);
     static void DrawPlayerModel(Renderer& renderer, const Camera3D& camera,
         float x, float y, float z, bool visible, float yaw = 0.0f);
-    static void DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw = 0.0f);
+    void DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw = 0.0f) const;
     void DrawShotModel(Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw = 0.0f) const;
     /** @brief 爆発エフェクトをHLSLへ渡す描画コマンドとして記録する */
     static void DrawExplosion(Renderer& renderer, const Camera3D& camera, const Explosion& explosion);

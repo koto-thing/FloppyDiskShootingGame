@@ -603,7 +603,7 @@ void SideScrollingShooter::TickEnemies() {
         // ボスは通常・特殊フェーズごとの間隔で、未破壊の各部位から弾幕を発射する
         if (enemy.type == 2 &&
             !m_stage->IsBossSpecialAttackActive(enemy) &&
-            enemy.age % m_stage->BossAttackInterval(static_cast<BossPhase>(enemy.bossPhase)) == 0) {
+            enemy.age % m_stage->BossAttackInterval(enemy.bossPhase) == 0) {
             FireBossPartBarrage(enemy);
         }
 
@@ -730,7 +730,7 @@ void SideScrollingShooter::TickShots() {
             if (enemy.behavior == nullptr) {
                 enemy.behavior = &EnemyBehaviorForType(enemy.type);
             }
-            BossPart hitPart = BossNose;
+            int hitPart = m_stage->BossNosePart();
             if (enemy.type == 2 && TryHitBossPart(shot, enemy, hitPart)) {
                 SpawnExplosion(shot.x, shot.y, shot.z);
                 if (!shot.piercing) shot.active = false;
@@ -739,7 +739,7 @@ void SideScrollingShooter::TickShots() {
                     enemy.bossPartHp[hitPart] = 0;
                     SpawnEnemyDebris(enemy, hitPart);
                     // 部位破壊の報酬として、本体へ大ダメージを与える
-                    const bool bossDefeated = DamageBoss(enemy, 120);
+                    const bool bossDefeated = DamageBoss(enemy, m_stage->BossPartBreakDamage(hitPart));
                     PlayHitSound();
                     if (bossDefeated) DefeatBoss(enemy);
                 }
@@ -1038,7 +1038,7 @@ void SideScrollingShooter::StartBossBattle() {
     m_stage->ConfigureBossPartHp(boss);
     m_bossHp = boss.hp;
     m_displayBossHp = static_cast<float>(m_bossHp);
-    boss.bossPhase = BossNormalPhase1;
+    boss.bossPhase = m_stage->BossInitialPhase();
     m_invincible = (std::max)(m_invincible, 60);
 
     if (m_audio) {
@@ -1193,13 +1193,11 @@ void SideScrollingShooter::FireBossPartBarrage(const Enemy& boss) {
     const bool railMode = IsRailGameplayActive();
 
     // 未破壊部位ごとに、ステージ定義の通常または特殊弾幕を発射する
-    for (int part = 0; part < BossPartCount; ++part) {
+    for (int part = 0; part < m_stage->BossPartTotal(); ++part) {
         if (boss.bossPartHp[part] <= 0) continue;
-        const int bulletCount = m_stage->BossPartBulletCount(
-            static_cast<BossPart>(part), static_cast<BossPhase>(boss.bossPhase), railMode);
+        const int bulletCount = m_stage->BossPartBulletCount(part, boss.bossPhase, railMode);
         for (int index = 0; index < bulletCount; ++index) {
-            const Stage::BossBullet bullet = m_stage->GetBossPartBullet(
-                static_cast<BossPart>(part), static_cast<BossPhase>(boss.bossPhase), index, railMode);
+            const Stage::BossBullet bullet = m_stage->GetBossPartBullet(part, boss.bossPhase, index, railMode);
             const float x = railMode ? boss.x + PartX[part] * ModelScale / WorldXScale :
                 boss.x + PartZ[part] * ModelScale / WorldXScale;
             const float y = boss.y + PartY[part] * ModelScale / WorldYScale;
@@ -1560,7 +1558,7 @@ void SideScrollingShooter::RestartCurrentChapter() {
     m_restartTimer = RestartDisplayFrames;
 }
 
-bool SideScrollingShooter::TryHitBossPart(const Shot& shot, const Enemy& boss, BossPart& part) const {
+bool SideScrollingShooter::TryHitBossPart(const Shot& shot, const Enemy& boss, int& part) const {
     // 既存ボスモデルのローカル座標に対応する、破壊可能部位の中心と当たり判定半径
     constexpr float ModelScale = 0.14f;
     constexpr float PartX[] = { 0.0f, 17.0f, -17.0f, 6.0f, -6.0f };
@@ -1568,7 +1566,7 @@ bool SideScrollingShooter::TryHitBossPart(const Shot& shot, const Enemy& boss, B
     constexpr float PartZ[] = { -17.5f, 0.0f, 0.0f, 13.0f, 13.0f };
     constexpr float PartRadius[] = { 0.50f, 1.20f, 1.20f, 0.58f, 0.58f };
 
-    for (int i = 0; i < BossPartCount; ++i) {
+    for (int i = 0; i < m_stage->BossPartTotal(); ++i) {
         if (boss.bossPartHp[i] <= 0) continue;
         if (IsRailGameplayActive()) {
             const float partX = ToWorldX(boss.x) + PartX[i] * ModelScale;
@@ -1587,7 +1585,7 @@ bool SideScrollingShooter::TryHitBossPart(const Shot& shot, const Enemy& boss, B
                 continue;
             }
         }
-        part = static_cast<BossPart>(i);
+        part = i;
         return true;
     }
     return false;
@@ -1922,7 +1920,7 @@ void SideScrollingShooter::DrawPlayerModel(Renderer& renderer, const Camera3D& c
         1.15f, 0.12f, 0.62f, PlayerAccent, yaw);
 }
 
-void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw) {
+void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw) const {
     const float x = ToWorldX(enemy.x);
     const float y = ToWorldY(enemy.y);
     const float z = enemy.z;
@@ -1941,7 +1939,7 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
         };
 
         // 機首と上部メインボディ
-        if (enemy.bossPartHp[BossNose] > 0) {
+        if (enemy.bossPartHp[m_stage->BossNosePart()] > 0) {
             DrawBossPart(2, 0.0f, 3.0f, -14.0f, 6.0f, 6.0f, 4.0f, Gray);
             DrawBossPart(2, 0.0f, 2.0f, -17.5f, 2.0f, 2.0f, 3.0f, Gray);
             DrawBossPart(2, 0.0f, 4.5f, -20.0f, 1.0f, 1.0f, 8.0f, Black);
@@ -1958,11 +1956,11 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
         DrawBossPart(2, 0.0f, -12.0f, -7.0f, 1.0f, 1.0f, 6.0f, Black);
         DrawBossPart(1, 2.0f, -8.0f, 0.0f, 1.0f, 5.0f, 1.0f, Black);
         DrawBossPart(1, -2.0f, -8.0f, 0.0f, 1.0f, 5.0f, 1.0f, Black);
-        if (enemy.bossPartHp[BossLeftWing] > 0) {
+        if (enemy.bossPartHp[m_stage->BossLeftWingPart()] > 0) {
             DrawBossPart(1, 13.0f, 2.0f, 0.0f, 8.0f, 4.0f, 12.0f, White);
             DrawBossPart(1, 21.0f, 2.0f, 0.0f, 12.0f, 2.0f, 10.0f, White);
         }
-        if (enemy.bossPartHp[BossRightWing] > 0) {
+        if (enemy.bossPartHp[m_stage->BossRightWingPart()] > 0) {
             DrawBossPart(1, -13.0f, 2.0f, 0.0f, 8.0f, 4.0f, 12.0f, White);
             DrawBossPart(1, -21.0f, 2.0f, 0.0f, 12.0f, 2.0f, 10.0f, White);
         }
@@ -1973,11 +1971,11 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
         DrawBossPart(2, -7.0f, 3.0f, 18.0f, 4.0f, 4.0f, 6.0f, Black);
         DrawBossPart(1, 0.0f, -6.0f, 16.5f, 2.0f, 8.0f, 3.0f, White);
         DrawBossPart(1, 0.0f, 12.0f, 16.5f, 2.0f, 8.0f, 3.0f, White);
-        if (enemy.bossPartHp[BossLeftEngine] > 0) {
+        if (enemy.bossPartHp[m_stage->BossLeftEnginePart()] > 0) {
             DrawBossPart(2, 6.0f, -6.0f, 10.0f, 4.0f, 4.0f, 10.0f, Black);
             DrawBossPart(2, 6.0f, -6.0f, 16.0f, 2.0f, 2.0f, 2.0f, Black);
         }
-        if (enemy.bossPartHp[BossRightEngine] > 0) {
+        if (enemy.bossPartHp[m_stage->BossRightEnginePart()] > 0) {
             DrawBossPart(2, -6.0f, -6.0f, 10.0f, 4.0f, 4.0f, 10.0f, Black);
             DrawBossPart(2, -6.0f, -6.0f, 16.0f, 2.0f, 2.0f, 2.0f, Black);
         }
@@ -2140,9 +2138,10 @@ void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
     DrawShape(renderer, 0.0f, 0.76f, BossBarWidth, 0.025f, BossBarBack);
     DrawShape(renderer, BossBarWidth * (1.0f - hpRate), 0.76f,
         BossBarWidth * hpRate, 0.018f, BossBarFill);
-    // 4フェーズの境界をHPバー上に常時表示する
-    for (int phase = 1; phase < BossPhaseCount; ++phase) {
-        DrawShape(renderer, -BossBarWidth * 0.5f + BossBarWidth * static_cast<float>(phase) / static_cast<float>(BossPhaseCount),
+    // ステージ定義のフェーズ境界をHPバー上に常時表示する
+    const int bossPhaseTotal = m_stage->BossPhaseTotal();
+    for (int phase = 1; phase < bossPhaseTotal; ++phase) {
+        DrawShape(renderer, -BossBarWidth * 0.5f + BossBarWidth * static_cast<float>(phase) / static_cast<float>(bossPhaseTotal),
             0.755f, 0.008f, 0.035f, BossBarDivider);
     }
     const BossStory story = BossStories::ForStage(m_stageNumber);
@@ -2151,10 +2150,7 @@ void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
     const char* phaseLabel = "NORMAL 1";
     for (const auto& enemy : m_enemies) {
         if (!enemy.active || enemy.type != 2) continue;
-        constexpr const char* PhaseLabels[] = {
-            "NORMAL 1", "SPECIAL 1", "NORMAL 2", "SPECIAL 2"
-        };
-        phaseLabel = PhaseLabels[enemy.bossPhase];
+        phaseLabel = m_stage->BossPhaseLabel(enemy.bossPhase);
         break;
     }
     renderer.DrawText(phaseLabel, { -BossBarWidth, 0.81f }, 0.012f,
@@ -2248,20 +2244,20 @@ void SideScrollingShooter::SpawnEnemyDebris(const Enemy& enemy, int bossPart) {
         float width, float height, float depth, const float color[4]) {
         AddPiece(shape, localX, localY, localZ, width, height, depth, color, ModelScale);
     };
-    if (bossPart == BossNose) {
+    if (bossPart == m_stage->BossNosePart()) {
         AddBossPiece(2, 0.0f, 3.0f, -14.0f, 6.0f, 6.0f, 4.0f, Gray);
         AddBossPiece(2, 0.0f, 2.0f, -17.5f, 2.0f, 2.0f, 3.0f, Gray);
         AddBossPiece(2, 0.0f, 4.5f, -20.0f, 1.0f, 1.0f, 8.0f, Black);
         return;
     }
-    if (bossPart == BossLeftWing || bossPart == BossRightWing) {
-        const float side = bossPart == BossLeftWing ? 1.0f : -1.0f;
+    if (bossPart == m_stage->BossLeftWingPart() || bossPart == m_stage->BossRightWingPart()) {
+        const float side = bossPart == m_stage->BossLeftWingPart() ? 1.0f : -1.0f;
         AddBossPiece(1, side * 13.0f, 2.0f, 0.0f, 8.0f, 4.0f, 12.0f, White);
         AddBossPiece(1, side * 21.0f, 2.0f, 0.0f, 12.0f, 2.0f, 10.0f, White);
         return;
     }
-    if (bossPart == BossLeftEngine || bossPart == BossRightEngine) {
-        const float side = bossPart == BossLeftEngine ? 1.0f : -1.0f;
+    if (bossPart == m_stage->BossLeftEnginePart() || bossPart == m_stage->BossRightEnginePart()) {
+        const float side = bossPart == m_stage->BossLeftEnginePart() ? 1.0f : -1.0f;
         AddBossPiece(2, side * 6.0f, -6.0f, 10.0f, 4.0f, 4.0f, 10.0f, Black);
         AddBossPiece(2, side * 6.0f, -6.0f, 16.0f, 2.0f, 2.0f, 2.0f, Black);
         return;
@@ -2274,11 +2270,11 @@ void SideScrollingShooter::SpawnEnemyDebris(const Enemy& enemy, int bossPart) {
     AddBossPiece(2, 0.0f, -12.0f, 0.0f, 4.0f, 4.0f, 10.0f, Gray);
     AddBossPiece(2, 0.0f, -15.0f, 1.0f, 2.0f, 2.0f, 8.0f, Gray);
     AddBossPiece(2, 0.0f, 3.0f, 15.0f, 10.0f, 10.0f, 6.0f, Gray);
-    if (enemy.bossPartHp[BossNose] > 0) SpawnEnemyDebris(enemy, BossNose);
-    if (enemy.bossPartHp[BossLeftWing] > 0) SpawnEnemyDebris(enemy, BossLeftWing);
-    if (enemy.bossPartHp[BossRightWing] > 0) SpawnEnemyDebris(enemy, BossRightWing);
-    if (enemy.bossPartHp[BossLeftEngine] > 0) SpawnEnemyDebris(enemy, BossLeftEngine);
-    if (enemy.bossPartHp[BossRightEngine] > 0) SpawnEnemyDebris(enemy, BossRightEngine);
+    if (enemy.bossPartHp[m_stage->BossNosePart()] > 0) SpawnEnemyDebris(enemy, m_stage->BossNosePart());
+    if (enemy.bossPartHp[m_stage->BossLeftWingPart()] > 0) SpawnEnemyDebris(enemy, m_stage->BossLeftWingPart());
+    if (enemy.bossPartHp[m_stage->BossRightWingPart()] > 0) SpawnEnemyDebris(enemy, m_stage->BossRightWingPart());
+    if (enemy.bossPartHp[m_stage->BossLeftEnginePart()] > 0) SpawnEnemyDebris(enemy, m_stage->BossLeftEnginePart());
+    if (enemy.bossPartHp[m_stage->BossRightEnginePart()] > 0) SpawnEnemyDebris(enemy, m_stage->BossRightEnginePart());
 }
 
 /**
