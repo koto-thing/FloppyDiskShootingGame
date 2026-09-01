@@ -205,7 +205,7 @@
     <ClInclude Include="Presentation\Gameplay\Stage1EnemySheetEasy.h" />
     <ClInclude Include="Presentation\Gameplay\Stage1EnemySheetHard.h" />
     <ClInclude Include="Presentation\Gameplay\Stage1EnemySheetNormal.h" />
-    <ClInclude Include="Presentation\Gameplay\Stage1Story.h" />
+    <ClInclude Include="Presentation\Gameplay\StageBossStory.h" />
     <ClInclude Include="Presentation\Scenes\TitleScene.h" />
     <ClInclude Include="Presentation\TitleScene\TitleSceneColumn.h" />
     <ClInclude Include="Temp\Bullet.h" />

@@ -177,7 +177,7 @@ Vector3 RotateYawOffset(float x, float y, float z, float yaw) {
 #include "Stage1EnemySheetEasy.h"
 #include "Stage1EnemySheetHard.h"
 #include "Stage1EnemySheetNormal.h"
-#include "Stage1Story.h"
+#include "StageBossStory.h"
 
 /**
  * @brief 指定難易度のステージ1敵出現シートを取得する
