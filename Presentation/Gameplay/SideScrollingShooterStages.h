@@ -73,6 +73,40 @@ public:
     virtual void ConfigureBoss(Enemy& boss, bool railMode) const {
         BossEnemyBehaviorInstance().ConfigureBossSpawn(boss, railMode, StageIndex());
     }
+    /**
+     * @brief ボス部位HPを設定する
+     * @param boss 部位HPを設定するボス
+     * @return なし
+     */
+    virtual void ConfigureBossPartHp(Enemy& boss) const {
+        boss.bossPartHp = { 120, 180, 180, 150, 150 };
+    }
+    /**
+     * @brief ボスの移動を更新する
+     * @param shooter ゲーム本体
+     * @param boss 更新するボス
+     * @return なし
+     */
+    virtual void TickBoss(SideScrollingShooter& shooter, Enemy& boss) const {
+        BossEnemyBehaviorInstance().Tick(shooter, boss);
+    }
+    /**
+     * @brief ボス弾幕の発射間隔を取得する
+     * @param phase 現在のボス攻撃フェーズ
+     * @return 発射間隔
+     */
+    virtual int BossAttackInterval(BossPhase phase) const {
+        return phase == BossNormalPhase1 || phase == BossNormalPhase2 ? 120 : 84;
+    }
+    /**
+     * @brief 本体HPからボス攻撃フェーズを取得する
+     * @param hp 現在の本体HP
+     * @param maxHp 本体の最大HP
+     * @return ボス攻撃フェーズ
+     */
+    virtual int BossPhaseForHp(int hp, int maxHp) const {
+        return SideScrollingShooter::BossPhaseForHp(hp, maxHp);
+    }
     virtual int BossBulletCount(bool railMode) const = 0;
     virtual BossBullet GetBossBullet(int index, bool railMode) const = 0;
     /**

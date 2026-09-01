@@ -554,7 +554,11 @@ void SideScrollingShooter::TickEnemies() {
         if (enemy.shotInterval <= 0) {
             enemy.shotInterval = enemy.behavior->AimedShotInterval();
         }
-        enemy.behavior->Tick(*this, enemy);
+        if (enemy.type == 2) {
+            m_stage->TickBoss(*this, enemy);
+        } else {
+            enemy.behavior->Tick(*this, enemy);
+        }
 
         // 巨大障害物へ接触した通常敵はスコアやアイテムを発生させず、その場で破壊する。ボス(type 2)は対象外
         const float boneHitRadius = IsRailGameplayActive() ? enemy.behavior->CollisionRadius3D(enemy) / WorldXScale :
@@ -581,7 +585,8 @@ void SideScrollingShooter::TickEnemies() {
         }
 
         // ボスは通常・特殊フェーズごとの間隔で、未破壊の各部位から弾幕を発射する
-        if (enemy.type == 2 && enemy.age % (enemy.bossPhase % 2 == 0 ? 120 : 84) == 0) {
+        if (enemy.type == 2 &&
+            enemy.age % m_stage->BossAttackInterval(static_cast<BossPhase>(enemy.bossPhase)) == 0) {
             FireBossPartBarrage(enemy);
         }
 
@@ -990,8 +995,6 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
 
 void SideScrollingShooter::StartBossBattle() {
     m_bossBattle = true;
-    m_bossHp = m_stage->BossMaxHp();
-    m_displayBossHp = static_cast<float>(m_bossHp);
     m_bossStoryLine = 0;
     m_bossStoryActive = true;
 
@@ -1005,8 +1008,9 @@ void SideScrollingShooter::StartBossBattle() {
 
     Enemy& boss = m_enemies[0];
     m_stage->ConfigureBoss(boss, IsRailGameplayActive());
-    // 機首、主翼、エンジンは本体とは別HPで管理する
-    boss.bossPartHp = { 120, 180, 180, 150, 150 };
+    m_stage->ConfigureBossPartHp(boss);
+    m_bossHp = boss.hp;
+    m_displayBossHp = static_cast<float>(m_bossHp);
     boss.bossPhase = BossNormalPhase1;
     m_invincible = (std::max)(m_invincible, 60);
 
@@ -1182,7 +1186,7 @@ void SideScrollingShooter::FireBossPartBarrage(const Enemy& boss) {
 bool SideScrollingShooter::DamageBoss(Enemy& boss, int damage) {
     boss.hp -= damage;
     m_bossHp = (std::max)(0, boss.hp);
-    const int nextPhase = BossPhaseForHp(boss.hp, boss.maxHp);
+    const int nextPhase = m_stage->BossPhaseForHp(boss.hp, boss.maxHp);
     if (nextPhase != boss.bossPhase) {
         boss.bossPhase = nextPhase;
         // フェーズ切り替え時は画面上の敵弾を消して次の弾幕を読みやすくする
