@@ -1,4 +1,5 @@
 #include "ModelTestScene.h"
+#include "../Gameplay/BossModelView.h"
 
 #include "../../Engine/Graphics/Renderer.h"
 #include "../../Engine/Input/Input.h"
@@ -9,8 +10,8 @@
  */
 void ModelTestScene::Initialize() {
     /** @brief 円柱の上面と側面を確認できる視点を設定する */
-    m_camera.SetPosition({3.6f, 2.8f, -5.0f});
-    m_camera.LookAt({0.0f, 0.0f, 0.0f});
+    m_camera.SetPosition({12.0f, 8.0f, -18.0f});
+    m_camera.LookAt({0.0f, 1.5f, 0.0f});
     m_camera.SetNearClip(0.1f);
     m_camera.SetFarClip(100.0f);
 }
@@ -40,75 +41,124 @@ void ModelTestScene::Tick() {
  * @brief モデルと床面およびUIを描画する
  */
 void ModelTestScene::Render(Renderer& renderer) {
-    /** @brief 現在の出力解像度に追従する3Dビューポートを設定する */
+    // 3D描画設定
     m_camera.SetViewport({0, 0, renderer.Width(), renderer.Height()});
-    /** @brief 奥側の面を除外する3Dモデル用パイプラインを選択する */
+
     renderer.SetPipeline(PipelineId::Model3D);
     renderer.SetCamera(m_camera);
 
-    /** @brief 床面を描画する */
-    const Matrix4x4 floorWorld = Matrix4x4::Translation({0.0f, -1.5f, 0.0f}) *
-        Matrix4x4::Scale({4.0f, 1.0f, 4.0f});
+    const Matrix4x4 viewProj =
+        m_camera.ProjectionMatrix() *
+        m_camera.ViewMatrix();
+
+    // 床
+    const Matrix4x4 floorWorld =
+        Matrix4x4::Translation({0.0f, -2.0f, 0.0f}) *
+        Matrix4x4::Scale({12.0f, 1.0f, 8.0f});
+
     renderer.Draw({
         PrimitiveShape::Plate,
-        m_camera.ProjectionMatrix() * m_camera.ViewMatrix() * floorWorld,
+        viewProj * floorWorld,
         Vector3::One,
         {0.12f, 0.16f, 0.22f, 1.0f}
     });
 
-    /** @brief モデルを描画する */
-// --- 共通パラメータの設定 ---
-    const Vector3 player = { 0.0f, 0.0f, 0.0f }; // 機体中心
-    const float rollFactor = 0.0f;              // ロール係数（必要に応じて変更）
-    const Matrix4x4 viewProj = m_camera.ProjectionMatrix() * m_camera.ViewMatrix();
-    const Matrix4x4 baseRotation = Matrix4x4::RotationY(m_rotationAngle);
+    // BossModelView.h 用描画アダプタ
+    auto drawBossPart =
+        [&](int shape,
+            const Vector3& position,
+            const Vector3& scale,
+            const float color[4],
+            float yaw) {
 
-    // カラー定義
-    const ColorF noseCol = { 0.90f, 0.20f, 0.20f, 1.0f }; // 赤系（ノーズ）
+        const PrimitiveShape primitiveShape =
+            static_cast<PrimitiveShape>(shape);
 
-    // 描画用ローカルラムダ（コード重複を減らし規則を統一）
-    auto DrawPart = [&](PrimitiveShape shape, const Vector3& pos, const Vector3& scale, const Vector3& rot, const ColorF& color) {
-        // 位置移動とスケールを設定し、全体回転(Y軸)を適用
-        const Matrix4x4 partRotation = Matrix4x4::RotationY(rot.y) * Matrix4x4::RotationX(rot.x) * Matrix4x4::RotationZ(rot.z);
-        const Matrix4x4 localWorld = Matrix4x4::Translation(pos) * partRotation * Matrix4x4::Scale(scale);
-        const Matrix4x4 world = baseRotation * localWorld;
-
-        renderer.Draw({
-            shape,
-            viewProj * world,
-            Vector3::One,
-            color,
-            m_rotationAngle
-            });
+        const ColorF partColor {
+            color[0],
+            color[1],
+            color[2],
+            color[3]
         };
 
-    // A. 機首ノーズ
-    DrawPart(
-        PrimitiveShape::Cone,
-        { player.x, player.y, player.z},
-        { 1.6f, 1.6f, 4.0f },
-        { 90.0f, 0.0f, 0.0f },
-        noseCol
+        const Matrix4x4 world =
+            Matrix4x4::Translation(position) *
+            Matrix4x4::RotationY(yaw) *
+            Matrix4x4::Scale(scale);
+
+        renderer.Draw({
+            primitiveShape,
+            viewProj * world,
+            Vector3::One,
+            partColor,
+            yaw
+        });
+    };
+
+    // -------------------------
+    // 下部：砂中潜航艦
+    // -------------------------
+
+    BossModelTransform submarineTransform;
+
+    submarineTransform.position = {
+        0.0f,
+        0.0f,
+        0.0f
+    };
+
+    submarineTransform.yaw = m_rotationAngle;
+    submarineTransform.scale = 1.0f;
+
+    SandSubmarineView::Draw(
+        submarineTransform,
+        drawBossPart
     );
 
-    /** @brief 3D描画後にUI座標系へ戻して操作説明を重ねる */
-    renderer.ResetCamera();
-    renderer.DrawText("3D MODEL TEST", TextAlign::TopCenter, 0.035f, ColorF::White(), {0.0f, -0.08f});
-    renderer.DrawText("CYLINDER - AUTO ROTATE", TextAlign::BottomCenter, 0.018f,
-                      {0.70f, 0.82f, 0.95f, 1.0f}, {0.0f, 0.12f});
-    renderer.DrawText("ESC: BACK TO TITLE", TextAlign::BottomCenter, 0.014f,
-                      {0.70f, 0.70f, 0.70f, 1.0f}, {0.0f, 0.05f});
-}
+    // -------------------------
+    // 上部：陸上戦艦
+    // -------------------------
 
-void drawModel(float m_rotationAngle, Renderer renderer, Camera3D m_camera)
-{
-    const Matrix4x4 cylinderWorld = Matrix4x4::RotationY(m_rotationAngle) *
-        Matrix4x4::Scale({ 2.0f, 3.0f, 2.0f });
-    renderer.Draw({
-        PrimitiveShape::Cylinder,
-        m_camera.ProjectionMatrix() * m_camera.ViewMatrix() * cylinderWorld,
-        Vector3::One,
-        {0.30f, 0.78f, 1.0f, 1.0f},
-        m_rotationAngle
-        });
+    BossModelTransform battleshipTransform;
+
+    battleshipTransform.position = {
+        0.0f,
+        1.55f,
+        0.0f
+    };
+
+    battleshipTransform.yaw = m_rotationAngle;
+    battleshipTransform.scale = 1.0f;
+
+    LandBattleshipView::Draw(
+        battleshipTransform,
+        drawBossPart
+    );
+
+    // UI描画へ戻す
+    renderer.ResetCamera();
+
+    renderer.DrawText(
+        "BOSS MODEL TEST",
+        TextAlign::TopCenter,
+        0.035f,
+        ColorF::White(),
+        {0.0f, -0.08f}
+    );
+
+    renderer.DrawText(
+        "AUTO ROTATE",
+        TextAlign::BottomCenter,
+        0.018f,
+        {0.70f, 0.82f, 0.95f, 1.0f},
+        {0.0f, 0.12f}
+    );
+
+    renderer.DrawText(
+        "ESC: BACK TO TITLE",
+        TextAlign::BottomCenter,
+        0.014f,
+        {0.70f, 0.70f, 0.70f, 1.0f},
+        {0.0f, 0.05f}
+    );
 }

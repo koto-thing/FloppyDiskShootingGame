@@ -70,6 +70,19 @@ private:
 
     bool InitD3D12(HWND hwnd, int width, int height);
     bool InitPipeline();
+    /**
+     * @brief 低解像度描画用のRenderTarget、Depth Buffer、Descriptorを生成する
+     * @return 生成に成功した場合true
+     */
+    bool InitializeLowResolutionRenderTarget();
+    /**
+     * @brief 低解像度RenderTargetをBackBufferへポイント拡大する
+     * @return なし
+     */
+    void DrawLowResolutionToBackBuffer();
+
+    static constexpr UINT LOW_RES_WIDTH = 512;
+    static constexpr UINT LOW_RES_HEIGHT = 288;
 
     int m_width;
     int m_height;
@@ -79,7 +92,9 @@ private:
     ComPtr<IDXGISwapChain3> m_swapChain;
     ComPtr<ID3D12DescriptorHeap> m_rtvHeap;
     ComPtr<ID3D12DescriptorHeap> m_dsvHeap;
+    ComPtr<ID3D12DescriptorHeap> m_lowResolutionSrvHeap;
     ComPtr<ID3D12Resource> m_renderTargets[2];
+    ComPtr<ID3D12Resource> m_lowResolutionRenderTarget;
     ComPtr<ID3D12Resource> m_depthStencil;
     ComPtr<ID3D12CommandAllocator> m_commandAllocator;
     ComPtr<ID3D12GraphicsCommandList> m_commandList;
@@ -92,6 +107,7 @@ private:
     ComPtr<ID3D12PipelineState> m_pipelineStateModel3D;
     ComPtr<ID3D12PipelineState> m_pipelineStatePlayerShot;
     ComPtr<ID3D12PipelineState> m_pipelineStateExplosion;
+    ComPtr<ID3D12PipelineState> m_pipelineStateUpscale;
 
     ComPtr<ID3D12Fence> m_fence;
     UINT64 m_fenceValue;
@@ -109,5 +125,6 @@ private:
     CameraMatrices m_cameraMatrices {};
     Viewport m_cameraViewport {};
     bool m_hasCamera = false;
+    bool m_sceneUpscaled = false;
     int m_currentPipelineType = 0;
 };

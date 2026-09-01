@@ -9,6 +9,7 @@
 #include "../../Engine/Input/Input.h"
 #include "../../Engine/Input/KeyCode.h"
 #include "../../Infrastructure/ExternalServices/AudioService.h"
+#include "BossModelView.h"
 
 namespace {
 constexpr float ModeTextColor[4] = { 0.55f, 0.85f, 1.0f, 1.0f };
@@ -120,6 +121,22 @@ bool GetSeaSerpentMotion(int frame, SeaSerpentMotion& motion) {
 }
 
 /**
+ * @brief ウミヘビの各胴体節が頭から遅れて一周する進行率を取得する
+ * @param progress 行動全体の進行率
+ * @param segmentCount 胴体節数
+ * @param segmentDelay 隣接する胴体節間の遅延
+ * @param segmentIndex 頭を0とする胴体節番号
+ * @return 水中を0、再入水完了を1とする進行率
+ */
+constexpr float GetSeaSerpentSegmentProgress(float progress, int segmentCount,
+    float segmentDelay, int segmentIndex) {
+    const float tailDelay = static_cast<float>(segmentCount - 1) * segmentDelay;
+    return Math::Clamp01(progress * (1.0f + tailDelay) - static_cast<float>(segmentIndex) * segmentDelay);
+}
+
+static_assert(GetSeaSerpentSegmentProgress(1.0f, 23, 0.05f, 22) >= 1.0f - Math::Epsilon);
+
+/**
  * @brief スクロール座標をNDCの横幅へ循環させる
  * @param value 循環前のX座標
  * @return -1.0f以上1.0f未満のX座標
@@ -173,6 +190,7 @@ Vector3 RotateYawOffset(float x, float y, float z, float yaw) {
 
 #include "SideScrollingShooterEnemies.h"
 #include "SideScrollingShooterStages.h"
+#include "GameplayRandom.h"
 #include "Stage1EnemySheet.h"
 #include "Stage1EnemySheetEasy.h"
 #include "Stage1EnemySheetHard.h"
@@ -442,6 +460,8 @@ void SideScrollingShooter::ProcessInput() {
 }
 
 void SideScrollingShooter::Tick() {
+    const bool completingRailToSideTransition = m_viewTransitionTimer == 1 &&
+        m_viewMode == ViewMode::Rail3D && m_nextViewMode == ViewMode::Side2D;
     TickViewTransition();
 
     // HUD用HPは実HPへ追従させ、ダメージ時の減少を視認できるようにする
@@ -452,7 +472,8 @@ void SideScrollingShooter::Tick() {
     } else {
         m_displayBossHp = static_cast<float>(m_bossHp);
     }
-    if (m_viewTransitionTimer > 0) {
+    // 3Dから2Dへ確定するフレームは、座標変換直後の特殊障害物との接触を判定しない
+    if (m_viewTransitionTimer > 0 || completingRailToSideTransition) {
         return;
     }
     if (m_clear) {
@@ -587,11 +608,19 @@ void SideScrollingShooter::TickEnemies() {
             continue;
         }
 
+        if (enemy.attackWarningFrames > 0) --enemy.attackWarningFrames;
         const int aimedShotInterval = enemy.shotInterval;
-        if (aimedShotInterval > 0 && enemy.age % aimedShotInterval == 0 &&
-            !(enemy.type == 2 && m_stage->IsBossSpecialAttackActive(enemy))) {
-            const float dxToPlayer = m_playerX - enemy.x;
-            const float dyToPlayer = m_playerY - enemy.y;
+        const bool canUseAimedShot = !(enemy.type == 2 && m_stage->IsBossSpecialAttackActive(enemy));
+        if (aimedShotInterval > AttackWarningFrames && canUseAimedShot &&
+            enemy.age % aimedShotInterval == aimedShotInterval - AttackWarningFrames) {
+            // 発射時の追尾を防ぐため、予告した地点を狙い弾の目標として固定する
+            enemy.attackWarningTargetX = m_playerX;
+            enemy.attackWarningTargetY = m_playerY;
+            enemy.attackWarningFrames = AttackWarningFrames;
+        }
+        if (aimedShotInterval > 0 && enemy.age % aimedShotInterval == 0 && canUseAimedShot) {
+            const float dxToPlayer = enemy.attackWarningTargetX - enemy.x;
+            const float dyToPlayer = enemy.attackWarningTargetY - enemy.y;
             const float length = std::sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
             if (length > 0.001f) {
                 const float shotSpeed = enemy.behavior->AimedShotSpeed();
@@ -628,18 +657,26 @@ void SideScrollingShooter::TickEnemies() {
 
 /** @brief ステージ固有の破壊可能ギミックを更新する */
 void SideScrollingShooter::TickStageGimmicks() {
-    if (m_stageNumber != 1 || m_meteorDestroyed) return;
+    if (m_stageNumber != 1) return;
 
-    // 被弾後は縮小率に合わせて飛来速度も落とす
-    m_meteorTravel += 0.16f * m_meteorScale;
-    if (m_meteorTravel >= 72.0f) m_meteorTravel -= 72.0f;
+    // 大小の異なる隕石をそれぞれ移動・回転させる
+    for (auto& meteor : m_meteors) {
+        if (meteor.destroyed) continue;
+        meteor.travel += 0.10f + meteor.scale * 0.06f;
+        if (meteor.travel >= 72.0f) meteor.travel -= 72.0f;
+        meteor.yaw += meteor.spin;
+    }
 }
 
 /** @brief ステージ固有の破壊可能ギミックを初期状態へ戻す */
 void SideScrollingShooter::ResetStageGimmicks() {
-    m_meteorTravel = 0.0f;
-    m_meteorScale = 1.0f;
-    m_meteorDestroyed = false;
+    constexpr float Travel[] = { 0.0f, 11.5f, 24.8f, 37.0f, 50.6f, 63.4f };
+    constexpr float Scale[] = { 1.75f, 1.10f, 2.05f, 1.38f, 1.62f, 0.92f };
+    constexpr float Spin[] = { 0.035f, -0.052f, 0.028f, -0.041f, 0.046f, -0.061f };
+    for (int i = 0; i < MeteorCount; ++i) {
+        m_meteors[i] = { Travel[i], Scale[i], static_cast<float>(i) * 0.7f, Spin[i],
+            4 + i % 3, false };
+    }
     m_boneArchHp = BoneArchMaxHp;
     m_boneArchDestroyed = false;
 }
@@ -651,12 +688,15 @@ void SideScrollingShooter::ResetStageGimmicks() {
  */
 bool SideScrollingShooter::TryDamageStageGimmick(Shot& shot) {
     if (shot.enemy) return false;
-    if (m_stageNumber == 1 && !m_meteorDestroyed &&
-        HitsStage1Meteor(shot.x, shot.y, shot.z, shot.hitRadius)) {
+    const int meteorIndex = m_stageNumber == 1 ?
+        FindStage1Meteor(shot.x, shot.y, shot.z, shot.hitRadius) : -1;
+    if (meteorIndex >= 0) {
         SpawnExplosion(shot.x, shot.y, shot.z);
         shot.active = false;
-        m_meteorScale = (std::max)(0.50f, m_meteorScale - 0.10f * static_cast<float>(shot.damage));
-        if (m_meteorScale <= 0.50f) m_meteorDestroyed = true;
+        Meteor& meteor = m_meteors[meteorIndex];
+        meteor.hp -= shot.damage;
+        SpawnMeteorDebris(meteor, meteor.hp <= 0 ? 8 : 2);
+        if (meteor.hp <= 0) meteor.destroyed = true;
         PlayHitSound();
         return true;
     }
@@ -752,7 +792,8 @@ void SideScrollingShooter::TickShots() {
             }
             const float enemyRadius = enemy.behavior->CollisionRadius(enemy);
             const bool enemyHit = IsRailGameplayActive() ?
-                Hit3D(ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
+                Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
+                    ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
                     ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z, enemy.behavior->ShotHitRadius3D(enemy)) :
                 Hit(shot.x, shot.y, shot.hitRadius, enemy.x, enemy.y, enemyRadius);
             if (!enemyHit) continue;
@@ -1006,15 +1047,26 @@ void SideScrollingShooter::InitializeSideObjects() {
 }
 
 void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, float y, float railZ) {
+    constexpr float SideEnemyEntryX = 2.80f;
+    static constexpr int SpawnableEnemyTypes[] = {
+        Stage::HeavyEnemy, Stage::StraightShooterEnemy,
+        Stage::ArmoredEnemy, Stage::CircleShooterEnemy
+    };
+    static_assert(sizeof(SpawnableEnemyTypes) / sizeof(SpawnableEnemyTypes[0]) == 4);
+    if (enemyType != Stage::BossEnemy) {
+        enemyType = SpawnableEnemyTypes[static_cast<int>(GameplayRandom::Range(0.0f, 3.999f))];
+    }
+
     for (auto& enemy : m_enemies) {
         if (enemy.active) continue;
         enemy.active = true;
         m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
-        enemy.baseX = IsRailGameplayActive() ? railX : sideX;
+        // 出現テーブルの座標に関わらず、敵機全体が表示領域外から入る位置に固定する
+        enemy.baseX = IsRailGameplayActive() ? railX : (std::max)(sideX, SideEnemyEntryX);
         enemy.x = enemy.baseX;
         enemy.baseY = y;
         enemy.y = y;
-        enemy.z = IsRailGameplayActive() ? railZ : ToRailZFromSideX(sideX);
+        enemy.z = IsRailGameplayActive() ? (std::max)(railZ, EnemyRailFarZ) : ToRailZFromSideX(enemy.x);
         ++m_chapterResult.enemySpawnCount;
         return;
     }
@@ -1087,20 +1139,39 @@ bool SideScrollingShooter::HitsDesertBoneArch(float x, float y, float z, float r
  * @return 隕石に接触している場合true
  */
 bool SideScrollingShooter::HitsStage1Meteor(float x, float y, float z, float radius) const {
-    if (m_meteorDestroyed) return false;
-    const float sideX = 1.85f - std::fmod(m_meteorTravel * 0.0325f, 4.40f);
-    const float sideY = 0.55f + std::sin(m_meteorTravel * 0.105f) * 0.34f;
-    if (IsRailGameplayActive()) {
-        const float railX = std::sin(m_meteorTravel * 0.090f) * 7.0f;
-        const float railY = 0.80f + std::sin(m_meteorTravel * 0.135f) * 2.0f;
-        return Hit3D(ToWorldX(x), ToWorldY(y), z, radius * WorldXScale,
-            railX, railY, 72.0f - m_meteorTravel, 2.50f * m_meteorScale);
-    }
-    return Hit(x, y, radius, sideX, sideY, 0.34f * m_meteorScale);
+    return FindStage1Meteor(x, y, z, radius) >= 0;
 }
 
 /**
- * @brief 海面を横断するウミヘビへ指定球が接触したか判定する
+ * @brief 指定球が接触しているステージ1隕石の番号を取得する
+ * @param x 判定対象のゲーム座標X
+ * @param y 判定対象のゲーム座標Y
+ * @param z 判定対象のレール座標Z
+ * @param radius 判定対象の半径
+ * @return 接触した隕石の番号、接触していない場合-1
+ */
+int SideScrollingShooter::FindStage1Meteor(float x, float y, float z, float radius) const {
+    for (int i = 0; i < MeteorCount; ++i) {
+        const Meteor& meteor = m_meteors[i];
+        if (meteor.destroyed) continue;
+        const float sideX = 1.85f - std::fmod(meteor.travel * 0.0325f, 4.40f);
+        const float sideY = 0.55f + std::sin(meteor.travel * 0.105f) * 0.34f;
+        if (IsRailGameplayActive()) {
+            const float railX = std::sin(meteor.travel * 0.090f) * 7.0f;
+            const float railY = 0.80f + std::sin(meteor.travel * 0.135f) * 2.0f;
+            if (Hit3D(ToWorldX(x), ToWorldY(y), z, radius * WorldXScale,
+                railX, railY, 72.0f - meteor.travel, 2.70f * meteor.scale)) {
+                return i;
+            }
+            continue;
+        }
+        if (Hit(x, y, radius, sideX, sideY, 0.42f * meteor.scale)) return i;
+    }
+    return -1;
+}
+
+/**
+ * @brief 海面からアーチ状に飛び出すウミヘビへ指定球が接触したか判定する
  * @param x 判定対象のゲーム座標X
  * @param y 判定対象のゲーム座標Y
  * @param z 判定対象のレール座標Z
@@ -1113,8 +1184,9 @@ bool SideScrollingShooter::HitsOceanSeaSerpent(float x, float y, float z, float 
 
     // 描画と同じ胴体球を使い、横視点とレール視点の双方で即死障害物として判定する
     for (int i = 0; i < motion.segmentCount; ++i) {
-        const float bodyProgress = (std::max)(0.0f, motion.progress - static_cast<float>(i) * motion.segmentDelay);
-        const float elevation = std::sin(Math::HalfPi * 2.0f * bodyProgress) *
+        const float bodyProgress = GetSeaSerpentSegmentProgress(
+            motion.progress, motion.segmentCount, motion.segmentDelay, i);
+        const float elevation = std::sin(Math::Pi * bodyProgress) *
             (motion.elevation - static_cast<float>(i) * 0.16f);
         const float sideX = motion.sideOriginX + motion.direction *
             (bodyProgress * motion.travel - static_cast<float>(i) * motion.segmentSpacing);
@@ -1127,8 +1199,10 @@ bool SideScrollingShooter::HitsOceanSeaSerpent(float x, float y, float z, float 
             const float visibleHeight = Math::Clamp01(elevation / railHeight) * railHeight;
             if (visibleHeight <= 0.0f) continue;
             const float visibleScale = segmentScale * std::sqrt(visibleHeight / railHeight);
+            const float railY = -3.65f + (elevation < railHeight ? visibleHeight * 0.5f :
+                elevation - railHeight * 0.5f);
             if (Hit3D(ToWorldX(x), ToWorldY(y), z, radius * WorldXScale,
-                railX, -3.65f + visibleHeight * 0.5f, railZ,
+                railX, railY, railZ,
                 1.25f * visibleScale)) {
                 return true;
             }
@@ -1141,7 +1215,9 @@ bool SideScrollingShooter::HitsOceanSeaSerpent(float x, float y, float z, float 
             const float hitWidth = visibleWidth * 0.5f + radius * WorldXScale;
             const float hitHeight = visibleHeight * 0.5f + radius * WorldYScale;
             const float dx = (ToWorldX(x) - sideX) / hitWidth;
-            const float dy = (ToWorldY(y) - (-6.0f + visibleHeight * 0.5f)) / hitHeight;
+            const float sideY = -6.0f + (elevation < sideHeight ? visibleHeight * 0.5f :
+                elevation - sideHeight * 0.5f);
+            const float dy = (ToWorldY(y) - sideY) / hitHeight;
             if (dx * dx + dy * dy <= 1.0f) return true;
         }
     }
@@ -1574,7 +1650,8 @@ bool SideScrollingShooter::TryHitBossPart(const Shot& shot, const Enemy& boss, B
             const float partX = ToWorldX(boss.x) + PartX[i] * ModelScale;
             const float partY = ToWorldY(boss.y) + PartY[i] * ModelScale;
             const float partZ = boss.z + PartZ[i] * ModelScale;
-            if (!Hit3D(ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
+            if (!Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
+                ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
                 partX, partY, partZ, PartRadius[i])) {
                 continue;
             }
@@ -1615,6 +1692,22 @@ bool SideScrollingShooter::Hit3D(
     const float dz = az - bz;
     const float radius = ar + br;
     return dx * dx + dy * dy + dz * dz <= radius * radius;
+}
+
+bool SideScrollingShooter::Hit3DSegment(float startX, float startY, float startZ,
+    float endX, float endY, float endZ, float movingRadius,
+    float targetX, float targetY, float targetZ, float targetRadius) {
+    const float dx = endX - startX;
+    const float dy = endY - startY;
+    const float dz = endZ - startZ;
+    const float lengthSquared = dx * dx + dy * dy + dz * dz;
+    const float toTargetX = targetX - startX;
+    const float toTargetY = targetY - startY;
+    const float toTargetZ = targetZ - startZ;
+    const float progress = lengthSquared > 0.000001f ? (std::clamp)(
+        (toTargetX * dx + toTargetY * dy + toTargetZ * dz) / lengthSquared, 0.0f, 1.0f) : 0.0f;
+    return Hit3D(startX + dx * progress, startY + dy * progress, startZ + dz * progress, movingRadius,
+        targetX, targetY, targetZ, targetRadius);
 }
 
 float SideScrollingShooter::SmoothStep(float value) {
@@ -1726,6 +1819,53 @@ void SideScrollingShooter::DrawShape(Renderer& renderer,
     renderer.Draw(Rect { { x, y }, { w, h } }, { color[0], color[1], color[2], color[3] });
 }
 
+/**
+ * @brief 2D画面上の敵攻撃予告を十字フラッシュとして描画する
+ * @param renderer 描画先レンダラー
+ * @return なし
+ */
+void SideScrollingShooter::DrawAttackWarnings2D(Renderer& renderer) const {
+    constexpr float FlashColor[] = { 1.0f, 0.08f, 0.08f, 1.0f };
+    for (const auto& enemy : m_enemies) {
+        if (!enemy.active || enemy.attackWarningFrames <= 0) continue;
+
+        // 残り時間に合わせて拡大する十字を、攻撃を行う敵機へ重ねる
+        const float progress = 1.0f - static_cast<float>(enemy.attackWarningFrames) / AttackWarningFrames;
+        const float armLength = 0.035f + progress * 0.055f;
+        DrawShape(renderer, enemy.x, enemy.y, armLength, 0.008f, FlashColor);
+        DrawShape(renderer, enemy.x, enemy.y, 0.008f, armLength, FlashColor);
+    }
+}
+
+/**
+ * @brief 3D空間内の敵攻撃予告を発光マーカーとして描画する
+ * @param renderer 描画先レンダラー
+ * @param camera 現在の3Dカメラ
+ * @param railWeight 横視点からレール視点への補間率
+ * @return なし
+ */
+void SideScrollingShooter::DrawAttackWarnings3D(Renderer& renderer, const Camera3D& camera, float railWeight) const {
+    constexpr float FlashColor[] = { 1.0f, 0.08f, 0.08f, 1.0f };
+    for (const auto& enemy : m_enemies) {
+        if (!enemy.active || enemy.attackWarningFrames <= 0) continue;
+
+        // 2Dと3Dのカメラ遷移中も、予告を敵機の発射位置へ追従させる
+        const float progress = 1.0f - static_cast<float>(enemy.attackWarningFrames) / AttackWarningFrames;
+        const float size = 0.20f + progress * 0.35f;
+        const bool enteringRail = m_viewTransitionTimer > 0 && m_nextViewMode == ViewMode::Rail3D;
+        const bool exitingRail = m_viewTransitionTimer > 0 && m_viewMode == ViewMode::Rail3D;
+        const float sideX = enteringRail ? enemy.transitionSideX :
+            (exitingRail ? enemy.x : ToSideXFromRailZ(enemy.z));
+        const float sideY = enteringRail ? enemy.transitionSideY : enemy.y;
+        const float x = Math::Lerp(sideX, exitingRail ? enemy.transitionSideX : enemy.x, railWeight);
+        const float y = Math::Lerp(sideY, exitingRail ? enemy.transitionSideY : enemy.y, railWeight);
+        const float railZ = exitingRail ? enemy.transitionRailZ : enemy.z;
+        const float z = Math::Lerp(SidePlaneZ + (enemy.type == 2 ? 2.2f : 1.5f), railZ, railWeight);
+        DrawModelPrimitive(renderer, camera, 1, ToWorldX(x), ToWorldY(y), z - 0.3f,
+            size, size, size, FlashColor);
+    }
+}
+
 void SideScrollingShooter::DrawModelPrimitive(Renderer& renderer, const Camera3D& camera, int shape,
     float x, float y, float z, float w, float h, float d, const float color[4], float yaw) {
     // プリミティブ形状を実3DカメラのViewProjectionへ乗せて描画する
@@ -1743,6 +1883,28 @@ void SideScrollingShooter::DrawModelPrimitive(Renderer& renderer, const Camera3D
         {color[0], color[1], color[2], color[3]},
         yaw
     });
+}
+
+/**
+ * @brief 機体直下の地面へ軽量なBlob Shadowを描画する
+ * @param renderer 描画先レンダラー
+ * @param camera 現在の3Dカメラ
+ * @param x 影の中心X座標
+ * @param z 影の中心Z座標
+ * @param groundTopY 地面上面Y座標
+ * @param width 影の半幅
+ * @param depth 影の半奥行き
+ * @param opacity 影の不透明度
+ * @return なし
+ */
+void SideScrollingShooter::DrawBlobShadow(Renderer& renderer, const Camera3D& camera,
+    float x, float z, float groundTopY, float width, float depth, float opacity) {
+    constexpr float ShadowHeight = 0.025f;
+    const float shadowColor[4] = {0.015f, 0.020f, 0.025f, opacity};
+
+    // 既存の円柱を薄く潰して八角形のBlobとし、Z-fightingを避ける
+    DrawModelPrimitive(renderer, camera, 2, x, groundTopY + ShadowHeight * 0.5f, z,
+        width * 2.0f, ShadowHeight, depth * 2.0f, shadowColor);
 }
 
 /**
@@ -1787,29 +1949,32 @@ void SideScrollingShooter::DrawDesertBoneArch(Renderer& renderer, const Camera3D
  * @return なし
  */
 void SideScrollingShooter::DrawStage1Meteor(Renderer& renderer, const Camera3D& camera, float railWeight) const {
-    if (m_meteorDestroyed) return;
+    for (int i = 0; i < MeteorCount; ++i) {
+        const Meteor& meteor = m_meteors[i];
+        if (meteor.destroyed) continue;
+        const float sideX = 1.85f - std::fmod(meteor.travel * 0.0325f, 4.40f);
+        const float sideY = 0.55f + std::sin(meteor.travel * 0.105f) * 0.34f;
+        const float railX = std::sin(meteor.travel * 0.090f) * 7.0f;
+        const float railY = 0.80f + std::sin(meteor.travel * 0.135f) * 2.0f;
+        const float x = Math::Lerp(ToWorldX(sideX), railX, railWeight);
+        const float y = Math::Lerp(ToWorldY(sideY), railY, railWeight);
+        const float z = Math::Lerp(SidePlaneZ + 1.2f, 72.0f - meteor.travel, railWeight);
+        const float width = Math::Lerp(2.20f, 5.30f, railWeight) * meteor.scale;
+        const float height = Math::Lerp(2.55f, 5.30f, railWeight) * meteor.scale;
+        const float depth = Math::Lerp(1.45f, 5.30f, railWeight) * meteor.scale;
 
-    const float sideX = 1.85f - std::fmod(m_meteorTravel * 0.0325f, 4.40f);
-    const float sideY = 0.55f + std::sin(m_meteorTravel * 0.105f) * 0.34f;
-    const float railX = std::sin(m_meteorTravel * 0.090f) * 7.0f;
-    const float railY = 0.80f + std::sin(m_meteorTravel * 0.135f) * 2.0f;
-    const float x = Math::Lerp(ToWorldX(sideX), railX, railWeight);
-    const float y = Math::Lerp(ToWorldY(sideY), railY, railWeight);
-    const float z = Math::Lerp(SidePlaneZ + 1.2f, 72.0f - m_meteorTravel, railWeight);
-
-    // 本体と発光するクレーターを同じ補間座標へ置き、遷移の終端で形状が切り替わらないようにする
-    DrawModelPrimitive(renderer, camera, 5, x, y, z,
-        Math::Lerp(1.85f, 4.80f, railWeight) * m_meteorScale,
-        Math::Lerp(2.20f, 4.80f, railWeight) * m_meteorScale,
-        Math::Lerp(1.20f, 4.80f, railWeight) * m_meteorScale, MeteorColor);
-    for (int i = 0; i < 3; ++i) {
-        const float offsetX = static_cast<float>(i - 1) * Math::Lerp(0.45f, 1.15f, railWeight);
-        const float offsetY = (i == 1 ? 0.32f : -0.28f) * Math::Lerp(0.55f, 1.25f, railWeight);
-        DrawModelPrimitive(renderer, camera, 5, x + offsetX, y + offsetY,
-            z - Math::Lerp(0.62f, 2.32f, railWeight),
-            Math::Lerp(0.32f, 0.85f, railWeight) * m_meteorScale,
-            Math::Lerp(0.38f, 0.85f, railWeight) * m_meteorScale,
-            Math::Lerp(0.16f, 0.35f, railWeight) * m_meteorScale, MeteorCraterColor);
+        // 本体とクレーターを同じ回転角で動かし、視点遷移中も形状を維持する
+        DrawModelPrimitive(renderer, camera, 5, x, y, z, width, height, depth, MeteorColor, meteor.yaw);
+        for (int crater = 0; crater < 3; ++crater) {
+            const float angle = meteor.yaw + static_cast<float>(crater) * Math::TwoPi / 3.0f;
+            const float offsetX = std::cos(angle) * Math::Lerp(0.52f, 1.28f, railWeight) * meteor.scale;
+            const float offsetY = std::sin(angle * 1.7f) * Math::Lerp(0.40f, 1.16f, railWeight) * meteor.scale;
+            DrawModelPrimitive(renderer, camera, 5, x + offsetX, y + offsetY,
+                z - std::cos(angle) * Math::Lerp(0.38f, 1.75f, railWeight) * meteor.scale,
+                Math::Lerp(0.38f, 0.92f, railWeight) * meteor.scale,
+                Math::Lerp(0.42f, 0.92f, railWeight) * meteor.scale,
+                Math::Lerp(0.20f, 0.38f, railWeight) * meteor.scale, MeteorCraterColor, meteor.yaw);
+        }
     }
 }
 
@@ -1826,8 +1991,9 @@ void SideScrollingShooter::DrawOceanSeaSerpent(Renderer& renderer, const Camera3
 
     // 通常跳躍、低空横断、超巨大ジャンプを同じ判定用の胴体配置で描画する
     for (int i = 0; i < motion.segmentCount; ++i) {
-        const float bodyProgress = (std::max)(0.0f, motion.progress - static_cast<float>(i) * motion.segmentDelay);
-        const float elevation = std::sin(Math::HalfPi * 2.0f * bodyProgress) *
+        const float bodyProgress = GetSeaSerpentSegmentProgress(
+            motion.progress, motion.segmentCount, motion.segmentDelay, i);
+        const float elevation = std::sin(Math::Pi * bodyProgress) *
             (motion.elevation - static_cast<float>(i) * 0.16f);
         const float sideX = motion.sideOriginX + motion.direction *
             (bodyProgress * motion.travel - static_cast<float>(i) * motion.segmentSpacing);
@@ -1845,7 +2011,11 @@ void SideScrollingShooter::DrawOceanSeaSerpent(Renderer& renderer, const Camera3
         const float sideVisibleScale = std::sqrt(sideVisibleHeight / sideHeight);
         const float railVisibleScale = std::sqrt(railVisibleHeight / railSize);
         const float x = Math::Lerp(sideX, railX, railWeight);
-        const float y = Math::Lerp(-6.0f + sideVisibleHeight * 0.5f, -3.65f + railVisibleHeight * 0.5f, railWeight);
+        const float sideY = -6.0f + (elevation < sideHeight ? sideVisibleHeight * 0.5f :
+            elevation - sideHeight * 0.5f);
+        const float railY = -3.65f + (elevation < railSize ? railVisibleHeight * 0.5f :
+            elevation - railSize * 0.5f);
+        const float y = Math::Lerp(sideY, railY, railWeight);
         const float z = Math::Lerp(SidePlaneZ + 13.1f, railZ, railWeight);
         DrawModelPrimitive(renderer, camera, 5, x, y, z,
             Math::Lerp(sideWidth * sideVisibleScale, railSize * railVisibleScale, railWeight),
@@ -1858,25 +2028,30 @@ void SideScrollingShooter::DrawOceanSeaSerpent(Renderer& renderer, const Camera3
         }
     }
     const float headScale = motion.scale * 1.25f;
-    const float headElevation = std::sin(Math::HalfPi * 2.0f * motion.progress) * motion.elevation;
-    const float headSideX = motion.sideOriginX + motion.direction * motion.progress * motion.travel;
-    const float headRailX = motion.railOriginX + std::sin(motion.progress * 4.0f) * 6.0f;
-    const float headRailZ = motion.railOriginZ + motion.railDirection * motion.progress * motion.railTravel;
+    const float headProgress = GetSeaSerpentSegmentProgress(
+        motion.progress, motion.segmentCount, motion.segmentDelay, 0);
+    const float headElevation = std::sin(Math::Pi * headProgress) * motion.elevation;
+    const float headSideX = motion.sideOriginX + motion.direction * headProgress * motion.travel;
+    const float headRailX = motion.railOriginX + std::sin(headProgress * 4.0f) * 6.0f;
+    const float headRailZ = motion.railOriginZ + motion.railDirection * headProgress * motion.railTravel;
     const float headX = Math::Lerp(headSideX, headRailX, railWeight);
     const float headSideVisibleHeight = Math::Clamp01(headElevation / (1.35f * headScale)) * 1.35f * headScale;
     const float headRailVisibleHeight = Math::Clamp01(headElevation / (2.50f * headScale)) * 2.50f * headScale;
-    const float headY = Math::Lerp(-6.0f + headSideVisibleHeight * 0.5f,
-        -3.65f + headRailVisibleHeight * 0.5f, railWeight);
+    const float headSideY = -6.0f + (headElevation < 1.35f * headScale ? headSideVisibleHeight * 0.5f :
+        headElevation - 1.35f * headScale * 0.5f);
+    const float headRailY = -3.65f + (headElevation < 2.50f * headScale ? headRailVisibleHeight * 0.5f :
+        headElevation - 2.50f * headScale * 0.5f);
+    const float headY = Math::Lerp(headSideY, headRailY, railWeight);
     const float headZ = Math::Lerp(SidePlaneZ + 13.1f, headRailZ, railWeight);
 
     // 頭が海面を出入りする短い時間だけ、水滴を初速と重力による放物線で飛ばす
     const float emergeProgress = std::asin((std::min)(1.0f, 1.35f * headScale / motion.elevation)) /
-        (Math::HalfPi * 2.0f);
-    const float reentryProgress = 0.5f - emergeProgress;
-    const float splashCenter = motion.progress < 0.25f ? emergeProgress : reentryProgress;
-    const float splashTime = Math::Clamp01((motion.progress - (splashCenter - emergeProgress)) /
+        Math::HalfPi;
+    const float reentryProgress = 1.0f - emergeProgress;
+    const float splashCenter = headProgress < 0.5f ? emergeProgress : reentryProgress;
+    const float splashTime = Math::Clamp01((headProgress - (splashCenter - emergeProgress)) /
         (emergeProgress * 2.0f));
-    const bool splashActive = std::abs(motion.progress - splashCenter) <= emergeProgress;
+    const bool splashActive = std::abs(headProgress - splashCenter) <= emergeProgress;
     if (splashActive) {
         for (int i = 0; i < 17; ++i) {
             const float spread = static_cast<float>(i - 8) * 0.22f * motion.scale * splashTime;
@@ -1922,16 +2097,32 @@ void SideScrollingShooter::DrawPlayerModel(Renderer& renderer, const Camera3D& c
         1.15f, 0.12f, 0.62f, PlayerAccent, yaw);
 }
 
-void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw) {
+void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& camera,
+    const Enemy& enemy, float yaw) const {
     const float x = ToWorldX(enemy.x);
     const float y = ToWorldY(enemy.y);
     const float z = enemy.z;
+    if (enemy.type == 2 && m_stageNumber == 2) {
+        // 上下ユニットへ別Transformを渡し、合体状態を描画する
+        constexpr float BossScale = 1.92f;
+        const BossModelTransform submarine {{x, y - 0.45f, z}, yaw, BossScale};
+        const BossModelTransform battleship {{x, y + 0.78f, z}, yaw, BossScale};
+        auto DrawBossPart = [&](int shape, const Vector3& position, const Vector3& scale,
+            const float color[4], float partYaw) {
+            DrawModelPrimitive(renderer, camera, shape, position.x, position.y, position.z,
+                scale.x, scale.y, scale.z, color, partYaw);
+        };
+        SandSubmarineView::Draw(submarine, DrawBossPart);
+        LandBattleshipView::Draw(battleship, DrawBossPart);
+        return;
+    }
+
     if (enemy.type == 2) {
-        // 旧ShootingGameで実装済みの大型戦闘機モデルを現行座標系へ縮小して描画する
+        // Stage2以外は従来の大型戦闘機モデルを維持する
         constexpr float ModelScale = 0.14f;
-        constexpr float Gray[4] = { 0.50f, 0.50f, 0.50f, 1.0f };
-        constexpr float White[4] = { 0.60f, 0.60f, 0.60f, 1.0f };
-        constexpr float Black[4] = { 0.20f, 0.20f, 0.20f, 1.0f };
+        constexpr float Gray[] = {0.50f, 0.50f, 0.50f, 1.0f};
+        constexpr float White[] = {0.60f, 0.60f, 0.60f, 1.0f};
+        constexpr float Black[] = {0.20f, 0.20f, 0.20f, 1.0f};
         auto DrawBossPart = [&](int shape, float localX, float localY, float localZ,
             float width, float height, float depth, const float color[4]) {
             const Vector3 offset = RotateYawOffset(localX * ModelScale, localY * ModelScale,
@@ -1940,7 +2131,7 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
                 width * ModelScale, height * ModelScale, depth * ModelScale, color, yaw);
         };
 
-        // 機首と上部メインボディ
+        // 機首と上部メインボディを描画する
         if (enemy.bossPartHp[BossNose] > 0) {
             DrawBossPart(2, 0.0f, 3.0f, -14.0f, 6.0f, 6.0f, 4.0f, Gray);
             DrawBossPart(2, 0.0f, 2.0f, -17.5f, 2.0f, 2.0f, 3.0f, Gray);
@@ -1952,7 +2143,7 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
         DrawBossPart(1, 0.0f, 12.0f, 2.0f, 4.0f, 4.0f, 4.0f, Gray);
         DrawBossPart(2, 0.0f, 13.0f, -2.0f, 1.0f, 1.0f, 4.0f, Black);
 
-        // 下部ボディと左右主翼
+        // 下部ボディと左右主翼を描画する
         DrawBossPart(2, 0.0f, -12.0f, 0.0f, 4.0f, 4.0f, 10.0f, Gray);
         DrawBossPart(2, 0.0f, -15.0f, 1.0f, 2.0f, 2.0f, 8.0f, Gray);
         DrawBossPart(2, 0.0f, -12.0f, -7.0f, 1.0f, 1.0f, 6.0f, Black);
@@ -1967,7 +2158,7 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
             DrawBossPart(1, -21.0f, 2.0f, 0.0f, 12.0f, 2.0f, 10.0f, White);
         }
 
-        // 主・副エンジン
+        // 主エンジンと左右エンジンを描画する
         DrawBossPart(2, 0.0f, 3.0f, 15.0f, 10.0f, 10.0f, 6.0f, Gray);
         DrawBossPart(2, 7.0f, 3.0f, 18.0f, 4.0f, 4.0f, 6.0f, Black);
         DrawBossPart(2, -7.0f, 3.0f, 18.0f, 4.0f, 4.0f, 6.0f, Black);
@@ -2200,6 +2391,32 @@ void SideScrollingShooter::SpawnDebrisPiece(float x, float y, float z, float vx,
         debris = {x, y, z, vx, vy, vz, yaw, spin, width, height, depth,
             {color[0], color[1], color[2], color[3]}, shape, 0, true};
         return;
+    }
+}
+
+/**
+ * @brief 被弾または破壊された隕石から当たり判定を持たない小隕石を飛散させる
+ * @param meteor 破片の発生元となる隕石
+ * @param count 発生させる小隕石の数
+ * @return なし
+ */
+void SideScrollingShooter::SpawnMeteorDebris(const Meteor& meteor, int count) {
+    const float sideX = 1.85f - std::fmod(meteor.travel * 0.0325f, 4.40f);
+    const float sideY = 0.55f + std::sin(meteor.travel * 0.105f) * 0.34f;
+    const float railX = std::sin(meteor.travel * 0.090f) * 7.0f;
+    const float railY = 0.80f + std::sin(meteor.travel * 0.135f) * 2.0f;
+    const bool railMode = IsRailGameplayActive();
+    const float x = railMode ? railX : ToWorldX(sideX);
+    const float y = railMode ? railY : ToWorldY(sideY);
+    const float z = railMode ? 72.0f - meteor.travel : SidePlaneZ + 1.2f;
+
+    // 既存のデブリは判定に使われないため、そのまま小隕石の漂流表現として再利用する
+    for (int i = 0; i < count; ++i) {
+        const float angle = meteor.yaw + static_cast<float>(i) * Math::TwoPi / static_cast<float>(count);
+        const float size = (0.20f + static_cast<float>(i % 3) * 0.08f) * meteor.scale;
+        SpawnDebrisPiece(x, y, z, std::cos(angle) * 0.035f, std::sin(angle * 1.4f) * 0.030f,
+            railMode ? std::sin(angle) * 0.045f : 0.0f, angle, meteor.spin * (1.5f + i * 0.1f),
+            5, size, size * 0.85f, size * 0.75f, MeteorColor);
     }
 }
 
@@ -2550,6 +2767,7 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
         SidePlaneZ, m_invincible == 0 || (m_invincible / 5) % 2 == 0, Math::HalfPi);
 
     renderer.ResetCamera();
+    DrawAttackWarnings2D(renderer);
 
     char stageStatus[48];
     char scoreStatus[32];
@@ -2943,6 +3161,15 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
             const float minimumRailY = FromWorldY(groundTopY + 0.32f);
             drawEnemy.y = Math::Lerp(drawEnemy.y, (std::max)(drawEnemy.y, minimumRailY), railWeight);
         }
+
+        // レール3Dへ入るほど機体直下の影を表示する
+        if (railWeight > 0.01f) {
+            const float groundTopY = (isDesert || isOcean || isCity) ? -3.65f : -3.275f;
+            const bool isBoss = enemy.type == 2;
+            DrawBlobShadow(renderer, camera, ToWorldX(drawEnemy.x), drawEnemy.z, groundTopY,
+                isBoss ? 2.4f : 0.72f, isBoss ? 2.0f : 0.58f,
+                railWeight * (isBoss ? 0.34f : 0.26f));
+        }
         DrawEnemyModel(renderer, camera, drawEnemy, enemyYaw);
     }
     for (const auto& shot : m_shots) {
@@ -2969,9 +3196,17 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
         if (!item.active) continue;
         DrawItemModel(renderer, camera, item, playerYaw);
     }
+    const bool playerVisible = m_invincible == 0 || (m_invincible / 5) % 2 == 0;
+    if (railWeight > 0.01f && playerVisible) {
+        const float groundTopY = (isDesert || isOcean || isCity) ? -3.65f : -3.275f;
+        DrawBlobShadow(renderer, camera, ToWorldX(m_playerX),
+            Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight), groundTopY,
+            1.05f, 0.82f, railWeight * 0.30f);
+    }
     DrawPlayerModel(renderer, camera, ToWorldX(m_playerX), ToWorldY(m_playerY),
         Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight),
-        m_invincible == 0 || (m_invincible / 5) % 2 == 0, playerYaw);
+        playerVisible, playerYaw);
+    DrawAttackWarnings3D(renderer, camera, railWeight);
 
     renderer.ResetCamera();
 

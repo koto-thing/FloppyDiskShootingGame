@@ -185,6 +185,10 @@ bool D3D12RenderingService::Initialize(HWND hwnd, int width, int height) {
         MessageBoxA(NULL, "D3D12Renderer::Initialize - InitD3D12 Failed!", "Error", MB_OK);
         return false;
     }
+    if (!InitializeLowResolutionRenderTarget()) {
+        Debug::LogError("D3D12RenderingService::InitializeLowResolutionRenderTarget failed");
+        return false;
+    }
     if (!InitPipeline()) {
         Debug::LogError("D3D12RenderingService::InitPipeline failed");
         MessageBoxA(NULL, "D3D12Renderer::Initialize - InitPipeline Failed!", "Error", MB_OK);
@@ -325,7 +329,7 @@ bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
     m_frameIndex = m_swapChain->GetCurrentBackBufferIndex();
 
     D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc = {};
-    rtvHeapDesc.NumDescriptors = 2;
+    rtvHeapDesc.NumDescriptors = 3;
     rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
     rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
     if (FAILED(m_device->CreateDescriptorHeap(&rtvHeapDesc, IID_PPV_ARGS(&m_rtvHeap)))) {
@@ -406,8 +410,8 @@ bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
     D3D12_RESOURCE_DESC depthDesc = {};
     depthDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     depthDesc.Alignment = 0;
-    depthDesc.Width = width;
-    depthDesc.Height = height;
+    depthDesc.Width = LOW_RES_WIDTH;
+    depthDesc.Height = LOW_RES_HEIGHT;
     depthDesc.DepthOrArraySize = 1;
     depthDesc.MipLevels = 1;
     depthDesc.Format = DXGI_FORMAT_D32_FLOAT;
@@ -451,6 +455,71 @@ bool D3D12RenderingService::InitD3D12(HWND hwnd, int width, int height) {
         return false;
     }
 
+    return true;
+}
+
+/**
+ * @brief 低解像度描画用のRenderTarget、Depth Buffer、Descriptorを生成する
+ * @return 生成に成功した場合true
+ */
+bool D3D12RenderingService::InitializeLowResolutionRenderTarget() {
+    // BackBuffer互換形式の低解像度RenderTargetを生成する
+    D3D12_RESOURCE_DESC textureDesc = {};
+    textureDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    textureDesc.Width = LOW_RES_WIDTH;
+    textureDesc.Height = LOW_RES_HEIGHT;
+    textureDesc.DepthOrArraySize = 1;
+    textureDesc.MipLevels = 1;
+    textureDesc.Format = m_renderTargets[0]->GetDesc().Format;
+    textureDesc.SampleDesc.Count = 1;
+    textureDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+    textureDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
+
+    D3D12_HEAP_PROPERTIES heapProperties = {};
+    heapProperties.Type = D3D12_HEAP_TYPE_DEFAULT;
+
+    D3D12_CLEAR_VALUE clearValue = {};
+    clearValue.Format = textureDesc.Format;
+    clearValue.Color[0] = 0.05f;
+    clearValue.Color[1] = 0.05f;
+    clearValue.Color[2] = 0.1f;
+    clearValue.Color[3] = 1.0f;
+
+    if (FAILED(m_device->CreateCommittedResource(
+        &heapProperties,
+        D3D12_HEAP_FLAG_NONE,
+        &textureDesc,
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+        &clearValue,
+        IID_PPV_ARGS(&m_lowResolutionRenderTarget)))) {
+        MessageBoxA(NULL, "CreateCommittedResource (Low Resolution RenderTarget) Failed", "Error", MB_OK);
+        return false;
+    }
+
+    // RTV Heapの3番目へ低解像度RenderTargetのRTVを生成する
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
+    rtvHandle.ptr += static_cast<SIZE_T>(2) * m_rtvDescriptorSize;
+    m_device->CreateRenderTargetView(m_lowResolutionRenderTarget.Get(), nullptr, rtvHandle);
+
+    // 拡大描画で参照するShader Visible SRVを生成する
+    D3D12_DESCRIPTOR_HEAP_DESC srvHeapDesc = {};
+    srvHeapDesc.NumDescriptors = 1;
+    srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
+    srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+    if (FAILED(m_device->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&m_lowResolutionSrvHeap)))) {
+        MessageBoxA(NULL, "CreateDescriptorHeap (Low Resolution SRV) Failed", "Error", MB_OK);
+        return false;
+    }
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc = {};
+    srvDesc.Format = textureDesc.Format;
+    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srvDesc.Texture2D.MipLevels = 1;
+    m_device->CreateShaderResourceView(
+        m_lowResolutionRenderTarget.Get(),
+        &srvDesc,
+        m_lowResolutionSrvHeap->GetCPUDescriptorHandleForHeapStart());
     return true;
 }
 
@@ -514,6 +583,7 @@ bool D3D12RenderingService::InitPipeline() {
     std::wstring pathObject = GetShaderFilePath(L"Shaders\\ObjectShader.hlsl");
     std::wstring pathBackground = GetShaderFilePath(L"Shaders\\BackgroundShader.hlsl");
     std::wstring pathSpellCircle = GetShaderFilePath(L"Shaders\\SpellCircleShader.hlsl");
+    std::wstring pathUpscale = GetShaderFilePath(L"Shaders\\PixelUpscaleShader.hlsl");
 
     // 共通頂点シェーダーのコンパイル
     ComPtr<ID3DBlob> vertexShader;
@@ -781,6 +851,37 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
+    // Fullscreen Triangleで低解像度RenderTargetを拡大するPSOを生成する
+    ComPtr<ID3DBlob> upscaleVertexShader;
+    ComPtr<ID3DBlob> upscalePixelShader;
+    error.Reset();
+    if (FAILED(D3DCompileFromFile(
+        pathUpscale.c_str(), nullptr, nullptr, "VSMain", "vs_5_0", shaderCompileFlags, 0,
+        &upscaleVertexShader, &error))) {
+        if (error) MessageBoxA(NULL, static_cast<char*>(error->GetBufferPointer()),
+            "Upscale Shader Compile Error (VS)", MB_OK);
+        return false;
+    }
+
+    error.Reset();
+    if (FAILED(D3DCompileFromFile(
+        pathUpscale.c_str(), nullptr, nullptr, "PSMain", "ps_5_0", shaderCompileFlags, 0,
+        &upscalePixelShader, &error))) {
+        if (error) MessageBoxA(NULL, static_cast<char*>(error->GetBufferPointer()),
+            "Upscale Shader Compile Error (PS)", MB_OK);
+        return false;
+    }
+
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC upscalePsoDesc = psoDesc;
+    upscalePsoDesc.VS = { upscaleVertexShader->GetBufferPointer(), upscaleVertexShader->GetBufferSize() };
+    upscalePsoDesc.PS = { upscalePixelShader->GetBufferPointer(), upscalePixelShader->GetBufferSize() };
+    upscalePsoDesc.BlendState.RenderTarget[0] = opaqueBlendDesc;
+    if (FAILED(m_device->CreateGraphicsPipelineState(
+        &upscalePsoDesc, IID_PPV_ARGS(&m_pipelineStateUpscale)))) {
+        MessageBoxA(NULL, "CreateGraphicsPipelineState (Upscale) Failed", "PSO Creation Error", MB_OK);
+        return false;
+    }
+
     return true;
 }
 
@@ -791,27 +892,29 @@ void D3D12RenderingService::BeginFrame() {
     // フレームごとに定数バッファのインデックスをリセット
     m_constantBufferCursor = 0;
     m_currentPipelineType = 0;
+    m_sceneUpscaled = false;
     
     m_commandAllocator->Reset();
     m_commandList->Reset(m_commandAllocator.Get(), m_pipelineStateObject.Get());
 
     m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
 
-    D3D12_VIEWPORT viewport = { 0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height), 0.0f, 1.0f };
-    D3D12_RECT scissorRect = { 0, 0, m_width, m_height };
+    D3D12_VIEWPORT viewport = { 0.0f, 0.0f, static_cast<float>(LOW_RES_WIDTH), static_cast<float>(LOW_RES_HEIGHT), 0.0f, 1.0f };
+    D3D12_RECT scissorRect = { 0, 0, static_cast<LONG>(LOW_RES_WIDTH), static_cast<LONG>(LOW_RES_HEIGHT) };
     m_commandList->RSSetViewports(1, &viewport);
     m_commandList->RSSetScissorRects(1, &scissorRect);
 
     D3D12_RESOURCE_BARRIER barrier = {};
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
-    barrier.Transition.pResource = m_renderTargets[m_frameIndex].Get();
-    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+    barrier.Transition.pResource = m_lowResolutionRenderTarget.Get();
+    barrier.Transition.StateBefore = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
     barrier.Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
     barrier.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
     m_commandList->ResourceBarrier(1, &barrier);
 
-    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = GetRtvCpuDescriptorHandle();
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = m_rtvHeap->GetCPUDescriptorHandleForHeapStart();
+    rtvHandle.ptr += static_cast<SIZE_T>(2) * m_rtvDescriptorSize;
     D3D12_CPU_DESCRIPTOR_HANDLE dsvHandle = m_dsvHeap->GetCPUDescriptorHandleForHeapStart();
     constexpr float clearColor[] = { 0.05f, 0.05f, 0.1f, 1.0f };
     m_commandList->ClearRenderTargetView(rtvHandle, clearColor, 0, nullptr);
@@ -824,6 +927,9 @@ void D3D12RenderingService::BeginFrame() {
  * フレームの描画を終了する
  */
 void D3D12RenderingService::EndFrame() {
+    if (!m_sceneUpscaled) DrawLowResolutionToBackBuffer();
+
+    // BackBufferをPresent可能な状態へ戻す
     D3D12_RESOURCE_BARRIER barrier = {};
     barrier.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
     barrier.Flags = D3D12_RESOURCE_BARRIER_FLAG_NONE;
@@ -840,6 +946,44 @@ void D3D12RenderingService::EndFrame() {
     m_swapChain->Present(1, 0);
 
     SyncFrame();
+}
+
+/**
+ * @brief 低解像度RenderTargetをBackBufferへポイント拡大する
+ * @return なし
+ */
+void D3D12RenderingService::DrawLowResolutionToBackBuffer() {
+    // 低解像度RenderTargetをSRV、BackBufferをRTVへ遷移する
+    D3D12_RESOURCE_BARRIER barriers[2] = {};
+    barriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barriers[0].Transition.pResource = m_lowResolutionRenderTarget.Get();
+    barriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    barriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE;
+    barriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    barriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+    barriers[1].Transition.pResource = m_renderTargets[m_frameIndex].Get();
+    barriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+    barriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_RENDER_TARGET;
+    barriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+    m_commandList->ResourceBarrier(_countof(barriers), barriers);
+
+    // ウィンドウ全体へ低解像度TextureをFullscreen Triangleで拡大する
+    D3D12_VIEWPORT viewport = { 0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height), 0.0f, 1.0f };
+    D3D12_RECT scissorRect = { 0, 0, m_width, m_height };
+    m_commandList->RSSetViewports(1, &viewport);
+    m_commandList->RSSetScissorRects(1, &scissorRect);
+
+    D3D12_CPU_DESCRIPTOR_HANDLE rtvHandle = GetRtvCpuDescriptorHandle();
+    m_commandList->OMSetRenderTargets(1, &rtvHandle, FALSE, nullptr);
+    m_commandList->SetPipelineState(m_pipelineStateUpscale.Get());
+    m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
+    ID3D12DescriptorHeap* descriptorHeaps[] = { m_lowResolutionSrvHeap.Get() };
+    m_commandList->SetDescriptorHeaps(_countof(descriptorHeaps), descriptorHeaps);
+    m_commandList->SetGraphicsRootDescriptorTable(
+        1, m_lowResolutionSrvHeap->GetGPUDescriptorHandleForHeapStart());
+    m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    m_commandList->DrawInstanced(3, 1, 0, 0);
+    m_sceneUpscaled = true;
 }
 
 /**
@@ -914,14 +1058,25 @@ void D3D12RenderingService::SetCamera(const CameraMatrices& matrices, const View
     m_cameraViewport = viewport;
     m_hasCamera = viewport.IsValid();
     if (m_hasCamera) {
-        D3D12_VIEWPORT d3dViewport{static_cast<float>(viewport.x), static_cast<float>(viewport.y), static_cast<float>(viewport.width), static_cast<float>(viewport.height), 0.0f, 1.0f};
-        D3D12_RECT scissor{viewport.x, viewport.y, viewport.x + viewport.width, viewport.y + viewport.height};
+        // ウィンドウ基準のカメラ領域を低解像度RenderTargetへ写像する
+        const float scaleX = static_cast<float>(LOW_RES_WIDTH) / static_cast<float>(m_width);
+        const float scaleY = static_cast<float>(LOW_RES_HEIGHT) / static_cast<float>(m_height);
+        const LONG left = static_cast<LONG>(viewport.x * scaleX);
+        const LONG top = static_cast<LONG>(viewport.y * scaleY);
+        const LONG right = static_cast<LONG>((viewport.x + viewport.width) * scaleX);
+        const LONG bottom = static_cast<LONG>((viewport.y + viewport.height) * scaleY);
+        D3D12_VIEWPORT d3dViewport{
+            static_cast<float>(left), static_cast<float>(top),
+            static_cast<float>(right - left), static_cast<float>(bottom - top), 0.0f, 1.0f};
+        D3D12_RECT scissor{left, top, right, bottom};
         m_commandList->RSSetViewports(1, &d3dViewport);
         m_commandList->RSSetScissorRects(1, &scissor);
     }
 }
 
 void D3D12RenderingService::ResetCamera() {
+    // ワールド描画を確定し、以降のHUDをBackBufferへ直接描画する
+    if (!m_sceneUpscaled) DrawLowResolutionToBackBuffer();
     m_hasCamera = false;
     D3D12_VIEWPORT viewport{0.0f, 0.0f, static_cast<float>(m_width), static_cast<float>(m_height), 0.0f, 1.0f};
     D3D12_RECT scissor{0, 0, m_width, m_height};
@@ -1158,6 +1313,8 @@ void D3D12RenderingService::DrawTextCommand(
     float size,
     const ColorF& color,
     float characterSpacing) {
+    // ResetCameraを使わないUI専用Sceneでも文字だけはBackBuffer解像度を維持する
+    if (!m_sceneUpscaled) DrawLowResolutionToBackBuffer();
     std::string ownedText(text);
     RenderText(ownedText.c_str(), {position.x, position.y}, size, {color.r, color.g, color.b, color.a},
                characterSpacing);

@@ -35,6 +35,9 @@
     <ClCompile Include="Infrastructure\Repositories\ScoreRepository.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Infrastructure\Repositories\SettingsRepository.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="Presentation\TitleScene\TitleSceneColumn.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -78,6 +81,7 @@
     <None Include="Shaders\BackgroundShader.hlsl" />
     <None Include="Shaders\SpellCircleShader.hlsl" />
     <None Include="Shaders\TextShader.hlsl" />
+    <None Include="Shaders\PixelUpscaleShader.hlsl" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Domain\ValueObjects\SceneType.h">
@@ -111,6 +115,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Infrastructure\Repositories\ScoreRepository.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Infrastructure\Repositories\SettingsRepository.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Infrastructure\Repositories\UserDataPath.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Presentation\TitleScene\TitleSceneColumn.h">
@@ -189,6 +199,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Presentation\Gameplay\Stage2EnemySheetNormal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\BossModelView.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

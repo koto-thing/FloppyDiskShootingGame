@@ -1,5 +1,7 @@
 #include "ScoreRepository.h"
 
+#include "UserDataPath.h"
+
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -11,11 +13,7 @@ namespace {
  * @return Application.persistentDataPath相当のランキングファイルパス
  */
 std::filesystem::path RankingPath() {
-    wchar_t localAppData[MAX_PATH] {};
-    const DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", localAppData, MAX_PATH);
-    const std::filesystem::path base = length > 0 && length < MAX_PATH
-        ? localAppData : std::filesystem::current_path();
-    return base / L"FloppyDiskShootingGame" / L"rankings.dat";
+    return UserDataPath() / L"rankings.dat";
 }
 }
 

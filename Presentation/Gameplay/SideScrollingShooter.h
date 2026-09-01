@@ -164,6 +164,9 @@ private:
         int age = 0;
         int motionAge = 0;
         int shotInterval = 0;
+        int attackWarningFrames = 0;
+        float attackWarningTargetX = 0.0f;
+        float attackWarningTargetY = 0.0f;
         int bossPhase = BossNormalPhase1;
         std::array<int, BossPartCount> bossPartHp {};
         const EnemyBehavior* behavior = nullptr;
@@ -198,6 +201,16 @@ private:
         bool active = false;
     };
 
+    /** @brief ステージ1を横切る破壊可能な隕石 */
+    struct Meteor {
+        float travel = 0.0f;
+        float scale = 1.0f;
+        float yaw = 0.0f;
+        float spin = 0.0f;
+        int hp = 0;
+        bool destroyed = false;
+    };
+
     enum class ItemType {
         Power,
         Score
@@ -229,8 +242,10 @@ private:
     static constexpr int ItemCapacity = 48;
     static constexpr int ExplosionCapacity = 32;
     static constexpr int ExplosionLifetimeFrames = 18;
+    static constexpr int AttackWarningFrames = 12;
     static constexpr int DebrisCapacity = 96;
     static constexpr int DebrisLifetimeFrames = 36;
+    static constexpr int MeteorCount = 6;
     static constexpr int BoneArchMaxHp = 12000;
     static constexpr float MaxPower = 4.0f;
     static constexpr int ChapterLengthFrames = 500;
@@ -328,7 +343,16 @@ private:
      */
     bool HitsStage1Meteor(float x, float y, float z, float radius) const;
     /**
-     * @brief 海面を横断するウミヘビへ指定球が接触したか判定する
+     * @brief 指定球が接触しているステージ1隕石の番号を取得する
+     * @param x 判定対象のゲーム座標X
+     * @param y 判定対象のゲーム座標Y
+     * @param z 判定対象のレール座標Z
+     * @param radius 判定対象の半径
+     * @return 接触した隕石の番号、接触していない場合-1
+     */
+    int FindStage1Meteor(float x, float y, float z, float radius) const;
+    /**
+     * @brief 海面からアーチ状に飛び出すウミヘビへ指定球が接触したか判定する
      * @param x 判定対象のゲーム座標X
      * @param y 判定対象のゲーム座標Y
      * @param z 判定対象のレール座標Z
@@ -385,6 +409,13 @@ private:
     void SpawnDebrisPiece(float x, float y, float z, float vx, float vy, float vz,
         float yaw, float spin, int shape, float width, float height, float depth,
         const float color[4]);
+    /**
+     * @brief 被弾または破壊された隕石から当たり判定を持たない小隕石を飛散させる
+     * @param meteor 破片の発生元となる隕石
+     * @param count 発生させる小隕石の数
+     * @return なし
+     */
+    void SpawnMeteorDebris(const Meteor& meteor, int count);
     void FireSpecialShots();
     void UpdateHomingShot(Shot& shot);
     void DamagePlayer();
@@ -402,6 +433,24 @@ private:
     void PlayHitSound();
     static bool Hit(float ax, float ay, float ar, float bx, float by, float br);
     static bool Hit3D(float ax, float ay, float az, float ar, float bx, float by, float bz, float br);
+    /**
+     * @brief 線分上を移動する球が対象球へ接触したか判定する
+     * @param startX 移動前のワールド座標X
+     * @param startY 移動前のワールド座標Y
+     * @param startZ 移動前のワールド座標Z
+     * @param endX 移動後のワールド座標X
+     * @param endY 移動後のワールド座標Y
+     * @param endZ 移動後のワールド座標Z
+     * @param movingRadius 移動する球の半径
+     * @param targetX 対象球のワールド座標X
+     * @param targetY 対象球のワールド座標Y
+     * @param targetZ 対象球のワールド座標Z
+     * @param targetRadius 対象球の半径
+     * @return 移動区間内で接触する場合true
+     */
+    static bool Hit3DSegment(float startX, float startY, float startZ,
+        float endX, float endY, float endZ, float movingRadius,
+        float targetX, float targetY, float targetZ, float targetRadius);
     static float SmoothStep(float value);
     static float ToWorldX(float x);
     static float ToWorldY(float y);
@@ -420,6 +469,20 @@ private:
     void ConfigureRailCamera(Camera3D& camera, Renderer& renderer) const;
     void Render2D(Renderer& renderer) const;
     void Render3D(Renderer& renderer) const;
+    /**
+     * @brief 2D画面上の敵攻撃予告を十字フラッシュとして描画する
+     * @param renderer 描画先レンダラー
+     * @return なし
+     */
+    void DrawAttackWarnings2D(Renderer& renderer) const;
+    /**
+     * @brief 3D空間内の敵攻撃予告を発光マーカーとして描画する
+     * @param renderer 描画先レンダラー
+     * @param camera 現在の3Dカメラ
+     * @param railWeight 横視点からレール視点への補間率
+     * @return なし
+     */
+    void DrawAttackWarnings3D(Renderer& renderer, const Camera3D& camera, float railWeight) const;
     /**
      * @brief プリミティブ球だけで構成した砂漠の巨大骨アーチを描画する
      * @param renderer 描画先レンダラー
@@ -451,9 +514,23 @@ private:
         float x, float y, float w, float h, const float color[4]);
     static void DrawModelPrimitive(Renderer& renderer, const Camera3D& camera, int shape,
         float x, float y, float z, float w, float h, float d, const float color[4], float yaw = 0.0f);
+    /**
+     * @brief 機体直下の地面へ軽量なBlob Shadowを描画する
+     * @param renderer 描画先レンダラー
+     * @param camera 現在の3Dカメラ
+     * @param x 影の中心X座標
+     * @param z 影の中心Z座標
+     * @param groundTopY 地面上面Y座標
+     * @param width 影の半幅
+     * @param depth 影の半奥行き
+     * @param opacity 影の不透明度
+     * @return なし
+     */
+    static void DrawBlobShadow(Renderer& renderer, const Camera3D& camera,
+        float x, float z, float groundTopY, float width, float depth, float opacity);
     static void DrawPlayerModel(Renderer& renderer, const Camera3D& camera,
         float x, float y, float z, bool visible, float yaw = 0.0f);
-    static void DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw = 0.0f);
+    void DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw = 0.0f) const;
     void DrawShotModel(Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw = 0.0f) const;
     /** @brief 爆発エフェクトをHLSLへ渡す描画コマンドとして記録する */
     static void DrawExplosion(Renderer& renderer, const Camera3D& camera, const Explosion& explosion);
@@ -501,9 +578,7 @@ private:
     int m_restartTimer = 0;
     float m_power = 0.0f;
     int m_clearTimer = 0;
-    float m_meteorTravel = 0.0f;
-    float m_meteorScale = 1.0f;
-    bool m_meteorDestroyed = false;
+    std::array<Meteor, MeteorCount> m_meteors {};
     int m_boneArchHp = BoneArchMaxHp;
     bool m_boneArchDestroyed = false;
     bool m_moveLeft = false;
