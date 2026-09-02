@@ -65,4 +65,22 @@ void RunStage4BossModelViewTests() {
     assert(std::fabs(firstScale.y - 2.7f) < 0.0001f);
     assert(std::fabs(firstScale.z - 48.0f) < 0.0001f);
     assert(std::fabs(firstYaw - Math::HalfPi) < 0.0001f);
+
+    // 主砲身は親Yawではなく照準先へのYaw/Pitchで描画されることを確認する
+    BossModelTransform aimingTransform {{0.0f, 0.0f, 0.0f}, {-8.25f, 5.55f, 0.0f},
+        0.0f, 1.0f, true};
+    float cannonYaw = 0.0f;
+    float cannonPitch = 0.0f;
+    int aimingVisited = 0;
+    Stage4BossModelView::Draw(aimingTransform, [&](int, const Vector3&, const Vector3&,
+        const float[4], float yaw, float pitch) {
+        if (aimingVisited++ != Stage4BossModelView::ChassisPrimitiveCount +
+            Stage4BossModelView::TrackPrimitiveCount +
+            Stage4BossModelView::LuxuryBodyPrimitiveCount +
+            Stage4BossModelView::MainTurretPrimitiveCount) return;
+        cannonYaw = yaw;
+        cannonPitch = pitch;
+    });
+    assert(std::fabs(cannonYaw) < 0.0001f);
+    assert(cannonPitch < -0.37f && cannonPitch > -0.39f);
 }

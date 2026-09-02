@@ -179,6 +179,7 @@ bool SideScrollingShooter::StageDispatch::TryHitBossPart(
     const Enemy& boss, BossPart& part) {
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::TryHitBossPart(shooter, shot, boss, part);
+    case 4: return Stage4Module::TryHitBossPart(shooter, shot, boss, part);
     case 5: return Stage5Module::TryHitBossPart(shooter, shot, boss, part);
     default: return shooter.TryHitDefaultBossPart(shot, boss, part);
     }
@@ -205,6 +206,9 @@ void SideScrollingShooter::StageDispatch::FireBossPartBarrage(
     switch (shooter.m_stageNumber) {
     case 2:
         Stage2Module::FireBossPartBarrage(shooter, boss);
+        break;
+    case 4:
+        Stage4Module::FireBossPartBarrage(shooter, boss);
         break;
     default:
         shooter.FireBossPartBarrage(boss);
@@ -275,6 +279,7 @@ bool SideScrollingShooter::StageDispatch::SpawnBossDebris(
     SideScrollingShooter& shooter, const Enemy& enemy, int bossPart) {
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::SpawnBossDebris(shooter, enemy, bossPart);
+    case 4: return Stage4Module::SpawnBossDebris(shooter, enemy, bossPart);
     case 5: return Stage5Module::SpawnBossDebris(shooter, enemy, bossPart);
     default: return false;
     }

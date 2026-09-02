@@ -1,5 +1,8 @@
 #pragma once
 
+#include <algorithm>
+#include <cmath>
+
 #include "../Common/BossModelTransform.h"
 
 #include "../../../../Engine/Graphics/IRenderBackend.h"
@@ -12,6 +15,8 @@ struct Stage4BossModelState {
     bool commandTower = true;
     bool exhaustStacks[2] = {true, true};
     bool frontRam = true;
+    bool mainCannonHit = false;
+    bool secondaryGunsHit[6] = {};
 };
 
 /** @brief 黒塗り高級車と超重戦車を融合したStage4ボスのプロシージャル描画 */
@@ -52,7 +57,7 @@ public:
 
         // 将来の部位破壊単位ごとに上部構造を描画する
         if (state.mainTurret) DrawMainTurret(transform, drawPart);
-        if (state.mainCannon) DrawMainCannon(transform, drawPart);
+        if (state.mainCannon) DrawMainCannon(transform, drawPart, state);
         if (state.commandTower) DrawCommandTower(transform, drawPart);
         DrawSecondaryGuns(transform, drawPart, state);
         DrawExhaustStacks(transform, drawPart, state);
@@ -69,6 +74,7 @@ private:
     inline static constexpr float Light[] = {0.90f, 0.80f, 0.50f, 1.0f};
     inline static constexpr float Track[] = {0.035f, 0.038f, 0.045f, 1.0f};
     inline static constexpr float Wheel[] = {0.13f, 0.14f, 0.16f, 1.0f};
+    inline static constexpr float Hit[] = {1.0f, 0.03f, 0.03f, 1.0f};
 
     /**
      * @brief ローカル部品をStage2と共通の親Transform合成処理へ渡す
@@ -97,6 +103,45 @@ private:
         };
         drawPart(static_cast<int>(shape), position, scale * transform.scale,
             color, transform.yaw + localYaw, pitch);
+    }
+
+    /**
+     * @brief 砲基部を支点に照準先へ向けた部品を描画する
+     * @param transform ボス全体の親Transformと照準先
+     * @param drawPart 描画関数
+     * @param tracksTarget 照準先へ向ける場合true
+     * @param aimTarget 照準先
+     * @param localPivot 砲基部のローカル座標
+     * @param shape 描画形状
+     * @param distance 基部から砲口方向への距離
+     * @param scale ローカル寸法
+     * @param color 部品色
+     * @return なし
+     */
+    template<class DrawPart>
+    static void GunPart(const BossModelTransform& transform, DrawPart& drawPart,
+        bool tracksTarget, const Vector3& aimTarget, const Vector3& localPivot,
+        PrimitiveShape shape, float distance, const Vector3& scale, const float color[4]) {
+        const float cosine = std::cos(transform.yaw);
+        const float sine = std::sin(transform.yaw);
+        const Vector3 pivot {
+            transform.position.x +
+                (localPivot.x * cosine + localPivot.z * sine) * transform.scale,
+            transform.position.y + localPivot.y * transform.scale,
+            transform.position.z +
+                (-localPivot.x * sine + localPivot.z * cosine) * transform.scale
+        };
+        const Vector3 delta = tracksTarget ? aimTarget - pivot :
+            Vector3 {-cosine, 0.0f, sine};
+        const float horizontal = (std::max)(0.001f,
+            std::sqrt(delta.x * delta.x + delta.z * delta.z));
+        const float length = (std::max)(0.001f,
+            std::sqrt(horizontal * horizontal + delta.y * delta.y));
+        const float gunYaw = std::atan2(delta.z, -delta.x);
+        const float gunPitch = -std::asin(delta.y / length);
+        const Vector3 position = pivot + delta / length * (distance * transform.scale);
+        drawPart(static_cast<int>(shape), position, scale * transform.scale,
+            color, gunYaw, gunPitch);
     }
 
     /**
@@ -211,14 +256,26 @@ private:
      * @return なし
      */
     template<class DrawPart>
-    static void DrawMainCannon(const BossModelTransform& transform, DrawPart& drawPart) {
-        // 円柱のY軸をローカル-Xへ倒し、全砲身を砲塔中心線へ揃える
-        Part(transform, drawPart, PrimitiveShape::Cylinder, {-3.25f, 3.55f, 0.0f}, {1.18f, 1.55f, 1.18f}, ArmorBlack, 0.0f, Math::HalfPi);
-        Part(transform, drawPart, PrimitiveShape::Cylinder, {-4.85f, 3.55f, 0.0f}, {0.92f, 2.35f, 0.92f}, HighlightBlack, 0.0f, Math::HalfPi);
-        Part(transform, drawPart, PrimitiveShape::Cylinder, {-6.80f, 3.55f, 0.0f}, {0.76f, 1.65f, 0.76f}, ArmorBlack, 0.0f, Math::HalfPi);
-        Part(transform, drawPart, PrimitiveShape::Cylinder, {-7.78f, 3.55f, 0.0f}, {1.16f, 0.42f, 1.16f}, MainBlack, 0.0f, Math::HalfPi);
-        Part(transform, drawPart, PrimitiveShape::Cylinder, {-8.02f, 3.55f, 0.0f}, {0.68f, 0.18f, 0.68f}, Window, 0.0f, Math::HalfPi);
-        Part(transform, drawPart, PrimitiveShape::Cylinder, {-7.55f, 3.55f, 0.0f}, {1.22f, 0.12f, 1.22f}, Gold, 0.0f, Math::HalfPi);
+    static void DrawMainCannon(const BossModelTransform& transform, DrawPart& drawPart,
+        const Stage4BossModelState& state) {
+        const float* armor = state.mainCannonHit ? Hit : ArmorBlack;
+        const float* highlight = state.mainCannonHit ? Hit : HighlightBlack;
+        const float* main = state.mainCannonHit ? Hit : MainBlack;
+        const float* window = state.mainCannonHit ? Hit : Window;
+        const float* gold = state.mainCannonHit ? Hit : Gold;
+        const Vector3 pivot {-3.25f, 3.55f, 0.0f};
+        GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, pivot,
+            PrimitiveShape::Cylinder, 0.00f, {1.18f, 1.18f, 1.18f}, armor);
+        GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, pivot,
+            PrimitiveShape::Cylinder, 1.30f, {2.35f, 0.92f, 0.92f}, highlight);
+        GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, pivot,
+            PrimitiveShape::Cylinder, 3.25f, {1.65f, 0.76f, 0.76f}, armor);
+        GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, pivot,
+            PrimitiveShape::Cylinder, 4.23f, {0.42f, 1.16f, 1.16f}, main);
+        GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, pivot,
+            PrimitiveShape::Cylinder, 4.47f, {0.18f, 0.68f, 0.68f}, window);
+        GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, pivot,
+            PrimitiveShape::Cylinder, 4.00f, {0.12f, 1.22f, 1.22f}, gold);
     }
 
     /**
@@ -258,11 +315,17 @@ private:
         for (int gun = 0; gun < 6; ++gun) {
             if (!state.secondaryGuns[gun]) continue;
             const Vector3& position = Positions[gun];
-            Part(transform, drawPart, PrimitiveShape::Cylinder, position, {0.78f, 0.38f, 0.78f}, MainBlack);
-            Part(transform, drawPart, PrimitiveShape::Box, {position.x - 0.18f, position.y + 0.28f, position.z},
-                {0.88f, 0.42f, 0.68f}, ArmorBlack);
-            Part(transform, drawPart, PrimitiveShape::Cylinder, {position.x - 0.92f, position.y + 0.28f, position.z},
-                {0.24f, 1.25f, 0.24f}, HighlightBlack, 0.0f, Math::HalfPi);
+            const float* color = state.secondaryGunsHit[gun] ? Hit : MainBlack;
+            Part(transform, drawPart, PrimitiveShape::Cylinder, position, {0.78f, 0.38f, 0.78f}, color);
+            const Vector3 pivot {position.x, position.y + 0.28f, position.z};
+            GunPart(transform, drawPart, transform.secondaryGunsTrackTarget,
+                transform.secondaryAimTarget, pivot,
+                PrimitiveShape::Box, 0.18f, {0.88f, 0.42f, 0.68f},
+                state.secondaryGunsHit[gun] ? Hit : ArmorBlack);
+            GunPart(transform, drawPart, transform.secondaryGunsTrackTarget,
+                transform.secondaryAimTarget, pivot,
+                PrimitiveShape::Cylinder, 0.92f, {1.25f, 0.24f, 0.24f},
+                state.secondaryGunsHit[gun] ? Hit : HighlightBlack);
         }
     }
 

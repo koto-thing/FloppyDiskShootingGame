@@ -70,6 +70,9 @@ public:
         boss.actionX = boss.x;
         boss.actionY = boss.y;
         boss.actionZ = boss.z;
+        boss.turretAimX = boss.x;
+        boss.turretAimY = boss.y;
+        boss.turretAimZ = boss.z;
         boss.phase = 0.0f;
         boss.motionAge = 0;
     }
@@ -85,8 +88,27 @@ public:
         boss.actionX = boss.x;
         boss.actionY = boss.y;
         boss.actionZ = boss.z;
+        boss.turretAimX = boss.x;
+        boss.turretAimY = boss.y;
+        boss.turretAimZ = boss.z;
         boss.phase = 0.0f;
         boss.motionAge = 0;
+    }
+
+    /** @brief Stage 4ボスの砲部位HPを設定する @param boss 設定するボス @return なし */
+    void ConfigureBossPartHp(Enemy& boss) const override {
+        boss.bossPartHp = {260, 0, 0, 0, 0,
+            90, 90, 90, 90, 90, 90,
+            0, 0, 0, 0, 0, 0};
+    }
+
+    /**
+     * @brief 部位破壊ダメージを取得する
+     * @param part 破壊された部位
+     * @return 本体へ与えるダメージ
+     */
+    int BossPartBreakDamage(BossPart part) const override {
+        return part == BossNose ? 140 : 70;
     }
 
     /**
@@ -96,6 +118,7 @@ public:
      * @return なし
      */
     void TickBoss(SideScrollingShooter& shooter, Enemy& boss) const override {
+        constexpr float TurretTrackingRate = 0.06f;
         boss.phase = 0.0f;
         boss.motionAge = 0;
         boss.x = boss.baseX;
@@ -104,6 +127,11 @@ public:
         boss.actionX = boss.x;
         boss.actionY = boss.y;
         boss.actionZ = boss.z;
+        boss.turretAimX += (shooter.m_playerX - boss.turretAimX) * TurretTrackingRate;
+        boss.turretAimY += (shooter.m_playerY - boss.turretAimY) * TurretTrackingRate;
+        const float targetZ = shooter.IsRailGameplayActive() ?
+            PlayerRailZ : ToRailZFromSideX(shooter.m_playerX);
+        boss.turretAimZ += (targetZ - boss.turretAimZ) * TurretTrackingRate;
     }
 
     /**
@@ -114,6 +142,24 @@ public:
     int BossBulletCount(bool railMode) const override {
         (void)railMode;
         return 7;
+    }
+
+    /**
+     * @brief 部位ごとの弾数を取得する
+     * @param part 発射する部位
+     * @param phase 攻撃フェーズ
+     * @param railMode レール表示中か
+     * @return 発射する弾数
+     */
+    int BossPartBulletCount(BossPart part, BossPhase phase, bool railMode) const override {
+        (void)railMode;
+        if (part == BossNose) {
+            return phase == BossSpecialPhase1 || phase == BossSpecialPhase2 ? 5 : 3;
+        }
+        if (part >= BossFunnelHatch0 && part < BossFunnelHatch0 + 6) {
+            return phase == BossSpecialPhase1 || phase == BossSpecialPhase2 ? 2 : 1;
+        }
+        return 0;
     }
 
     /**
