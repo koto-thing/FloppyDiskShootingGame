@@ -237,7 +237,7 @@ public:
 private:
     inline static constexpr int RushIntervalFrames = 400;
     inline static constexpr int RushWindupFrames = 42;
-    inline static constexpr int RushChargeFrames = 51;
+    inline static constexpr int RushChargeFrames = 61;
     inline static constexpr int RushWaitFrames = 48;
     inline static constexpr int RushReturnFrames = 96;
     inline static constexpr int RushTotalFrames = RushWindupFrames + RushChargeFrames +

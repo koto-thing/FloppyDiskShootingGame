@@ -11,4 +11,5 @@ struct BossModelTransform {
     bool mainGunTracksTarget = false;
     bool secondaryGunsTrackTarget = false;
     Vector3 secondaryAimTarget {};
+    float trackRoll = 0.0f;
 };

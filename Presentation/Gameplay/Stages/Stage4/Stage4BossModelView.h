@@ -26,7 +26,7 @@ public:
     static constexpr float Stage4LaneWidth = 6.0f;
     static constexpr float ModelWidth = Stage4LaneCount * Stage4LaneWidth;
     static constexpr int ChassisPrimitiveCount = 10;
-    static constexpr int TrackPrimitiveCount = 46;
+    static constexpr int TrackPrimitiveCount = 106;
     static constexpr int LuxuryBodyPrimitiveCount = 25;
     static constexpr int MainTurretPrimitiveCount = 9;
     static constexpr int MainCannonPrimitiveCount = 6;
@@ -75,6 +75,17 @@ private:
     inline static constexpr float Track[] = {0.035f, 0.038f, 0.045f, 1.0f};
     inline static constexpr float Wheel[] = {0.13f, 0.14f, 0.16f, 1.0f};
     inline static constexpr float Hit[] = {1.0f, 0.03f, 0.03f, 1.0f};
+
+    /**
+     * @brief 履帯板の巡回位置を取得する
+     * @param value 巡回前の位置
+     * @param length 巡回する長さ
+     * @return 0以上length未満へ丸めた位置
+     */
+    static float WrapTrackPosition(float value, float length) {
+        const float wrapped = std::fmod(value, length);
+        return wrapped < 0.0f ? wrapped + length : wrapped;
+    }
 
     /**
      * @brief ローカル部品をStage2と共通の親Transform合成処理へ渡す
@@ -174,6 +185,12 @@ private:
      */
     template<class DrawPart>
     static void DrawTracks(const BossModelTransform& transform, DrawPart& drawPart) {
+        constexpr float TrackLength = 13.2f;
+        constexpr float TrackLeft = -TrackLength * 0.5f;
+        constexpr float ShoeSpacing = 2.20f;
+        constexpr int ShoeCount = 7;
+        const float shoePhase = WrapTrackPosition(transform.trackRoll * 0.54f, ShoeSpacing);
+
         for (float side : {-1.0f, 1.0f}) {
             // 長い履帯板と円柱端部で角張りすぎない外周を作る
             Part(transform, drawPart, PrimitiveShape::Box, {0.0f, -0.08f, side * 11.10f}, {13.4f, 2.25f, 0.54f}, Track);
@@ -181,6 +198,17 @@ private:
             Part(transform, drawPart, PrimitiveShape::Cylinder, {6.70f, -0.08f, side * 11.10f}, {2.28f, 0.58f, 2.28f}, Track, Math::HalfPi, Math::HalfPi);
             Part(transform, drawPart, PrimitiveShape::Box, {0.0f, 0.91f, side * 11.16f}, {11.8f, 0.48f, 0.66f}, MainBlack);
             Part(transform, drawPart, PrimitiveShape::Box, {0.0f, -1.08f, side * 11.16f}, {11.8f, 0.30f, 0.66f}, MainBlack);
+
+            // 履帯板を移動距離と連動した位相で上下逆方向へ流す
+            for (int shoe = 0; shoe < ShoeCount; ++shoe) {
+                const float offset = static_cast<float>(shoe) * ShoeSpacing + shoePhase;
+                const float topX = TrackLeft + WrapTrackPosition(offset, TrackLength);
+                const float bottomX = TrackLeft + WrapTrackPosition(TrackLength - offset, TrackLength);
+                Part(transform, drawPart, PrimitiveShape::Box, {topX, 1.04f, side * 11.62f},
+                    {0.72f, 0.12f, 0.78f}, HighlightBlack);
+                Part(transform, drawPart, PrimitiveShape::Box, {bottomX, -1.18f, side * 11.62f},
+                    {0.72f, 0.12f, 0.78f}, HighlightBlack);
+            }
 
             // 規則的な中心位置と大小差を持つ八輪を外装の間から見せる
             for (int wheel = 0; wheel < 8; ++wheel) {
@@ -191,6 +219,11 @@ private:
                     {diameter, 0.22f, diameter}, Wheel, Math::HalfPi, Math::HalfPi);
                 Part(transform, drawPart, PrimitiveShape::Cylinder, {x, -0.18f, side * 11.53f},
                     {diameter * 0.42f, 0.12f, diameter * 0.42f}, Gold, Math::HalfPi, Math::HalfPi);
+                Part(transform, drawPart, PrimitiveShape::Box, {x, -0.18f, side * 11.64f},
+                    {diameter * 0.70f, 0.06f, 0.08f}, Gold, 0.0f, -transform.trackRoll);
+                Part(transform, drawPart, PrimitiveShape::Box, {x, -0.18f, side * 11.65f},
+                    {diameter * 0.70f, 0.06f, 0.08f}, Gold, 0.0f,
+                    -transform.trackRoll + Math::HalfPi);
             }
 
             // 前後の斜め装甲で履帯上部を車体へつなぐ
@@ -404,4 +437,4 @@ private:
     }
 };
 
-static_assert(Stage4BossModelView::PrimitiveCount == 160);
+static_assert(Stage4BossModelView::PrimitiveCount == 220);

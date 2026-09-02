@@ -10,6 +10,7 @@ namespace {
 
 constexpr float Stage4BossScale = 1.00f;
 constexpr float Stage4ModelYawOffset = -Math::HalfPi;
+constexpr float Stage4TrackWheelRadius = 0.74f;
 constexpr Vector3 Stage4MainCannonLocal {-5.75f, 3.55f, 0.0f};
 constexpr Vector3 Stage4SecondaryGunLocal[] = {
     {-3.40f, 3.76f, -3.45f}, {-3.40f, 3.76f, 3.45f},
@@ -31,7 +32,6 @@ const SideScrollingShooter::Stage& SideScrollingShooter::Stage4Module::Definitio
 bool SideScrollingShooter::Stage4Module::DrawBossModel(
     const SideScrollingShooter& shooter, Renderer& renderer,
     const Camera3D& camera, const Enemy& enemy, float yaw) {
-    (void)shooter;
     if (enemy.type != 2) return false;
 
     // Stage2と同じ親Transform経由で専用モデルを描画する
@@ -60,6 +60,9 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
     aimedTransform.secondaryAimTarget = aimTarget;
     aimedTransform.secondaryGunsTrackTarget = true;
     aimedTransform.mainGunTracksTarget = state.mainCannon && enemy.phase <= 0.0f;
+    aimedTransform.trackRoll = (shooter.IsRailGameplayActive() ?
+        enemy.z - enemy.baseZ : ToWorldX(enemy.x - enemy.baseX)) /
+        Stage4TrackWheelRadius;
 
     // Stage4BossModelViewの出力を既存Primitive描画へ接続する
     auto DrawBossPart = [&](int shape, const Vector3& position, const Vector3& scale,
