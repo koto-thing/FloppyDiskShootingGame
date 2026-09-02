@@ -19,8 +19,15 @@ constexpr float Stage4CannonMuzzleDistance = 4.47f;
 constexpr float Stage4CannonballRailRadius = 0.52f;
 constexpr float Stage4CannonballSideRadius = 0.075f;
 constexpr float Stage4RailGroundGameY = -0.829545f;
+constexpr float Stage4BodyHitRadius = 3.35f;
 constexpr Vector3 Stage4MainCannonLocal {-5.75f, 3.55f, 0.0f};
 constexpr Vector3 Stage4MainCannonPivotLocal {-3.25f, 3.55f, 0.0f};
+constexpr Vector3 Stage4BodyHitLocal[] = {
+    {-4.70f, 0.35f, -7.40f}, {-4.70f, 0.35f, 0.0f}, {-4.70f, 0.35f, 7.40f},
+    {0.00f, 0.35f, -7.40f}, {0.00f, 0.35f, 0.0f}, {0.00f, 0.35f, 7.40f},
+    {4.70f, 0.50f, -7.40f}, {4.70f, 0.50f, 0.0f}, {4.70f, 0.50f, 7.40f},
+    {-1.35f, 2.55f, -4.40f}, {-1.35f, 2.55f, 0.0f}, {-1.35f, 2.55f, 4.40f}
+};
 constexpr Vector3 Stage4SecondaryGunLocal[] = {
     {-3.40f, 3.76f, -3.45f}, {-3.40f, 3.76f, 3.45f},
     {-4.40f, 3.08f, -7.65f}, {-4.40f, 3.08f, 7.65f},
@@ -30,6 +37,7 @@ constexpr float Stage4MainCannonHitRadius = 1.45f;
 constexpr float Stage4SecondaryGunHitRadius = 0.82f;
 
 static_assert(sizeof(Stage4SecondaryGunLocal) / sizeof(Stage4SecondaryGunLocal[0]) == 6);
+static_assert(sizeof(Stage4BodyHitLocal) / sizeof(Stage4BodyHitLocal[0]) == 12);
 
 }
 
@@ -177,6 +185,25 @@ void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
     }
 }
 
+bool SideScrollingShooter::Stage4Module::HitsHazard(
+    const SideScrollingShooter& shooter, float x, float y, float z, float radius) {
+    for (const Enemy& enemy : shooter.m_enemies) {
+        if (!enemy.active || enemy.type != 2 || !enemy.collisionEnabled) continue;
+
+        // 車体と砲塔の主要な塊を描画用ローカル座標と同じ基準で判定する
+        for (const Vector3& local : Stage4BodyHitLocal) {
+            const Vector3 world = LocalToWorld(shooter, enemy, local);
+            const bool hit = shooter.IsRailGameplayActive() ?
+                Hit3D(ToWorldX(x), ToWorldY(y), z, radius * WorldXScale,
+                    world.x, world.y, world.z, Stage4BodyHitRadius) :
+                Hit(x, y, radius, FromWorldX(world.x), FromWorldY(world.y),
+                    Stage4BodyHitRadius / WorldXScale);
+            if (hit) return true;
+        }
+    }
+    return false;
+}
+
 void SideScrollingShooter::Stage4Module::TickSpecialShotBeforeMove(
     SideScrollingShooter& shooter, Shot& shot) {
     (void)shooter;
@@ -290,7 +317,7 @@ bool SideScrollingShooter::Stage4Module::DrawSpecialShot(
     if (!shot.enemy || shot.stage4.kind != ShotKind::Cannonball) return false;
 
     // 主砲弾は通常敵弾より大きな鉄球として描画する
-    constexpr float ShellColor[] = {0.035f, 0.032f, 0.030f, 1.0f};
+    constexpr float ShellColor[] = {0.16f, 0.16f, 0.17f, 1.0f};
     constexpr float HotCoreColor[] = {0.85f, 0.18f, 0.035f, 1.0f};
     const float radius = shooter.IsRailGameplayActive() ?
         Stage4CannonballRailRadius : Stage4CannonballSideRadius * WorldXScale;

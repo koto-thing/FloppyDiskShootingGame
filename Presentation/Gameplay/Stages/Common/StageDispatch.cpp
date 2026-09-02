@@ -144,6 +144,7 @@ bool SideScrollingShooter::StageDispatch::HitsHazard(const SideScrollingShooter&
     case 1: return Stage1Module::HitsHazard(shooter, x, y, z, radius);
     case 2: return Stage2Module::HitsHazard(shooter, x, y, z, radius);
     case 3: return Stage3Module::HitsHazard(shooter, x, y, z, radius);
+    case 4: return Stage4Module::HitsHazard(shooter, x, y, z, radius);
     default: return false;
     }
 }

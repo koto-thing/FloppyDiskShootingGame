@@ -35,6 +35,18 @@ public:
     static void FireBossPartBarrage(SideScrollingShooter& shooter, const Enemy& boss);
 
     /**
+     * @brief 指定球がStage 4ボス本体へ接触したか判定する
+     * @param shooter 判定に使用するゲーム本体
+     * @param x 判定対象のゲーム座標X
+     * @param y 判定対象のゲーム座標Y
+     * @param z 判定対象のレール座標Z
+     * @param radius 判定対象の半径
+     * @return ボス本体へ接触している場合true、接触していない場合false
+     */
+    static bool HitsHazard(const SideScrollingShooter& shooter,
+        float x, float y, float z, float radius);
+
+    /**
      * @brief Stage 4特殊弾を座標加算前に更新する
      * @param shooter 更新するゲーム本体
      * @param shot 更新する弾
