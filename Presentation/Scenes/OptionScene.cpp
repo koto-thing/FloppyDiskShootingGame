@@ -103,12 +103,15 @@ void OptionScene::Tick() {
 void OptionScene::Dispose() {
     // 現在の音量設定をランキングと同じ永続データ領域へ保存する
     const AudioService& audio = AudioService::Get();
-    SettingsRepository().Save({
-        audio.GetMasterVolume(),
-        audio.GetBGMVolume(),
-        audio.GetSEVolume(),
-        m_retroEffectEnabled
-    });
+    SettingsRepository repository;
+    GameSettings settings = repository.Load();
+
+    // ギャラリー解放状態を維持したままオプション項目だけを更新する
+    settings.masterVolume = audio.GetMasterVolume();
+    settings.bgmVolume = audio.GetBGMVolume();
+    settings.seVolume = audio.GetSEVolume();
+    settings.retroEffectEnabled = m_retroEffectEnabled;
+    repository.Save(settings);
     m_backToTitleButton.reset();
     m_retroEffectButton.reset();
 }

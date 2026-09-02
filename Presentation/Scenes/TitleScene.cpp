@@ -20,14 +20,14 @@ void TitleScene::Initialize() {
     );
     m_startButton->SetOnClick([this]() { changeScene(SceneType::ModeSelection); });
 
-    /** @brief ゲーム開始ボタンの下に3Dモデルテスト用ボタンを配置する */
-    m_modelTestButton = std::make_unique<Button>(
+    /** @brief ゲーム開始ボタンの下にギャラリーボタンを配置する */
+    m_galleryButton = std::make_unique<Button>(
         Vector2 { 0.35f, 0.10f },
         RectAlign::Center,
-        "MODEL TEST",
+        "GALLERY",
         Vector2 { 0.0f, 0.00f }
     );
-    m_modelTestButton->SetOnClick([this]() { changeScene(SceneType::ModelTest); });
+    m_galleryButton->SetOnClick([this]() { changeScene(SceneType::Gallery); });
 
     /** @brief モデルテストボタンの下にランキングボタンを配置する */
     m_rankingButton = std::make_unique<Button>(
@@ -96,9 +96,9 @@ void TitleScene::ProcessInput() {
         m_startButton->Update(inputState);
     }
 
-    /** @brief 3Dモデルテストボタンにマウス入力を渡す */
-    if (m_modelTestButton != nullptr) {
-        m_modelTestButton->Update(inputState);
+    /** @brief ギャラリーボタンにマウス入力を渡す */
+    if (m_galleryButton != nullptr) {
+        m_galleryButton->Update(inputState);
     }
 
     /** @brief ランキングボタンにマウス入力を渡す */
@@ -131,7 +131,7 @@ void TitleScene::Tick() {
 
 void TitleScene::Dispose() {
     m_startButton.reset();
-    m_modelTestButton.reset();
+    m_galleryButton.reset();
     m_rankingButton.reset();
     m_exitButton.reset();
     m_creditButton.reset();
@@ -161,9 +161,9 @@ void TitleScene::Render(Renderer& renderer) {
         m_startButton->Render(renderer);
     }
 
-    // 3Dモデルテストボタンを描画する
-    if (m_modelTestButton != nullptr) {
-        m_modelTestButton->Render(renderer);
+    // ギャラリーボタンを描画する
+    if (m_galleryButton != nullptr) {
+        m_galleryButton->Render(renderer);
     }
 
     // ランキングボタンを描画する

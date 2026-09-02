@@ -17,6 +17,7 @@
 #include "../Math/Vector2.h"
 
 class WindowsInputBackend;
+class InputTestAccess;
 
 /**
  * @brief キーボードとマウスの入力状態をフレーム単位で管理する
@@ -105,11 +106,14 @@ public:
 
 private:
     friend class WindowsInputBackend;
+    friend class InputTestAccess;
 
     static std::array<bool, static_cast<std::size_t>(KeyCode::Count)> m_currentKeys;
-    static std::array<bool, static_cast<std::size_t>(KeyCode::Count)> m_previousKeys;
+    static std::array<bool, static_cast<std::size_t>(KeyCode::Count)> m_keyDown;
+    static std::array<bool, static_cast<std::size_t>(KeyCode::Count)> m_keyUp;
     static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_currentMouseButtons;
-    static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_previousMouseButtons;
+    static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_mouseButtonDown;
+    static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_mouseButtonUp;
     static Vector2 m_mousePosition;
     static Vector2 m_mouseDelta;
     static float m_mouseWheelDelta;

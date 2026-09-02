@@ -66,7 +66,10 @@ constexpr float Phase3MainGunTrackingRate(int frame, int fireFrame) {
 enum class ShotKind {
     None,
     Funnel,
-    Missile
+    Missile,
+    ReflectPass,
+    ReflectAttack,
+    FunnelMissile
 };
 
 /** @brief Stage 2特殊弾の状態 */

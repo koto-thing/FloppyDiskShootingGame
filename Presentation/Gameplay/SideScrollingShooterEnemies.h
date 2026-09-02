@@ -61,7 +61,7 @@ public:
         return enemy.type == 2 ? 1.6f : 0.7f;
     }
     virtual float ShotHitRadius3D(const Enemy& enemy) const {
-        return enemy.type == 2 ? 1.5f : 0.55f;
+        return enemy.type == 2 ? 1.5f : 0.66f;
     }
     virtual int Score(const Enemy& enemy) const {
         return enemy.type == 0 ? 100 : 250;

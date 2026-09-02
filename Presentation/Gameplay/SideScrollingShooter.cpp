@@ -7,6 +7,8 @@
 #include "../../Engine/Input/Input.h"
 #include "../../Engine/Input/KeyCode.h"
 #include "../../Infrastructure/ExternalServices/AudioService.h"
+#include "../../Infrastructure/ExternalServices/InputService.h"
+#include "../../Infrastructure/Repositories/SettingsRepository.h"
 #include "SideScrollingShooterShared.h"
 #include "Stages/Common/StageDispatch.h"
 
@@ -91,6 +93,7 @@ void SideScrollingShooter::Initialize(AudioService* audio, PlayerType playerType
     m_audio = audio;
     m_playerType = playerType;
     m_difficulty = difficulty;
+    m_galleryUnlocks = SettingsRepository {}.Load().galleryUnlocks;
     Reset(true);
 }
 
@@ -128,6 +131,9 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
     m_bossStoryActive = false;
     m_bossIntroductionPhase = BossIntroductionPhase::None;
     m_bossIntroductionTimer = 0;
+    m_screenShakeIntensity = 0.0f;
+    m_screenShakeFrames = 0;
+    m_screenShakeDurationFrames = 0;
     m_clearTimer = 0;
     m_clear = false;
     m_bossBattle = false;
@@ -196,6 +202,7 @@ void SideScrollingShooter::StartDebugCheckpoint(int stageNumber, int chapterNumb
     m_viewTransitionProgress = 0.0f;
     m_playerX = -0.72f;
     m_playerY = 0.0f;
+    m_slowMove = false;
     StageDispatch::ResetScriptState(*this);
 
     if (bossBattle) {
@@ -214,6 +221,7 @@ void SideScrollingShooter::ProcessInput() {
     m_moveRight = Input::GetKey(KeyCode::RightArrow) || Input::GetKey(KeyCode::D);
     m_moveUp = Input::GetKey(KeyCode::UpArrow) || Input::GetKey(KeyCode::W);
     m_moveDown = Input::GetKey(KeyCode::DownArrow) || Input::GetKey(KeyCode::S);
+    m_slowMove = InputService::IsKeyPressed(VK_SHIFT);
     m_fire = Input::GetKey(KeyCode::Z) || Input::GetKey(KeyCode::Space);
     m_viewToggleRequested = Input::GetKeyDown(KeyCode::X) && m_viewToggleCooldown == 0 &&
         !StageDispatch::IsViewLocked(*this) &&
@@ -239,6 +247,9 @@ void SideScrollingShooter::ProcessInput() {
 }
 
 void SideScrollingShooter::Tick() {
+    // 進行停止中も画面揺れを終了へ進める
+    m_screenShakeFrames = (std::max)(0, m_screenShakeFrames - 1);
+
     // ミッション開始表示中は背景を維持したまま戦闘進行と操作を止める
     if (m_missionStartTimer > 0) {
         --m_missionStartTimer;
@@ -333,21 +344,7 @@ void SideScrollingShooter::Tick() {
         return;
     }
 
-    bool firedPlayerShot = false;
-    if (m_fire && m_shotCooldown == 0) {
-        SpawnShot(m_playerX + (IsRailGameplayActive() ? 0.0f : 0.12f), m_playerY,
-            IsRailGameplayActive() ? 0.0f : 0.045f, 0.0f, false, -1.0f, -1.0f, 1 + PowerLevel());
-        m_shotCooldown = (std::max)(3, 7 - PowerLevel());
-        PlayShotSound();
-    }
-    if (m_fire && m_specialShotCooldown == 0) {
-        /** @brief 選択中の機体タイプに対応する特殊弾を発射する */
-        FireSpecialShots();
-        const auto& config = PlayerShotConfigs[static_cast<size_t>(m_playerType)];
-        m_specialShotCooldown = config.fireIntervalFrames;
-        firedPlayerShot = true;
-    }
-    if (firedPlayerShot) PlayShotSound();
+    TickPlayerWeapons();
 
     if (!m_bossBattle && !m_chapterResultActive &&
         StageDispatch::UsesChapterTimeline(*this)) {
@@ -365,6 +362,27 @@ void SideScrollingShooter::Tick() {
     TickExplosions();
     TickDebris();
     TickItems();
+}
+
+/**
+ * @brief ゲーム画面の揺れを開始する
+ * @param intensity 揺れの最大振幅
+ * @param durationFrames 揺れを継続するフレーム数
+ * @return なし
+ */
+void SideScrollingShooter::ShakeScreen(float intensity, int durationFrames) {
+    // 無効な指定は現在の画面揺れを停止する
+    if (intensity <= 0.0f || durationFrames <= 0) {
+        m_screenShakeIntensity = 0.0f;
+        m_screenShakeFrames = 0;
+        m_screenShakeDurationFrames = 0;
+        return;
+    }
+
+    // 呼び出すたびに指定した強さと長さで揺れを開始し直す
+    m_screenShakeIntensity = intensity;
+    m_screenShakeFrames = durationFrames;
+    m_screenShakeDurationFrames = durationFrames;
 }
 
 /**
@@ -636,13 +654,11 @@ void SideScrollingShooter::StartBossBattle() {
     m_bossIntroductionPhase = BossIntroductionPhase::Entrance;
     m_bossIntroductionTimer = 0;
 
-    // 通常敵と敵弾を消去してボス戦へ切り替える
+    // 通常敵と全弾を消去してボス登場中に自機弾が画面へ残るのを防ぐ
     for (auto& enemy : m_enemies) {
         enemy.active = false;
     }
-    for (auto& shot : m_shots) {
-        if (shot.enemy) shot.active = false;
-    }
+    m_shots = {};
 
     Enemy& boss = m_enemies[0];
     m_stage->ConfigureBoss(boss, IsRailGameplayActive());

@@ -180,12 +180,13 @@
     <ClCompile Include="Presentation\Scenes\RankingScene.cpp" />
     <ClCompile Include="Presentation\Scenes\OptionScene.cpp" />
     <ClCompile Include="Presentation\Scenes\TestStage.cpp" />
-    <ClCompile Include="Presentation\Scenes\ModelTestScene.cpp" />
+    <ClCompile Include="Presentation\Scenes\GalleryScene.cpp" />
     <ClCompile Include="Presentation\Scenes\TitleScene.cpp" />
     <ClCompile Include="Presentation\TitleScene\TitleSceneColumn.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Domain\ValueObjects\DifficultyType.h" />
+    <ClInclude Include="Domain\ValueObjects\GalleryEntry.h" />
     <ClInclude Include="Domain\ValueObjects\PlayerType.h" />
     <ClInclude Include="Domain\ValueObjects\SceneSharedData.h" />
     <ClInclude Include="Domain\ValueObjects\SceneType.h" />
@@ -214,10 +215,15 @@
     <ClInclude Include="Presentation\Scenes\RankingScene.h" />
     <ClInclude Include="Presentation\Scenes\OptionScene.h" />
     <ClInclude Include="Presentation\Scenes\TestStage.h" />
-    <ClInclude Include="Presentation\Scenes\ModelTestScene.h" />
+    <ClInclude Include="Presentation\Scenes\GalleryScene.h" />
     <ClInclude Include="Presentation\Gameplay\SideScrollingShooter.h" />
     <ClInclude Include="Presentation\Gameplay\SideScrollingShooterShared.h" />
+    <ClInclude Include="Presentation\Gameplay\Models\AircraftModelView.h" />
+    <ClInclude Include="Presentation\Gameplay\Models\LegacyBossModelView.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2BossModelView.h" />
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3BossModelView.h" />
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3BarrierCageView.h" />
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3FunnelModelView.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4BossModelView.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5ModelView.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage1\Stage1EnemySheet.h" />
@@ -242,6 +248,7 @@
     <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2State.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2Module.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3Module.h" />
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3State.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Common\CityBackgroundModule.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4Module.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5State.h" />
