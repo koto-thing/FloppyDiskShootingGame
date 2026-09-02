@@ -1,7 +1,7 @@
 #include <cassert>
 
 #include "../Presentation/Gameplay/SideScrollingShooter.h"
-#include "../Presentation/Gameplay/Stage5ModelView.h"
+#include "../Presentation/Gameplay/Stages/Stage5/Stage5ModelView.h"
 
 /**
  * @brief Stage 5の状態順序と共有モデルTransformを検証する

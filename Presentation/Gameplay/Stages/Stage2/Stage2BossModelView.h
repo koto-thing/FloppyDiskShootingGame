@@ -2,19 +2,8 @@
 
 #include <cmath>
 
-#include "../../Engine/Math/Math.h"
-#include "../../Engine/Math/Vector3.h"
-
-/** @brief ボスモデルの親座標と向きを表す */
-struct BossModelTransform {
-    Vector3 position {};
-    Vector3 aimTarget {};
-    float yaw = 0.0f;
-    float scale = 1.0f;
-    bool mainGunTracksTarget = false;
-    bool secondaryGunsTrackTarget = false;
-    Vector3 secondaryAimTarget {};
-};
+#include "../Common/BossModelTransform.h"
+#include "../../../../Engine/Math/Math.h"
 
 /** @brief Stage2ボスの破壊済み部位を描画へ反映する */
 struct BossModelDamageState {
@@ -142,7 +131,6 @@ private:
     }
 
     friend class LandBattleshipView;
-    friend class Stage4BossModelView;
 };
 
 /** @brief 陸上戦艦ユニットのプロシージャル描画 */

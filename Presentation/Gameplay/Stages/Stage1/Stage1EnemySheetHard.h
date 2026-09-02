@@ -1,9 +1,9 @@
 #pragma once
 
-#include "Stage2EnemySheet.h"
+#include "Stage1EnemySheet.h"
 
-/** @brief HARD用のステージ2敵出現シートを定義する */
-class SideScrollingShooter::Stage2EnemySheetHard final : public SideScrollingShooter::Stage2EnemySheet {
+/** @brief HARD用のステージ1敵出現シートを定義する */
+class SideScrollingShooter::Stage1EnemySheetHard final : public SideScrollingShooter::Stage1EnemySheet {
 public:
     static constexpr int ChapterLength = 500;
 
@@ -21,7 +21,7 @@ public:
      * @param spawnIndex 同一フレーム内で取得する出現候補の番号
      * @param spawn 出現設定の格納先
      * @param chapterNumber 現在チャプター番号の格納先
-     * @return 敵を出現させる場合true
+     * @return 敵を出現させる場合true、出現させない場合false
      */
     bool TrySelectEnemySpawn(int frame, int spawnIndex,
         EnemySpawnRule& spawn, int& chapterNumber) const override {
@@ -30,20 +30,18 @@ public:
             {BasicEnemy, 20, 48, 1.08f, -0.72f, -0.54f, 60.0f},
             {StraightShooterEnemy, 100, 210, 1.10f, -0.18f, 0.86f, 48.0f}
         };
-        // チャプター2は4種類の敵を高頻度で出現させる
+        // チャプター2は3種類の敵を高頻度で出現させる
         static constexpr EnemySpawnRule Chapter2[] = {
             {BasicEnemy, 10, 42, 1.12f, 0.42f, -0.12f, 60.0f},
             {CircleShooterEnemy, 50, 120, 1.14f, 0.35f, -0.32f, 54.0f},
-            {HeavyEnemy, 110, 160, 1.16f, 0.70f, 0.58f, 60.0f},
-            {SquareShooterEnemy, 150, 160, 1.14f, -0.62f, 0.32f, 54.0f}
+            {HeavyEnemy, 110, 160, 1.16f, 0.70f, 0.58f, 60.0f}
         };
         // チャプター3は全種類を高頻度で出現させる
         static constexpr EnemySpawnRule Chapter3[] = {
             {StraightShooterEnemy, 10, 100, 1.10f, -0.78f, 0.86f, 48.0f},
             {CircleShooterEnemy, 40, 110, 1.14f, 0.78f, -0.86f, 36.0f},
             {HeavyEnemy, 90, 130, 1.16f, 0.22f, 0.30f, 60.0f},
-            {ArmoredEnemy, 160, 240, 1.16f, -0.36f, -0.30f, 60.0f},
-            {SquareShooterEnemy, 120, 120, 1.14f, 0.42f, 0.32f, 54.0f}
+            {ArmoredEnemy, 160, 240, 1.16f, -0.36f, -0.30f, 60.0f}
         };
         constexpr Chapter Chapters[] = {
             MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)

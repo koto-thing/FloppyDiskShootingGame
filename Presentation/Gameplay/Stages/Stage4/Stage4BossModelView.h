@@ -1,8 +1,8 @@
 #pragma once
 
-#include "BossModelView.h"
+#include "../Common/BossModelTransform.h"
 
-#include "../../Engine/Graphics/IRenderBackend.h"
+#include "../../../../Engine/Graphics/IRenderBackend.h"
 
 /** @brief Stage4ボスの独立破壊対象を描画へ反映する */
 struct Stage4BossModelState {
@@ -86,12 +86,17 @@ private:
     static void Part(const BossModelTransform& transform, DrawPart& drawPart, PrimitiveShape shape,
         const Vector3& localPosition, const Vector3& scale, const float color[4],
         float localYaw = 0.0f, float pitch = 0.0f) {
-        auto drawRotated = [&](int partShape, const Vector3& position, const Vector3& worldScale,
-            const float partColor[4], float yaw, float) {
-            drawPart(partShape, position, worldScale, partColor, yaw, pitch);
+        const float cosine = std::cos(transform.yaw);
+        const float sine = std::sin(transform.yaw);
+        const Vector3 position {
+            transform.position.x +
+                (localPosition.x * cosine + localPosition.z * sine) * transform.scale,
+            transform.position.y + localPosition.y * transform.scale,
+            transform.position.z +
+                (-localPosition.x * sine + localPosition.z * cosine) * transform.scale
         };
-        SandSubmarineView::DrawLocal(transform, drawRotated, static_cast<int>(shape),
-            localPosition, scale, color, localYaw);
+        drawPart(static_cast<int>(shape), position, scale * transform.scale,
+            color, transform.yaw + localYaw, pitch);
     }
 
     /**

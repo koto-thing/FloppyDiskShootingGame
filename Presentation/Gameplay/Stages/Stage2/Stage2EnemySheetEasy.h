@@ -26,7 +26,7 @@ public:
      * @param spawnIndex 同一フレーム内で取得する出現候補の番号
      * @param spawn 出現設定の格納先
      * @param chapterNumber 現在チャプター番号の格納先
-     * @return 敵を出現させる場合true
+     * @return 敵を出現させる場合true、出現させない場合false
      */
     bool TrySelectEnemySpawn(int frame, int spawnIndex,
         EnemySpawnRule& spawn, int& chapterNumber) const override {

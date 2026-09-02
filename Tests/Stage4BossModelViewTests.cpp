@@ -1,7 +1,7 @@
 #include <cassert>
 #include <cmath>
 
-#include "../Presentation/Gameplay/Stage4BossModelView.h"
+#include "../Presentation/Gameplay/Stages/Stage4/Stage4BossModelView.h"
 
 /**
  * @brief Stage4ボスの構成数、破壊単位、親Transform合成を検証する
