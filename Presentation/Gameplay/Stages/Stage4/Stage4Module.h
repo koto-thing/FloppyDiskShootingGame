@@ -28,5 +28,4 @@ public:
         Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw);
 
 private:
-    class StageDefinitionImpl;
 };

@@ -77,6 +77,7 @@ private:
     class Stage2EnemySheetEasy;
     class Stage2EnemySheetNormal;
     class Stage2EnemySheetHard;
+    class Stage4EnemySheet;
     class EnemyBehavior;
     class BasicEnemyBehavior;
     class HeavyEnemyBehavior;
