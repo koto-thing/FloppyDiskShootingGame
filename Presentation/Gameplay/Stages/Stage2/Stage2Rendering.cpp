@@ -250,7 +250,7 @@ void SideScrollingShooter::Stage2Module::DrawBoneArch(
             RailCenterY + std::sin(angle) * RailRadius, railWeight);
         const float z = Math::Lerp(SideZ, railZ, railWeight);
         const float jointScale = i % 3 == 0 ? 1.18f : 1.0f;
-        DrawModelPrimitive(renderer, camera, 5, x, y, z,
+        DrawModelPrimitive(renderer, camera, 1, x, y, z,
             Math::Lerp(1.25f, 2.55f, railWeight) * jointScale,
             Math::Lerp(1.40f, 2.55f, railWeight) * jointScale,
             Math::Lerp(0.85f, 2.55f, railWeight) * jointScale,
@@ -763,7 +763,7 @@ bool SideScrollingShooter::Stage2Module::SpawnBossDebris(
     Debris* lowerHull = shooter.SpawnDebrisPiece(
         x, lowerHullY, boss.z,
         0.0f, 0.0f, 0.0f, yaw, 0.0f,
-        5, 8.8f * ModelScale, LowerHullHeight, 3.15f * ModelScale,
+        1, 8.8f * ModelScale, LowerHullHeight, 3.15f * ModelScale,
         Hull, 420, 420, false);
     if (lowerHull != nullptr) lowerHull->stage2 = {DebrisKind::Sink, -1};
     auto AddFallingUpper = [&](int shape, const Vector3& local,

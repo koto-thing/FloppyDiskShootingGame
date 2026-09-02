@@ -15,6 +15,7 @@
 
 class AudioService;
 class Renderer;
+enum class PrimitiveShape;
 
 /**
  * @brief 固定長プールで動作する横スクロールシューティングのゲーム本体
@@ -542,6 +543,10 @@ private:
     bool TryHitDefaultBossPart(const Shot& shot, const Enemy& boss, BossPart& part) const;
     void PlayShotSound();
     void PlayHitSound();
+    /** @brief ミサイル噴射開始音を再生する @return なし */
+    void PlayMissileLaunchSound();
+    /** @brief ボスマシンガンの単発音を再生する @return なし */
+    void PlayBossMachineGunSound();
     static bool Hit(float ax, float ay, float ar, float bx, float by, float br);
     static bool Hit3D(float ax, float ay, float az, float ar, float bx, float by, float bz, float br);
     /**
@@ -581,6 +586,11 @@ private:
     float RailBlend() const;
     bool IsRailGameplayActive() const;
     bool IsRailRenderActive() const;
+    /**
+     * @brief 現在2Dと3Dの表示を切り替えられるか判定する
+     * @return 切り替え可能な場合true
+     */
+    bool CanToggleView() const;
     void ConfigureSideCamera(Camera3D& camera, Renderer& renderer) const;
     void ConfigureRailCamera(Camera3D& camera, Renderer& renderer) const;
     /**
@@ -605,6 +615,15 @@ private:
      */
     void DrawAttackWarnings3D(Renderer& renderer, const Camera3D& camera, float railWeight) const;
     void DrawBossHud(Renderer& renderer) const;
+    /**
+     * @brief 2Dと3Dの表示切り替えクールダウンを描画する
+     * @param renderer 描画先レンダラー
+     * @param camera 現在の3Dカメラ
+     * @param playerZ 描画中の自機のワールド座標Z
+     * @return なし
+     */
+    void DrawViewToggleCooldownHud(
+        Renderer& renderer, const Camera3D& camera, float playerZ) const;
     /** @brief ボス戦前会話を画面へ描画する */
     void DrawBossStory(Renderer& renderer) const;
     /** @brief 墨の筆跡を模したボス名演出を画面へ描画する */
@@ -614,6 +633,25 @@ private:
     static void DrawModelPrimitive(Renderer& renderer, const Camera3D& camera, int shape,
         float x, float y, float z, float w, float h, float d, const float color[4],
         float yaw = 0.0f, float pitch = 0.0f);
+    /**
+     * @brief PrimitiveShapeを変換せず3Dプリミティブとして描画する
+     * @param renderer 描画先レンダラー
+     * @param camera 現在の3Dカメラ
+     * @param shape 描画形状
+     * @param x 中心X座標
+     * @param y 中心Y座標
+     * @param z 中心Z座標
+     * @param w X寸法
+     * @param h Y寸法
+     * @param d Z寸法
+     * @param color RGBA色
+     * @param yaw Y軸回転
+     * @param pitch Z軸回転
+     * @return なし
+     */
+    static void DrawModelPrimitive(Renderer& renderer, const Camera3D& camera,
+        PrimitiveShape shape, float x, float y, float z, float w, float h, float d,
+        const float color[4], float yaw = 0.0f, float pitch = 0.0f);
     /**
      * @brief XYZ回転を維持して3Dプリミティブを描画する
      * @param renderer 描画先
@@ -652,8 +690,19 @@ private:
      */
     static void DrawBlobShadow(Renderer& renderer, const Camera3D& camera,
         float x, float z, float groundTopY, float width, float depth, float opacity);
-    static void DrawPlayerModel(Renderer& renderer, const Camera3D& camera,
-        float x, float y, float z, bool visible, float yaw = 0.0f);
+    /**
+     * @brief 自機と表示切り替え可能時の機首発光を描画する
+     * @param renderer 描画先レンダラー
+     * @param camera 現在の3Dカメラ
+     * @param x 自機中心のワールド座標X
+     * @param y 自機中心のワールド座標Y
+     * @param z 自機中心のワールド座標Z
+     * @param visible 自機を描画する場合true
+     * @param yaw 自機のY軸回転角度
+     * @return なし
+     */
+    void DrawPlayerModel(Renderer& renderer, const Camera3D& camera,
+        float x, float y, float z, bool visible, float yaw = 0.0f) const;
     void DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw = 0.0f) const;
     void DrawShotModel(Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw = 0.0f) const;
     /** @brief 爆発エフェクトをHLSLへ渡す描画コマンドとして記録する */
@@ -668,6 +717,14 @@ private:
     void DrawChapterResult(Renderer& renderer) const;
     /** @brief リスタート中のカウントダウンを描画する */
     void DrawRestart(Renderer& renderer) const;
+    /**
+     * @brief 武装強化時の点滅メッセージを自機上へ描画する
+     * @param renderer 描画先レンダラー
+     * @param camera 現在の3Dカメラ
+     * @param playerZ 描画中の自機のワールド座標Z
+     * @return なし
+     */
+    void DrawPowerUp(Renderer& renderer, const Camera3D& camera, float playerZ) const;
     /** @brief ミッション開始または終了の文字アニメーションを描画する */
     void DrawMissionBanner(Renderer& renderer) const;
 
@@ -679,6 +736,7 @@ private:
     ShooterStages::Stage1::State m_stage1 {};
     ShooterStages::Stage2::State m_stage2 {};
     ShooterStages::Stage3::State m_stage3 {};
+    ShooterStages::Stage4::State m_stage4 {};
     ShooterStages::Stage5::State m_stage5 {};
     AudioService* m_audio = nullptr;
     const Stage* m_stage = nullptr;
@@ -711,6 +769,7 @@ private:
     int m_chapterResultTimer = 0;
     int m_playerDestructionTimer = 0;
     int m_restartTimer = 0;
+    int m_powerUpTimer = 0;
     int m_missionStartTimer = 0;
     float m_power = 0.0f;
     int m_clearTimer = 0;

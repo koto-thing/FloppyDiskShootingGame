@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../Common/StageDefinition.h"
+#include "Stage4Module.h"
 
 /**
  * @brief ステージ4の敵出現とボス弾幕を定義する
@@ -119,6 +120,16 @@ public:
     }
 
     /**
+     * @brief 本体HPからStage 4固有の三段階攻撃フェーズを取得する
+     * @param hp 現在HP
+     * @param maxHp 最大HP
+     * @return Phase 1からPhase 3に対応する番号
+     */
+    int BossPhaseForHp(int hp, int maxHp) const override {
+        return ShooterStages::Stage4::BossPhaseForHp(hp, maxHp);
+    }
+
+    /**
      * @brief 部位破壊ダメージを取得する
      * @param part 破壊された部位
      * @return 本体へ与えるダメージ
@@ -136,6 +147,15 @@ public:
     void TickBoss(SideScrollingShooter& shooter, Enemy& boss) const override {
         constexpr float TurretTrackingRate = 0.06f;
         boss.motionAge = 0;
+
+        // 交換中は戦車を基準位置へ止めて攻撃用の移動処理を行わない
+        if (Stage4Module::TickWeaponSwap(shooter, boss)) {
+            boss.phase = 0.0f;
+            boss.x = boss.baseX;
+            boss.y = boss.baseY;
+            boss.z = shooter.IsRailGameplayActive() ? boss.baseZ : ToRailZFromSideX(boss.x);
+            return;
+        }
 
         // Phase2以降は一定間隔で後退、突進、待機、復帰を行う
         if (IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) &&
@@ -179,8 +199,8 @@ public:
      */
     bool IsBossSpecialAttackActive(
         const SideScrollingShooter& shooter, const Enemy& boss) const override {
-        (void)shooter;
-        return IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) && boss.phase > 0.0f;
+        return Stage4Module::IsWeaponSwapActive(shooter) ||
+            (IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) && boss.phase > 0.0f);
     }
 
     /**

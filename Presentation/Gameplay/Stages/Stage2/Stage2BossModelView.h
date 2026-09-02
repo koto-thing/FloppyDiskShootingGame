@@ -40,10 +40,10 @@ public:
         constexpr float Core[] = {0.95f, 0.28f, 0.055f, 1.0f};
         constexpr float Hit[] = {1.0f, 0.03f, 0.03f, 1.0f};
 
-        // 中央を長い楕円、前後を小さめの丸い部品でつないでカプセル状の主船体を作る
-        DrawLocal(transform, drawPart, 5, {0.0f, 0.0f, 0.0f}, {8.8f, 2.05f, 3.15f}, Hull);
-        DrawLocal(transform, drawPart, 5, {-4.25f, 0.00f, 0.0f}, {2.65f, 1.95f, 3.00f}, Hull);
-        DrawLocal(transform, drawPart, 5, {4.25f, 0.00f, 0.0f}, {2.65f, 1.90f, 2.95f}, Hull);
+        // 中央と前後のBoxをつないで角張った主船体を作る
+        DrawLocal(transform, drawPart, 1, {0.0f, 0.0f, 0.0f}, {8.8f, 2.05f, 3.15f}, Hull);
+        DrawLocal(transform, drawPart, 1, {-4.25f, 0.00f, 0.0f}, {2.65f, 1.95f, 3.00f}, Hull);
+        DrawLocal(transform, drawPart, 1, {4.25f, 0.00f, 0.0f}, {2.65f, 1.90f, 2.95f}, Hull);
 
         // 側面の長い装甲帯で潜水艦らしい厚みと水平ラインを作る
         for (float side : {-1.0f, 1.0f}) {

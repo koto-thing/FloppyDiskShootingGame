@@ -450,6 +450,7 @@ void SideScrollingShooter::Stage2Module::SpawnMissile(
         shot.enemy = true;
         shot.stage2.kind = ShotKind::Missile;
         shot.active = true;
+        shooter.PlayMissileLaunchSound();
         return;
     }
 }

@@ -1,7 +1,7 @@
 #include "D3D12RenderingService.h"
 
 namespace {
-/** @brief 画像を使わず3種類の自機弾を生成する埋め込みHLSL */
+/** @brief 画像を使わず自機弾と敵弾を生成する埋め込みHLSL */
 constexpr char PlayerShotShaderCode[] = R"hlsl(
 struct VS_OUTPUT
 {
@@ -71,7 +71,7 @@ float4 PSPlayerShot(VS_OUTPUT input) : SV_TARGET
         color = lerp(float3(1.0f, 0.08f, 0.32f), float3(1.0f, 0.82f, 1.0f),
             saturate(core + ring * 0.35f)) * pulse;
     }
-    else
+    else if (u_shotType < 3.5f)
     {
         // NORMAL: 機首中央から飛ぶ白青色の小型レーザー
         float endMask = 1.0f - smoothstep(0.74f, 1.0f, abs(uv.x));
@@ -79,6 +79,23 @@ float4 PSPlayerShot(VS_OUTPUT input) : SV_TARGET
         float glow = 1.0f - smoothstep(0.10f, 0.74f, abs(uv.y));
         alpha = saturate((core + glow * 0.48f) * endMask);
         color = lerp(float3(0.05f, 0.58f, 1.0f), float3(0.92f, 1.0f, 1.0f), core) * pulse;
+    }
+    else
+    {
+        // ENEMY: 白熱した芯を橙色の炎と赤い揺らぎが包む敵弾
+        float2 p = float2(uv.x, uv.y * 1.45f);
+        float edgeNoise = sin(p.x * 18.0f + u_time * 0.21f) * 0.035f +
+            sin(p.x * 31.0f - u_time * 0.13f) * 0.018f;
+        float distanceFromCore = length(float2(p.x * 0.82f, p.y + edgeNoise));
+        float endMask = 1.0f - smoothstep(0.72f, 1.02f, abs(p.x));
+        float outerGlow = (1.0f - smoothstep(0.28f, 0.92f, distanceFromCore)) * endMask;
+        float flame = (1.0f - smoothstep(0.14f, 0.58f, distanceFromCore)) * endMask;
+        float core = (1.0f - smoothstep(0.035f, 0.20f, distanceFromCore)) *
+            (1.0f - smoothstep(0.42f, 0.82f, abs(p.x)));
+        alpha = saturate(outerGlow * 0.52f + flame * 0.72f + core);
+        color = lerp(float3(0.72f, 0.002f, 0.001f), float3(1.0f, 0.075f, 0.008f), flame);
+        color = lerp(color, float3(1.0f, 0.82f, 0.62f), core) * pulse;
+        if (u_shotType > 4.5f) color = 1.0f - saturate(color);
     }
 
     if (alpha < 0.01f) discard;
@@ -238,6 +255,19 @@ VS_OUTPUT VSRailgun(uint vertexId : SV_VertexID)
 
 float4 PSRailgun(VS_OUTPUT input) : SV_TARGET
 {
+    if (u_shapeType > 2.5f)
+    {
+        // チャージ進行に合わせて予告レーザーを濃くする
+        float charge = saturate(u_progress);
+        float endMask = 1.0f - smoothstep(0.94f, 1.0f, abs(input.uv.x));
+        float lineMask = 1.0f - smoothstep(0.08f, 0.72f, abs(input.uv.y));
+        float core = 1.0f - smoothstep(0.02f, 0.18f, abs(input.uv.y));
+        float alpha = (lineMask * 0.34f + core * 0.46f) * endMask * charge;
+        if (alpha < 0.01f) discard;
+        return float4(lerp(float3(1.0f, 0.03f, 0.01f),
+            float3(1.0f, 0.72f, 0.30f), core * charge), alpha);
+    }
+
     if (u_shapeType > 1.5f)
     {
         // 加熱された空気が軌跡周辺で蛇行する蜃気楼状の揺らぎを作る
@@ -1390,7 +1420,7 @@ void D3D12RenderingService::DrawPrimitive3D(const Primitive3D& primitive) {
     switch (primitive.shape) {
     case PrimitiveShape::Plate: shapeType = 0.0f; vertexCount = 4; break;
     case PrimitiveShape::Box: shapeType = 1.0f; vertexCount = 36; break;
-    case PrimitiveShape::Sphere: shapeType = 1.0f; vertexCount = 36; break;
+    case PrimitiveShape::Sphere: shapeType = 7.0f; vertexCount = 576; break;
     case PrimitiveShape::Cylinder: shapeType = 3.0f; vertexCount = 96; break;
     case PrimitiveShape::Cone: shapeType = 4.0f; vertexCount = 48; break;
     case PrimitiveShape::Prism: shapeType = 5.0f; vertexCount = 24; break;

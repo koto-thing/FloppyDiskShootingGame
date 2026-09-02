@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cmath>
 
+#include "../Engine/Graphics/IRenderBackend.h"
 #include "../Presentation/Gameplay/Stages/Stage3/Stage3BossModelView.h"
 
 /**
@@ -8,6 +9,21 @@
  * @return なし
  */
 void RunStage3BossModelViewTests() {
+    // Stage3モデルが使う旧形状番号で砲身2がCylinder、装甲4がPrismになることを確認する
+    static_assert(PrimitiveShapeFromLegacyIndex(2) == PrimitiveShape::Cylinder);
+    static_assert(PrimitiveShapeFromLegacyIndex(4) == PrimitiveShape::Prism);
+    int topGunShapes[4] {};
+    int topGunShapeCount = 0;
+    Stage3BossModelView::DrawTopGun(0, {}, {}, false,
+        [&](int shape, const Vector3&, const Vector3&, const float[4], float, float) {
+            topGunShapes[topGunShapeCount++] = shape;
+        });
+    assert(topGunShapeCount == 4);
+    assert(PrimitiveShapeFromLegacyIndex(topGunShapes[0]) == PrimitiveShape::Cylinder);
+    assert(PrimitiveShapeFromLegacyIndex(topGunShapes[1]) == PrimitiveShape::Prism);
+    assert(PrimitiveShapeFromLegacyIndex(topGunShapes[2]) == PrimitiveShape::Cylinder);
+    assert(PrimitiveShapeFromLegacyIndex(topGunShapes[3]) == PrimitiveShape::Cylinder);
+
     // 全部位を個別APIから描画して宣言済みPrimitive数と一致することを確認する
     int primitiveCount = 0;
     auto countPart = [&](int, const Vector3&, const Vector3&, const float[4], float, float) {
@@ -31,6 +47,22 @@ void RunStage3BossModelViewTests() {
         Stage3BossModelView::DrawFunnelPod(i, {}, 0.0f, countPart);
     }
     assert(primitiveCount == Stage3BossModelView::PrimitiveCount);
+
+    // 一回目で上部船体に穴が開き、二回目で上部船体が全消失することを確認する
+    int intactBodyCount = 0;
+    int piercedBodyCount = 0;
+    int swallowedBodyCount = 0;
+    auto CountBody = [](int& count) {
+        return [&count](int, const Vector3&, const Vector3&, const float[4], float, float) {
+            ++count;
+        };
+    };
+    Stage3BossModelView::DrawDamagedStaticBody({}, 0, CountBody(intactBodyCount));
+    Stage3BossModelView::DrawDamagedStaticBody({}, 1, CountBody(piercedBodyCount));
+    Stage3BossModelView::DrawDamagedStaticBody({}, 2, CountBody(swallowedBodyCount));
+    assert(intactBodyCount == Stage3BossModelView::StaticBodyPrimitiveCount);
+    assert(piercedBodyCount > 0 && piercedBodyCount < intactBodyCount);
+    assert(swallowedBodyCount == 0);
 
     // 各Mountが部位種別と論理インデックスを保持することを確認する
     assert(Stage3BossModelView::TopGunMount(2).type == Stage3BossPartType::TopMachineGun);
@@ -119,4 +151,14 @@ void RunStage3BossModelViewTests() {
     assert(std::isfinite(railAim.x) && std::isfinite(railAim.y));
     assert(std::fabs(sideAim.y) > 0.01f);
     assert(std::fabs(railAim.y) > 0.01f);
+
+    // 大口径砲の砲口が支点ではなく回転後の砲身先端へ一致することを確認する
+    const BossModelTransform cannonTransform {{4.0f, -3.0f, 12.0f}, {}, 0.0f, 1.8f};
+    const Vector3 cannonMuzzle = Stage3BossModelView::HeavyCannonMuzzleWorldPosition(
+        0, cannonTransform, {0.0f, 0.0f, 0.0f});
+    const Vector3 cannonMount = Stage3BossModelView::HeavyCannonMount(0).localPosition;
+    assert(std::fabs(cannonMuzzle.x -
+        (cannonTransform.position.x + (cannonMount.x - 2.63f) * cannonTransform.scale)) < 0.0001f);
+    assert(std::fabs(cannonMuzzle.y -
+        (cannonTransform.position.y + (cannonMount.y - 0.48f) * cannonTransform.scale)) < 0.0001f);
 }

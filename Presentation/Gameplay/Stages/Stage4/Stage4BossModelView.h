@@ -19,6 +19,21 @@ struct Stage4BossModelState {
     bool secondaryGunsHit[6] = {};
 };
 
+/** @brief Stage4ボスへ装着または単体運搬する主砲の種類 */
+enum class Stage4MainWeaponType {
+    Phase1Cannon,
+    SiegeMortar,
+    RomanceCannon
+};
+
+/** @brief 主砲単体の取付補正と可動部位の姿勢 */
+struct Stage4MainWeaponPose {
+    Vector3 localPositionOffset {};
+    float localYaw = 0.0f;
+    float barrelPitch = 0.0f;
+    float recoil = 0.0f;
+};
+
 /** @brief 黒塗り高級車と超重戦車を融合したStage4ボスのプロシージャル描画 */
 class Stage4BossModelView {
 public:
@@ -30,6 +45,8 @@ public:
     static constexpr int LuxuryBodyPrimitiveCount = 25;
     static constexpr int MainTurretPrimitiveCount = 9;
     static constexpr int MainCannonPrimitiveCount = 6;
+    static constexpr int SiegeMortarPrimitiveCount = 24;
+    static constexpr int RomanceCannonPrimitiveCount = 35;
     static constexpr int CommandTowerPrimitiveCount = 9;
     static constexpr int SecondaryGunPrimitiveCount = 18;
     static constexpr int ExhaustPrimitiveCount = 8;
@@ -39,6 +56,151 @@ public:
         LuxuryBodyPrimitiveCount + MainTurretPrimitiveCount + MainCannonPrimitiveCount +
         CommandTowerPrimitiveCount + SecondaryGunPrimitiveCount + ExhaustPrimitiveCount +
         FrontPrimitiveCount + DecorationPrimitiveCount;
+
+    /** @brief Siege Mortarの標準仰角 */
+    static constexpr float SiegeMortarDefaultPitch = Math::Pi * 52.5f / 180.0f;
+
+    /**
+     * @brief 三種類の主砲が共有する車体ローカル取付位置を取得する
+     * @return 車体ローカル取付位置
+     */
+    static constexpr Vector3 MainWeaponMountLocalPosition() {
+        return {-3.25f, 3.55f, 0.0f};
+    }
+
+    /**
+     * @brief 車体Transformから共通主砲マウントの独立Transformを作る
+     * @param tankTransform 車体Transform
+     * @return ワールド座標へ変換済みの主砲Transform
+     */
+    static BossModelTransform MainWeaponMount(const BossModelTransform& tankTransform) {
+        BossModelTransform weaponTransform = tankTransform;
+        weaponTransform.position = LocalToWorldPosition(tankTransform, MainWeaponMountLocalPosition());
+        weaponTransform.trackRoll = 0.0f;
+        return weaponTransform;
+    }
+
+    /**
+     * @brief 主砲種別に対応する標準姿勢を取得する
+     * @param weaponType 主砲種別
+     * @return 標準姿勢
+     */
+    static Stage4MainWeaponPose DefaultMainWeaponPose(Stage4MainWeaponType weaponType) {
+        Stage4MainWeaponPose pose;
+        if (weaponType == Stage4MainWeaponType::SiegeMortar) {
+            pose.barrelPitch = SiegeMortarDefaultPitch;
+        }
+        return pose;
+    }
+
+    /**
+     * @brief 主砲ローカル点を姿勢適用後のワールド座標へ変換する
+     * @param weaponTransform 主砲単体Transform
+     * @param pose 主砲姿勢
+     * @param localPosition 主砲ローカル座標
+     * @return ワールド座標
+     */
+    static Vector3 MainWeaponPointWorldPosition(const BossModelTransform& weaponTransform,
+        const Stage4MainWeaponPose& pose, const Vector3& localPosition) {
+        return LocalToWorldPosition(ApplyWeaponPose(weaponTransform, pose), localPosition);
+    }
+
+    /**
+     * @brief 指定主砲の砲口ローカル位置を取得する
+     * @param weaponType 主砲種別
+     * @param pose 主砲姿勢
+     * @return 主砲Transform基準の砲口位置
+     */
+    static Vector3 MainWeaponMuzzleLocalPosition(Stage4MainWeaponType weaponType,
+        const Stage4MainWeaponPose& pose) {
+        const float recoil = Math::Clamp01(pose.recoil);
+        switch (weaponType) {
+        case Stage4MainWeaponType::SiegeMortar: {
+            const float pitch = (std::clamp)(pose.barrelPitch,
+                Math::Pi * 20.0f / 180.0f, Math::Pi * 75.0f / 180.0f);
+            return Vector3 {-0.25f, 1.28f, 0.0f} +
+                AxisLocalPosition(4.10f - recoil * 0.55f, pitch);
+        }
+        case Stage4MainWeaponType::RomanceCannon: {
+            const float pitch = (std::clamp)(pose.barrelPitch, -0.18f, 0.42f);
+            return Vector3 {-0.35f, 1.48f, 0.0f} +
+                AxisLocalPosition(10.80f - recoil * 2.40f, pitch);
+        }
+        default:
+            return {-4.47f + recoil * 0.80f, 0.0f, 0.0f};
+        }
+    }
+
+    /**
+     * @brief Siege Mortarの砲口ローカル位置を取得する
+     * @param barrelPitch 砲身仰角
+     * @param recoil 0から1の後座量
+     * @return 主砲Transform基準の砲口位置
+     */
+    static Vector3 SiegeMortarMuzzleLocalPosition(float barrelPitch, float recoil = 0.0f) {
+        Stage4MainWeaponPose pose;
+        pose.barrelPitch = barrelPitch;
+        pose.recoil = recoil;
+        return MainWeaponMuzzleLocalPosition(Stage4MainWeaponType::SiegeMortar, pose);
+    }
+
+    /**
+     * @brief Romance Cannonの砲口ローカル位置を取得する
+     * @param barrelPitch 砲身仰角
+     * @param recoil 0から1の後座量
+     * @return 主砲Transform基準の砲口位置
+     */
+    static Vector3 RomanceCannonMuzzleLocalPosition(float barrelPitch, float recoil = 0.0f) {
+        Stage4MainWeaponPose pose;
+        pose.barrelPitch = barrelPitch;
+        pose.recoil = recoil;
+        return MainWeaponMuzzleLocalPosition(Stage4MainWeaponType::RomanceCannon, pose);
+    }
+
+    /**
+     * @brief 主砲を運搬するドローン用把持点数を取得する
+     * @param weaponType 主砲種別
+     * @return 把持点数
+     */
+    static constexpr int CarryPointCount(Stage4MainWeaponType weaponType) {
+        return weaponType == Stage4MainWeaponType::Phase1Cannon ? 2 :
+            weaponType == Stage4MainWeaponType::SiegeMortar ? 3 : 4;
+    }
+
+    /**
+     * @brief 主砲を運搬するドローン用把持点を取得する
+     * @param weaponType 主砲種別
+     * @param index 0からCarryPointCount未満の把持点番号
+     * @return 主砲Transform基準の把持点
+     */
+    static Vector3 CarryPointLocalPosition(Stage4MainWeaponType weaponType, int index) {
+        constexpr Vector3 Phase1Points[] = {
+            {-0.85f, 0.72f, 0.0f}, {-3.05f, 0.60f, 0.0f}
+        };
+        constexpr Vector3 MortarPoints[] = {
+            {0.45f, 1.65f, -1.30f}, {0.45f, 1.65f, 1.30f}, {-1.50f, 4.03f, 0.0f}
+        };
+        constexpr Vector3 RomancePoints[] = {
+            {-2.20f, 2.56f, -1.55f}, {-2.20f, 2.56f, 1.55f},
+            {-3.45f, 2.56f, -1.55f}, {-3.45f, 2.56f, 1.55f}
+        };
+        if (index < 0 || index >= CarryPointCount(weaponType)) return {};
+        if (weaponType == Stage4MainWeaponType::Phase1Cannon) return Phase1Points[index];
+        if (weaponType == Stage4MainWeaponType::SiegeMortar) return MortarPoints[index];
+        return RomancePoints[index];
+    }
+
+    /**
+     * @brief パージ用補助エンジンの噴射口位置を取得する
+     * @param weaponType 主砲種別
+     * @return 主砲Transform基準の噴射口位置
+     */
+    static constexpr Vector3 PurgeThrusterLocalPosition(Stage4MainWeaponType weaponType) {
+        return weaponType == Stage4MainWeaponType::Phase1Cannon ?
+            Vector3 {0.0f, -1.18f, 0.0f} :
+            weaponType == Stage4MainWeaponType::SiegeMortar ?
+                Vector3 {0.35f, -0.48f, 0.0f} : Vector3 {0.35f, -0.56f, 0.0f};
+    }
 
     /**
      * @brief Stage4ボスをローカル部品の組み合わせで描画する
@@ -57,12 +219,64 @@ public:
 
         // 将来の部位破壊単位ごとに上部構造を描画する
         if (state.mainTurret) DrawMainTurret(transform, drawPart);
-        if (state.mainCannon) DrawMainCannon(transform, drawPart, state);
+        if (state.mainCannon) {
+            DrawMainWeapon(Stage4MainWeaponType::Phase1Cannon, MainWeaponMount(transform),
+                DefaultMainWeaponPose(Stage4MainWeaponType::Phase1Cannon), drawPart,
+                state.mainCannonHit);
+        }
         if (state.commandTower) DrawCommandTower(transform, drawPart);
         DrawSecondaryGuns(transform, drawPart, state);
         DrawExhaustStacks(transform, drawPart, state);
         DrawFront(transform, drawPart, state.frontRam);
         DrawDecorations(transform, drawPart);
+    }
+
+    /**
+     * @brief 交換式主砲を除くStage4ボス車体を描画する
+     * @param transform ボス全体の親Transform
+     * @param drawPart 形状、ワールド座標、寸法、色、向きを受け取る描画関数
+     * @param state 独立破壊対象の描画状態
+     * @return なし
+     */
+    template<class DrawPart>
+    static void DrawBody(const BossModelTransform& transform, DrawPart&& drawPart,
+        const Stage4BossModelState& state = {}) {
+        DrawChassis(transform, drawPart);
+        DrawTracks(transform, drawPart);
+        DrawLuxuryBody(transform, drawPart);
+        if (state.mainTurret) DrawMainTurret(transform, drawPart);
+        if (state.commandTower) DrawCommandTower(transform, drawPart);
+        DrawSecondaryGuns(transform, drawPart, state);
+        DrawExhaustStacks(transform, drawPart, state);
+        DrawFront(transform, drawPart, state.frontRam);
+        DrawDecorations(transform, drawPart);
+    }
+
+    /**
+     * @brief 任意Transformから交換式主砲を単体描画する
+     * @param weaponType 主砲種別
+     * @param weaponTransform 主砲単体Transform
+     * @param pose 取付補正、砲身仰角、後座量
+     * @param drawPart 形状、ワールド座標、寸法、色、向きを受け取る描画関数
+     * @param hit 被弾色で描画する場合true
+     * @return なし
+     */
+    template<class DrawPart>
+    static void DrawMainWeapon(Stage4MainWeaponType weaponType,
+        const BossModelTransform& weaponTransform, const Stage4MainWeaponPose& pose,
+        DrawPart&& drawPart, bool hit = false) {
+        const BossModelTransform posedTransform = ApplyWeaponPose(weaponTransform, pose);
+        switch (weaponType) {
+        case Stage4MainWeaponType::SiegeMortar:
+            DrawSiegeMortar(posedTransform, pose, drawPart, hit);
+            break;
+        case Stage4MainWeaponType::RomanceCannon:
+            DrawRomanceCannon(posedTransform, pose, drawPart, hit);
+            break;
+        default:
+            DrawPhase1Cannon(posedTransform, pose, drawPart, hit);
+            break;
+        }
     }
 
 private:
@@ -75,6 +289,50 @@ private:
     inline static constexpr float Track[] = {0.035f, 0.038f, 0.045f, 1.0f};
     inline static constexpr float Wheel[] = {0.13f, 0.14f, 0.16f, 1.0f};
     inline static constexpr float Hit[] = {1.0f, 0.03f, 0.03f, 1.0f};
+    inline static constexpr float Ember[] = {0.85f, 0.12f, 0.025f, 1.0f};
+
+    /**
+     * @brief ローカル座標を親Transformのワールド座標へ変換する
+     * @param transform 親Transform
+     * @param localPosition ローカル座標
+     * @return ワールド座標
+     */
+    static Vector3 LocalToWorldPosition(const BossModelTransform& transform,
+        const Vector3& localPosition) {
+        const float cosine = std::cos(transform.yaw);
+        const float sine = std::sin(transform.yaw);
+        return {
+            transform.position.x +
+                (localPosition.x * cosine + localPosition.z * sine) * transform.scale,
+            transform.position.y + localPosition.y * transform.scale,
+            transform.position.z +
+                (-localPosition.x * sine + localPosition.z * cosine) * transform.scale
+        };
+    }
+
+    /**
+     * @brief 主砲単体Transformへ取付補正を適用する
+     * @param transform 主砲単体Transform
+     * @param pose 取付補正
+     * @return 補正済みTransform
+     */
+    static BossModelTransform ApplyWeaponPose(const BossModelTransform& transform,
+        const Stage4MainWeaponPose& pose) {
+        BossModelTransform result = transform;
+        result.position = LocalToWorldPosition(transform, pose.localPositionOffset);
+        result.yaw += pose.localYaw;
+        return result;
+    }
+
+    /**
+     * @brief 仰角を持つ砲軸上のローカル座標を取得する
+     * @param distance 支点から砲口方向への距離
+     * @param pitch 砲身仰角
+     * @return 砲軸上のローカル座標
+     */
+    static Vector3 AxisLocalPosition(float distance, float pitch) {
+        return {-std::cos(pitch) * distance, std::sin(pitch) * distance, 0.0f};
+    }
 
     /**
      * @brief 履帯板の巡回位置を取得する
@@ -103,17 +361,39 @@ private:
     static void Part(const BossModelTransform& transform, DrawPart& drawPart, PrimitiveShape shape,
         const Vector3& localPosition, const Vector3& scale, const float color[4],
         float localYaw = 0.0f, float pitch = 0.0f) {
-        const float cosine = std::cos(transform.yaw);
-        const float sine = std::sin(transform.yaw);
-        const Vector3 position {
-            transform.position.x +
-                (localPosition.x * cosine + localPosition.z * sine) * transform.scale,
-            transform.position.y + localPosition.y * transform.scale,
-            transform.position.z +
-                (-localPosition.x * sine + localPosition.z * cosine) * transform.scale
-        };
+        const Vector3 position = LocalToWorldPosition(transform, localPosition);
         drawPart(static_cast<int>(shape), position, scale * transform.scale,
             color, transform.yaw + localYaw, pitch);
+    }
+
+    /**
+     * @brief 主砲軸へ沿って配置した部品を描画する
+     * @param transform 主砲単体Transform
+     * @param drawPart 描画関数
+     * @param localPivot 砲軸支点のローカル座標
+     * @param shape 描画形状
+     * @param distance 支点から砲口方向への距離
+     * @param scale ローカル寸法
+     * @param color 部品色
+     * @param barrelPitch 砲身仰角
+     * @return なし
+     */
+    template<class DrawPart>
+    static void WeaponAxisPart(const BossModelTransform& transform, DrawPart& drawPart,
+        const Vector3& localPivot, PrimitiveShape shape, float distance, const Vector3& scale,
+        const float color[4], float barrelPitch) {
+        const Vector3 pivot = LocalToWorldPosition(transform, localPivot);
+        const float yawCosine = std::cos(transform.yaw);
+        const float yawSine = std::sin(transform.yaw);
+        const float pitchCosine = std::cos(barrelPitch);
+        const Vector3 direction {
+            -yawCosine * pitchCosine,
+            std::sin(barrelPitch),
+            yawSine * pitchCosine
+        };
+        const Vector3 position = pivot + direction * (distance * transform.scale);
+        drawPart(static_cast<int>(shape), position, scale * transform.scale,
+            color, transform.yaw, -barrelPitch);
     }
 
     /**
@@ -283,32 +563,287 @@ private:
     }
 
     /**
-     * @brief 前方へ突き出す三重砲身と多重砲口を描画する
-     * @param transform ボス全体の親Transform
+     * @brief 既存外観を維持したPhase1主砲を単体描画する
+     * @param transform 主砲単体Transform
+     * @param pose 主砲姿勢
      * @param drawPart 描画関数
+     * @param hit 被弾色で描画する場合true
      * @return なし
      */
     template<class DrawPart>
-    static void DrawMainCannon(const BossModelTransform& transform, DrawPart& drawPart,
-        const Stage4BossModelState& state) {
-        const float* armor = state.mainCannonHit ? Hit : ArmorBlack;
-        const float* highlight = state.mainCannonHit ? Hit : HighlightBlack;
-        const float* main = state.mainCannonHit ? Hit : MainBlack;
-        const float* window = state.mainCannonHit ? Hit : Window;
-        const float* gold = state.mainCannonHit ? Hit : Gold;
-        const Vector3 pivot {-3.25f, 3.55f, 0.0f};
-        GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, pivot,
+    static void DrawPhase1Cannon(const BossModelTransform& transform,
+        const Stage4MainWeaponPose& pose, DrawPart& drawPart, bool hit) {
+        const float* armor = hit ? Hit : ArmorBlack;
+        const float* highlight = hit ? Hit : HighlightBlack;
+        const float* main = hit ? Hit : MainBlack;
+        const float* window = hit ? Hit : Window;
+        const float* gold = hit ? Hit : Gold;
+        BossModelTransform aimedTransform = transform;
+
+        // 後座量だけ支点を砲尾方向へ移し既存六部品の寸法と並びを保つ
+        const float recoil = Math::Clamp01(pose.recoil) * 0.80f;
+        const float cosine = std::cos(transform.yaw);
+        const float sine = std::sin(transform.yaw);
+        aimedTransform.position += Vector3 {cosine * recoil, 0.0f, -sine * recoil} * transform.scale;
+        GunPart(aimedTransform, drawPart, aimedTransform.mainGunTracksTarget,
+            aimedTransform.aimTarget, {},
             PrimitiveShape::Cylinder, 0.00f, {1.18f, 1.18f, 1.18f}, armor);
-        GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, pivot,
+        GunPart(aimedTransform, drawPart, aimedTransform.mainGunTracksTarget,
+            aimedTransform.aimTarget, {},
             PrimitiveShape::Cylinder, 1.30f, {2.35f, 0.92f, 0.92f}, highlight);
-        GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, pivot,
+        GunPart(aimedTransform, drawPart, aimedTransform.mainGunTracksTarget,
+            aimedTransform.aimTarget, {},
             PrimitiveShape::Cylinder, 3.25f, {1.65f, 0.76f, 0.76f}, armor);
-        GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, pivot,
+        GunPart(aimedTransform, drawPart, aimedTransform.mainGunTracksTarget,
+            aimedTransform.aimTarget, {},
             PrimitiveShape::Cylinder, 4.23f, {0.42f, 1.16f, 1.16f}, main);
-        GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, pivot,
+        GunPart(aimedTransform, drawPart, aimedTransform.mainGunTracksTarget,
+            aimedTransform.aimTarget, {},
             PrimitiveShape::Cylinder, 4.47f, {0.18f, 0.68f, 0.68f}, window);
-        GunPart(transform, drawPart, transform.mainGunTracksTarget, transform.aimTarget, pivot,
+        GunPart(aimedTransform, drawPart, aimedTransform.mainGunTracksTarget,
+            aimedTransform.aimTarget, {},
             PrimitiveShape::Cylinder, 4.00f, {0.12f, 1.22f, 1.22f}, gold);
+    }
+
+    /**
+     * @brief Siege Mortarの固定基部を描画する
+     * @param transform 主砲単体Transform
+     * @param drawPart 描画関数
+     * @param hit 被弾色で描画する場合true
+     * @return なし
+     */
+    template<class DrawPart>
+    static void DrawSiegeMortarBase(const BossModelTransform& transform,
+        DrawPart& drawPart, bool hit) {
+        const float* main = hit ? Hit : MainBlack;
+        const float* armor = hit ? Hit : ArmorBlack;
+        const float* highlight = hit ? Hit : HighlightBlack;
+        const float* gold = hit ? Hit : Gold;
+
+        // 幅広い旋回座と左右の支持架で臼砲の重量を受ける
+        Part(transform, drawPart, PrimitiveShape::Cylinder, {0.35f, 0.05f, 0.0f},
+            {3.10f, 0.48f, 5.20f}, main);
+        Part(transform, drawPart, PrimitiveShape::Box, {0.10f, 0.48f, 0.0f},
+            {3.65f, 0.72f, 4.55f}, armor);
+        Part(transform, drawPart, PrimitiveShape::Prism, {-1.25f, 0.82f, 0.0f},
+            {1.40f, 1.10f, 4.20f}, highlight);
+        for (float side : {-1.0f, 1.0f}) {
+            Part(transform, drawPart, PrimitiveShape::Cylinder, {-0.25f, 1.28f, side * 1.72f},
+                {1.15f, 0.48f, 1.15f}, armor, Math::HalfPi, Math::HalfPi);
+            Part(transform, drawPart, PrimitiveShape::Box, {0.55f, 1.18f, side * 1.42f},
+                {1.40f, 1.65f, 0.34f}, highlight);
+            Part(transform, drawPart, PrimitiveShape::Cylinder, {0.45f, 1.65f, side * 1.30f},
+                {0.34f, 0.16f, 0.34f}, gold);
+        }
+    }
+
+    /**
+     * @brief Siege Mortarの仰角可動砲身を描画する
+     * @param transform 主砲単体Transform
+     * @param pose 砲身仰角と後座量
+     * @param drawPart 描画関数
+     * @param hit 被弾色で描画する場合true
+     * @return なし
+     */
+    template<class DrawPart>
+    static void DrawSiegeMortarBarrel(const BossModelTransform& transform,
+        const Stage4MainWeaponPose& pose, DrawPart& drawPart, bool hit) {
+        const float* main = hit ? Hit : MainBlack;
+        const float* armor = hit ? Hit : ArmorBlack;
+        const float* highlight = hit ? Hit : HighlightBlack;
+        const float* window = hit ? Hit : Window;
+        const float* gold = hit ? Hit : Gold;
+        const float pitch = (std::clamp)(pose.barrelPitch,
+            Math::Pi * 20.0f / 180.0f, Math::Pi * 75.0f / 180.0f);
+        const float recoil = Math::Clamp01(pose.recoil) * 0.55f;
+        auto BarrelPart = [&](PrimitiveShape shape, float distance, const Vector3& scale,
+            const float color[4]) {
+            WeaponAxisPart(transform, drawPart, {-0.25f, 1.28f, 0.0f}, shape,
+                distance - recoil, scale, color, pitch);
+        };
+
+        // 短い極太外筒へ大きな段差と暗い砲口を重ねる
+        BarrelPart(PrimitiveShape::Sphere, -0.25f, {2.65f, 2.65f, 2.65f}, armor);
+        BarrelPart(PrimitiveShape::Cylinder, 0.35f, {1.55f, 2.45f, 2.45f}, main);
+        BarrelPart(PrimitiveShape::Cylinder, 1.42f, {2.05f, 2.12f, 2.12f}, armor);
+        BarrelPart(PrimitiveShape::Cylinder, 2.72f, {1.42f, 1.88f, 1.88f}, highlight);
+        BarrelPart(PrimitiveShape::Cylinder, 0.05f, {0.22f, 2.72f, 2.72f}, gold);
+        BarrelPart(PrimitiveShape::Cylinder, 1.20f, {0.20f, 2.40f, 2.40f}, armor);
+        BarrelPart(PrimitiveShape::Cylinder, 2.35f, {0.20f, 2.18f, 2.18f}, gold);
+        BarrelPart(PrimitiveShape::Cylinder, 3.58f, {0.72f, 2.68f, 2.68f}, main);
+        BarrelPart(PrimitiveShape::Cylinder, 3.92f, {0.18f, 2.85f, 2.85f}, gold);
+        BarrelPart(PrimitiveShape::Cylinder, 4.10f, {0.12f, 2.18f, 2.18f}, window);
+
+        // 油圧補強と中央把持金具を砲身へ追従させる
+        for (float side : {-1.0f, 1.0f}) {
+            const Vector3 brace = Vector3 {-0.25f, 1.28f, 0.0f} +
+                AxisLocalPosition(0.55f - recoil, pitch) +
+                Vector3 {0.0f, -0.62f, side * 1.25f};
+            Part(transform, drawPart, PrimitiveShape::Box, brace,
+                {1.55f, 0.24f, 0.20f}, highlight, 0.0f, -pitch);
+        }
+        const Vector3 carryPoint = Vector3 {-0.25f, 1.28f, 0.0f} +
+            AxisLocalPosition(2.05f - recoil, pitch) +
+            Vector3 {0.0f, 1.12f, 0.0f};
+        Part(transform, drawPart, PrimitiveShape::Cylinder, carryPoint,
+            {0.34f, 0.16f, 0.34f}, gold);
+        Part(transform, drawPart, PrimitiveShape::Box,
+            Vector3 {-0.25f, 1.28f, 0.0f} + AxisLocalPosition(-0.55f - recoil, pitch) +
+                Vector3 {0.0f, -0.78f, 0.0f},
+            {1.10f, 0.28f, 1.18f}, armor, 0.0f, -pitch);
+        Part(transform, drawPart, PrimitiveShape::Box,
+            Vector3 {-0.25f, 1.28f, 0.0f} + AxisLocalPosition(0.35f - recoil, pitch) +
+                Vector3 {0.0f, 0.72f, 0.0f},
+            {0.82f, 0.18f, 1.45f}, gold, 0.0f, -pitch);
+    }
+
+    /**
+     * @brief Siege Mortarを固定基部と可動砲身に分けて描画する
+     * @param transform 主砲単体Transform
+     * @param pose 主砲姿勢
+     * @param drawPart 描画関数
+     * @param hit 被弾色で描画する場合true
+     * @return なし
+     */
+    template<class DrawPart>
+    static void DrawSiegeMortar(const BossModelTransform& transform,
+        const Stage4MainWeaponPose& pose, DrawPart& drawPart, bool hit) {
+        DrawSiegeMortarBase(transform, drawPart, hit);
+        DrawSiegeMortarBarrel(transform, pose, drawPart, hit);
+    }
+
+    /**
+     * @brief Romance Cannonの固定基部を描画する
+     * @param transform 主砲単体Transform
+     * @param drawPart 描画関数
+     * @param hit 被弾色で描画する場合true
+     * @return なし
+     */
+    template<class DrawPart>
+    static void DrawRomanceCannonBase(const BossModelTransform& transform,
+        DrawPart& drawPart, bool hit) {
+        const float* main = hit ? Hit : MainBlack;
+        const float* armor = hit ? Hit : ArmorBlack;
+        const float* highlight = hit ? Hit : HighlightBlack;
+        const float* gold = hit ? Hit : Gold;
+
+        // 超長砲身を受ける低い旋回台と左右ロックを作る
+        Part(transform, drawPart, PrimitiveShape::Cylinder, {0.35f, 0.08f, 0.0f},
+            {4.30f, 0.56f, 6.20f}, main);
+        Part(transform, drawPart, PrimitiveShape::Box, {0.25f, 0.60f, 0.0f},
+            {4.65f, 0.92f, 5.45f}, armor);
+        Part(transform, drawPart, PrimitiveShape::Prism, {-1.65f, 0.92f, 0.0f},
+            {1.65f, 1.18f, 5.05f}, highlight);
+        for (float side : {-1.0f, 1.0f}) {
+            Part(transform, drawPart, PrimitiveShape::Cylinder, {-0.35f, 1.48f, side * 2.18f},
+                {1.48f, 0.62f, 1.48f}, armor, Math::HalfPi, Math::HalfPi);
+            Part(transform, drawPart, PrimitiveShape::Box, {0.62f, 1.25f, side * 1.90f},
+                {1.85f, 1.85f, 0.42f}, main);
+            Part(transform, drawPart, PrimitiveShape::Box, {0.15f, 1.82f, side * 2.12f},
+                {1.25f, 0.22f, 0.18f}, gold);
+        }
+    }
+
+    /**
+     * @brief Romance Cannon後部の圧力機関と砲尾を描画する
+     * @param transform 主砲単体Transform
+     * @param drawPart 描画関数
+     * @param hit 被弾色で描画する場合true
+     * @return なし
+     */
+    template<class DrawPart>
+    static void DrawRomanceCannonRearBreech(const BossModelTransform& transform,
+        DrawPart& drawPart, bool hit) {
+        const float* main = hit ? Hit : MainBlack;
+        const float* armor = hit ? Hit : ArmorBlack;
+        const float* highlight = hit ? Hit : HighlightBlack;
+        const float* gold = hit ? Hit : Gold;
+
+        // 砲尾後方へ箱形圧力室と左右蓄圧器を大きく張り出す
+        Part(transform, drawPart, PrimitiveShape::Box, {2.10f, 1.62f, 0.0f},
+            {3.20f, 2.65f, 4.65f}, main);
+        Part(transform, drawPart, PrimitiveShape::Sphere, {3.35f, 1.62f, 0.0f},
+            {2.35f, 2.35f, 3.45f}, armor);
+        Part(transform, drawPart, PrimitiveShape::Cylinder, {2.20f, 1.62f, 0.0f},
+            {2.70f, 2.05f, 2.05f}, highlight);
+        Part(transform, drawPart, PrimitiveShape::Cylinder, {0.95f, 1.62f, 0.0f},
+            {0.20f, 2.55f, 2.55f}, gold);
+        Part(transform, drawPart, PrimitiveShape::Box, {4.38f, 1.62f, 0.0f},
+            {0.42f, 1.72f, 2.75f}, gold);
+        for (float side : {-1.0f, 1.0f}) {
+            Part(transform, drawPart, PrimitiveShape::Cylinder, {2.20f, 2.85f, side * 1.72f},
+                {1.85f, 0.65f, 0.65f}, armor);
+            Part(transform, drawPart, PrimitiveShape::Box, {2.25f, 1.55f, side * 2.38f},
+                {1.80f, 1.35f, 0.18f}, gold);
+        }
+    }
+
+    /**
+     * @brief Romance Cannonの後座可能な超長砲身を描画する
+     * @param transform 主砲単体Transform
+     * @param pose 砲身仰角と後座量
+     * @param drawPart 描画関数
+     * @param hit 被弾色で描画する場合true
+     * @return なし
+     */
+    template<class DrawPart>
+    static void DrawRomanceCannonBarrel(const BossModelTransform& transform,
+        const Stage4MainWeaponPose& pose, DrawPart& drawPart, bool hit) {
+        const float* main = hit ? Hit : MainBlack;
+        const float* armor = hit ? Hit : ArmorBlack;
+        const float* highlight = hit ? Hit : HighlightBlack;
+        const float* window = hit ? Hit : Window;
+        const float* gold = hit ? Hit : Gold;
+        const float* ember = hit ? Hit : Ember;
+        const float pitch = (std::clamp)(pose.barrelPitch, -0.18f, 0.42f);
+        const float recoil = Math::Clamp01(pose.recoil) * 2.40f;
+        auto BarrelPart = [&](PrimitiveShape shape, float distance, const Vector3& scale,
+            const float color[4]) {
+            WeaponAxisPart(transform, drawPart, {-0.35f, 1.48f, 0.0f}, shape,
+                distance - recoil, scale, color, pitch);
+        };
+
+        // 圧力室から砲口まで六段の大きな径差で異常な長さを読ませる
+        BarrelPart(PrimitiveShape::Cylinder, -0.35f, {2.20f, 2.45f, 2.45f}, main);
+        BarrelPart(PrimitiveShape::Cylinder, 1.25f, {2.15f, 2.18f, 2.18f}, armor);
+        BarrelPart(PrimitiveShape::Cylinder, 2.85f, {1.35f, 1.92f, 1.92f}, highlight);
+        BarrelPart(PrimitiveShape::Cylinder, 5.10f, {3.20f, 1.68f, 1.68f}, main);
+        BarrelPart(PrimitiveShape::Cylinder, 7.95f, {2.55f, 1.48f, 1.48f}, armor);
+        BarrelPart(PrimitiveShape::Cylinder, 0.20f, {0.22f, 2.72f, 2.72f}, gold);
+        BarrelPart(PrimitiveShape::Cylinder, 2.10f, {0.22f, 2.35f, 2.35f}, gold);
+        BarrelPart(PrimitiveShape::Cylinder, 4.05f, {0.22f, 2.05f, 2.05f}, gold);
+        BarrelPart(PrimitiveShape::Cylinder, 6.65f, {0.22f, 1.88f, 1.88f}, gold);
+        BarrelPart(PrimitiveShape::Cylinder, 9.72f, {0.90f, 2.72f, 2.72f}, main);
+        BarrelPart(PrimitiveShape::Cylinder, 10.28f, {0.24f, 3.05f, 3.05f}, gold);
+        BarrelPart(PrimitiveShape::Cylinder, 10.68f, {0.18f, 2.42f, 2.42f}, window);
+        BarrelPart(PrimitiveShape::Cylinder, 10.80f, {0.08f, 1.48f, 1.48f}, ember);
+
+        // 四機の運搬ドローンへ対応する左右一対二組の金色把持金具を付ける
+        for (float distance : {1.85f, 3.10f}) {
+            for (float side : {-1.0f, 1.0f}) {
+                const Vector3 carryPoint = Vector3 {-0.35f, 1.48f, 0.0f} +
+                    AxisLocalPosition(distance - recoil, pitch) +
+                    Vector3 {0.0f, 1.08f, side * 1.55f};
+                Part(transform, drawPart, PrimitiveShape::Cylinder, carryPoint,
+                    {0.38f, 0.18f, 0.38f}, gold);
+            }
+        }
+    }
+
+    /**
+     * @brief Romance Cannonを固定基部、砲尾機関、可動砲身に分けて描画する
+     * @param transform 主砲単体Transform
+     * @param pose 主砲姿勢
+     * @param drawPart 描画関数
+     * @param hit 被弾色で描画する場合true
+     * @return なし
+     */
+    template<class DrawPart>
+    static void DrawRomanceCannon(const BossModelTransform& transform,
+        const Stage4MainWeaponPose& pose, DrawPart& drawPart, bool hit) {
+        DrawRomanceCannonBase(transform, drawPart, hit);
+        DrawRomanceCannonRearBreech(transform, drawPart, hit);
+        DrawRomanceCannonBarrel(transform, pose, drawPart, hit);
     }
 
     /**

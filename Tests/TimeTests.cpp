@@ -22,6 +22,7 @@ void RunStage3BarrierCageViewTests();
 void RunStage3FunnelModelViewTests();
 void RunStage2BossModelViewTests();
 void RunStage4BossModelViewTests();
+void RunStage4WeaponDroneViewTests();
 void RunStage5ModelViewTests();
 #include <thread>
 
@@ -204,6 +205,7 @@ int main()
         RunStage3FunnelModelViewTests();
         RunStage2BossModelViewTests();
         RunStage4BossModelViewTests();
+        RunStage4WeaponDroneViewTests();
         RunStage5ModelViewTests();
     } catch (const std::exception& exception) {
         std::cerr << "TimeTests failed: " << exception.what() << '\n';

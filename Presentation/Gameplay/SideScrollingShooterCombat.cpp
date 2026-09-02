@@ -7,6 +7,7 @@
 #include "../../Infrastructure/ExternalServices/AudioService.h"
 #include "../../Infrastructure/Repositories/SettingsRepository.h"
 #include "Stages/Common/StageDispatch.h"
+#include "Stages/Stage4/Stage4Module.h"
 
 #include "SideScrollingShooterEnemies.h"
 #include "Stages/Common/StageDefinition.h"
@@ -104,6 +105,7 @@ void SideScrollingShooter::TickEnemies() {
                 const float shotSpeed = enemy.behavior->AimedShotSpeed();
                 SpawnShot(enemy.x - 0.06f, enemy.y, dxToPlayer / length * shotSpeed,
                     dyToPlayer / length * shotSpeed, true, enemy.z, enemy.behavior->RailAimedShotSpeed());
+                if (enemy.type != 2) PlayBossMachineGunSound();
             }
         }
 
@@ -196,9 +198,9 @@ void SideScrollingShooter::TickShots() {
                 Hit(m_playerX, m_playerY, 0.050f, shot.x, shot.y,
                     StageDispatch::EnemyShotHitRadius(*this, shot)));
             const bool grazed = IsRailGameplayActive() ?
-                Hit3D(ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ, 0.80f,
+                Hit3D(ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ, 1.18f,
                     ToWorldX(shot.x), ToWorldY(shot.y), shot.z, 0.28f) :
-                Hit(m_playerX, m_playerY, 0.140f, shot.x, shot.y, 0.022f);
+                Hit(m_playerX, m_playerY, 0.200f, shot.x, shot.y, 0.022f);
             if (!playerHit && grazed && !shot.grazed) {
                 shot.grazed = true;
                 ++m_chapterResult.grazeCount;
@@ -337,7 +339,9 @@ void SideScrollingShooter::TickItems() {
         if (!collected) continue;
 
         if (item.type == ItemType::Power) {
+            const int previousPowerLevel = PowerLevel();
             m_power = (std::min)(MaxPower, m_power + item.power);
+            if (PowerLevel() > previousPowerLevel) m_powerUpTimer = 120;
         } else {
             m_chapterResult.score += item.score;
             m_score += item.score;
@@ -420,6 +424,9 @@ void SideScrollingShooter::FireBossPartBarrage(const Enemy& boss) {
 bool SideScrollingShooter::DamageBoss(Enemy& boss, int damage) {
     boss.hp -= damage;
     m_bossHp = (std::max)(0, boss.hp);
+    if (m_stageNumber == 4) {
+        return Stage4Module::HandleBossPhaseAfterDamage(*this, boss);
+    }
     const int nextPhase = m_stage->BossPhaseForHp(boss.hp, boss.maxHp);
     if (nextPhase != boss.bossPhase) {
         boss.bossPhase = nextPhase;
@@ -448,6 +455,7 @@ void SideScrollingShooter::DefeatBoss(Enemy& boss) {
             UnlockGallery(GalleryEntry::Stage3BarrierFunnel);
             UnlockGallery(GalleryEntry::Stage3ReflectFunnel);
         }
+        if (m_stageNumber == 4) UnlockGallery(GalleryEntry::Stage4WeaponDrone);
     }
     SpawnExplosion(boss.x, boss.y, boss.z, true);
     SpawnEnemyDebris(boss);
@@ -763,6 +771,37 @@ void SideScrollingShooter::PlayShotSound() {
 
 void SideScrollingShooter::PlayHitSound() {
     if (m_audio) m_audio->PlayMMLSE("t180 o4 l32 v10 g e c");
+}
+
+void SideScrollingShooter::PlayMissileLaunchSound() {
+    if (!m_audio) return;
+
+    // 低域を含まない高周波サイン波を緩く下降させて鋭い噴射音を作る
+    Audio::SfxrParams sound;
+    sound.waveType = Audio::SfxrWaveType::Sine;
+    sound.attackTime = 0.015f;
+    sound.sustainTime = 0.34f;
+    sound.decayTime = 0.26f;
+    sound.startFrequency = 2.20f;
+    sound.minFrequency = 1.35f;
+    sound.slide = -0.08f;
+    sound.masterVolume = 0.46f;
+    m_audio->PlaySE(sound);
+}
+
+void SideScrollingShooter::PlayBossMachineGunSound() {
+    if (!m_audio) return;
+
+    // 短く急降下する高域ノイズで連射時の「タッ」という一発を作る
+    Audio::SfxrParams sound;
+    sound.waveType = Audio::SfxrWaveType::Noise;
+    sound.sustainTime = 0.012f;
+    sound.decayTime = 0.055f;
+    sound.startFrequency = 0.76f;
+    sound.minFrequency = 0.18f;
+    sound.slide = -0.55f;
+    sound.masterVolume = 0.48f;
+    m_audio->PlaySE(sound);
 }
 
 /** @brief 生存中の爆発エフェクトを更新する @return なし */

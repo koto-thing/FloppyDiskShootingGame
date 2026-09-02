@@ -1542,7 +1542,6 @@ void SideScrollingShooter::Stage5Module::RestartCheckpoint(SideScrollingShooter&
     shooter.m_items = {};
     shooter.m_explosions = {};
     shooter.m_debris = {};
-    shooter.m_power = shooter.m_stage5.checkpointPower;
     shooter.m_score = shooter.m_stage5.checkpointScore;
     shooter.m_kills = shooter.m_stage5.checkpointKills;
     shooter.m_playerX = -0.72f;

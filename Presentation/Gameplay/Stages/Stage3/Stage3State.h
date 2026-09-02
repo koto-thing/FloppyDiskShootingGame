@@ -12,6 +12,7 @@ struct ReflectFunnel {
     int hp = 0;
     int age = 0;
     int port = 0;
+    int spinFrames = 0;
     bool active = false;
 };
 
@@ -22,7 +23,11 @@ inline constexpr int ReflectFunnelCount = 5;
 struct State {
     std::array<ReflectFunnel, ReflectFunnelCount> reflectFunnels {};
     std::array<int, 3> funnelPortCooldowns {};
+    float laserTargetX = 0.0f;
+    float laserTargetY = 0.0f;
+    float laserTargetZ = 0.0f;
     int nextFunnelPort = 0;
+    bool laserTargetInitialized = false;
 };
 
 }

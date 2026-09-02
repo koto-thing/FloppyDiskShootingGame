@@ -20,6 +20,7 @@ enum class GalleryEntry : std::uint32_t {
     Stage2Enemy,
     Stage3Enemy,
     Stage4Enemy,
+    Stage4WeaponDrone,
     Count
 };
 
@@ -39,5 +40,5 @@ inline constexpr std::uint32_t DefaultGalleryUnlocks = GalleryEntryBit(GalleryEn
 inline constexpr std::uint32_t ValidGalleryUnlocks =
     (1u << static_cast<std::uint32_t>(GalleryEntry::Count)) - 1u;
 
-static_assert(static_cast<std::uint32_t>(GalleryEntry::Count) == 16u);
+static_assert(static_cast<std::uint32_t>(GalleryEntry::Count) == 17u);
 static_assert((DefaultGalleryUnlocks & GalleryEntryBit(GalleryEntry::Player)) != 0u);

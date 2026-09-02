@@ -3,10 +3,21 @@
 #include <algorithm>
 #include <cmath>
 
+#include "../../../../Engine/Graphics/Renderer.h"
+#include "../../../../Engine/Input/Input.h"
+#include "../../../../Engine/Input/KeyCode.h"
+
 #include "Stage4BossModelView.h"
 #include "Stage4EnemySheet.h"
+#include "Stage4WeaponDroneView.h"
 
 using ShooterStages::Stage4::ShotKind;
+using Stage4Logic = ShooterStages::Stage4::State;
+using Stage4BossPhase = ShooterStages::Stage4::BossPhase;
+using Stage4Weapon = ShooterStages::Stage4::MainWeaponType;
+using Stage4WeaponVisual = ShooterStages::Stage4::WeaponVisualState;
+using Stage4SwapState = ShooterStages::Stage4::WeaponSwapState;
+using Stage4SwapConfig = ShooterStages::Stage4::WeaponSwapConfig;
 
 namespace {
 
@@ -37,9 +48,192 @@ constexpr Vector3 Stage4SecondaryGunLocal[] = {
 constexpr float Stage4MainCannonHitRadius = 1.45f;
 constexpr float Stage4SecondaryGunHitRadius = 0.82f;
 
+/** @brief 交換工程に対応する継続フレーム数を取得する @param state 工程 @param config 演出設定 @return 継続フレーム数 */
+int SwapStateFrames(Stage4SwapState state, const Stage4SwapConfig& config) {
+    switch (state) {
+    case Stage4SwapState::Prepare: return config.prepareFrames;
+    case Stage4SwapState::Unlock: return config.unlockFrames;
+    case Stage4SwapState::Purge: return config.purgeFrames;
+    case Stage4SwapState::WaitingForDrone: return config.waitingFrames;
+    case Stage4SwapState::DroneApproach: return config.approachFrames;
+    case Stage4SwapState::CarryWeapon: return config.carryFrames;
+    case Stage4SwapState::AlignWeapon: return config.alignFrames;
+    case Stage4SwapState::MountWeapon: return config.mountFrames;
+    case Stage4SwapState::LockWeapon: return config.lockFrames;
+    case Stage4SwapState::DroneRelease: return config.releaseFrames;
+    case Stage4SwapState::DroneRetreat: return config.retreatFrames;
+    default: return 0;
+    }
+}
+
+/** @brief 論理主砲種別を描画主砲種別へ変換する @param weapon 論理主砲種別 @return 描画主砲種別 */
+Stage4MainWeaponType ViewWeaponType(Stage4Weapon weapon) {
+    switch (weapon) {
+    case Stage4Weapon::SiegeMortar: return Stage4MainWeaponType::SiegeMortar;
+    case Stage4Weapon::RomanceCannon: return Stage4MainWeaponType::RomanceCannon;
+    default: return Stage4MainWeaponType::Phase1Cannon;
+    }
+}
+
+/** @brief 親Transformのローカル方向へ位置をずらす @param transform 基準Transform @param offset ローカル移動量 @return 移動後Transform */
+BossModelTransform OffsetTransform(const BossModelTransform& transform, const Vector3& offset) {
+    BossModelTransform result = transform;
+    const float cosine = std::cos(transform.yaw);
+    const float sine = std::sin(transform.yaw);
+    result.position += Vector3 {
+        offset.x * cosine + offset.z * sine,
+        offset.y,
+        -offset.x * sine + offset.z * cosine
+    } * transform.scale;
+    return result;
+}
+
+/** @brief 0から1の工程進捗を取得する @param state 交換状態 @param config 演出設定 @return 補間用進捗 */
+float SwapProgress(const Stage4Logic& state, const Stage4SwapConfig& config) {
+    const int frames = SwapStateFrames(state.swapState, config);
+    return frames > 0 ? Math::Clamp01(static_cast<float>(state.timer) /
+        static_cast<float>(frames)) : 1.0f;
+}
+
 static_assert(sizeof(Stage4SecondaryGunLocal) / sizeof(Stage4SecondaryGunLocal[0]) == 6);
 static_assert(sizeof(Stage4BodyHitLocal) / sizeof(Stage4BodyHitLocal[0]) == 12);
 
+}
+
+void SideScrollingShooter::Stage4Module::Reset(SideScrollingShooter& shooter) {
+    shooter.m_stage4 = {};
+}
+
+void SideScrollingShooter::Stage4Module::ProcessDebugInput(SideScrollingShooter& shooter) {
+#ifdef _DEBUG
+    // F6とF7から二種類の交換演出をHP操作なしで開始する
+    if (Input::GetKeyDown(KeyCode::F6)) {
+        StartDebugWeaponSwap(shooter, Stage4Weapon::SiegeMortar);
+    }
+    if (Input::GetKeyDown(KeyCode::F7)) {
+        StartDebugWeaponSwap(shooter, Stage4Weapon::RomanceCannon);
+    }
+#else
+    (void)shooter;
+#endif
+}
+
+bool SideScrollingShooter::Stage4Module::TickWeaponSwap(
+    SideScrollingShooter& shooter, Enemy& boss) {
+    Stage4Logic& state = shooter.m_stage4;
+
+    // 被弾で先行更新された攻撃フェーズから必要な交換を開始する
+    if (state.swapState == Stage4SwapState::None) {
+        if (boss.bossPhase == BossSpecialPhase1 && state.phase == Stage4BossPhase::Phase1) {
+            BeginWeaponSwap(shooter, boss, Stage4Weapon::SiegeMortar);
+        } else if (boss.bossPhase >= BossNormalPhase2 &&
+            state.phase == Stage4BossPhase::Phase2) {
+            BeginWeaponSwap(shooter, boss, Stage4Weapon::RomanceCannon);
+        }
+    }
+    if (state.swapState == Stage4SwapState::None) return false;
+
+    // 工程ごとの設定時間が過ぎたらタイマーをリセットして次へ進む
+    const Stage4SwapConfig config = ShooterStages::Stage4::SwapConfig(state.incomingWeapon);
+    if (++state.timer >= SwapStateFrames(state.swapState, config)) {
+        AdvanceWeaponSwap(shooter);
+        if (state.swapState == Stage4SwapState::Complete) AdvanceWeaponSwap(shooter);
+    }
+    return true;
+}
+
+bool SideScrollingShooter::Stage4Module::IsWeaponSwapActive(
+    const SideScrollingShooter& shooter) {
+    return shooter.m_stage4.swapState != Stage4SwapState::None;
+}
+
+bool SideScrollingShooter::Stage4Module::HandleBossPhaseAfterDamage(
+    SideScrollingShooter& shooter, Enemy& boss) {
+    Stage4Logic& state = shooter.m_stage4;
+
+    // 交換中は次の閾値判定と撃破を保留して演出の連続スキップを防ぐ
+    if (IsWeaponSwapActive(shooter)) {
+        const int minimumHp = state.incomingWeapon == Stage4Weapon::SiegeMortar ?
+            boss.maxHp / 3 + 1 : 1;
+        boss.hp = (std::max)(boss.hp, minimumHp);
+        shooter.m_bossHp = boss.hp;
+        return false;
+    }
+
+    // 一度の大ダメージでも一段階だけ進めて必ず各交換演出を通す
+    const int requestedPhase = shooter.m_stage->BossPhaseForHp(boss.hp, boss.maxHp);
+    if (requestedPhase > boss.bossPhase && boss.bossPhase < BossNormalPhase2) {
+        ++boss.bossPhase;
+        const Stage4Weapon incoming = boss.bossPhase == BossSpecialPhase1 ?
+            Stage4Weapon::SiegeMortar : Stage4Weapon::RomanceCannon;
+        BeginWeaponSwap(shooter, boss, incoming);
+        const int minimumHp = incoming == Stage4Weapon::SiegeMortar ?
+            boss.maxHp / 3 + 1 : 1;
+        boss.hp = (std::max)(boss.hp, minimumHp);
+        shooter.m_bossHp = boss.hp;
+        return false;
+    }
+    return boss.hp <= 0;
+}
+
+void SideScrollingShooter::Stage4Module::BeginWeaponSwap(
+    SideScrollingShooter& shooter, Enemy& boss, Stage4Weapon incomingWeapon) {
+    Stage4Logic& state = shooter.m_stage4;
+    state.outgoingWeapon = state.currentWeapon;
+    state.incomingWeapon = incomingWeapon;
+    state.outgoingVisual = Stage4WeaponVisual::Attached;
+    state.incomingVisual = Stage4WeaponVisual::Hidden;
+    state.phase = incomingWeapon == Stage4Weapon::SiegeMortar ?
+        Stage4BossPhase::TransitionToPhase2 : Stage4BossPhase::TransitionToPhase3;
+    state.swapState = Stage4SwapState::Prepare;
+    state.timer = 0;
+    boss.phase = 0.0f;
+    boss.recoilAge = 0;
+
+    // 交換開始時に敵弾を消して演出と主砲なし状態を読みやすくする
+    for (auto& shot : shooter.m_shots) {
+        if (shot.enemy) shot.active = false;
+    }
+}
+
+void SideScrollingShooter::Stage4Module::AdvanceWeaponSwap(SideScrollingShooter& shooter) {
+    Stage4Logic& state = shooter.m_stage4;
+    const bool mountedRomance = state.swapState == Stage4SwapState::MountWeapon &&
+        state.incomingWeapon == Stage4Weapon::RomanceCannon;
+
+    // 状態側の共通所有権遷移を使い装着瞬間だけ画面振動を加える
+    ShooterStages::Stage4::AdvanceWeaponSwap(state);
+    if (mountedRomance) {
+        shooter.m_screenShakeIntensity = 0.045f;
+        shooter.m_screenShakeFrames = 18;
+        shooter.m_screenShakeDurationFrames = 18;
+    }
+}
+
+void SideScrollingShooter::Stage4Module::StartDebugWeaponSwap(
+    SideScrollingShooter& shooter, Stage4Weapon incomingWeapon) {
+    // ボス戦外からの入力は既存ボス直行処理で必要な戦闘状態を作る
+    if (shooter.m_stageNumber != 4 || !shooter.m_bossBattle ||
+        !shooter.m_enemies[0].active || shooter.m_enemies[0].type != 2) {
+        shooter.StartDebugCheckpoint(4, 3, true);
+    }
+
+    Enemy& boss = shooter.m_enemies[0];
+    shooter.m_stage4 = {};
+    if (incomingWeapon == Stage4Weapon::RomanceCannon) {
+        shooter.m_stage4.phase = Stage4BossPhase::Phase2;
+        shooter.m_stage4.currentWeapon = Stage4Weapon::SiegeMortar;
+        shooter.m_stage4.outgoingWeapon = Stage4Weapon::SiegeMortar;
+        boss.bossPhase = BossSpecialPhase1;
+        boss.hp = boss.maxHp / 3;
+    } else {
+        boss.bossPhase = BossNormalPhase1;
+        boss.hp = boss.maxHp * 2 / 3;
+    }
+    ++boss.bossPhase;
+    shooter.m_bossHp = boss.hp;
+    shooter.m_displayBossHp = static_cast<float>(boss.hp);
+    BeginWeaponSwap(shooter, boss, incomingWeapon);
 }
 
 const SideScrollingShooter::Stage& SideScrollingShooter::Stage4Module::Definition() {
@@ -59,13 +253,22 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
         ToWorldY(enemy.turretAimY),
         Math::Lerp(SidePlaneZ, enemy.turretAimZ, railWeight)
     };
-    const BossModelTransform transform {
+    BossModelTransform transform {
         {ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z},
         aimTarget, yaw + Stage4ModelYawOffset, Stage4BossScale,
         enemy.bossPartHp[BossNose] > 0, true
     };
+    const Stage4Logic& swap = shooter.m_stage4;
+    const Stage4SwapConfig swapConfig = ShooterStages::Stage4::SwapConfig(swap.incomingWeapon);
+
+    // Romance Cannon装着時だけ車体全体を沈ませ重量を受ける動きを作る
+    if (swap.currentWeapon == Stage4Weapon::RomanceCannon &&
+        swap.swapState == Stage4SwapState::LockWeapon) {
+        const float progress = SwapProgress(swap, swapConfig);
+        transform.position.y -= std::sin(progress * Math::Pi) * 0.18f;
+    }
     Stage4BossModelState state;
-    state.mainCannon = enemy.bossPartHp[BossNose] > 0;
+    state.mainCannon = false;
     state.mainCannonHit = enemy.bossPartHitFlashFrames[BossNose] > 0 &&
         (enemy.bossPartHitFlashFrames[BossNose] / 2) % 2 != 0;
     for (int i = 0; i < 6; ++i) {
@@ -77,7 +280,8 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
     BossModelTransform aimedTransform = transform;
     aimedTransform.secondaryAimTarget = aimTarget;
     aimedTransform.secondaryGunsTrackTarget = true;
-    aimedTransform.mainGunTracksTarget = state.mainCannon && enemy.phase <= 0.0f;
+    aimedTransform.mainGunTracksTarget = swap.currentWeapon == Stage4Weapon::Phase1Cannon &&
+        swap.swapState == Stage4SwapState::None && enemy.phase <= 0.0f;
     aimedTransform.trackRoll = (shooter.IsRailGameplayActive() ?
         enemy.z - enemy.baseZ : ToWorldX(enemy.x - enemy.baseX)) /
         Stage4TrackWheelRadius;
@@ -85,11 +289,131 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
     // Stage4BossModelViewの出力を既存Primitive描画へ接続する
     auto DrawBossPart = [&](int shape, const Vector3& position, const Vector3& scale,
         const float color[4], float partYaw, float partPitch) {
-        DrawModelPrimitive(renderer, camera, shape,
+        DrawModelPrimitive(renderer, camera, static_cast<PrimitiveShape>(shape),
             position.x, position.y, position.z,
             scale.x, scale.y, scale.z, color, partYaw, partPitch);
     };
-    Stage4BossModelView::Draw(aimedTransform, DrawBossPart, state);
+    Stage4BossModelView::DrawBody(aimedTransform, DrawBossPart, state);
+
+    // 装着主砲またはパージ中の旧主砲を独立Transformで描画する
+    const BossModelTransform mount = Stage4BossModelView::MainWeaponMount(aimedTransform);
+    if (swap.outgoingVisual != Stage4WeaponVisual::Hidden) {
+        BossModelTransform outgoingTransform = mount;
+        if (swap.swapState == Stage4SwapState::Unlock) {
+            const float progress = SmoothStep(SwapProgress(swap, swapConfig));
+            outgoingTransform = OffsetTransform(outgoingTransform,
+                {0.0f, progress * 0.35f + std::sin(swap.timer * 0.85f) * 0.045f, 0.0f});
+        } else if (swap.outgoingVisual == Stage4WeaponVisual::Detached) {
+            const float progress = SwapProgress(swap, swapConfig);
+            const float travel = progress * progress;
+            const Vector3 purgeOffset = swap.outgoingWeapon == Stage4Weapon::Phase1Cannon ?
+                Vector3 {-10.0f * travel, 0.35f + 4.8f * travel, 0.0f} :
+                Vector3 {7.0f * travel, 0.35f + 7.2f * travel, 0.0f};
+            outgoingTransform = OffsetTransform(outgoingTransform, purgeOffset);
+        }
+        const Stage4MainWeaponType outgoingType = ViewWeaponType(swap.outgoingWeapon);
+        const Stage4MainWeaponPose outgoingPose =
+            Stage4BossModelView::DefaultMainWeaponPose(outgoingType);
+        Stage4BossModelView::DrawMainWeapon(outgoingType, outgoingTransform,
+            outgoingPose, DrawBossPart, state.mainCannonHit);
+
+        if (swap.swapState == Stage4SwapState::Purge) {
+            // 旧主砲下面の補助エンジンへ既存の噴射煙と炎を重ねる
+            const Vector3 nozzle = Stage4BossModelView::MainWeaponPointWorldPosition(
+                outgoingTransform, outgoingPose,
+                Stage4BossModelView::PurgeThrusterLocalPosition(outgoingType));
+            const float scale = outgoingTransform.scale;
+            const Matrix4x4 smokeWorld = Matrix4x4::Translation(
+                nozzle + Vector3 {0.0f, -1.65f * scale, 0.0f}) *
+                Matrix4x4::Scale({0.52f * scale, 1.10f * scale, 1.0f});
+            renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * smokeWorld,
+                static_cast<float>(shooter.m_frame) / 12.0f, 1});
+            const Matrix4x4 flameWorld = Matrix4x4::Translation(
+                nozzle + Vector3 {0.0f, -0.82f * scale, 0.0f}) *
+                Matrix4x4::Scale({0.38f * scale, 0.90f * scale, 1.0f});
+            renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * flameWorld,
+                static_cast<float>(shooter.m_frame) / 12.0f, 3});
+        }
+    }
+
+    // 搬入主砲はSpawn、Approach、Carry、Align、Mountの各点を滑らかに結ぶ
+    BossModelTransform incomingTransform = mount;
+    if (swap.incomingVisual != Stage4WeaponVisual::Hidden) {
+        const bool romance = swap.incomingWeapon == Stage4Weapon::RomanceCannon;
+        const Vector3 spawnOffset = romance ? Vector3 {15.0f, 13.0f, 0.0f} :
+            Vector3 {11.0f, 10.0f, 0.0f};
+        const Vector3 approachOffset = romance ? Vector3 {8.0f, 8.5f, 0.0f} :
+            Vector3 {6.0f, 7.0f, 0.0f};
+        const Vector3 carryOffset = romance ? Vector3 {3.0f, 6.0f, 0.0f} :
+            Vector3 {2.0f, 5.0f, 0.0f};
+        const Vector3 alignOffset {0.0f, romance ? 3.2f : 2.5f, 0.0f};
+        const float progress = SmoothStep(SwapProgress(swap, swapConfig));
+        Vector3 offset {};
+        switch (swap.swapState) {
+        case Stage4SwapState::DroneApproach:
+            offset = Math::Lerp(spawnOffset, approachOffset, progress);
+            break;
+        case Stage4SwapState::CarryWeapon:
+            offset = Math::Lerp(approachOffset, carryOffset, progress);
+            break;
+        case Stage4SwapState::AlignWeapon:
+            offset = Math::Lerp(carryOffset, alignOffset, progress);
+            break;
+        case Stage4SwapState::MountWeapon:
+            offset = Math::Lerp(alignOffset, Vector3::Zero, progress);
+            break;
+        default:
+            break;
+        }
+        if (romance && swap.incomingVisual == Stage4WeaponVisual::Carried) {
+            offset.y += std::sin(static_cast<float>(swap.timer) * 0.12f) * 0.08f;
+        }
+        incomingTransform = OffsetTransform(incomingTransform, offset);
+        const Stage4MainWeaponType incomingType = ViewWeaponType(swap.incomingWeapon);
+        const Stage4MainWeaponPose incomingPose =
+            Stage4BossModelView::DefaultMainWeaponPose(incomingType);
+        Stage4BossModelView::DrawMainWeapon(
+            incomingType, incomingTransform, incomingPose, DrawBossPart);
+
+        // 主砲側CarryPointへ各ドローンのLiftPointを一致させて編隊を作る
+        if (swap.swapState >= Stage4SwapState::DroneApproach &&
+            swap.swapState <= Stage4SwapState::DroneRetreat) {
+            Stage4WeaponDronePose dronePose;
+            dronePose.leftShoulderPitch = 0.12f;
+            dronePose.rightShoulderPitch = 0.12f;
+            dronePose.leftElbowPitch = -0.18f;
+            dronePose.rightElbowPitch = -0.18f;
+            if (swap.swapState == Stage4SwapState::DroneApproach) {
+                dronePose.leftClampOpen = 1.0f - progress;
+                dronePose.rightClampOpen = 1.0f - progress;
+                dronePose.thrusterTilt = -0.18f * (1.0f - progress);
+            } else if (swap.swapState == Stage4SwapState::DroneRelease) {
+                dronePose.leftClampOpen = progress;
+                dronePose.rightClampOpen = progress;
+            } else if (swap.swapState == Stage4SwapState::DroneRetreat) {
+                dronePose.leftClampOpen = 1.0f;
+                dronePose.rightClampOpen = 1.0f;
+                dronePose.leftShoulderPitch = -0.28f * progress;
+                dronePose.rightShoulderPitch = -0.28f * progress;
+                dronePose.thrusterTilt = 0.32f * progress;
+            }
+            for (int index = 0; index < swapConfig.droneCount; ++index) {
+                const Vector3 carryPoint = Stage4BossModelView::MainWeaponPointWorldPosition(
+                    incomingTransform, incomingPose,
+                    Stage4BossModelView::CarryPointLocalPosition(incomingType, index));
+                BossModelTransform droneTransform = incomingTransform;
+                droneTransform.scale = Stage4BossScale * 0.92f;
+                droneTransform = Stage4WeaponDroneView::PlaceLiftPointAt(
+                    droneTransform, dronePose, carryPoint);
+                if (swap.swapState == Stage4SwapState::DroneRetreat) {
+                    const float side = index % 2 == 0 ? -1.0f : 1.0f;
+                    droneTransform = OffsetTransform(droneTransform,
+                        {5.0f * progress, 8.0f * progress, side * 2.5f * progress});
+                }
+                Stage4WeaponDroneView::Draw(droneTransform, dronePose, DrawBossPart);
+            }
+        }
+    }
     return true;
 }
 
@@ -137,7 +461,7 @@ bool SideScrollingShooter::Stage4Module::TryHitBossPart(
 
 void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
     SideScrollingShooter& shooter, Enemy& boss) {
-    if (boss.type != 2) return;
+    if (boss.type != 2 || IsWeaponSwapActive(shooter)) return;
 
     // 生存中の主砲身と副砲6基から、現在の自機位置へ直接撃つ
     for (int partIndex = 0; partIndex < BossPartCount; ++partIndex) {
@@ -369,18 +693,36 @@ void SideScrollingShooter::Stage4Module::SpawnMainCannonball(
     }
     if (available == nullptr) return;
 
-    // 見た目の主砲と同じピボット、照準先から砲口位置と射出方向を決める
-    const Vector3 pivot = LocalToWorld(shooter, boss, Stage4MainCannonPivotLocal);
+    // 現在装着中の主砲Transformと砲口APIから射出位置を決める
+    const Stage4Weapon logicalWeapon = shooter.m_stage4.currentWeapon;
+    const Stage4MainWeaponType weaponType = ViewWeaponType(logicalWeapon);
     const Vector3 aimTarget {
         ToWorldX(boss.turretAimX),
         ToWorldY(boss.turretAimY),
-        shooter.IsRailGameplayActive() ? boss.turretAimZ : pivot.z
+        shooter.IsRailGameplayActive() ? boss.turretAimZ : boss.z
     };
-    const Vector3 delta = aimTarget - pivot;
+    Vector3 muzzle;
+    if (logicalWeapon == Stage4Weapon::Phase1Cannon) {
+        const Vector3 pivot = LocalToWorld(shooter, boss, Stage4MainCannonPivotLocal);
+        const Vector3 aimDelta = aimTarget - pivot;
+        const float aimLength = (std::max)(0.001f, std::sqrt(
+            aimDelta.x * aimDelta.x + aimDelta.y * aimDelta.y + aimDelta.z * aimDelta.z));
+        muzzle = pivot + aimDelta / aimLength * Stage4CannonMuzzleDistance;
+    } else {
+        BossModelTransform tankTransform;
+        tankTransform.position = {ToWorldX(boss.x), ToWorldY(boss.y), boss.z};
+        tankTransform.yaw = ModelYaw(shooter);
+        tankTransform.scale = Stage4BossScale;
+        const BossModelTransform weaponTransform =
+            Stage4BossModelView::MainWeaponMount(tankTransform);
+        const Stage4MainWeaponPose pose = Stage4BossModelView::DefaultMainWeaponPose(weaponType);
+        muzzle = Stage4BossModelView::MainWeaponPointWorldPosition(weaponTransform, pose,
+            Stage4BossModelView::MainWeaponMuzzleLocalPosition(weaponType, pose));
+    }
+    const Vector3 delta = aimTarget - muzzle;
     const float length = (std::max)(0.001f,
         std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z));
     const Vector3 direction = delta / length;
-    const Vector3 muzzle = pivot + direction * Stage4CannonMuzzleDistance;
 
     Shot& shot = *available;
     shot = {};
