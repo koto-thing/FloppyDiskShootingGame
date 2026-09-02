@@ -117,6 +117,24 @@ VS_OUTPUT VSExplosion(uint vertexId : SV_VertexID)
 
 float4 PSExplosion(VS_OUTPUT input) : SV_TARGET
 {
+    if (u_shapeType > 3.5f)
+    {
+        // 迫撃砲着弾時に地表を走る高温の衝撃波を生成する
+        float progress = saturate(u_progress);
+        float2 uv = input.uv;
+        float distanceFromCenter = length(float2(uv.x * 0.72f, uv.y * 2.45f));
+        float ringRadius = 0.18f + progress * 0.82f;
+        float ring = 1.0f - smoothstep(0.025f, 0.10f, abs(distanceFromCenter - ringRadius));
+        float innerHeat = 1.0f - smoothstep(0.02f, 0.42f + progress * 0.22f, distanceFromCenter);
+        float roughness = sin(atan2(uv.y, uv.x) * 17.0f + progress * 24.0f) * 0.5f + 0.5f;
+        float alpha = saturate((ring * (0.70f + roughness * 0.30f) + innerHeat * 0.20f) *
+            (1.0f - progress));
+        if (alpha < 0.01f) discard;
+        float3 color = lerp(float3(1.0f, 0.12f, 0.01f), float3(1.0f, 0.90f, 0.28f),
+            saturate(innerHeat + ring * 0.45f));
+        return float4(color, alpha);
+    }
+
     if (u_shapeType > 2.5f)
     {
         // 戦艦下面から下向きに噴射する補助エンジン炎を生成する
@@ -1445,7 +1463,8 @@ void D3D12RenderingService::DrawExplosion(const ExplosionVisual& explosion) {
 
     // 爆発専用PSOで画面正対クアッドを発行する
     const int previousPipelineType = m_currentPipelineType;
-    m_commandList->SetPipelineState((explosion.effectType == 0 || explosion.effectType == 3) ?
+    m_commandList->SetPipelineState((explosion.effectType == 0 || explosion.effectType == 3 ||
+        explosion.effectType == 4) ?
         m_pipelineStateExplosion.Get() : m_pipelineStateExplosionSmoke.Get());
     m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);

@@ -72,7 +72,8 @@ void RecordsExplosionCommand() {
     renderer.BeginFrame();
     renderer.DrawExplosion({Matrix4x4::Identity, 0.5f, 2});
     renderer.DrawExplosion({Matrix4x4::Identity, 0.75f, 3});
-    Require(renderer.CommandCount() == 2, "Explosions must be recorded as individual commands");
+    renderer.DrawExplosion({Matrix4x4::Identity, 0.25f, 4});
+    Require(renderer.CommandCount() == 3, "Explosions must be recorded as individual commands");
     Require(renderer.Command(0).type == RenderCommand::Type::Explosion,
         "Explosion command must preserve its type");
     Require(renderer.Command(0).explosion.progress == 0.5f,
@@ -81,6 +82,8 @@ void RecordsExplosionCommand() {
         "Explosion command must preserve its effect type");
     Require(renderer.Command(1).explosion.effectType == 3,
         "Engine flame command must preserve its effect type");
+    Require(renderer.Command(2).explosion.effectType == 4,
+        "Mortar shockwave command must preserve its effect type");
 }
 
 void SendsCharacterSpacingToBackend() {

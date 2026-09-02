@@ -676,8 +676,8 @@ void SideScrollingShooter::PlayHitSound() {
 void SideScrollingShooter::TickExplosions() {
     for (auto& explosion : m_explosions) {
         if (!explosion.active) continue;
-        const int lifetime = explosion.destruction ?
-            DestructionExplosionLifetimeFrames : ExplosionLifetimeFrames;
+        const int lifetime = explosion.effectType == 1 ? MortarExplosionLifetimeFrames :
+            (explosion.destruction ? DestructionExplosionLifetimeFrames : ExplosionLifetimeFrames);
         if (++explosion.age >= lifetime) explosion.active = false;
     }
 }
@@ -710,6 +710,24 @@ void SideScrollingShooter::SpawnExplosion(
         explosion = {
             x, y, IsRailGameplayActive() ? z : ToRailZFromSideX(x),
             0, destruction, true
+        };
+        return;
+    }
+}
+
+/**
+ * @brief 迫撃砲着弾用の大爆破エフェクトを生成する
+ * @param x 2D座標系のX座標
+ * @param y 2D座標系のY座標
+ * @param z 3Dレール座標系のZ座標
+ * @return なし
+ */
+void SideScrollingShooter::SpawnMortarExplosion(float x, float y, float z) {
+    for (auto& explosion : m_explosions) {
+        if (explosion.active) continue;
+        explosion = {
+            x, y, IsRailGameplayActive() ? z : ToRailZFromSideX(x),
+            0, false, true, 1
         };
         return;
     }

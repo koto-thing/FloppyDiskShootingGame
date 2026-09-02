@@ -214,6 +214,7 @@ private:
         int age = 0;
         bool destruction = false;
         bool active = false;
+        int effectType = 0;
     };
 
     /** @brief 撃破された機体モデルから分離して飛散する部品 */
@@ -272,6 +273,7 @@ private:
     static_assert(ExplosionCapacity >= ShotCapacity);
     static constexpr int ExplosionLifetimeFrames = 18;
     static constexpr int DestructionExplosionLifetimeFrames = 48;
+    static constexpr int MortarExplosionLifetimeFrames = 64;
     static constexpr int AttackWarningFrames = 12;
     static constexpr int BossPartHitFlashFrames = 12;
     static constexpr int DebrisCapacity = 96;
@@ -476,6 +478,14 @@ private:
      * @return なし
      */
     void SpawnExplosion(float x, float y, float z, bool destruction = false);
+    /**
+     * @brief 迫撃砲着弾用の大爆破エフェクトを生成する
+     * @param x 2D座標系のX座標
+     * @param y 2D座標系のY座標
+     * @param z 3Dレール座標系のZ座標
+     * @return なし
+     */
+    void SpawnMortarExplosion(float x, float y, float z);
     /** @brief 機体モデルを構成する部品を飛散エフェクトとして生成する */
     void SpawnEnemyDebris(const Enemy& enemy, int bossPart = -1);
     /** @brief 飛散するモデル部品を固定長プールへ追加する */
