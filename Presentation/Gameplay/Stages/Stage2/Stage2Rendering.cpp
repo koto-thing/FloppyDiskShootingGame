@@ -756,13 +756,14 @@ bool SideScrollingShooter::Stage2Module::SpawnBossDebris(
     }
 
     // 撃破時は下部の沈下と再浮上、上部の緩やかな降下を同じ時間軸で開始する
-    const float submarineY = SubmarineWorldY(shooter, boss);
+    const float groundTopY = Math::Lerp(-6.0f, -3.65f, shooter.RailBlend());
     const float battleshipY = BattleshipWorldY(shooter, boss);
-    const Vector3 lowerOffset = RotateYawOffset(0.0f, -0.45f, 0.0f, yaw);
+    constexpr float LowerHullHeight = 2.05f * ModelScale;
+    const float lowerHullY = groundTopY - LowerHullHeight * 0.12f;
     Debris* lowerHull = shooter.SpawnDebrisPiece(
-        x + lowerOffset.x, submarineY + lowerOffset.y, boss.z + lowerOffset.z,
+        x, lowerHullY, boss.z,
         0.0f, 0.0f, 0.0f, yaw, 0.0f,
-        5, 8.8f * ModelScale, 2.05f * ModelScale, 3.15f * ModelScale,
+        5, 8.8f * ModelScale, LowerHullHeight, 3.15f * ModelScale,
         Hull, 420, 420, false);
     if (lowerHull != nullptr) lowerHull->stage2 = {DebrisKind::Sink, -1};
     auto AddFallingUpper = [&](int shape, const Vector3& local,

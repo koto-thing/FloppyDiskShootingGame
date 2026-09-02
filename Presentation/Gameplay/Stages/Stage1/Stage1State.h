@@ -10,8 +10,9 @@ struct Meteor {
     float scale = 1.0f;
     float yaw = 0.0f;
     float spin = 0.0f;
+    float pathPhase = 0.0f;
     int hp = 0;
-    bool destroyed = false;
+    bool destroyed = true;
 };
 
 /** @brief ステージ1に配置する隕石数 */
@@ -20,6 +21,8 @@ inline constexpr int MeteorCount = 6;
 /** @brief ステージ1固有の永続状態 */
 struct State {
     std::array<Meteor, MeteorCount> meteors {};
+    int nextMeteorIndex = 0;
+    int spawnFrames = 0;
 };
 
 }
