@@ -9,6 +9,7 @@
 #include "../../Engine/Graphics/Camera3D.h"
 #include "Stages/Stage1/Stage1State.h"
 #include "Stages/Stage2/Stage2State.h"
+#include "Stages/Stage4/Stage4State.h"
 #include "Stages/Stage3/Stage3State.h"
 #include "Stages/Stage5/Stage5State.h"
 
@@ -87,6 +88,7 @@ private:
     class Stage2EnemySheetEasy;
     class Stage2EnemySheetNormal;
     class Stage2EnemySheetHard;
+    class Stage4EnemySheet;
     class EnemyBehavior;
     class BasicEnemyBehavior;
     class HeavyEnemyBehavior;
@@ -118,6 +120,7 @@ private:
         int barrageCount = 0;
         int age = 0;
         ShooterStages::Stage2::ShotState stage2 {};
+        ShooterStages::Stage4::ShotState stage4 {};
         PlayerType playerType = Homing;
         bool enemy = false;
         bool special = false;
@@ -202,6 +205,7 @@ private:
         int type = 0;
         int age = 0;
         int motionAge = 0;
+        int recoilAge = 0;
         int shotInterval = 0;
         int attackWarningFrames = 0;
         float attackWarningTargetX = 0.0f;
@@ -223,6 +227,9 @@ private:
         int age = 0;
         bool destruction = false;
         bool active = false;
+        int effectType = 0;
+        float hitRadius = 0.0f;
+        bool damagedPlayer = false;
     };
 
     /** @brief 撃破された機体モデルから分離して飛散する部品 */
@@ -281,6 +288,7 @@ private:
     static_assert(ExplosionCapacity >= ShotCapacity);
     static constexpr int ExplosionLifetimeFrames = 18;
     static constexpr int DestructionExplosionLifetimeFrames = 48;
+    static constexpr int MortarExplosionLifetimeFrames = 64;
     static constexpr int AttackWarningFrames = 12;
     static constexpr int BossPartHitFlashFrames = 12;
     static constexpr int DebrisCapacity = 96;
@@ -496,6 +504,14 @@ private:
      * @return なし
      */
     void SpawnExplosion(float x, float y, float z, bool destruction = false);
+    /**
+     * @brief 迫撃砲着弾用の大爆破エフェクトを生成する
+     * @param x 2D座標系のX座標
+     * @param y 2D座標系のY座標
+     * @param z 3Dレール座標系のZ座標
+     * @return なし
+     */
+    void SpawnMortarExplosion(float x, float y, float z);
     /** @brief 機体モデルを構成する部品を飛散エフェクトとして生成する */
     void SpawnEnemyDebris(const Enemy& enemy, int bossPart = -1);
     /** @brief 飛散するモデル部品を固定長プールへ追加する */

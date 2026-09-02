@@ -16,6 +16,83 @@ public:
     static const Stage& Definition();
 
     /**
+     * @brief 自機弾とStage 4ボスの破壊可能砲部位との衝突を判定する
+     * @param shooter 判定に使用するゲーム本体
+     * @param shot 判定する自機弾
+     * @param boss 判定するStage 4ボス
+     * @param part 命中部位の格納先
+     * @return 破壊可能砲部位へ命中した場合true、命中していない場合false
+     */
+    static bool TryHitBossPart(const SideScrollingShooter& shooter,
+        const Shot& shot, const Enemy& boss, BossPart& part);
+
+    /**
+     * @brief Stage 4ボスの生存砲部位から自機方向へ弾を発射する
+     * @param shooter 弾を生成するゲーム本体
+     * @param boss 発射元となるStage 4ボス
+     * @return なし
+     */
+    static void FireBossPartBarrage(SideScrollingShooter& shooter, Enemy& boss);
+
+    /**
+     * @brief 指定球がStage 4ボス本体へ接触したか判定する
+     * @param shooter 判定に使用するゲーム本体
+     * @param x 判定対象のゲーム座標X
+     * @param y 判定対象のゲーム座標Y
+     * @param z 判定対象のレール座標Z
+     * @param radius 判定対象の半径
+     * @return ボス本体へ接触している場合true、接触していない場合false
+     */
+    static bool HitsHazard(const SideScrollingShooter& shooter,
+        float x, float y, float z, float radius);
+
+    /**
+     * @brief Stage 4特殊弾を座標加算前に更新する
+     * @param shooter 更新するゲーム本体
+     * @param shot 更新する弾
+     * @return なし
+     */
+    static void TickSpecialShotBeforeMove(SideScrollingShooter& shooter, Shot& shot);
+
+    /**
+     * @brief Stage 4特殊弾を座標加算後に更新する
+     * @param shooter 更新するゲーム本体
+     * @param shot 更新する弾
+     * @param previousX 座標加算前のゲーム座標X
+     * @param previousY 座標加算前のゲーム座標Y
+     * @param previousZ 座標加算前のワールド座標Z
+     * @return なし
+     */
+    static void TickSpecialShotAfterMove(
+        SideScrollingShooter& shooter, Shot& shot,
+        float previousX, float previousY, float previousZ);
+
+    /**
+     * @brief Stage 4特殊弾が画面外カリング猶予中か判定する
+     * @param shot 判定する弾
+     * @return カリングを保留する場合true、通常カリングを行う場合false
+     */
+    static bool IsShotCullProtected(const Shot& shot);
+
+    /**
+     * @brief Stage 4敵弾のプレイヤー命中半径を取得する
+     * @param shot 判定する敵弾
+     * @param railMode レール表示中の場合true
+     * @return 表示モードと弾種に対応する命中半径
+     */
+    static float EnemyShotHitRadius(const Shot& shot, bool railMode);
+
+    /**
+     * @brief Stage 4ボスの破壊済み砲部位を飛散部品へ変換する
+     * @param shooter デブリを生成するゲーム本体
+     * @param boss デブリ生成元のStage 4ボス
+     * @param bossPart 破壊部位
+     * @return Stage 4ボス部位として専用デブリを生成した場合true、対象外の場合false
+     */
+    static bool SpawnBossDebris(SideScrollingShooter& shooter,
+        const Enemy& boss, int bossPart);
+
+    /**
      * @brief Stage 4ボスの専用モデル描画を試みる
      * @param shooter 現在のゲーム状態
      * @param renderer 描画先レンダラー
@@ -27,6 +104,55 @@ public:
     static bool DrawBossModel(const SideScrollingShooter& shooter,
         Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw);
 
+    /**
+     * @brief Stage 4特殊弾の専用描画を試みる
+     * @param shooter 現在のゲーム状態
+     * @param renderer 描画先レンダラー
+     * @param camera 現在の描画カメラ
+     * @param shot 描画対象の弾
+     * @param yaw 表示モードに対応するY軸回転
+     * @return 専用描画を行った場合true、共通描画を使用する場合false
+     */
+    static bool DrawSpecialShot(const SideScrollingShooter& shooter,
+        Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw);
+
 private:
-    class StageDefinitionImpl;
+    /**
+     * @brief Stage 4主砲身から重力砲丸を生成する
+     * @param shooter 弾を生成するゲーム本体
+     * @param boss 発射元となるStage 4ボス
+     * @return なし
+     */
+    static void SpawnMainCannonball(SideScrollingShooter& shooter, const Enemy& boss);
+
+    /**
+     * @brief Stage 4ボスモデルのY軸回転を取得する
+     * @param shooter 現在のゲーム状態
+     * @return 描画と判定で共有するY軸回転
+     */
+    static float ModelYaw(const SideScrollingShooter& shooter);
+
+    /**
+     * @brief Stage 4ボスのローカル座標をワールド座標へ変換する
+     * @param shooter 現在のゲーム状態
+     * @param boss 座標変換元のボス
+     * @param local ローカル座標
+     * @return ワールド座標
+     */
+    static Vector3 LocalToWorld(
+        const SideScrollingShooter& shooter, const Enemy& boss, const Vector3& local);
+
+    /**
+     * @brief Stage 4ボスの副砲部位番号を配列番号へ変換する
+     * @param part 判定する部位
+     * @return 副砲番号、対象外は-1
+     */
+    static int SecondaryGunIndex(BossPart part);
+
+    /**
+     * @brief Stage 4ボスの破壊可能砲部位のローカル座標を取得する
+     * @param part 取得する部位
+     * @return 砲部位のローカル座標
+     */
+    static Vector3 BossPartLocalPosition(BossPart part);
 };

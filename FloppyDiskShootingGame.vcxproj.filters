@@ -249,6 +249,9 @@
     <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2EnemySheetNormal.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4EnemySheet.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2BossModelView.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -308,6 +311,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4Module.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4State.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4Story.h">

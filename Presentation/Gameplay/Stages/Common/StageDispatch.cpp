@@ -145,6 +145,7 @@ bool SideScrollingShooter::StageDispatch::HitsHazard(const SideScrollingShooter&
     case 1: return Stage1Module::HitsHazard(shooter, x, y, z, radius);
     case 2: return Stage2Module::HitsHazard(shooter, x, y, z, radius);
     case 3: return Stage3Module::HitsHazard(shooter, x, y, z, radius);
+    case 4: return Stage4Module::HitsHazard(shooter, x, y, z, radius);
     default: return false;
     }
 }
@@ -181,6 +182,7 @@ bool SideScrollingShooter::StageDispatch::TryHitBossPart(
     const Enemy& boss, BossPart& part) {
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::TryHitBossPart(shooter, shot, boss, part);
+    case 4: return Stage4Module::TryHitBossPart(shooter, shot, boss, part);
     case 3: return Stage3Module::TryHitBossPart(shooter, shot, boss, part);
     case 5: return Stage5Module::TryHitBossPart(shooter, shot, boss, part);
     default: return shooter.TryHitDefaultBossPart(shot, boss, part);
@@ -211,11 +213,13 @@ bool SideScrollingShooter::StageDispatch::CanHitBossWhileCollisionDisabled(
 }
 
 void SideScrollingShooter::StageDispatch::FireBossPartBarrage(
-    SideScrollingShooter& shooter, const Enemy& boss) {
+    SideScrollingShooter& shooter, Enemy& boss) {
     switch (shooter.m_stageNumber) {
     case 2:
         Stage2Module::FireBossPartBarrage(shooter, boss);
         break;
+    case 4:
+        Stage4Module::FireBossPartBarrage(shooter, boss);
     case 3:
         Stage3Module::FireBossPartBarrage(shooter, boss);
         break;
@@ -231,6 +235,8 @@ void SideScrollingShooter::StageDispatch::TickSpecialShotBeforeMove(
     case 2:
         Stage2Module::TickSpecialShotBeforeMove(shooter, shot);
         break;
+    case 4:
+        Stage4Module::TickSpecialShotBeforeMove(shooter, shot);
     case 3:
         Stage3Module::TickSpecialShotBeforeMove(shooter, shot);
         break;
@@ -238,10 +244,15 @@ void SideScrollingShooter::StageDispatch::TickSpecialShotBeforeMove(
 }
 
 void SideScrollingShooter::StageDispatch::TickSpecialShotAfterMove(
-    SideScrollingShooter& shooter, Shot& shot, float previousY) {
+    SideScrollingShooter& shooter, Shot& shot,
+    float previousX, float previousY, float previousZ) {
     switch (shooter.m_stageNumber) {
     case 2:
         Stage2Module::TickSpecialShotAfterMove(shooter, shot, previousY);
+        break;
+    case 4:
+        Stage4Module::TickSpecialShotAfterMove(
+            shooter, shot, previousX, previousY, previousZ);
         break;
     }
 }
@@ -250,6 +261,7 @@ bool SideScrollingShooter::StageDispatch::IsShotCullProtected(
     const SideScrollingShooter& shooter, const Shot& shot) {
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::IsShotCullProtected(shot);
+    case 4: return Stage4Module::IsShotCullProtected(shot);
     case 3: return Stage3Module::IsShotCullProtected(shot);
     default: return false;
     }
@@ -259,6 +271,7 @@ float SideScrollingShooter::StageDispatch::EnemyShotHitRadius(
     const SideScrollingShooter& shooter, const Shot& shot) {
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::EnemyShotHitRadius(shot, shooter.IsRailGameplayActive());
+    case 4: return Stage4Module::EnemyShotHitRadius(shot, shooter.IsRailGameplayActive());
     case 3: return Stage3Module::EnemyShotHitRadius(shot, shooter.IsRailGameplayActive());
     default: return shooter.IsRailGameplayActive() ? 0.28f : 0.022f;
     }
@@ -294,6 +307,7 @@ bool SideScrollingShooter::StageDispatch::SpawnBossDebris(
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::SpawnBossDebris(shooter, enemy, bossPart);
     case 3: return Stage3Module::SpawnBossDebris(shooter, enemy, bossPart);
+    case 4: return Stage4Module::SpawnBossDebris(shooter, enemy, bossPart);
     case 5: return Stage5Module::SpawnBossDebris(shooter, enemy, bossPart);
     default: return false;
     }
@@ -440,6 +454,7 @@ bool SideScrollingShooter::StageDispatch::DrawSpecialShot(
     const Camera3D& camera, const Shot& shot, float yaw) {
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
+    case 4: return Stage4Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
     case 3:
         if (Stage3Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw)) return true;
         return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
