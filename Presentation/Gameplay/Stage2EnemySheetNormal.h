@@ -19,11 +19,13 @@ public:
     /**
      * @brief 指定フレームで出現させるNORMAL用の敵を取得する
      * @param frame 現在のステージフレーム
+     * @param spawnIndex 同一フレーム内で取得する出現候補の番号
      * @param spawn 出現設定の格納先
      * @param chapterNumber 現在チャプター番号の格納先
      * @return 敵を出現させる場合true
      */
-    bool TrySelectEnemySpawn(int frame, EnemySpawnRule& spawn, int& chapterNumber) const override {
+    bool TrySelectEnemySpawn(int frame, int spawnIndex,
+        EnemySpawnRule& spawn, int& chapterNumber) const override {
         // チャプター1
         static constexpr EnemySpawnRule Chapter1[] = {
             {BasicEnemy, 35, 70, 2.6f, -0.72f, -0.54f, 60.0f},
@@ -34,7 +36,8 @@ public:
         static constexpr EnemySpawnRule Chapter2[] = {
             {BasicEnemy, 25, 65, 2.6f, 0.42f, -0.12f, 60.0f},
             {HeavyEnemy, 50, 280, 2.6f, 0.70f, 0.58f, 60.0f},
-            {SquareShooterEnemy, 140, 220, 2.6f, -0.62f, 0.32f, 54.0f}
+            {SquareShooterEnemy, 300, 300, 2.6f, -0.6f, 0.0f, 54.0f},
+            {SquareShooterEnemy, 300, 300, 2.6f, 0.6f, 0.0f, 54.0f}
         };
         // チャプター3
         static constexpr EnemySpawnRule Chapter3[] = {
@@ -47,7 +50,7 @@ public:
         constexpr Chapter Chapters[] = {
             MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)
         };
-        const bool selected = TrySelectByChapters(Chapters, 3, frame, spawn, chapterNumber);
+        const bool selected = TrySelectByChapters(Chapters, 3, frame, spawnIndex, spawn, chapterNumber);
         // YとZの生成範囲をランダム化
         if (selected) {
             if (spawn.enemyType != SquareShooterEnemy) {

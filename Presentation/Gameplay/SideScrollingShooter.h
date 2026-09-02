@@ -197,6 +197,9 @@ private:
         float baseX = 0.0f;
         float baseY = 0.0f;
         float baseZ = 0.0f;
+        float railAnchorX = 0.0f;
+        float railAnchorY = 0.0f;
+        float railAnchorZ = 0.0f;
         float actionX = 0.0f;
         float actionY = 0.0f;
         float actionZ = 0.0f;

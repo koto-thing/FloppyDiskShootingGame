@@ -23,11 +23,13 @@ public:
     /**
      * @brief 指定フレームで出現させるEASY用の敵を取得する
      * @param frame 現在のステージフレーム
+     * @param spawnIndex 同一フレーム内で取得する出現候補の番号
      * @param spawn 出現設定の格納先
      * @param chapterNumber 現在チャプター番号の格納先
      * @return 敵を出現させる場合true
      */
-    bool TrySelectEnemySpawn(int frame, EnemySpawnRule& spawn, int& chapterNumber) const override {
+    bool TrySelectEnemySpawn(int frame, int spawnIndex,
+        EnemySpawnRule& spawn, int& chapterNumber) const override {
         // チャプター1は通常機だけを低頻度で出現させる
         static constexpr EnemySpawnRule Chapter1[] = {
             {BasicEnemy, 70, 110, 1.08f, -0.72f, -0.54f, 60.0f}
@@ -46,6 +48,6 @@ public:
         constexpr Chapter Chapters[] = {
             MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)
         };
-        return TrySelectByChapters(Chapters, 3, frame, spawn, chapterNumber);
+        return TrySelectByChapters(Chapters, 3, frame, spawnIndex, spawn, chapterNumber);
     }
 };

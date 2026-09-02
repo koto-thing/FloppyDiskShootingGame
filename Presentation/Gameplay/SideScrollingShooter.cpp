@@ -788,11 +788,15 @@ void SideScrollingShooter::Tick() {
     }
     if (firedPlayerShot) PlayShotSound();
 
-    Stage::EnemySpawnRule spawn;
     if (!m_bossBattle && !m_chapterResultActive &&
-        (m_stageNumber != 5 || m_stage5Phase == Stage5Phase::Approach) &&
-        m_stage->TrySelectEnemySpawn(m_frame, spawn, m_chapterNumber)) {
-        SpawnEnemy(spawn.enemyType, spawn.sideX, spawn.railX, spawn.y, spawn.railZ);
+        (m_stageNumber != 5 || m_stage5Phase == Stage5Phase::Approach)) {
+        for (int spawnIndex = 0;; ++spawnIndex) {
+            Stage::EnemySpawnRule spawn;
+            if (!m_stage->TrySelectEnemySpawn(m_frame, spawnIndex, spawn, m_chapterNumber)) {
+                break;
+            }
+            SpawnEnemy(spawn.enemyType, spawn.sideX, spawn.railX, spawn.y, spawn.railZ);
+        }
     }
 
     TickEnemies();
@@ -1390,6 +1394,12 @@ void SideScrollingShooter::InitializeRailObjects() {
             m_stage->ConfigureBossRailAnchor(enemy);
             continue;
         }
+        if (enemy.type == Stage::SquareShooterEnemy) {
+            enemy.z = ToRailZFromSideX(enemy.transitionSideX);
+            enemy.baseX = enemy.railAnchorX;
+            enemy.x = enemy.railAnchorX;
+            continue;
+        }
         enemy.baseX = enemy.type == 2 ? 0.0f : (std::clamp)(enemy.baseX, -0.76f, 0.76f);
         enemy.x = enemy.baseX;
     }
@@ -1520,6 +1530,7 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
         if (enemy.active) continue;
         enemy.active = true;
         m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
+        enemy.railAnchorX = railX;
         // 出現テーブルの座標に関わらず、敵機全体が表示領域外から入る位置に固定する
         enemy.baseX = IsRailGameplayActive() ? railX : (std::max)(sideX, SideEnemyEntryX);
         enemy.x = enemy.baseX;
