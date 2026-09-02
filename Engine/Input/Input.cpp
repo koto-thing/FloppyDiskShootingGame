@@ -3,9 +3,11 @@
 #include "WindowsInputBackend.h"
 
 std::array<bool, static_cast<std::size_t>(KeyCode::Count)> Input::m_currentKeys{};
-std::array<bool, static_cast<std::size_t>(KeyCode::Count)> Input::m_previousKeys{};
+std::array<bool, static_cast<std::size_t>(KeyCode::Count)> Input::m_keyDown{};
+std::array<bool, static_cast<std::size_t>(KeyCode::Count)> Input::m_keyUp{};
 std::array<bool, static_cast<std::size_t>(MouseButton::Count)> Input::m_currentMouseButtons{};
-std::array<bool, static_cast<std::size_t>(MouseButton::Count)> Input::m_previousMouseButtons{};
+std::array<bool, static_cast<std::size_t>(MouseButton::Count)> Input::m_mouseButtonDown{};
+std::array<bool, static_cast<std::size_t>(MouseButton::Count)> Input::m_mouseButtonUp{};
 Vector2 Input::m_mousePosition{};
 Vector2 Input::m_mouseDelta{};
 float Input::m_mouseWheelDelta = 0.0f;
@@ -18,9 +20,11 @@ float Input::m_mouseWheelDelta = 0.0f;
 bool Input::Initialize(HWND hwnd) {
     // すべてのデジタル入力状態を未入力に戻す
     m_currentKeys.fill(false);
-    m_previousKeys.fill(false);
+    m_keyDown.fill(false);
+    m_keyUp.fill(false);
     m_currentMouseButtons.fill(false);
-    m_previousMouseButtons.fill(false);
+    m_mouseButtonDown.fill(false);
+    m_mouseButtonUp.fill(false);
 
     // フレーム内に蓄積するアナログ入力を初期化する
     m_mousePosition = {};
@@ -34,9 +38,11 @@ bool Input::Initialize(HWND hwnd) {
  * @brief 新しいフレームの入力受付を開始する
  */
 void Input::BeginFrame() {
-    // 現在のデジタル入力を前フレームの状態として保存する
-    m_previousKeys = m_currentKeys;
-    m_previousMouseButtons = m_currentMouseButtons;
+    // 前フレームで発生したデジタル入力イベントを消去する
+    m_keyDown.fill(false);
+    m_keyUp.fill(false);
+    m_mouseButtonDown.fill(false);
+    m_mouseButtonUp.fill(false);
 
     // フレーム単位で扱う移動量とホイール量をリセットする
     m_mouseDelta = {};
@@ -60,7 +66,7 @@ bool Input::GetKey(KeyCode key) {
  */
 bool Input::GetKeyDown(KeyCode key) {
     const auto index = static_cast<std::size_t>(key);
-    return index < m_currentKeys.size() && m_currentKeys[index] && !m_previousKeys[index];
+    return index < m_keyDown.size() && m_keyDown[index];
 }
 
 /**
@@ -70,7 +76,7 @@ bool Input::GetKeyDown(KeyCode key) {
  */
 bool Input::GetKeyUp(KeyCode key) {
     const auto index = static_cast<std::size_t>(key);
-    return index < m_currentKeys.size() && !m_currentKeys[index] && m_previousKeys[index];
+    return index < m_keyUp.size() && m_keyUp[index];
 }
 
 /**
@@ -90,7 +96,7 @@ bool Input::GetMouseButton(MouseButton button) {
  */
 bool Input::GetMouseButtonDown(MouseButton button) {
     const auto index = static_cast<std::size_t>(button);
-    return index < m_currentMouseButtons.size() && m_currentMouseButtons[index] && !m_previousMouseButtons[index];
+    return index < m_mouseButtonDown.size() && m_mouseButtonDown[index];
 }
 
 /**
@@ -100,7 +106,7 @@ bool Input::GetMouseButtonDown(MouseButton button) {
  */
 bool Input::GetMouseButtonUp(MouseButton button) {
     const auto index = static_cast<std::size_t>(button);
-    return index < m_currentMouseButtons.size() && !m_currentMouseButtons[index] && m_previousMouseButtons[index];
+    return index < m_mouseButtonUp.size() && m_mouseButtonUp[index];
 }
 
 /**
@@ -146,7 +152,9 @@ void Input::SetNativeKeyState(UINT virtualKey, bool isPressed) {
     // 対応する抽象キーを検索して状態を更新する
     for (std::size_t i = 1; i < m_currentKeys.size(); ++i) {
         if (ToVirtualKey(static_cast<KeyCode>(i)) == static_cast<int>(virtualKey)) {
+            if (m_currentKeys[i] == isPressed) return;
             m_currentKeys[i] = isPressed;
+            (isPressed ? m_keyDown : m_keyUp)[i] = true;
             return;
         }
     }
@@ -159,9 +167,9 @@ void Input::SetNativeKeyState(UINT virtualKey, bool isPressed) {
  */
 void Input::SetMouseButtonState(MouseButton button, bool isPressed) {
     const auto index = static_cast<std::size_t>(button);
-    if (index < m_currentMouseButtons.size()) {
-        m_currentMouseButtons[index] = isPressed;
-    }
+    if (index >= m_currentMouseButtons.size() || m_currentMouseButtons[index] == isPressed) return;
+    m_currentMouseButtons[index] = isPressed;
+    (isPressed ? m_mouseButtonDown : m_mouseButtonUp)[index] = true;
 }
 
 /**

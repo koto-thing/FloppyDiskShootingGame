@@ -7,6 +7,8 @@
 #include <string_view>
 
 #include "../../Engine/Graphics/Renderer.h"
+#include "Models/AircraftModelView.h"
+#include "Models/StageEnemyModelView.h"
 #include "SideScrollingShooterShared.h"
 
 namespace {
@@ -14,8 +16,6 @@ using SideScrollingShooterShared::SideCameraZ;
 using SideScrollingShooterShared::SideCameraFieldOfView;
 using SideScrollingShooterShared::BossNameRevealFrames;
 
-constexpr float PlayerColor[4] = { 0.80f, 0.80f, 0.85f, 1.0f };
-constexpr float PlayerAccent[4] = { 0.10f, 0.90f, 0.90f, 1.0f };
 constexpr float EnemyColor[4] = { 0.90f, 0.12f, 0.12f, 1.0f };
 constexpr float EnemyAccent[4] = { 1.00f, 0.55f, 0.08f, 1.0f };
 constexpr float PlayerShotColor[4] = { 0.15f, 1.00f, 0.25f, 1.0f };
@@ -25,6 +25,20 @@ constexpr float ScoreItemColor[4] = { 0.25f, 0.90f, 1.00f, 1.0f };
 
 constexpr int MissionBannerGlyphDelayFrames = 4;
 constexpr int MissionBannerGlyphPopFrames = 8;
+
+/**
+ * @brief 画面揺れの残りフレームから減衰率を取得する
+ * @param remainingFrames 残りフレーム数
+ * @param durationFrames 総フレーム数
+ * @return 0から1の減衰率
+ */
+constexpr float ScreenShakeDecay(int remainingFrames, int durationFrames) {
+    return durationFrames > 0 ?
+        static_cast<float>(remainingFrames) / static_cast<float>(durationFrames) : 0.0f;
+}
+
+static_assert(ScreenShakeDecay(18, 18) == 1.0f);
+static_assert(ScreenShakeDecay(0, 18) == 0.0f);
 
 /**
  * @brief 文字の登場経過に対応する拡大率を取得する
@@ -56,23 +70,28 @@ Vector3 RotateYawOffset(float x, float y, float z, float yaw) {
 #include "Stages/Common/StageDispatch.h"
 
 void SideScrollingShooter::ConfigureSideCamera(Camera3D& camera, Renderer& renderer) const {
+    const Vector2 shake = ScreenShakeOffset();
+    const float cameraY = StageDispatch::SideCameraY(*this);
+
     // 2DモードはXY移動平面を3Dカメラで正面から見て奥行きを持たせる
     camera.SetViewport({0, 0, renderer.Width(), renderer.Height()});
     camera.SetProjectionMode(ProjectionMode::Perspective);
     camera.SetFieldOfView(Math::ToRadians(SideCameraFieldOfView));
     camera.SetNearClip(0.1f);
     camera.SetFarClip(80.0f);
-    camera.SetPosition({0.0f, 0.0f, SideCameraZ});
-    camera.LookAt({0.0f, 0.0f, SidePlaneZ});
+    camera.SetPosition({shake.x, cameraY + shake.y, SideCameraZ});
+    camera.LookAt({shake.x, cameraY + shake.y, SidePlaneZ});
 }
 
 void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, Renderer& renderer) const {
     const float railWeight = RailBlend();
+    const Vector2 shake = ScreenShakeOffset();
+    const float sideCameraY = StageDispatch::SideCameraY(*this);
 
     const Vector3 playerPosition{ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ};
     // 2Dモードと同じカメラ状態から、3Dレールの追従カメラへ補間する
-    const Vector3 sidePosition{0.0f, 0.0f, SideCameraZ};
-    const Vector3 sideTarget{0.0f, 0.0f, SidePlaneZ};
+    const Vector3 sidePosition{0.0f, sideCameraY, SideCameraZ};
+    const Vector3 sideTarget{0.0f, sideCameraY, SidePlaneZ};
     Vector3 railPosition{playerPosition.x * 0.18f, playerPosition.y * 0.12f + 1.0f, PlayerRailZ - 15.5f};
     Vector3 railTarget{playerPosition.x * 0.28f, playerPosition.y * 0.18f, PlayerRailZ + 22.0f};
 
@@ -82,8 +101,9 @@ void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, Renderer& rende
     camera.SetFieldOfView(Math::ToRadians(38.0f + (8.0f * railWeight)));
     camera.SetNearClip(0.1f);
     camera.SetFarClip(StageDispatch::CameraFarClip(*this));
-    camera.SetPosition(Vector3::Lerp(sidePosition, railPosition, railWeight));
-    camera.LookAt(Vector3::Lerp(sideTarget, railTarget, railWeight));
+    const Vector3 shakeOffset{shake.x, shake.y, 0.0f};
+    camera.SetPosition(Vector3::Lerp(sidePosition, railPosition, railWeight) + shakeOffset);
+    camera.LookAt(Vector3::Lerp(sideTarget, railTarget, railWeight) + shakeOffset);
 }
 
 void SideScrollingShooter::DrawShape(Renderer& renderer,
@@ -227,19 +247,15 @@ void SideScrollingShooter::DrawPlayerModel(Renderer& renderer, const Camera3D& c
     float x, float y, float z, bool visible, float yaw) {
     if (!visible) return;
 
-    // 自機は円錐の機首、箱の胴体、三角柱の翼で構成する(仮)
-    Vector3 offset = RotateYawOffset(0.0f, 0.0f, 0.0f, yaw);
-    DrawModelPrimitive(renderer, camera, 1, x + offset.x, y + offset.y, z + offset.z,
-        0.58f, 0.32f, 1.35f, PlayerColor, yaw);
-    offset = RotateYawOffset(0.0f, 0.0f, 0.82f, yaw);
-    DrawModelPrimitive(renderer, camera, 3, x + offset.x, y + offset.y, z + offset.z,
-        0.42f, 0.42f, 0.78f, PlayerAccent, yaw);
-    offset = RotateYawOffset(-0.75f, 0.0f, -0.08f, yaw);
-    DrawModelPrimitive(renderer, camera, 4, x + offset.x, y + offset.y, z + offset.z,
-        1.15f, 0.12f, 0.62f, PlayerAccent, yaw);
-    offset = RotateYawOffset(0.75f, 0.0f, -0.08f, yaw);
-    DrawModelPrimitive(renderer, camera, 4, x + offset.x, y + offset.y, z + offset.z,
-        1.15f, 0.12f, 0.62f, PlayerAccent, yaw);
+    // ゲーム本編とギャラリーで同じ機体定義を共有する
+    auto drawPart = [&](int shape, const Vector3& partPosition, const Vector3& partScale,
+        const float color[4], float partYaw, float pitch) {
+        (void)pitch;
+        DrawModelPrimitive(renderer, camera, shape,
+            partPosition.x, partPosition.y, partPosition.z,
+            partScale.x, partScale.y, partScale.z, color, partYaw);
+    };
+    AircraftModelView::DrawPlayer({x, y, z}, yaw, 1.0f, drawPart);
 }
 
 void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& camera,
@@ -328,20 +344,43 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
         return;
     }
 
-    // 通常敵は奥から来る小型機として描画する
+    // 通常敵もギャラリーと共有するステージ固有モデルで描画する
     const float scale = enemy.behavior != nullptr ? enemy.behavior->RenderScale() : 1.0f;
-    Vector3 offset = RotateYawOffset(0.0f, 0.0f, 0.0f, yaw);
-    DrawModelPrimitive(renderer, camera, 1, x + offset.x, y + offset.y, z + offset.z,
-        0.65f * scale, 0.42f * scale, 1.0f * scale, EnemyColor, yaw);
-    offset = RotateYawOffset(0.0f, 0.0f, -0.68f * scale, yaw);
-    DrawModelPrimitive(renderer, camera, 3, x + offset.x, y + offset.y, z + offset.z,
-        0.45f * scale, 0.45f * scale, 0.68f * scale, EnemyAccent, yaw);
-    offset = RotateYawOffset(-0.75f * scale, 0.0f, 0.0f, yaw);
-    DrawModelPrimitive(renderer, camera, 4, x + offset.x, y + offset.y, z + offset.z,
-        0.9f * scale, 0.10f, 0.5f * scale, EnemyAccent, yaw);
-    offset = RotateYawOffset(0.75f * scale, 0.0f, 0.0f, yaw);
-    DrawModelPrimitive(renderer, camera, 4, x + offset.x, y + offset.y, z + offset.z,
-        0.9f * scale, 0.10f, 0.5f * scale, EnemyAccent, yaw);
+    if (m_stageNumber >= 1 && m_stageNumber <= 4) {
+        const Matrix4x4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
+        auto drawPart = [&](PrimitiveShape shape, const Matrix4x4& world, const ColorF& color) {
+            renderer.Draw({shape, viewProjection * world, Vector3::One, color});
+        };
+        StageEnemyModelView::Draw(m_stageNumber, {x, y, z}, yaw + Math::Pi, scale, drawPart);
+        return;
+    }
+
+    // 専用モデルがない追加ステージは現行の共通機体を維持する
+    auto drawPart = [&](int shape, const Vector3& partPosition, const Vector3& partScale,
+        const float color[4], float partYaw, float pitch) {
+        (void)pitch;
+        DrawModelPrimitive(renderer, camera, shape, partPosition.x, partPosition.y, partPosition.z,
+            partScale.x, partScale.y, partScale.z, color, partYaw);
+    };
+    AircraftModelView::DrawEnemy({x, y, z}, yaw + Math::Pi, scale, drawPart);
+}
+
+/**
+ * @brief 現在フレームの画面揺れオフセットを取得する
+ * @return カメラへ加算するXYオフセット
+ */
+Vector2 SideScrollingShooter::ScreenShakeOffset() const {
+    if (m_screenShakeFrames <= 0 || m_screenShakeDurationFrames <= 0) return Vector2::Zero;
+
+    // 固定パターンへ残り時間の比率を掛け、終端へ向けて自然に減衰させる
+    constexpr Vector2 Pattern[] = {
+        {1.0f, -0.5f}, {-0.7f, 1.0f}, {0.4f, -0.8f}, {-1.0f, 0.3f},
+        {0.8f, 0.6f}, {-0.3f, -1.0f}, {0.6f, 0.2f}, {-0.8f, -0.4f}
+    };
+    const int elapsedFrames = m_screenShakeDurationFrames - m_screenShakeFrames;
+    const float decay = ScreenShakeDecay(m_screenShakeFrames, m_screenShakeDurationFrames);
+    constexpr int PatternCount = sizeof(Pattern) / sizeof(Pattern[0]);
+    return Pattern[elapsedFrames % PatternCount] * (m_screenShakeIntensity * decay);
 }
 
 

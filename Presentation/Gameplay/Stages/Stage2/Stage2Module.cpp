@@ -6,6 +6,7 @@
 #include "../../../../Infrastructure/ExternalServices/AudioService.h"
 #include "../../SideScrollingShooterEnemies.h"
 #include "../Common/StageDefinition.h"
+#include "Stage2BossModelView.h"
 #include "Stage2EnemySheet.h"
 #include "Stage2EnemySheetEasy.h"
 #include "Stage2EnemySheetHard.h"
@@ -18,6 +19,8 @@ using ShooterStages::Stage2::ShotKind;
 
 constexpr int Phase3FunnelEngineStartFrame = 26;
 constexpr int FunnelLaunchCullGraceFrames = 45;
+constexpr int DefeatExplosionIntervalFrames = 72;
+constexpr int DefeatExplosionCount = 3;
 constexpr float Phase3FunnelLaunchVelocity = 0.09f;
 constexpr float Phase3FunnelGravity = 0.0035f;
 constexpr float Phase3FunnelRise = Phase3FunnelEngineStartFrame * Phase3FunnelLaunchVelocity -
@@ -170,10 +173,15 @@ void SideScrollingShooter::Stage2Module::TickBoss(
         boss.phase = static_cast<float>(nextPhase);
         ChangeBossAction(shooter, nextPhase == 3 ? BossAction::Separating : BossAction::Idle);
         if (nextPhase == 3) {
-            boss.actionX = shooter.m_playerX;
-            boss.actionY = shooter.m_playerY;
-            boss.actionZ = shooter.IsRailGameplayActive() ?
-                PlayerRailZ : ToRailZFromSideX(boss.actionX);
+            // 主砲照準を現在の追従位置から始め、Phase切替時の瞬間的な張り付きを防ぐ
+            boss.actionX = boss.turretAimX;
+            boss.actionY = boss.turretAimY;
+            boss.actionZ = boss.turretAimZ;
+            // Phase 3開始時から各ハッチの初回射出を時間差にする
+            for (int hatch = 0; hatch < BossFunnelHatchCount; ++hatch) {
+                shooter.m_stage2.boss.funnelLaunchCooldowns[hatch] = 12 + hatch * 7;
+                shooter.m_stage2.boss.funnelLaunchCounts[hatch] = 0;
+            }
         }
         boss.collisionEnabled = true;
         boss.x = boss.baseX;
@@ -228,8 +236,8 @@ bool SideScrollingShooter::Stage2Module::HandleBossInteractionAfterTick(
         }
     }
 
-    // Phase 3は上部戦艦の船体だけで骨アーチとの接触を判定する
-    if (boss.phase >= 3.0f && !shooter.m_stage2.boneArchDestroyed) {
+    // 全Phaseで上部戦艦の船体と骨アーチとの接触を判定する
+    if (!shooter.m_stage2.boneArchDestroyed) {
         constexpr float BodyLocalX = 0.55f;
         constexpr float BodyLocalY = 0.95f;
         constexpr float ModelScale = 1.92f;
@@ -330,17 +338,32 @@ void SideScrollingShooter::Stage2Module::TickBossPhase3(
     const int beamCycle = shooter.m_stage2.boss.actionAge % RailgunCycleFrames;
     if (beamCycle == 0) {
         boss.attackWarningFrames = RailgunFireFrame;
-        boss.actionX = shooter.m_playerX;
-        boss.actionY = shooter.m_playerY;
-        boss.actionZ = shooter.IsRailGameplayActive() ?
-            PlayerRailZ : ToRailZFromSideX(boss.actionX);
+        boss.actionX = boss.turretAimX;
+        boss.actionY = boss.turretAimY;
+        boss.actionZ = boss.turretAimZ;
+    }
+    if (beamCycle < RailgunFireFrame) {
+        // 予告の前後はゆっくり、中央は素早く追従し、発射時に現在の照準へ固定する
+        const float trackingRate = ShooterStages::Stage2::Phase3MainGunTrackingRate(
+            beamCycle, RailgunFireFrame);
+        boss.actionX += (shooter.m_playerX - boss.actionX) * trackingRate;
+        boss.actionY += (shooter.m_playerY - boss.actionY) * trackingRate;
+        const float targetZ = shooter.IsRailGameplayActive() ?
+            PlayerRailZ : ToRailZFromSideX(shooter.m_playerX);
+        boss.actionZ += (targetZ - boss.actionZ) * trackingRate;
     }
     if (beamCycle == RailgunFireFrame && boss.bossPartHp[BossNose] > 0) {
         PlayRailgunSound(shooter);
     }
-    if (boss.age % 150 < 3) {
-        const int launchIndex = boss.age % 150;
-        LaunchFunnel(shooter, boss, boss.age / 150 * 3 + launchIndex, true);
+    // 各ハッチを独立したランダム間隔で待機させ、同一フレームの一斉射を避ける
+    for (int hatch = 0; hatch < BossFunnelHatchCount; ++hatch) {
+        if (boss.bossPartHp[BossFunnelHatch0 + hatch] <= 0) continue;
+        int& cooldown = shooter.m_stage2.boss.funnelLaunchCooldowns[hatch];
+        if (--cooldown > 0) continue;
+        LaunchFunnel(shooter, boss, hatch, true);
+        const int launchCount = shooter.m_stage2.boss.funnelLaunchCounts[hatch]++;
+        cooldown = ShooterStages::Stage2::Phase3FunnelLaunchInterval(hatch, launchCount);
+        break;
     }
     if (boss.age % 72 == 0) FireBossPartBarrage(shooter, boss);
 }
@@ -709,16 +732,29 @@ void SideScrollingShooter::Stage2Module::FireBossPartBarrage(
         BattleshipWorldY(shooter, boss),
         boss.z + shooter.m_stage2.boss.landBattleshipOffsetZ
     };
+    BossModelTransform battleship {
+        battleshipPosition, {}, yaw, ModelScale,
+        boss.phase >= 3.0f && shooter.m_stage2.boss.action != BossAction::Separating, true
+    };
+    battleship.secondaryAimTarget = {
+        ToWorldX(boss.turretAimX), ToWorldY(boss.turretAimY),
+        railMode ? boss.turretAimZ : SidePlaneZ
+    };
 
     // 毎フレーム移動する上部戦艦の描画位置へローカル砲塔座標を合成する
     for (int part = 0; part < BossRightEngine; ++part) {
+        if (part == BossNose && boss.phase < 3.0f) continue;
         if (boss.bossPartHp[part] <= 0) continue;
         const Vector3& local = PartPosition[part];
-        const Vector3 world {
+        const Vector3 partWorld {
             battleshipPosition.x + (local.x * cosine + local.z * sine) * ModelScale,
             battleshipPosition.y + local.y * ModelScale,
             battleshipPosition.z + (-local.x * sine + local.z * cosine) * ModelScale
         };
+        // 副砲は全Phaseで描画と同じ向きと砲身長を使い、砲口先端から射出する
+        const Vector3 world = part >= BossLeftWing && part <= BossLeftEngine ?
+            LandBattleshipView::SecondaryGunMuzzlePosition(battleship, part - BossLeftWing) :
+            partWorld;
         const int bulletCount = shooter.m_stage->BossPartBulletCount(
             static_cast<BossPart>(part), static_cast<BossPhase>(boss.bossPhase), railMode);
         for (int index = 0; index < bulletCount; ++index) {
@@ -797,6 +833,8 @@ float SideScrollingShooter::Stage2Module::EnemyShotHitRadius(
 
 bool SideScrollingShooter::Stage2Module::TickSpecialDebris(
     SideScrollingShooter& shooter, Debris& debris) {
+    static_assert((DefeatExplosionCount - 1) * DefeatExplosionIntervalFrames <
+        ResurfaceStartFrame);
     if (!debris.active || debris.stage2.kind == DebrisKind::None) return false;
 
     // ponytail: 固定長プールの先頭船体を都度探索する。容量拡大時はTickDebris開始時の参照キャッシュへ置換する
@@ -810,15 +848,24 @@ bool SideScrollingShooter::Stage2Module::TickSpecialDebris(
 
     // 下部船体は一旦沈み、最後の再浮上後に上部船体へ押し戻される
     if (debris.stage2.kind == DebrisKind::Sink) {
+        // 沈下中は短い大爆発音を約1.2秒間隔で鳴らす
+        if (debris.age > 0 &&
+            debris.age < DefeatExplosionCount * DefeatExplosionIntervalFrames &&
+            debris.age % DefeatExplosionIntervalFrames == 0) {
+            PlayDefeatSound(shooter, false);
+        }
+        const float groundTopY = Math::Lerp(-6.0f, -3.65f, shooter.RailBlend());
+        const float buriedY = groundTopY - debris.height * 0.55f;
         if (debris.stage2.effectAge >= 0) {
             debris.y -= 0.018f;
             ++debris.stage2.effectAge;
         } else if (debris.age < FirstSinkEndFrame) {
-            debris.y -= 0.0075f;
+            // 残りフレーム数で割り、船体上面まで確実に砂面下へ沈める
+            debris.y += (buriedY - debris.y) /
+                static_cast<float>(FirstSinkEndFrame - debris.age);
         } else if (debris.age >= ResurfaceStartFrame) {
-            const float groundTopY = Math::Lerp(-6.0f, -3.65f, shooter.RailBlend());
-            const float visibleTargetY = groundTopY - debris.height * 0.12f;
-            debris.y = (std::min)(visibleTargetY, debris.y + 0.026f);
+            const float resurfaceY = groundTopY + debris.height * 0.18f;
+            debris.y = (std::min)(resurfaceY, debris.y + 0.065f);
         }
         if (++debris.age >= debris.lifetime) debris.active = false;
         return true;
@@ -838,10 +885,12 @@ bool SideScrollingShooter::Stage2Module::TickSpecialDebris(
         if (lowerHullHit) {
             // 主船体がeffectAgeを開始した同フレームに後続部品も衝突済みとして扱う
             lowerHull->stage2.effectAge = 0;
+            shooter.SpawnExplosion(
+                FromWorldX(debris.x), FromWorldY(debris.y), debris.z, true);
             PlayDefeatSound(shooter, true);
         }
         if (!lowerHullHit && !collisionStarted) {
-            debris.y -= 0.012f;
+            debris.y -= 0.032f;
             debris.yaw += debris.spin * 0.18f;
             if (++debris.age >= debris.lifetime) debris.active = false;
             return true;
@@ -929,16 +978,16 @@ void SideScrollingShooter::Stage2Module::PlayDefeatSound(
     SideScrollingShooter& shooter, bool finalExplosion) {
     if (!shooter.m_audio) return;
 
-    // 低域ノイズの長さと落下量を切り替えてゴゴゴ音とドカーン音を作る
+    // 短い低域ノイズで間隔のある大爆発音と最後のドカーン音を作る
     Audio::SfxrParams sound;
     sound.waveType = Audio::SfxrWaveType::Noise;
-    sound.startFrequency = finalExplosion ? 0.24f : 0.10f;
-    sound.minFrequency = finalExplosion ? 0.01f : 0.06f;
-    sound.slide = finalExplosion ? -0.32f : -0.015f;
-    sound.attackTime = finalExplosion ? 0.0f : 0.08f;
-    sound.sustainTime = finalExplosion ? 0.42f : 1.10f;
-    sound.decayTime = finalExplosion ? 0.90f : 0.72f;
-    sound.masterVolume = finalExplosion ? 0.95f : 0.42f;
+    sound.startFrequency = finalExplosion ? 0.24f : 0.20f;
+    sound.minFrequency = finalExplosion ? 0.01f : 0.025f;
+    sound.slide = finalExplosion ? -0.32f : -0.24f;
+    sound.attackTime = 0.0f;
+    sound.sustainTime = finalExplosion ? 0.42f : 0.18f;
+    sound.decayTime = finalExplosion ? 0.90f : 0.38f;
+    sound.masterVolume = finalExplosion ? 0.95f : 0.78f;
     shooter.m_audio->PlaySE(sound);
 
     // 最終爆発だけ低い衝撃音を足して爆発の芯を強める

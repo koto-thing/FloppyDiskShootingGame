@@ -39,6 +39,7 @@ BossStory SideScrollingShooter::StageDispatch::Story(int stageNumber) {
 void SideScrollingShooter::StageDispatch::ResetGimmicks(SideScrollingShooter& shooter) {
     Stage1Module::Reset(shooter);
     Stage2Module::Reset(shooter);
+    Stage3Module::Reset(shooter);
 }
 
 void SideScrollingShooter::StageDispatch::ResetScriptState(SideScrollingShooter& shooter) {
@@ -170,6 +171,7 @@ bool SideScrollingShooter::StageDispatch::TryDamageStageTarget(
     switch (shooter.m_stageNumber) {
     case 1: return Stage1Module::TryDamageTarget(shooter, shot);
     case 2: return Stage2Module::TryDamageStageTarget(shooter, shot);
+    case 3: return Stage3Module::TryDamageStageTarget(shooter, shot);
     case 5: return Stage5Module::TryDamageStageTarget(shooter, shot);
     default: return false;
     }
@@ -181,6 +183,7 @@ bool SideScrollingShooter::StageDispatch::TryHitBossPart(
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::TryHitBossPart(shooter, shot, boss, part);
     case 4: return Stage4Module::TryHitBossPart(shooter, shot, boss, part);
+    case 3: return Stage3Module::TryHitBossPart(shooter, shot, boss, part);
     case 5: return Stage5Module::TryHitBossPart(shooter, shot, boss, part);
     default: return shooter.TryHitDefaultBossPart(shot, boss, part);
     }
@@ -194,10 +197,17 @@ bool SideScrollingShooter::StageDispatch::TryHitBossBody(
     }
 }
 
+bool SideScrollingShooter::StageDispatch::BlocksPlayerShot(
+    const SideScrollingShooter& shooter, const Shot& shot, const Enemy& boss) {
+    return shooter.m_stageNumber == 3 &&
+        Stage3Module::BlocksPlayerShot(shooter, shot, boss);
+}
+
 bool SideScrollingShooter::StageDispatch::CanHitBossWhileCollisionDisabled(
     const SideScrollingShooter& shooter) {
     switch (shooter.m_stageNumber) {
     case 2: return true;
+    case 3: return true;
     default: return false;
     }
 }
@@ -210,6 +220,8 @@ void SideScrollingShooter::StageDispatch::FireBossPartBarrage(
         break;
     case 4:
         Stage4Module::FireBossPartBarrage(shooter, boss);
+    case 3:
+        Stage3Module::FireBossPartBarrage(shooter, boss);
         break;
     default:
         shooter.FireBossPartBarrage(boss);
@@ -225,6 +237,8 @@ void SideScrollingShooter::StageDispatch::TickSpecialShotBeforeMove(
         break;
     case 4:
         Stage4Module::TickSpecialShotBeforeMove(shooter, shot);
+    case 3:
+        Stage3Module::TickSpecialShotBeforeMove(shooter, shot);
         break;
     }
 }
@@ -248,6 +262,7 @@ bool SideScrollingShooter::StageDispatch::IsShotCullProtected(
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::IsShotCullProtected(shot);
     case 4: return Stage4Module::IsShotCullProtected(shot);
+    case 3: return Stage3Module::IsShotCullProtected(shot);
     default: return false;
     }
 }
@@ -257,6 +272,7 @@ float SideScrollingShooter::StageDispatch::EnemyShotHitRadius(
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::EnemyShotHitRadius(shot, shooter.IsRailGameplayActive());
     case 4: return Stage4Module::EnemyShotHitRadius(shot, shooter.IsRailGameplayActive());
+    case 3: return Stage3Module::EnemyShotHitRadius(shot, shooter.IsRailGameplayActive());
     default: return shooter.IsRailGameplayActive() ? 0.28f : 0.022f;
     }
 }
@@ -290,6 +306,7 @@ bool SideScrollingShooter::StageDispatch::SpawnBossDebris(
     SideScrollingShooter& shooter, const Enemy& enemy, int bossPart) {
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::SpawnBossDebris(shooter, enemy, bossPart);
+    case 3: return Stage3Module::SpawnBossDebris(shooter, enemy, bossPart);
     case 4: return Stage4Module::SpawnBossDebris(shooter, enemy, bossPart);
     case 5: return Stage5Module::SpawnBossDebris(shooter, enemy, bossPart);
     default: return false;
@@ -340,6 +357,7 @@ bool SideScrollingShooter::StageDispatch::DrawBossModel(
     const Camera3D& camera, const Enemy& enemy, float yaw) {
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::DrawBossModel(shooter, renderer, camera, enemy, yaw);
+    case 3: return Stage3Module::DrawBossModel(shooter, renderer, camera, enemy, yaw);
     case 4: return Stage4Module::DrawBossModel(shooter, renderer, camera, enemy, yaw);
     case 5: return Stage5Module::DrawBossModel(shooter, renderer, camera, enemy);
     default: return false;
@@ -349,6 +367,9 @@ bool SideScrollingShooter::StageDispatch::DrawBossModel(
 void SideScrollingShooter::StageDispatch::ApplyCameraCorrection(
     const SideScrollingShooter& shooter, Vector3& railPosition, Vector3& railTarget) {
     switch (shooter.m_stageNumber) {
+    case 3:
+        Stage3Module::ApplyCameraCorrection(shooter, railPosition, railTarget);
+        break;
     case 5:
         Stage5Module::ApplyCameraCorrection(shooter, railPosition, railTarget);
         break;
@@ -358,6 +379,7 @@ void SideScrollingShooter::StageDispatch::ApplyCameraCorrection(
 float SideScrollingShooter::StageDispatch::CameraFarClip(
     const SideScrollingShooter& shooter) {
     switch (shooter.m_stageNumber) {
+    case 3: return 160.0f;
     case 5: return Stage5Module::CameraFarClip();
     default: return 120.0f;
     }
@@ -367,6 +389,7 @@ float SideScrollingShooter::StageDispatch::RailGroundY(
     const SideScrollingShooter& shooter) {
     switch (shooter.m_stageNumber) {
     case 1: return -3.275f;
+    case 3: return Stage3Module::RailGroundY(shooter);
     default: return -3.65f;
     }
 }
@@ -374,6 +397,7 @@ float SideScrollingShooter::StageDispatch::RailGroundY(
 bool SideScrollingShooter::StageDispatch::ShouldDrawEnemy(
     const SideScrollingShooter& shooter, const Enemy& enemy) {
     switch (shooter.m_stageNumber) {
+    case 3: return Stage3Module::ShouldDrawEnemy(shooter, enemy);
     case 5: return Stage5Module::ShouldDrawEnemy(shooter, enemy);
     default: return true;
     }
@@ -431,6 +455,9 @@ bool SideScrollingShooter::StageDispatch::DrawSpecialShot(
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
     case 4: return Stage4Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
+    case 3:
+        if (Stage3Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw)) return true;
+        return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
     default: return false;
     }
 }
@@ -449,6 +476,7 @@ bool SideScrollingShooter::StageDispatch::DrawSpecialDebris(
 bool SideScrollingShooter::StageDispatch::IsViewLocked(
     const SideScrollingShooter& shooter) {
     switch (shooter.m_stageNumber) {
+    case 3: return Stage3Module::IsViewLocked(shooter);
     case 5: return Stage5Module::IsViewLocked(shooter);
     default: return false;
     }
@@ -486,7 +514,30 @@ bool SideScrollingShooter::StageDispatch::HasNextStage(
 void SideScrollingShooter::StageDispatch::TickBossIntroduction(SideScrollingShooter& shooter) {
     if (shooter.m_stageNumber == 1) {
         Stage1Module::TickBossIntroduction(shooter);
+    } else if (shooter.m_stageNumber == 3) {
+        Stage3Module::TickBossIntroduction(shooter);
     }
+}
+
+float SideScrollingShooter::StageDispatch::RailPlayerMaxY(
+    const SideScrollingShooter& shooter) {
+    return shooter.m_stageNumber == 3 ? Stage3Module::RailPlayerMaxY(shooter) : 0.9f;
+}
+
+float SideScrollingShooter::StageDispatch::SideCameraY(
+    const SideScrollingShooter& shooter) {
+    return shooter.m_stageNumber == 3 ? Stage3Module::SideCameraY(shooter) : 0.0f;
+}
+
+Vector2 SideScrollingShooter::StageDispatch::SidePlayerYRange(
+    const SideScrollingShooter& shooter) {
+    return shooter.m_stageNumber == 3 ? Stage3Module::SidePlayerYRange(shooter) :
+        Vector2 {Side2DPlayerMinY, Side2DPlayerMaxY};
+}
+
+bool SideScrollingShooter::StageDispatch::CanEnemyShotDamagePlayer(
+    const SideScrollingShooter& shooter, const Shot& shot) {
+    return shooter.m_stageNumber != 3 || Stage3Module::CanEnemyShotDamagePlayer(shot);
 }
 
 int SideScrollingShooter::StageDispatch::BossIntroductionFrames(
@@ -494,6 +545,7 @@ int SideScrollingShooter::StageDispatch::BossIntroductionFrames(
     switch (shooter.m_stageNumber) {
     case 1: return Stage1Module::BossIntroductionFrames();
     case 2: return Stage2Module::BossIntroductionFrames();
+    case 3: return Stage3Module::BossIntroductionFrames();
     default: return 1;
     }
 }

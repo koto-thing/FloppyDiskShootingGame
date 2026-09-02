@@ -1,0 +1,4 @@
+interface:
+  display_name: "Gallery Exhibit"
+  short_description: "Add models and animations to the in-game gallery"
+  default_prompt: "Add the requested model or animation exhibit to GalleryScene and connect its unlock condition."

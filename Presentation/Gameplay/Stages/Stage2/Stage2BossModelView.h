@@ -139,6 +139,22 @@ public:
     static constexpr int PrimitiveCount = 53;
 
     /**
+     * @brief 指定した副砲の砲口先端ワールド座標を取得する
+     * @param transform 陸上戦艦ユニットの親Transformと副砲の照準先
+     * @param gunIndex 副砲番号
+     * @return 描画中の砲身先端と一致するワールド座標
+     */
+    static Vector3 SecondaryGunMuzzlePosition(
+        const BossModelTransform& transform, int gunIndex) {
+        constexpr float BarrelCenterDistance = 1.10f;
+        constexpr float BarrelLength = 1.35f;
+        const Vector3 position = SecondaryGunPosition(gunIndex);
+        const Vector3 pivot {position.x, position.y + 0.26f, position.z};
+        return GunPosition(transform, transform.secondaryGunsTrackTarget,
+            transform.secondaryAimTarget, pivot, BarrelCenterDistance + BarrelLength * 0.5f);
+    }
+
+    /**
      * @brief 陸上戦艦をローカル部品の組み合わせで描画する
      * @param transform 陸上戦艦ユニットの親Transform
      * @param drawPart 形状、ワールド座標、寸法、色、向きを受け取る描画関数
@@ -182,12 +198,9 @@ public:
         }
 
         // 三基の副砲を独立描画し、破壊した砲だけ輪郭から取り除く
-        constexpr Vector3 SecondaryGunPositions[] = {
-            {-0.55f, 2.34f, -0.92f}, {0.65f, 2.34f, 0.0f}, {2.85f, 1.92f, 0.92f}
-        };
         for (int i = 0; i < 3; ++i) {
             if (!damage.secondaryGuns[i]) continue;
-            const Vector3& position = SecondaryGunPositions[i];
+            const Vector3 position = SecondaryGunPosition(i);
             const float* darkColor = damage.secondaryGunsHit[i] ? Hit : Dark;
             Part(transform, drawPart, 2, position, {0.76f, 0.46f, 0.76f}, darkColor);
             const Vector3 pivot {position.x, position.y + 0.26f, position.z};
@@ -229,6 +242,42 @@ public:
 
 private:
     /**
+     * @brief 指定した副砲のローカル基部座標を取得する
+     * @param gunIndex 副砲番号
+     * @return 副砲のローカル基部座標
+     */
+    static constexpr Vector3 SecondaryGunPosition(int gunIndex) {
+        constexpr Vector3 Positions[] = {
+            {-0.55f, 2.34f, -0.92f}, {0.65f, 2.34f, 0.0f}, {2.85f, 1.92f, 0.92f}
+        };
+        return Positions[gunIndex];
+    }
+
+    /**
+     * @brief 砲塔支点から砲口方向へ進めたワールド座標を取得する
+     * @param transform 親Transform
+     * @param tracksTarget 照準先へ向ける場合true
+     * @param aimTarget 照準先
+     * @param localPivot 砲塔基部のローカル座標
+     * @param distance 基部から砲口方向への距離
+     * @return 指定距離にあるワールド座標
+     */
+    static Vector3 GunPosition(const BossModelTransform& transform, bool tracksTarget,
+        const Vector3& aimTarget, const Vector3& localPivot, float distance) {
+        const float cosine = std::cos(transform.yaw);
+        const float sine = std::sin(transform.yaw);
+        const Vector3 pivot {
+            transform.position.x + (localPivot.x * cosine + localPivot.z * sine) * transform.scale,
+            transform.position.y + localPivot.y * transform.scale,
+            transform.position.z + (-localPivot.x * sine + localPivot.z * cosine) * transform.scale
+        };
+        const Vector3 delta = tracksTarget ? aimTarget - pivot : Vector3 {-cosine, 0.0f, sine};
+        const float length = (std::max)(0.001f,
+            std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z));
+        return pivot + delta / length * (distance * transform.scale);
+    }
+
+    /**
      * @brief 砲塔基部を支点に照準先へ向けた部品を描画する
      * @param transform 親Transformと照準先
      * @param drawPart 描画関数
@@ -257,7 +306,8 @@ private:
         const float length = (std::max)(0.001f, std::sqrt(horizontal * horizontal + delta.y * delta.y));
         const float gunYaw = std::atan2(delta.z, -delta.x);
         const float gunPitch = -std::asin(delta.y / length);
-        const Vector3 position = pivot + delta / length * (distance * transform.scale);
+        const Vector3 position = GunPosition(
+            transform, tracksTarget, aimTarget, localPivot, distance);
         drawPart(shape, position, scale * transform.scale, color, gunYaw, gunPitch);
     }
 

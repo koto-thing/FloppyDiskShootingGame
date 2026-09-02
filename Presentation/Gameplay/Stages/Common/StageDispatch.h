@@ -169,6 +169,16 @@ public:
         const Shot& shot, const Enemy& boss);
 
     /**
+     * @brief ダメージ対象外のボス船体が自機弾を遮るか判定する
+     * @param shooter 現在のゲーム状態
+     * @param shot 判定する自機弾
+     * @param boss 判定するボス
+     * @return 船体が弾を遮る場合true
+     */
+    static bool BlocksPlayerShot(const SideScrollingShooter& shooter,
+        const Shot& shot, const Enemy& boss);
+
+    /**
      * @brief 接触判定が無効なボスへ部位・船体弾判定を継続するか判定する
      * @param shooter 判定対象
      * @return 専用露出部位への判定を継続する場合true、無効なボス判定を省略する場合false
@@ -221,6 +231,15 @@ public:
      * @return 現在表示モードに対応する命中半径
      */
     static float EnemyShotHitRadius(
+        const SideScrollingShooter& shooter, const Shot& shot);
+
+    /**
+     * @brief 現在ステージの敵弾がプレイヤーへ命中可能か判定する
+     * @param shooter 判定対象
+     * @param shot 判定する敵弾
+     * @return 命中可能な場合true
+     */
+    static bool CanEnemyShotDamagePlayer(
         const SideScrollingShooter& shooter, const Shot& shot);
 
     /**
@@ -309,6 +328,20 @@ public:
         Vector3& railPosition, Vector3& railTarget);
 
     /**
+     * @brief 現在ステージの2DカメラY座標を取得する
+     * @param shooter 判定対象
+     * @return ワールド座標系のカメラY座標
+     */
+    static float SideCameraY(const SideScrollingShooter& shooter);
+
+    /**
+     * @brief 現在ステージの2D自機Y移動範囲を取得する
+     * @param shooter 判定対象
+     * @return Xを下限、Yを上限とするゲーム座標
+     */
+    static Vector2 SidePlayerYRange(const SideScrollingShooter& shooter);
+
+    /**
      * @brief 現在ステージのレールカメラFar Clipを取得する
      * @param shooter 判定対象
      * @return Far Clip
@@ -321,6 +354,13 @@ public:
      * @return ワールド座標系の地面上面Y
      */
     static float RailGroundY(const SideScrollingShooter& shooter);
+
+    /**
+     * @brief 現在ステージのレール視点自機Y座標上限を取得する
+     * @param shooter 判定対象
+     * @return ゲーム座標系のY座標上限
+     */
+    static float RailPlayerMaxY(const SideScrollingShooter& shooter);
 
     /**
      * @brief 現在の演出状態で指定敵を描画するか判定する
