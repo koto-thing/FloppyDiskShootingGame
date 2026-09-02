@@ -394,6 +394,11 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::CircleShooterEn
     return behavior;
 }
 
+const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::SquareShooterEnemyBehaviorInstance() {
+    static const SquareShooterEnemyBehavior behavior;
+    return behavior;
+}
+
 const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorForType(int type) {
     switch (type) {
     case 1:
@@ -406,6 +411,8 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorFo
         return ArmoredEnemyBehaviorInstance();
     case 5:
         return CircleShooterEnemyBehaviorInstance();
+    case 6:
+        return SquareShooterEnemyBehaviorInstance();
     default:
         return BasicEnemyBehaviorInstance();
     }
@@ -781,11 +788,15 @@ void SideScrollingShooter::Tick() {
     }
     if (firedPlayerShot) PlayShotSound();
 
-    Stage::EnemySpawnRule spawn;
     if (!m_bossBattle && !m_chapterResultActive &&
-        (m_stageNumber != 5 || m_stage5Phase == Stage5Phase::Approach) &&
-        m_stage->TrySelectEnemySpawn(m_frame, spawn, m_chapterNumber)) {
-        SpawnEnemy(spawn.enemyType, spawn.sideX, spawn.railX, spawn.y, spawn.railZ);
+        (m_stageNumber != 5 || m_stage5Phase == Stage5Phase::Approach)) {
+        for (int spawnIndex = 0;; ++spawnIndex) {
+            Stage::EnemySpawnRule spawn;
+            if (!m_stage->TrySelectEnemySpawn(m_frame, spawnIndex, spawn, m_chapterNumber)) {
+                break;
+            }
+            SpawnEnemy(spawn.enemyType, spawn.sideX, spawn.railX, spawn.y, spawn.railZ);
+        }
     }
 
     TickEnemies();
@@ -1383,6 +1394,12 @@ void SideScrollingShooter::InitializeRailObjects() {
             m_stage->ConfigureBossRailAnchor(enemy);
             continue;
         }
+        if (enemy.type == Stage::SquareShooterEnemy) {
+            enemy.z = ToRailZFromSideX(enemy.transitionSideX);
+            enemy.baseX = enemy.railAnchorX;
+            enemy.x = enemy.railAnchorX;
+            continue;
+        }
         enemy.baseX = enemy.type == 2 ? 0.0f : (std::clamp)(enemy.baseX, -0.76f, 0.76f);
         enemy.x = enemy.baseX;
     }
@@ -1390,6 +1407,21 @@ void SideScrollingShooter::InitializeRailObjects() {
         if (!shot.active) continue;
         shot.transitionSideX = shot.x;
         shot.transitionSideY = shot.y;
+        if (shot.enemy && shot.barrageCount < 0) {
+            constexpr int GridSize = 5;
+            constexpr float SpreadSpeed = 0.010f;
+            constexpr float RowScale = 1.4f;
+            const int barrageCount = -shot.barrageCount;
+            const int column = barrageCount == GridSize * GridSize ? shot.barrageIndex % GridSize : GridSize / 2;
+            const int row = barrageCount == GridSize * GridSize ? shot.barrageIndex / GridSize : shot.barrageIndex;
+            const float centerX = (std::clamp)(shot.x, -0.76f, 0.76f);
+            shot.x = centerX;
+            shot.z = ToRailZFromSideX(centerX);
+            shot.vx = static_cast<float>(column - GridSize / 2) * SpreadSpeed;
+            shot.vy = static_cast<float>(row - GridSize / 2) * SpreadSpeed * RowScale;
+            shot.vz = -0.58f;
+            continue;
+        }
         if (shot.enemy && shot.barrageCount > 0) {
             constexpr float Radius = 0.22f;
             constexpr float RingShotSpeed = 0.58f;
@@ -1449,6 +1481,24 @@ void SideScrollingShooter::InitializeSideObjects() {
         if (!shot.active) continue;
         shot.transitionSideX = shot.x;
         shot.transitionSideY = shot.y;
+        if (shot.enemy && shot.barrageCount < 0) {
+            constexpr int GridSize = 5;
+            constexpr float AimedShotSpeed = 0.018f;
+            constexpr float LineSpacing = 0.075f;
+            const int barrageCount = -shot.barrageCount;
+            if (barrageCount == GridSize * GridSize && shot.barrageIndex % GridSize != GridSize / 2) {
+                shot.active = false;
+                continue;
+            }
+            const int row = barrageCount == GridSize * GridSize ? shot.barrageIndex / GridSize : shot.barrageIndex;
+            shot.x = ToSideXFromRailZ(shot.z);
+            shot.y = shot.transitionSideY + static_cast<float>(row - GridSize / 2) * LineSpacing;
+            shot.z = ToRailZFromSideX(shot.x);
+            shot.vx = -AimedShotSpeed;
+            shot.vy = 0.0f;
+            shot.vz = 0.0f;
+            continue;
+        }
         if (shot.enemy && shot.barrageCount > 0) {
             constexpr float Radius = 0.22f;
             constexpr float AimedShotSpeed = 0.018f;
@@ -1475,19 +1525,12 @@ void SideScrollingShooter::InitializeSideObjects() {
 
 void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, float y, float railZ) {
     constexpr float SideEnemyEntryX = 2.80f;
-    static constexpr int SpawnableEnemyTypes[] = {
-        Stage::HeavyEnemy, Stage::StraightShooterEnemy,
-        Stage::ArmoredEnemy, Stage::CircleShooterEnemy
-    };
-    static_assert(sizeof(SpawnableEnemyTypes) / sizeof(SpawnableEnemyTypes[0]) == 4);
-    if (enemyType != Stage::BossEnemy) {
-        enemyType = SpawnableEnemyTypes[static_cast<int>(GameplayRandom::Range(0.0f, 3.999f))];
-    }
 
     for (auto& enemy : m_enemies) {
         if (enemy.active) continue;
         enemy.active = true;
         m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
+        enemy.railAnchorX = railX;
         // 出現テーブルの座標に関わらず、敵機全体が表示領域外から入る位置に固定する
         enemy.baseX = IsRailGameplayActive() ? railX : (std::max)(sideX, SideEnemyEntryX);
         enemy.x = enemy.baseX;
@@ -2383,9 +2426,10 @@ Stage5ModelTransform SideScrollingShooter::TayamaTransform() const {
 
     // 通常チャプターでは遠景の都市構造として見せ、後半ほど接近させる
     if (m_stage5Phase == Stage5Phase::Approach) {
+        const int chapterLength = m_stage != nullptr ? m_stage->ChapterFrameLength() : ChapterLengthFrames;
         const float chapterProgress = Math::Clamp01(
-            static_cast<float>(m_frame - (m_chapterNumber - 1) * ChapterLengthFrames) /
-            static_cast<float>(ChapterLengthFrames));
+            static_cast<float>(m_frame - (m_chapterNumber - 1) * chapterLength) /
+            static_cast<float>(chapterLength));
         y = -9.0f + static_cast<float>(m_chapterNumber - 1) * 2.4f + chapterProgress * 1.2f;
         z = 88.0f - static_cast<float>(m_chapterNumber - 1) * 6.0f;
         scale = 0.82f + static_cast<float>(m_chapterNumber - 1) * 0.12f;

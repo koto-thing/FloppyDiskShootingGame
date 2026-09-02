@@ -88,6 +88,7 @@ private:
     class Stage2BossEnemyBehavior;
     class StraightShooterEnemyBehavior;
     class CircleShooterEnemyBehavior;
+    class SquareShooterEnemyBehavior;
 
     struct Shot {
         float x = 0.0f;
@@ -196,6 +197,9 @@ private:
         float baseX = 0.0f;
         float baseY = 0.0f;
         float baseZ = 0.0f;
+        float railAnchorX = 0.0f;
+        float railAnchorY = 0.0f;
+        float railAnchorZ = 0.0f;
         float actionX = 0.0f;
         float actionY = 0.0f;
         float actionZ = 0.0f;
@@ -555,6 +559,7 @@ private:
     static const EnemyBehavior& Stage2BossEnemyBehaviorInstance();
     static const EnemyBehavior& StraightShooterEnemyBehaviorInstance();
     static const EnemyBehavior& CircleShooterEnemyBehaviorInstance();
+    static const EnemyBehavior& SquareShooterEnemyBehaviorInstance();
     static const EnemyBehavior& EnemyBehaviorForType(int type);
     void TickViewTransition();
     /**
