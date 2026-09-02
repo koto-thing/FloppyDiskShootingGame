@@ -16,6 +16,7 @@ void RunCameraTests();
 void RunGeometry3DTests();
 void RunUITests();
 void RunScoreRepositoryTests();
+void RunStage2BossModelViewTests();
 void RunStage4BossModelViewTests();
 void RunStage5ModelViewTests();
 #include <thread>
@@ -193,6 +194,7 @@ int main()
         RunGeometry3DTests();
         RunUITests();
         RunScoreRepositoryTests();
+        RunStage2BossModelViewTests();
         RunStage4BossModelViewTests();
         RunStage5ModelViewTests();
     } catch (const std::exception& exception) {
