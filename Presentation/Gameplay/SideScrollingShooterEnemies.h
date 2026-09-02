@@ -46,6 +46,7 @@ public:
     virtual void ConfigureBossSpawn(Enemy& enemy, bool railMode, int stageIndex) const {
         ConfigureStats(enemy, stageIndex);
         enemy.active = true;
+        enemy.collisionEnabled = true;
         enemy.x = 1.16f;
         enemy.y = 0.0f;
         enemy.z = railMode ? (stageIndex >= 2 ? 52.0f : 48.0f) : ToRailZFromSideX(enemy.x);
