@@ -54,28 +54,8 @@ inline constexpr BossStoryLine Stage1[] = {
 {"SYATEIGASHIRA KOTO", "Now die!!", true}                                                                       // KOTO: オラァ、死に晒せェ！！
 };
 inline constexpr BossStoryLine Stage2[] = {
-    {"MOMIJI", "So you're the head of the main syndicate office...", false},                                          // MOMIJI: あんたが本部の仕切り役……
-    {"MOMIJI", "Honbucho BOTAMOCHI.", false},                                                                         // MOMIJI: 本部長のBOTAMOCHIだな。
-    {"HONBUCHO BOTAMOCHI", "...(Evil laughter) Bota-mo~chi-mochi-mochi.", true},                                      // BOTAMOCHI: （邪悪な笑い声）……ぼたも～ちもちもち。
-    {"HONBUCHO BOTAMOCHI", "You've got some nerve stepping into my fortress, rogue cop.", true},                      // BOTAMOCHI: よくぞここまで嗅ぎつけてきたな、はぐれマッポが。
-    {"HONBUCHO BOTAMOCHI", "I hear KOTO and RYOTA both fell to your hands.", true},                                   // BOTAMOCHI: KOTOを叩き潰した腕前、見事なもんだ。
-    {"MOMIJI", "They put up a fight, but they're in custody now.", false},                                            // MOMIJI: 派手に暴れてくれたけどね。今はブタ箱ん中だ。
-    {"MOMIJI", "Now it's time to take down the brain behind the whole syndicate.", false},                            // MOMIJI: 次は組織の頭脳である、お前の番だよ。
-    {"HONBUCHO BOTAMOCHI", "(Evil laughter) Bota-mochi-mochi...", true},                                              // BOTAMOCHI: （邪悪な笑い声）ぼたもちもち……。
-    {"HONBUCHO BOTAMOCHI", "Those two were good men. True pillars of the PandD-kai.", true},                          // BOTAMOCHI: あいつらは優秀な舎弟だった。我がPANDD会を支える立派な柱よ。
-    {"HONBUCHO BOTAMOCHI", "And you crushed their pride.", true},                                                     // BOTAMOCHI: その男たちの誇りを、テメェは土足で踏みにじった。
-    {"MOMIJI", "Pride built on smuggling and violence is just crime.", false},                                        // MOMIJI: 密輸と暴力の上に成り立つ誇りなんて、ただの犯罪だ。
-    {"MOMIJI", "Don't try to dress it up as chivalry.", false},                                                       // MOMIJI: 仁義面して誤魔化せると思うなよ。
-    {"HONBUCHO BOTAMOCHI", "Heh... Law and order, is it?", true},                                                     // BOTAMOCHI: フッ……法の正義、か。
-    {"HONBUCHO BOTAMOCHI", "In this cold, lawless outer rim, power is the only rule that matters.", true},            // BOTAMOCHI: この冷たい銀河の果てでモノを言うのは、力と覚悟だけだ。
-    {"HONBUCHO BOTAMOCHI", "And I bear the weight of every brother who bled for this syndicate.", true},              // BOTAMOCHI: 俺は血を流してきたすべての組員の業を背負ってここに立っている。
-    {"MOMIJI", "Then carry that weight straight into a prison cell.", false},                                         // MOMIJI: なら、その重みごと牢屋へ持っていくんだね。
-    {"HONBUCHO BOTAMOCHI", "(Evil laughter) Bota-mo~chi-mochi-mochi!!", true},                                        // BOTAMOCHI: （邪悪な笑い声）ぼたも～ちもちもち！！
-    {"HONBUCHO BOTAMOCHI", "You think you can break my iron wall with that rusty vessel?", true},                     // BOTAMOCHI: そのオンボロ機体で、この鉄壁を穿てると思ってンのか！
-    {"HONBUCHO BOTAMOCHI", "Main guns, full power! Flagship 'TANABOTA', eliminate the target!!", true},               // BOTAMOCHI: 主砲全門展開！ 旗艦『PUROPAWA号』、目標を完全粉砕しろ！！
-    {"MOMIJI", "Heavy armor just makes for a bigger target.", false},                                                 // MOMIJI: 分厚い装甲は、デカい標的になるだけさ。
-    {"HONBUCHO BOTAMOCHI", "(Evil laughter) BOTA-MO~CHI-MOCHI-MOCHI!!", true},                                        // BOTAMOCHI: （邪悪な笑い声）ぼたも～ちもちもちィ！！
-    {"HONBUCHO BOTAMOCHI", "Let's see if your resolve can pierce my absolute defense!!", true},                       // BOTAMOCHI: テメェの覚悟、この絶対防衛砂上戦艦にブチ当ててみせろやァッ！！
+    {"PILOT", "I am not backing down now.", false},
+    {"BOSS", "Then disappear with the rest.", true}
 };
 inline constexpr BossStoryLine Stage3[] = {
     {"MOMIJI", "Found you. RYOTA, Wakagashira of the PandD-kai.", false},                                          // MOMIJI: 見つけたよ。『PANDD会』若頭、RYOTA。
@@ -116,12 +96,50 @@ inline constexpr BossStoryLine Stage3[] = {
     {"WAKAGASHIRA RYOTA", "I'll fire one straight through your goddamn center!!", true}                            // RYOTA: テメェのド真ん中、ブチ抜いてやる！！
 };
 inline constexpr BossStoryLine Stage4[] = {
-    {"PILOT", "I am not backing down now.", false},
-    {"BOSS", "Then disappear with the rest.", true}
+    {"MOMIJI", "So you're the head of the main syndicate office...", false},                                          // MOMIJI: あんたが本部の仕切り役……
+    {"MOMIJI", "Honbucho BOTAMOCHI.", false},                                                                         // MOMIJI: 本部長のBOTAMOCHIだな。
+    {"HONBUCHO BOTAMOCHI", "...(Evil laughter) Bota-mo~chi-mochi-mochi.", true},                                      // BOTAMOCHI: （邪悪な笑い声）……ぼたも～ちもちもち。
+    {"HONBUCHO BOTAMOCHI", "You've got some nerve stepping into my fortress, rogue cop.", true},                      // BOTAMOCHI: よくぞここまで嗅ぎつけてきたな、はぐれマッポが。
+    {"HONBUCHO BOTAMOCHI", "I hear KOTO and RYOTA both fell to your hands.", true},                                   // BOTAMOCHI: KOTOを叩き潰した腕前、見事なもんだ。
+    {"MOMIJI", "They put up a fight, but they're in custody now.", false},                                            // MOMIJI: 派手に暴れてくれたけどね。今はブタ箱ん中だ。
+    {"MOMIJI", "Now it's time to take down the brain behind the whole syndicate.", false},                            // MOMIJI: 次は組織の頭脳である、お前の番だよ。
+    {"HONBUCHO BOTAMOCHI", "(Evil laughter) Bota-mochi-mochi...", true},                                              // BOTAMOCHI: （邪悪な笑い声）ぼたもちもち……。
+    {"HONBUCHO BOTAMOCHI", "Those two were good men. True pillars of the PandD-kai.", true},                          // BOTAMOCHI: あいつらは優秀な舎弟だった。我がPANDD会を支える立派な柱よ。
+    {"HONBUCHO BOTAMOCHI", "And you crushed their pride.", true},                                                     // BOTAMOCHI: その男たちの誇りを、テメェは土足で踏みにじった。
+    {"MOMIJI", "Pride built on smuggling and violence is just crime.", false},                                        // MOMIJI: 密輸と暴力の上に成り立つ誇りなんて、ただの犯罪だ。
+    {"MOMIJI", "Don't try to dress it up as chivalry.", false},                                                       // MOMIJI: 仁義面して誤魔化せると思うなよ。
+    {"HONBUCHO BOTAMOCHI", "Heh... Law and order, is it?", true},                                                     // BOTAMOCHI: フッ……法の正義、か。
+    {"HONBUCHO BOTAMOCHI", "In this cold, lawless outer rim, power is the only rule that matters.", true},            // BOTAMOCHI: この冷たい銀河の果てでモノを言うのは、力と覚悟だけだ。
+    {"HONBUCHO BOTAMOCHI", "And I bear the weight of every brother who bled for this syndicate.", true},              // BOTAMOCHI: 俺は血を流してきたすべての組員の業を背負ってここに立っている。
+    {"MOMIJI", "Then carry that weight straight into a prison cell.", false},                                         // MOMIJI: なら、その重みごと牢屋へ持っていくんだね。
+    {"HONBUCHO BOTAMOCHI", "(Evil laughter) Bota-mo~chi-mochi-mochi!!", true},                                        // BOTAMOCHI: （邪悪な笑い声）ぼたも～ちもちもち！！
+    {"HONBUCHO BOTAMOCHI", "You think you can break my iron wall with that rusty vessel?", true},                     // BOTAMOCHI: そのオンボロ機体で、この鉄壁を穿てると思ってンのか！
+    {"HONBUCHO BOTAMOCHI", "Main guns, full power! Flagship 'TANABOTA', eliminate the target!!", true},               // BOTAMOCHI: 主砲全門展開！ 旗艦『PUROPAWA号』、目標を完全粉砕しろ！！
+    {"MOMIJI", "Heavy armor just makes for a bigger target.", false},                                                 // MOMIJI: 分厚い装甲は、デカい標的になるだけさ。
+    {"HONBUCHO BOTAMOCHI", "(Evil laughter) BOTA-MO~CHI-MOCHI-MOCHI!!", true},                                        // BOTAMOCHI: （邪悪な笑い声）ぼたも～ちもちもちィ！！
+    {"HONBUCHO BOTAMOCHI", "Let's see if your resolve can pierce my absolute defense!!", true},                       // BOTAMOCHI: テメェの覚悟、この絶対防衛砂上戦艦にブチ当ててみせろやァッ！！
 };
 inline constexpr BossStoryLine Stage5[] = {
-    {"MOMIJI", "Move. TAYAMA is getting away.", false},
-    {"EASTSOURCE", "That is precisely why I am here.", true}
+    {"MOMIJI", "...Out of the way.", false},                                                                               // MOMIJI: ……そこをどきな。
+    {"MOMIJI", "The Boss is just beyond this gate, isn't he?", false},                                                     // MOMIJI: この扉の向こうに、あんたらの親玉がいるんだろう。
+    {"HITMAN EASTSOURCE", "Hahahahaha! Hyaho~!!", true},                                                                   // EASTSOURCE: ハーッハッハッハ！ ヒャッホォォゥ！！
+    {"HITMAN EASTSOURCE", "Hold your horses, copper-chan! Where d'ya think you're goin' so fast?!", true},                 // EASTSOURCE: ちょお待ちぃな、マッポちゃん！ どこ急ぎ足で行こうとしとんねん！
+    {"MOMIJI", "EASTSOURCE... The PandD-kai's loose cannon hitman.", false},                                               // MOMIJI: EASTSOURCE……PANDD会のイカれた鉄砲玉だな。
+    {"HITMAN EASTSOURCE", "Bingo, hit the jackpot! Yer smarter than you look, gal!", true},                                // EASTSOURCE: ピンポォン、大正解！ 見た目より頭回るやんけ、姉ちゃん！
+    {"HITMAN EASTSOURCE", "Ya made mincemeat outta KOTO, RYOTA, and even BOTAMOCHI, right?", true},                        // EASTSOURCE: KOTOもRYOTAも、あのBOTAMOCHIの旦那までミンチにしたんやってなぁ？
+    {"HITMAN EASTSOURCE", "Goddamn, you're terrifying! Ya made me so horny for a fight, my teeth are chatterin'!!", true}, // EASTSOURCE: ゾクゾクするわぁ！ ワシもうなぁ、嬉しゅうて奥歯ガタガタ鳴っとんねん！！
+    {"MOMIJI", "You're clearly not wired right.", false},                                                                  // MOMIJI: 頭のネジ、何本か宇宙空間に落としてきたみたいだね。
+    {"MOMIJI", "If you don't wanna end up like them, stand down.", false},                                                 // MOMIJI: あいつらと同じ目に遭いたくないなら、素直に道を空けろ。
+    {"HITMAN EASTSOURCE", "Hahaha! Stand down?! Like hell I will!!", true},                                                // EASTSOURCE: ハハッ！ 退けやとぉ？！ 誰が退くかいドアホ！！
+    {"HITMAN EASTSOURCE", "I'm the syndicate's crazy dog, EASTSOURCE-sama!", true},                                        // EASTSOURCE: ワシは組の狂犬、EASTSOURCE様やぞ！
+    {"HITMAN EASTSOURCE", "The Patriarch is chillin' inside. I ain't lettin' a cheap cop ruin his buzz!", true},           // EASTSOURCE: 奥でお待ちのオヤジのシマ荒らされてたまるかい！
+    {"MOMIJI", "So you're the last stray dog on the leash, huh.", false},                                                  // MOMIJI: ボスの前で尻尾振る、最後の番犬ってわけか。
+    {"MOMIJI", "Fine. I'll put you to sleep right here.", false},                                                          // MOMIJI: 上等だ。ここでまとめて眠らせてやるよ。
+    {"HITMAN EASTSOURCE", "Gyaahahaha! That's the spirit, lady!!", true},                                                  // EASTSOURCE: ギャーッハハハ！ ええ面構えや、最高やんけぇ！！
+    {"HITMAN EASTSOURCE", "'DOTONBORI' thrusters, full throttle! Break off the limiter!!", true},                          // EASTSOURCE: 愛機『DOTONBORI号』、全開バリバリ！ リミッター外したれェ！
+    {"HITMAN EASTSOURCE", "Let's party 'til one of us turns into cold scrap, MOMIJI-chan!!", true},                        // EASTSOURCE: どっちが鉄クズになるか、ド派手に踊り狂おうやァ、MOMIJIちゃぁぁん！！
+    {"MOMIJI", "Thrusters maximum output. Target: Hostile interceptor, engaging!", false},                                 // MOMIJI: スラスター最大出力。迎撃機、叩き落とす！
+    {"HITMAN EASTSOURCE", "HYAHAHAHA! LET'S GET NUTS!! DIE, COP DOGGY!!", true},                                           // EASTSOURCE: ヒャハハハ！ 狂い咲いたるわァ！ 死に晒せェ、サツの犬コロォォッ！！
 };
 
 /**

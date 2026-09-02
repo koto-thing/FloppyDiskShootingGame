@@ -14,6 +14,21 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Presentation\Gameplay\SideScrollingShooterCombat.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\Gameplay\SideScrollingShooterStage5.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\Gameplay\SideScrollingShooterGimmicks.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\Gameplay\SideScrollingShooterRendering.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\Gameplay\SideScrollingShooterBackgrounds.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="Presentation\Scenes\TestStage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -208,6 +223,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Presentation\Gameplay\Stage5ModelView.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\SideScrollingShooterShared.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

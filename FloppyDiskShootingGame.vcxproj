@@ -157,6 +157,11 @@
     <ClCompile Include="Infrastructure\Repositories\SettingsRepository.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Presentation\Gameplay\SideScrollingShooter.cpp" />
+    <ClCompile Include="Presentation\Gameplay\SideScrollingShooterCombat.cpp" />
+    <ClCompile Include="Presentation\Gameplay\SideScrollingShooterStage5.cpp" />
+    <ClCompile Include="Presentation\Gameplay\SideScrollingShooterGimmicks.cpp" />
+    <ClCompile Include="Presentation\Gameplay\SideScrollingShooterRendering.cpp" />
+    <ClCompile Include="Presentation\Gameplay\SideScrollingShooterBackgrounds.cpp" />
     <ClCompile Include="Presentation\CreditScene\CreditContentController.cpp" />
     <ClCompile Include="Presentation\CreditScene\CreditContentPresenter.cpp" />
     <ClCompile Include="Presentation\CreditScene\CreditSceneContent.cpp" />
@@ -204,6 +209,7 @@
     <ClInclude Include="Presentation\Scenes\TestStage.h" />
     <ClInclude Include="Presentation\Scenes\ModelTestScene.h" />
     <ClInclude Include="Presentation\Gameplay\SideScrollingShooter.h" />
+    <ClInclude Include="Presentation\Gameplay\SideScrollingShooterShared.h" />
     <ClInclude Include="Presentation\Gameplay\BossModelView.h" />
     <ClInclude Include="Presentation\Gameplay\Stage4BossModelView.h" />
     <ClInclude Include="Presentation\Gameplay\Stage5ModelView.h" />
