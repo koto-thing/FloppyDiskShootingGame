@@ -358,7 +358,7 @@ protected:
 /**
  * @brief 停止後に円形弾幕を撃つ砲台機を制御する
  */
-class SideScrollingShooter::CircleShooterEnemyBehavior final : public SideScrollingShooter::EnemyBehavior {
+class SideScrollingShooter::CircleShooterEnemyBehavior : public SideScrollingShooter::EnemyBehavior {
 public:
     int Type() const override {
         return 5;
@@ -501,6 +501,56 @@ protected:
             }
         }
         return false;
+    }
+};
+
+/**
+ * @brief 停止後に正方形型の拡散弾幕を撃つStage2用砲台機を制御する
+ */
+class SideScrollingShooter::SquareShooterEnemyBehavior final : public SideScrollingShooter::CircleShooterEnemyBehavior {
+public:
+    int Type() const override {
+        return 6;
+    }
+
+	int MaxHp() const override {
+		return 80;
+	}
+
+    int Score(const Enemy&) const override {
+        return 340;
+    }
+
+    void FireSpecial(SideScrollingShooter& shooter, Enemy& enemy) const override {
+        if (enemy.age < 36 || enemy.age % 72 != 0) {
+            return;
+        }
+
+        if (shooter.IsRailGameplayActive()) {
+            // 3Dでは同一点から5x5の格子へ徐々に拡散させる
+            constexpr int GridSize = 5;
+            constexpr int BulletCount = GridSize * GridSize;
+            constexpr float SpreadSpeed = 0.010f;
+            constexpr float RowScale = 1.4f;
+            for (int i = 0; i < BulletCount; ++i) {
+                const int column = i % GridSize;
+                const int row = i / GridSize;
+                const float vx = static_cast<float>(column - GridSize / 2) * SpreadSpeed;
+                const float vy = static_cast<float>(row - GridSize / 2) * SpreadSpeed * RowScale;
+                shooter.SpawnShotDirect(enemy.x, enemy.y, enemy.z,
+                    vx, vy, -RingShotSpeed(), true, i, -BulletCount);
+            }
+            return;
+        }
+
+        // 2Dでは同一点から縦1列5発へ徐々に拡散させる
+        constexpr int BulletCount = 5;
+        constexpr float SpreadSpeed = 0.010f;
+        for (int i = 0; i < BulletCount; ++i) {
+            const float vy = static_cast<float>(i - BulletCount / 2) * SpreadSpeed;
+            shooter.SpawnShotDirect(enemy.x - 0.06f, enemy.y, ToRailZFromSideX(enemy.x),
+                -AimedShotSpeed(), vy, 0.0f, true, i, -BulletCount);
+        }
     }
 };
 

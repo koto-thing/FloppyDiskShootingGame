@@ -37,10 +37,11 @@ public:
             {BasicEnemy, 40, 100, 1.12f, 0.42f, -0.12f, 60.0f},
             {CircleShooterEnemy, 150, 320, 1.14f, 0.35f, -0.32f, 54.0f}
         };
-        // チャプター3は狙撃機と重装機を低頻度で出現させる
+        // チャプター3は狙撃機、重装機、正方形弾幕砲台を低頻度で出現させる
         static constexpr EnemySpawnRule Chapter3[] = {
             {StraightShooterEnemy, 60, 280, 1.10f, -0.78f, 0.86f, 48.0f},
-            {HeavyEnemy, 200, 360, 1.16f, 0.22f, 0.30f, 60.0f}
+            {HeavyEnemy, 200, 360, 1.16f, 0.22f, 0.30f, 60.0f},
+            {SquareShooterEnemy, 260, 360, 1.14f, 0.62f, -0.32f, 54.0f}
         };
         constexpr Chapter Chapters[] = {
             MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)

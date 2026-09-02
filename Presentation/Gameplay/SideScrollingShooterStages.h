@@ -14,7 +14,8 @@ public:
         BossEnemy = 2,
         StraightShooterEnemy = 3,
         ArmoredEnemy = 4,
-        CircleShooterEnemy = 5
+        CircleShooterEnemy = 5,
+        SquareShooterEnemy = 6
     };
 
     struct BossBullet {
