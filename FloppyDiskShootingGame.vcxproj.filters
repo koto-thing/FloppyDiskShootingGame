@@ -116,7 +116,6 @@
     <None Include="Shaders\ObjectShader.hlsl" />
     <None Include="Shaders\BackgroundShader.hlsl" />
     <None Include="Shaders\SpellCircleShader.hlsl" />
-    <None Include="Shaders\TextShader.hlsl" />
     <None Include="Shaders\PixelUpscaleShader.hlsl" />
   </ItemGroup>
   <ItemGroup>

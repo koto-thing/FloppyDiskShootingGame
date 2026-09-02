@@ -1,7 +1,6 @@
 /*
 shapeType = 0 → XZ平面の板
 shapeType = 1 → 四角柱
-shapeType = 2 → ピラミッド
 shapeType = 3 → 円柱
 shapeType = 4 → 円錐
 shapeType = 5 → 三角柱
@@ -60,29 +59,6 @@ static const float3 cubeNormals[36] = {
     float3( 1,0,0), float3( 1,0,0), float3( 1,0,0), float3( 1,0,0), float3( 1,0,0), float3( 1,0,0),
     float3(0, 1,0), float3(0, 1,0), float3(0, 1,0), float3(0, 1,0), float3(0, 1,0), float3(0, 1,0),
     float3(0,-1,0), float3(0,-1,0), float3(0,-1,0), float3(0,-1,0), float3(0,-1,0), float3(0,-1,0)
-};
-
-// 三角錐 (Pyramid) 18頂点 (底面6頂点＋側面12頂点)
-static const float3 pyramidVertices[18] = {
-    // Bottom Face (2 triangles)
-    float3(-0.5, -0.3, -0.5), float3( 0.5, -0.3,  0.5), float3( 0.5, -0.3, -0.5),
-    float3(-0.5, -0.3, -0.5), float3(-0.5, -0.3,  0.5), float3( 0.5, -0.3,  0.5),
-    // Front Face (tip is 0, 0.5, 0)
-    float3(-0.5, -0.3, -0.5), float3( 0.0,  0.5,  0.0), float3( 0.5, -0.3, -0.5),
-    // Back Face
-    float3(-0.5, -0.3,  0.5), float3( 0.5, -0.3,  0.5), float3( 0.0,  0.5,  0.0),
-    // Left Face
-    float3(-0.5, -0.3, -0.5), float3(-0.5, -0.3,  0.5), float3( 0.0,  0.5,  0.0),
-    // Right Face
-    float3( 0.5, -0.3, -0.5), float3( 0.0,  0.5,  0.0), float3( 0.5, -0.3,  0.5)
-};
-
-static const float3 pyramidNormals[18] = {
-    float3(0,-1,0), float3(0,-1,0), float3(0,-1,0), float3(0,-1,0), float3(0,-1,0), float3(0,-1,0),
-    float3(0, 0.447, -0.894), float3(0, 0.447, -0.894), float3(0, 0.447, -0.894),
-    float3(0, 0.447,  0.894), float3(0, 0.447,  0.894), float3(0, 0.447,  0.894),
-    float3(-0.894, 0.447, 0), float3(-0.894, 0.447, 0), float3(-0.894, 0.447, 0),
-    float3( 0.894, 0.447, 0), float3( 0.894, 0.447, 0), float3( 0.894, 0.447, 0)
 };
 
 // 三角柱 (Triangular Prism: 24頂点)
@@ -246,12 +222,6 @@ VS_OUTPUT VSMain(uint vID : SV_VertexID)
         // 1: Cube
         localPos = cubeVertices[vID % 36];
         normal = cubeNormals[vID % 36];
-        output.localPos = localPos.xy;
-    }
-    else if (u_shapeType < 2.5) {
-        // 2: Pyramid
-        localPos = pyramidVertices[vID % 18];
-        normal = pyramidNormals[vID % 18];
         output.localPos = localPos.xy;
     }
     else if (u_shapeType < 3.5)
