@@ -59,7 +59,7 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
     BossModelTransform aimedTransform = transform;
     aimedTransform.secondaryAimTarget = aimTarget;
     aimedTransform.secondaryGunsTrackTarget = true;
-    aimedTransform.mainGunTracksTarget = state.mainCannon;
+    aimedTransform.mainGunTracksTarget = state.mainCannon && enemy.phase <= 0.0f;
 
     // Stage4BossModelViewの出力を既存Primitive描画へ接続する
     auto DrawBossPart = [&](int shape, const Vector3& position, const Vector3& scale,

@@ -61,6 +61,8 @@ public:
 
     /** @brief Stage 4ボスの3D基準点を設定する @param boss 設定するボス @return なし */
     void ConfigureBossRailAnchor(Enemy& boss) const override {
+        const float rushPhase = boss.phase;
+        const bool rushing = IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) && rushPhase > 0.0f;
         boss.x = 0.0f;
         boss.y = -0.5f;
         boss.z = 48.0f;
@@ -75,10 +77,16 @@ public:
         boss.turretAimZ = boss.z;
         boss.phase = 0.0f;
         boss.motionAge = 0;
+        if (rushing) {
+            boss.phase = rushPhase;
+            ApplyRushPosition(boss, true, static_cast<int>(rushPhase));
+        }
     }
 
     /** @brief Stage 4ボスの2D基準点を設定する @param boss 設定するボス @return なし */
     void ConfigureBossSideAnchor(Enemy& boss) const override {
+        const float rushPhase = boss.phase;
+        const bool rushing = IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) && rushPhase > 0.0f;
         boss.x = 1.80f;
         boss.y = -0.5f;
         boss.z = ToRailZFromSideX(boss.x);
@@ -93,6 +101,10 @@ public:
         boss.turretAimZ = boss.z;
         boss.phase = 0.0f;
         boss.motionAge = 0;
+        if (rushing) {
+            boss.phase = rushPhase;
+            ApplyRushPosition(boss, false, static_cast<int>(rushPhase));
+        }
     }
 
     /** @brief Stage 4ボスの砲部位HPを設定する @param boss 設定するボス @return なし */
@@ -119,19 +131,51 @@ public:
      */
     void TickBoss(SideScrollingShooter& shooter, Enemy& boss) const override {
         constexpr float TurretTrackingRate = 0.06f;
-        boss.phase = 0.0f;
         boss.motionAge = 0;
-        boss.x = boss.baseX;
-        boss.y = boss.baseY;
-        boss.z = shooter.IsRailGameplayActive() ? boss.baseZ : ToRailZFromSideX(boss.x);
-        boss.actionX = boss.x;
-        boss.actionY = boss.y;
-        boss.actionZ = boss.z;
+
+        // Phase2以降は一定間隔で後退、突進、待機、復帰を行う
+        if (IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) &&
+            (boss.phase > 0.0f || boss.age % RushIntervalFrames == 0)) {
+            int rushFrame = static_cast<int>(boss.phase);
+            if (rushFrame <= 0) {
+                boss.actionX = boss.baseX;
+                boss.actionY = boss.baseY;
+                boss.actionZ = boss.baseZ;
+                rushFrame = 1;
+            }
+
+            ApplyRushPosition(boss, shooter.IsRailGameplayActive(), rushFrame);
+
+            boss.phase = rushFrame < RushTotalFrames ?
+                static_cast<float>(rushFrame + 1) : 0.0f;
+        } else {
+            boss.phase = 0.0f;
+            boss.x = boss.baseX;
+            boss.y = boss.baseY;
+            boss.z = shooter.IsRailGameplayActive() ? boss.baseZ : ToRailZFromSideX(boss.x);
+            boss.actionX = boss.x;
+            boss.actionY = boss.y;
+            boss.actionZ = boss.z;
+        }
+
+        // 砲の照準は突進中も自機位置へ追従する
         boss.turretAimX += (shooter.m_playerX - boss.turretAimX) * TurretTrackingRate;
         boss.turretAimY += (shooter.m_playerY - boss.turretAimY) * TurretTrackingRate;
         const float targetZ = shooter.IsRailGameplayActive() ?
             PlayerRailZ : ToRailZFromSideX(shooter.m_playerX);
         boss.turretAimZ += (targetZ - boss.turretAimZ) * TurretTrackingRate;
+    }
+
+    /**
+     * @brief Stage 4ボスが突進攻撃中か取得する
+     * @param shooter ゲーム本体
+     * @param boss 判定するボス
+     * @return 突進攻撃中の場合true、通常攻撃中の場合false
+     */
+    bool IsBossSpecialAttackActive(
+        const SideScrollingShooter& shooter, const Enemy& boss) const override {
+        (void)shooter;
+        return IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) && boss.phase > 0.0f;
     }
 
     /**
@@ -188,5 +232,80 @@ public:
             {0.0f, 0.0f, 0.018f, 0.028f}
         };
         return (railMode ? RailPattern : SidePattern)[index % 7];
+    }
+
+private:
+    inline static constexpr int RushIntervalFrames = 400;
+    inline static constexpr int RushWindupFrames = 42;
+    inline static constexpr int RushChargeFrames = 51;
+    inline static constexpr int RushWaitFrames = 48;
+    inline static constexpr int RushReturnFrames = 96;
+    inline static constexpr int RushTotalFrames = RushWindupFrames + RushChargeFrames +
+        RushWaitFrames + RushReturnFrames;
+    inline static constexpr float SideBackDistance = 0.28f;
+    inline static constexpr float SideRushEndX = -3.35f;
+    inline static constexpr float RailBackDistance = 8.0f;
+    inline static constexpr float RailRushEndZ = -30.0f;
+
+    /**
+     * @brief 突進攻撃を行うフェーズか取得する
+     * @param phase 現在のボス攻撃フェーズ
+     * @return Phase2以降の場合true、それ以外の場合false
+     */
+    static constexpr bool IsRushPhase(BossPhase phase) {
+        return phase == BossNormalPhase2 || phase == BossSpecialPhase2;
+    }
+    static_assert(BossSpecialPhase1 != BossNormalPhase2);
+    static_assert(BossNormalPhase2 + 1 == BossSpecialPhase2);
+
+    /**
+     * @brief 突進フレームから現在表示モードの突進位置を反映する
+     * @param boss 更新するボス
+     * @param railMode 3Dレール表示中か
+     * @param rushFrame 現在の突進フレーム
+     * @return なし
+     */
+    static void ApplyRushPosition(Enemy& boss, bool railMode, int rushFrame) {
+        boss.y = boss.actionY;
+        if (railMode) {
+            boss.x = boss.actionX;
+            if (rushFrame <= RushWindupFrames) {
+                const float t = static_cast<float>(rushFrame) /
+                    static_cast<float>(RushWindupFrames);
+                boss.z = boss.actionZ + RailBackDistance * t;
+            } else if (rushFrame <= RushWindupFrames + RushChargeFrames) {
+                const float t = static_cast<float>(rushFrame - RushWindupFrames) /
+                    static_cast<float>(RushChargeFrames);
+                boss.z = boss.actionZ + RailBackDistance +
+                    (RailRushEndZ - boss.actionZ - RailBackDistance) * t * t;
+            } else if (rushFrame <= RushWindupFrames + RushChargeFrames + RushWaitFrames) {
+                boss.z = RailRushEndZ;
+            } else {
+                const float t = static_cast<float>(rushFrame - RushWindupFrames -
+                    RushChargeFrames - RushWaitFrames) /
+                    static_cast<float>(RushReturnFrames);
+                boss.z = RailRushEndZ + (boss.actionZ - RailRushEndZ) * t;
+            }
+            return;
+        }
+
+        if (rushFrame <= RushWindupFrames) {
+            const float t = static_cast<float>(rushFrame) /
+                static_cast<float>(RushWindupFrames);
+            boss.x = boss.actionX + SideBackDistance * t;
+        } else if (rushFrame <= RushWindupFrames + RushChargeFrames) {
+            const float t = static_cast<float>(rushFrame - RushWindupFrames) /
+                static_cast<float>(RushChargeFrames);
+            boss.x = boss.actionX + SideBackDistance +
+                (SideRushEndX - boss.actionX - SideBackDistance) * t * t;
+        } else if (rushFrame <= RushWindupFrames + RushChargeFrames + RushWaitFrames) {
+            boss.x = SideRushEndX;
+        } else {
+            const float t = static_cast<float>(rushFrame - RushWindupFrames -
+                RushChargeFrames - RushWaitFrames) /
+                static_cast<float>(RushReturnFrames);
+            boss.x = SideRushEndX + (boss.actionX - SideRushEndX) * t;
+        }
+        boss.z = ToRailZFromSideX(boss.x);
     }
 };
