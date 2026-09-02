@@ -40,6 +40,8 @@ GameSettings SettingsRepository::Load() const {
     // 旧形式の音量3行だけの設定は、映像効果ONとして読み込む
     int retroEffectEnabled = 1;
     if (input >> retroEffectEnabled) settings.retroEffectEnabled = retroEffectEnabled != 0;
+    // 旧形式ではプレイヤー展示だけを初期解放する
+    input >> settings.galleryUnlocks;
     return Sanitize(settings);
 }
 
@@ -60,7 +62,8 @@ void SettingsRepository::Save(const GameSettings& settings) const {
     output << sanitized.masterVolume << '\n'
            << sanitized.bgmVolume << '\n'
            << sanitized.seVolume << '\n'
-           << (sanitized.retroEffectEnabled ? 1 : 0) << '\n';
+           << (sanitized.retroEffectEnabled ? 1 : 0) << '\n'
+           << sanitized.galleryUnlocks << '\n';
     output.close();
     if (!output) return;
 
@@ -73,6 +76,22 @@ void SettingsRepository::Save(const GameSettings& settings) const {
 }
 
 /**
+ * @brief 展示を解放して既存設定とともに保存する
+ * @param entry 解放する展示
+ * @return この呼び出しで初めて解放された場合true
+ */
+bool SettingsRepository::UnlockGalleryEntry(GalleryEntry entry) const {
+    const std::uint32_t bit = GalleryEntryBit(entry);
+    GameSettings settings = Load();
+    if ((settings.galleryUnlocks & bit) != 0u) return false;
+
+    // 新しい解放だけを書き込み、既存の音量と映像設定を維持する
+    settings.galleryUnlocks |= bit;
+    Save(settings);
+    return true;
+}
+
+/**
  * @brief 設定値を有効範囲へ補正する
  * @param settings 補正前の設定
  * @return 補正後の設定
@@ -81,5 +100,6 @@ GameSettings SettingsRepository::Sanitize(GameSettings settings) {
     settings.masterVolume = SanitizeVolume(settings.masterVolume);
     settings.bgmVolume = SanitizeVolume(settings.bgmVolume);
     settings.seVolume = SanitizeVolume(settings.seVolume);
+    settings.galleryUnlocks = (settings.galleryUnlocks & ValidGalleryUnlocks) | DefaultGalleryUnlocks;
     return settings;
 }

@@ -28,7 +28,8 @@ void RunScoreRepositoryTests() {
     });
     if (sanitized.masterVolume != 0.0f ||
         sanitized.bgmVolume != 1.0f ||
-        !std::isfinite(sanitized.seVolume) || sanitized.seVolume != 1.0f) {
+        !std::isfinite(sanitized.seVolume) || sanitized.seVolume != 1.0f ||
+        sanitized.galleryUnlocks != DefaultGalleryUnlocks) {
         throw std::runtime_error("Settings volumes must remain finite and in range");
     }
 
@@ -42,9 +43,17 @@ void RunScoreRepositoryTests() {
     std::filesystem::remove_all(testRoot, error);
     SetEnvironmentVariableW(L"LOCALAPPDATA", testRoot.c_str());
 
-    const GameSettings expectedSettings { 0.25f, 0.5f, 0.75f, false };
-    SettingsRepository().Save(expectedSettings);
-    const GameSettings loadedSettings = SettingsRepository().Load();
+    const GameSettings expectedSettings {0.25f, 0.5f, 0.75f, false,
+        GalleryEntryBit(GalleryEntry::Player) |
+        GalleryEntryBit(GalleryEntry::Stage3Boss)};
+    SettingsRepository repository;
+    repository.Save(expectedSettings);
+    const GameSettings loadedSettings = repository.Load();
+
+    // 新規解放だけを追記し、重複解放と既存設定の上書きを防ぐ
+    const bool unlocked = repository.UnlockGalleryEntry(GalleryEntry::LightEnemy);
+    const bool duplicateUnlock = repository.UnlockGalleryEntry(GalleryEntry::LightEnemy);
+    const GameSettings unlockedSettings = repository.Load();
 
     SetEnvironmentVariableW(L"LOCALAPPDATA",
         originalLength > 0 && originalLength < std::size(originalLocalAppData)
@@ -53,7 +62,13 @@ void RunScoreRepositoryTests() {
     if (loadedSettings.masterVolume != expectedSettings.masterVolume ||
         loadedSettings.bgmVolume != expectedSettings.bgmVolume ||
         loadedSettings.seVolume != expectedSettings.seVolume ||
-        loadedSettings.retroEffectEnabled != expectedSettings.retroEffectEnabled) {
+        loadedSettings.retroEffectEnabled != expectedSettings.retroEffectEnabled ||
+        loadedSettings.galleryUnlocks != expectedSettings.galleryUnlocks) {
         throw std::runtime_error("Settings must survive a save and load round trip");
+    }
+    if (!unlocked || duplicateUnlock ||
+        unlockedSettings.masterVolume != expectedSettings.masterVolume ||
+        (unlockedSettings.galleryUnlocks & GalleryEntryBit(GalleryEntry::LightEnemy)) == 0u) {
+        throw std::runtime_error("Gallery unlocks must persist without replacing settings");
     }
 }

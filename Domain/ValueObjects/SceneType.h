@@ -10,7 +10,7 @@ enum class SceneType {
     Option,
     Credit,
     TestStage,
-    ModelTest,
+    Gallery,
     Ending,
     Ranking,
 };

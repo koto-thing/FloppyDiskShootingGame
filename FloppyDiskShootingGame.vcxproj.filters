@@ -53,7 +53,7 @@
     <ClCompile Include="Presentation\Scenes\TestStage.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Presentation\Scenes\ModelTestScene.cpp">
+    <ClCompile Include="Presentation\Scenes\GalleryScene.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Presentation\Scenes\TitleScene.cpp">
@@ -123,6 +123,9 @@
     <ClInclude Include="Domain\ValueObjects\SceneType.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Domain\ValueObjects\GalleryEntry.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Domain\ValueObjects\SceneSharedData.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -135,7 +138,13 @@
     <ClInclude Include="Presentation\Scenes\TestStage.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Presentation\Scenes\ModelTestScene.h">
+    <ClInclude Include="Presentation\Scenes\GalleryScene.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Models\AircraftModelView.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Models\LegacyBossModelView.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Presentation\Scenes\TitleScene.h">
@@ -246,6 +255,15 @@
     <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4BossModelView.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3BossModelView.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3BarrierCageView.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3FunnelModelView.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5ModelView.h">
       <Filter>Header Files</Filter>
     </ClInclude>
@@ -285,6 +303,7 @@
     <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3Module.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3State.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3Story.h">
       <Filter>Header Files</Filter>
     </ClInclude>

@@ -1,11 +1,16 @@
 #pragma once
 
+#include <cstdint>
+
+#include "../../Domain/ValueObjects/GalleryEntry.h"
+
 /** @brief ゲーム設定値 */
 struct GameSettings {
     float masterVolume = 1.0f;
     float bgmVolume = 1.0f;
     float seVolume = 1.0f;
     bool retroEffectEnabled = true;
+    std::uint32_t galleryUnlocks = DefaultGalleryUnlocks;
 };
 
 /** @brief ゲーム設定をユーザーの永続データ領域へ保存するリポジトリ */
@@ -22,6 +27,13 @@ public:
      * @param settings 保存する設定
      */
     void Save(const GameSettings& settings) const;
+
+    /**
+     * @brief 展示を解放して既存設定とともに保存する
+     * @param entry 解放する展示
+     * @return この呼び出しで初めて解放された場合true
+     */
+    bool UnlockGalleryEntry(GalleryEntry entry) const;
 
     /**
      * @brief 設定値を有効範囲へ補正する

@@ -1,12 +1,15 @@
 #pragma once
 
 #include <array>
+#include <cstdint>
 
 #include "../../Domain/ValueObjects/DifficultyType.h"
+#include "../../Domain/ValueObjects/GalleryEntry.h"
 #include "../../Domain/ValueObjects/PlayerType.h"
 #include "../../Engine/Graphics/Camera3D.h"
 #include "Stages/Stage1/Stage1State.h"
 #include "Stages/Stage2/Stage2State.h"
+#include "Stages/Stage3/Stage3State.h"
 #include "Stages/Stage5/Stage5State.h"
 
 class AudioService;
@@ -56,6 +59,13 @@ public:
     void ProcessInput();
     void Tick();
     void Render(Renderer& renderer) const;
+    /**
+     * @brief ゲーム画面の揺れを開始する
+     * @param intensity 揺れの最大振幅
+     * @param durationFrames 揺れを継続するフレーム数
+     * @return なし
+     */
+    void ShakeScreen(float intensity = 0.3f, int durationFrames = 18);
     /**
      * @brief 全ステージをクリア済みか取得する
      * @return 最終ステージのミッション終了表示が完了した場合true、進行中の場合false
@@ -403,6 +413,11 @@ private:
     void InitializeRailObjects();
     void InitializeSideObjects();
     void TickPlayer();
+    /**
+     * @brief 入力中の通常弾・特殊弾発射を更新する
+     * @return なし
+     */
+    void TickPlayerWeapons();
     void TickEnemies();
     void TickShots();
     /** @brief 生存中の爆発エフェクトを更新する */
@@ -425,6 +440,12 @@ private:
     /** @brief 現在のチャプター戦績を確定して表示を開始する */
     void FinishChapter();
     void SpawnEnemy(int enemyType, float sideX, float railX, float y, float railZ);
+    /**
+     * @brief 未解放の展示だけを永続データへ追加する
+     * @param entry 解放する展示
+     * @return なし
+     */
+    void UnlockGallery(GalleryEntry entry);
     /** @brief 指定座標にPowerアイテムを生成する */
     void SpawnPowerItem(float x, float y, float z, float value);
     /** @brief 指定座標にScoreアイテムを生成する */
@@ -546,6 +567,11 @@ private:
     bool IsRailRenderActive() const;
     void ConfigureSideCamera(Camera3D& camera, Renderer& renderer) const;
     void ConfigureRailCamera(Camera3D& camera, Renderer& renderer) const;
+    /**
+     * @brief 現在フレームの画面揺れオフセットを取得する
+     * @return カメラへ加算するXYオフセット
+     */
+    Vector2 ScreenShakeOffset() const;
     void Render2D(Renderer& renderer) const;
     void Render3D(Renderer& renderer) const;
     /**
@@ -636,11 +662,13 @@ private:
     std::array<Debris, DebrisCapacity> m_debris {};
     ShooterStages::Stage1::State m_stage1 {};
     ShooterStages::Stage2::State m_stage2 {};
+    ShooterStages::Stage3::State m_stage3 {};
     ShooterStages::Stage5::State m_stage5 {};
     AudioService* m_audio = nullptr;
     const Stage* m_stage = nullptr;
     PlayerType m_playerType = Homing;
     DifficultyType m_difficulty = Easy;
+    std::uint32_t m_galleryUnlocks = DefaultGalleryUnlocks;
     float m_playerX = -0.72f;
     float m_playerY = 0.0f;
     float m_scroll = 0.0f;
@@ -674,6 +702,7 @@ private:
     bool m_moveRight = false;
     bool m_moveUp = false;
     bool m_moveDown = false;
+    bool m_slowMove = false;
     bool m_fire = false;
     bool m_clear = false;
     bool m_bossBattle = false;
@@ -685,6 +714,9 @@ private:
     int m_viewTransitionTimer = 0;
     int m_viewToggleCooldown = 0;
     float m_viewTransitionProgress = 0.0f;
+    float m_screenShakeIntensity = 0.0f;
+    int m_screenShakeFrames = 0;
+    int m_screenShakeDurationFrames = 0;
 };
 
 static_assert(SideScrollingShooter::IsValidStage5Transition(

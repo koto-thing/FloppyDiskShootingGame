@@ -800,6 +800,7 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
  */
 void SideScrollingShooter::Stage5Module::DefeatEastsource(SideScrollingShooter& shooter, Enemy& eastsource) {
     if (shooter.m_stage5.phase != Stage5Phase::EastsourceBattle) return;
+    shooter.UnlockGallery(GalleryEntry::Eastsource);
     eastsource.hp = 0;
     eastsource.collisionEnabled = false;
     shooter.m_bossHp = 0;
@@ -1223,6 +1224,7 @@ bool SideScrollingShooter::Stage5Module::TryDamageTayama(SideScrollingShooter& s
             } else if (shooter.m_stage5.phase == Stage5Phase::TayamaLiftEngines) {
                 StartTayamaPhase(shooter, Stage5Phase::TayamaCommandCore);
             } else {
+                shooter.UnlockGallery(GalleryEntry::Tayama);
                 StartPhase(shooter, Stage5Phase::TayamaCollapse, false);
             }
         } else {

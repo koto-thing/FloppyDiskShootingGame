@@ -20,7 +20,7 @@
 #include "Engine/Graphics/Renderer.h"
 #include "Presentation/Scenes/TitleScene.h"
 #include "Presentation/Scenes/TestStage.h"
-#include "Presentation/Scenes/ModelTestScene.h"
+#include "Presentation/Scenes/GalleryScene.h"
 #include "Presentation/Scenes/CreditScene.h"
 #include "Presentation/Scenes/ModeSelectionScene.h"
 #include "Presentation/Scenes/StoryScene.h"
@@ -129,7 +129,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     app.AddScene<ModeSelectionScene>(SceneType::ModeSelection);
     app.AddScene<StoryScene>(SceneType::Story);
     app.AddScene<TestStage>(SceneType::TestStage);
-    app.AddScene<ModelTestScene>(SceneType::ModelTest);
+    app.AddScene<GalleryScene>(SceneType::Gallery);
     app.AddScene<OptionScene>(SceneType::Option);
     app.AddScene<CreditScene>(SceneType::Credit);
     app.AddScene<EndingScene>(SceneType::Ending);

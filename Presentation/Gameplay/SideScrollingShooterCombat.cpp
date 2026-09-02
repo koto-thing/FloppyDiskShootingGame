@@ -5,6 +5,7 @@
 #include <cstddef>
 
 #include "../../Infrastructure/ExternalServices/AudioService.h"
+#include "../../Infrastructure/Repositories/SettingsRepository.h"
 #include "Stages/Common/StageDispatch.h"
 
 #include "SideScrollingShooterEnemies.h"
@@ -20,10 +21,36 @@ void SideScrollingShooter::TickPlayer() {
     /** @brief 2D画面ではHUDを除くプレイ領域全体を移動可能にする */
     const float minX = IsRailGameplayActive() ? -1.2f : Side2DPlayerMinX;
     const float maxX = IsRailGameplayActive() ? 1.2f : Side2DPlayerMaxX;
-    const float minY = IsRailGameplayActive() ? PlayerRailMinY() : Side2DPlayerMinY;
-    const float maxY = IsRailGameplayActive() ? 0.9f : Side2DPlayerMaxY;
-    m_playerX = (std::clamp)(m_playerX + dx * 0.018f, minX, maxX);
-    m_playerY = (std::clamp)(m_playerY + dy * 0.024f, minY, maxY);
+    const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
+    const float minY = IsRailGameplayActive() ? PlayerRailMinY() : sideYRange.x;
+    const float maxY = IsRailGameplayActive() ?
+        StageDispatch::RailPlayerMaxY(*this) : sideYRange.y;
+    const float speedScale = m_slowMove ? 0.5f : 1.0f;
+    m_playerX = (std::clamp)(m_playerX + dx * 0.018f * speedScale, minX, maxX);
+    m_playerY = (std::clamp)(m_playerY + dy * 0.024f * speedScale, minY, maxY);
+}
+
+/**
+ * @brief 入力中の通常弾・特殊弾発射を更新する
+ * @return なし
+ */
+void SideScrollingShooter::TickPlayerWeapons() {
+    // 通常弾と選択機体の特殊弾をそれぞれのクールダウンで発射する
+    bool firedPlayerShot = false;
+    if (m_fire && m_shotCooldown == 0) {
+        SpawnShot(m_playerX + (IsRailGameplayActive() ? 0.0f : 0.12f), m_playerY,
+            IsRailGameplayActive() ? 0.0f : 0.045f, 0.0f, false,
+            -1.0f, -1.0f, 1 + PowerLevel());
+        m_shotCooldown = (std::max)(3, 7 - PowerLevel());
+        PlayShotSound();
+    }
+    if (m_fire && m_specialShotCooldown == 0) {
+        FireSpecialShots();
+        const auto& config = PlayerShotConfigs[static_cast<size_t>(m_playerType)];
+        m_specialShotCooldown = config.fireIntervalFrames;
+        firedPlayerShot = true;
+    }
+    if (firedPlayerShot) PlayShotSound();
 }
 
 void SideScrollingShooter::TickEnemies() {
@@ -108,9 +135,20 @@ void SideScrollingShooter::TickEnemies() {
 }
 
 void SideScrollingShooter::TickShots() {
+    // Stage3の遅延点火ミサイルは画面外到達または命中時に爆発へ変換する
+    auto DeactivateShot = [this](Shot& shot) {
+        if (m_stageNumber == 3 && shot.enemy &&
+            shot.stage2.kind == ShooterStages::Stage2::ShotKind::Funnel &&
+            shot.stage2.delayedEngine) {
+            SpawnExplosion(shot.x, shot.y, shot.z);
+        }
+        shot.active = false;
+    };
+
     for (auto& shot : m_shots) {
         if (!shot.active) continue;
         StageDispatch::TickSpecialShotBeforeMove(*this, shot);
+        if (!shot.active) continue;
         const float previousY = shot.y;
 
         /** @brief 追尾弾を最寄りの前方敵へ旋回させる */
@@ -127,28 +165,33 @@ void SideScrollingShooter::TickShots() {
         }
         // ハッチから出た直後は船体外へ抜けるまで通常弾の画面外カリングを猶予する
         const bool cullProtected = StageDispatch::IsShotCullProtected(*this, shot);
+        const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
         if (!cullProtected && !IsRailGameplayActive() &&
             (shot.x < Side2DPlayerMinX - Side2DShotCullMargin ||
                 shot.x > Side2DPlayerMaxX + Side2DShotCullMargin ||
-                shot.y < Side2DPlayerMinY - Side2DShotCullMargin ||
-                shot.y > Side2DPlayerMaxY + Side2DShotCullMargin)) {
-            shot.active = false;
+                shot.y < sideYRange.x - Side2DShotCullMargin ||
+                shot.y > sideYRange.y + Side2DShotCullMargin)) {
+            DeactivateShot(shot);
             continue;
         }
         // 端から出る円形弾幕が生成直後に欠けないよう、弾のY消滅範囲だけ少し広げる
-        if (!cullProtected && IsRailGameplayActive() && (shot.z < 0.0f || shot.z > 72.0f ||
-            std::abs(shot.x) > 1.2f || std::abs(shot.y) > 1.24f)) {
-            shot.active = false;
+        if (!cullProtected && IsRailGameplayActive() &&
+            (shot.z < 0.0f || shot.z > EnemyRailFarZ ||
+            std::abs(shot.x) > 1.2f ||
+            shot.y < PlayerRailMinY() - Side2DShotCullMargin ||
+            shot.y > StageDispatch::RailPlayerMaxY(*this) + Side2DShotCullMargin)) {
+            DeactivateShot(shot);
             continue;
         }
 
         if (shot.enemy) {
-            const bool playerHit = IsRailGameplayActive() ?
+            const bool playerHit = StageDispatch::CanEnemyShotDamagePlayer(*this, shot) &&
+                (IsRailGameplayActive() ?
                 Hit3D(ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ, 0.38f,
                     ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
                     StageDispatch::EnemyShotHitRadius(*this, shot)) :
                 Hit(m_playerX, m_playerY, 0.050f, shot.x, shot.y,
-                    StageDispatch::EnemyShotHitRadius(*this, shot));
+                    StageDispatch::EnemyShotHitRadius(*this, shot)));
             const bool grazed = IsRailGameplayActive() ?
                 Hit3D(ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ, 0.80f,
                     ToWorldX(shot.x), ToWorldY(shot.y), shot.z, 0.28f) :
@@ -158,7 +201,7 @@ void SideScrollingShooter::TickShots() {
                 ++m_chapterResult.grazeCount;
             }
             if (m_invincible == 0 && playerHit) {
-                shot.active = false;
+                DeactivateShot(shot);
                 DamagePlayer();
                 return;
             }
@@ -194,6 +237,12 @@ void SideScrollingShooter::TickShots() {
                 } else {
                     m_bossHp = enemy.hp;
                 }
+                break;
+            }
+            if (enemy.type == 2 && StageDispatch::BlocksPlayerShot(*this, shot, enemy)) {
+                SpawnExplosion(shot.x, shot.y, shot.z);
+                shot.active = false;
+                PlayHitSound();
                 break;
             }
             if (enemy.type == 2 && StageDispatch::TryHitBossBody(*this, shot, enemy)) {
@@ -301,6 +350,18 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
         if (enemy.active) continue;
         enemy.active = true;
         m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
+
+        // 初めて画面へ出現した通常敵を永続ギャラリーへ登録する
+        switch (enemy.type) {
+        case 0: UnlockGallery(GalleryEntry::LightEnemy); break;
+        case 1: UnlockGallery(GalleryEntry::HeavyEnemy); break;
+        case 4: UnlockGallery(GalleryEntry::ArmoredEnemy); break;
+        default: break;
+        }
+        if (m_stageNumber >= 1 && m_stageNumber <= 4) {
+            UnlockGallery(static_cast<GalleryEntry>(
+                static_cast<std::uint32_t>(GalleryEntry::Stage1Enemy) + m_stageNumber - 1));
+        }
         enemy.railAnchorX = railX;
         // 出現テーブルの座標に関わらず、敵機全体が表示領域外から入る位置に固定する
         enemy.baseX = IsRailGameplayActive() ? railX : (std::max)(sideX, SideEnemyEntryX);
@@ -311,6 +372,20 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
         ++m_chapterResult.enemySpawnCount;
         return;
     }
+}
+
+/**
+ * @brief 未解放の展示だけを永続データへ追加する
+ * @param entry 解放する展示
+ * @return なし
+ */
+void SideScrollingShooter::UnlockGallery(GalleryEntry entry) {
+    const std::uint32_t bit = GalleryEntryBit(entry);
+    if ((m_galleryUnlocks & bit) != 0u) return;
+
+    // メモリ上のビットを先に更新して同じプレイ中の重複I/Oを防ぐ
+    m_galleryUnlocks |= bit;
+    SettingsRepository {}.UnlockGalleryEntry(entry);
 }
 
 void SideScrollingShooter::FireBossPartBarrage(const Enemy& boss) {
@@ -356,6 +431,21 @@ bool SideScrollingShooter::DamageBoss(Enemy& boss, int damage) {
 void SideScrollingShooter::DefeatBoss(Enemy& boss) {
     if (!boss.active) return;
     if (StageDispatch::HandleBossDefeat(*this, boss)) return;
+
+    // 共通ボス撃破処理を使うStage 1から4を対応する展示へ登録する
+    constexpr GalleryEntry BossEntries[] = {
+        GalleryEntry::Stage1Boss,
+        GalleryEntry::Stage2Boss,
+        GalleryEntry::Stage3Boss,
+        GalleryEntry::Stage4Boss
+    };
+    if (m_stageNumber >= 1 && m_stageNumber <= 4) {
+        UnlockGallery(BossEntries[m_stageNumber - 1]);
+        if (m_stageNumber == 3) {
+            UnlockGallery(GalleryEntry::Stage3BarrierFunnel);
+            UnlockGallery(GalleryEntry::Stage3ReflectFunnel);
+        }
+    }
     SpawnExplosion(boss.x, boss.y, boss.z, true);
     SpawnEnemyDebris(boss);
     boss.active = false;
