@@ -20,6 +20,7 @@ constexpr float Stage4CannonballRailRadius = 0.52f;
 constexpr float Stage4CannonballSideRadius = 0.075f;
 constexpr float Stage4RailGroundGameY = -0.829545f;
 constexpr float Stage4BodyHitRadius = 3.35f;
+constexpr int Stage4MainCannonRecoilFrames = 30;
 constexpr Vector3 Stage4MainCannonLocal {-5.75f, 3.55f, 0.0f};
 constexpr Vector3 Stage4MainCannonPivotLocal {-3.25f, 3.55f, 0.0f};
 constexpr Vector3 Stage4BodyHitLocal[] = {
@@ -135,7 +136,7 @@ bool SideScrollingShooter::Stage4Module::TryHitBossPart(
 }
 
 void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
-    SideScrollingShooter& shooter, const Enemy& boss) {
+    SideScrollingShooter& shooter, Enemy& boss) {
     if (boss.type != 2) return;
 
     // 生存中の主砲身と副砲6基から、現在の自機位置へ直接撃つ
@@ -146,6 +147,7 @@ void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
 
         if (part == BossNose) {
             SpawnMainCannonball(shooter, boss);
+            boss.recoilAge = Stage4MainCannonRecoilFrames;
             continue;
         }
 

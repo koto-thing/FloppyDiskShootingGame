@@ -62,6 +62,7 @@ public:
     /** @brief Stage 4ボスの3D基準点を設定する @param boss 設定するボス @return なし */
     void ConfigureBossRailAnchor(Enemy& boss) const override {
         const float rushPhase = boss.phase;
+        const int recoilAge = boss.recoilAge;
         const bool rushing = IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) && rushPhase > 0.0f;
         boss.x = 0.0f;
         boss.y = -0.5f;
@@ -77,6 +78,7 @@ public:
         boss.turretAimZ = boss.z;
         boss.phase = 0.0f;
         boss.motionAge = 0;
+        boss.recoilAge = recoilAge;
         if (rushing) {
             boss.phase = rushPhase;
             ApplyRushPosition(boss, true, static_cast<int>(rushPhase));
@@ -86,6 +88,7 @@ public:
     /** @brief Stage 4ボスの2D基準点を設定する @param boss 設定するボス @return なし */
     void ConfigureBossSideAnchor(Enemy& boss) const override {
         const float rushPhase = boss.phase;
+        const int recoilAge = boss.recoilAge;
         const bool rushing = IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) && rushPhase > 0.0f;
         boss.x = 1.80f;
         boss.y = -0.5f;
@@ -101,6 +104,7 @@ public:
         boss.turretAimZ = boss.z;
         boss.phase = 0.0f;
         boss.motionAge = 0;
+        boss.recoilAge = recoilAge;
         if (rushing) {
             boss.phase = rushPhase;
             ApplyRushPosition(boss, false, static_cast<int>(rushPhase));
@@ -157,6 +161,7 @@ public:
             boss.actionY = boss.y;
             boss.actionZ = boss.z;
         }
+        ApplyMainCannonRecoil(boss, shooter.IsRailGameplayActive());
 
         // 砲の照準は突進中も自機位置へ追従する
         boss.turretAimX += (shooter.m_playerX - boss.turretAimX) * TurretTrackingRate;
@@ -247,6 +252,9 @@ private:
     inline static constexpr float SideRushEndX = -3.35f;
     inline static constexpr float RailBackDistance = 8.0f;
     inline static constexpr float RailRushEndZ = -30.0f;
+    inline static constexpr int MainCannonRecoilFrames = 40;
+    inline static constexpr float SideMainCannonRecoilDistance = 0.10f;
+    inline static constexpr float RailMainCannonRecoilDistance = 1.40f;
 
     /**
      * @brief 突進攻撃を行うフェーズか取得する
@@ -308,5 +316,38 @@ private:
             boss.x = SideRushEndX + (boss.actionX - SideRushEndX) * t;
         }
         boss.z = ToRailZFromSideX(boss.x);
+    }
+
+    /**
+     * @brief 主砲発射反動をボス本体位置へ加算する
+     * @param boss 反動を適用するボス
+     * @param railMode レール表示中か
+     * @return なし
+     */
+    static void ApplyMainCannonRecoil(Enemy& boss, bool railMode) {
+        if (boss.recoilAge <= 0) return;
+
+        // 前半で後退し、後半で基準位置へ戻る
+        const int frame = MainCannonRecoilFrames - boss.recoilAge + 1;
+        const float t = static_cast<float>(frame) /
+            static_cast<float>(MainCannonRecoilFrames);
+        const float half = t < 0.5f ? t * 2.0f : (1.0f - t) * 2.0f;
+        const float ease = SmoothStep(Math::Clamp01(half));
+        if (railMode) {
+            boss.z += RailMainCannonRecoilDistance * ease;
+        } else {
+            boss.x += SideMainCannonRecoilDistance * ease;
+            boss.z = ToRailZFromSideX(boss.x);
+        }
+        --boss.recoilAge;
+    }
+
+    /**
+     * @brief ステージ4ボス弾幕の発射間隔を取得する
+     * @param phase 現在のボス攻撃フェーズ
+     * @return 発射間隔
+     */
+    int BossAttackInterval(BossPhase phase) const override {
+        return 150;
     }
 };

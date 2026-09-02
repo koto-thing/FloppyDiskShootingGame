@@ -182,7 +182,7 @@ public:
      * @return なし
      */
     static void FireBossPartBarrage(
-        SideScrollingShooter& shooter, const Enemy& boss);
+        SideScrollingShooter& shooter, Enemy& boss);
 
     /**
      * @brief ステージ固有弾を座標加算前に更新する

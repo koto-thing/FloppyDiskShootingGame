@@ -32,7 +32,7 @@ public:
      * @param boss 発射元となるStage 4ボス
      * @return なし
      */
-    static void FireBossPartBarrage(SideScrollingShooter& shooter, const Enemy& boss);
+    static void FireBossPartBarrage(SideScrollingShooter& shooter, Enemy& boss);
 
     /**
      * @brief 指定球がStage 4ボス本体へ接触したか判定する

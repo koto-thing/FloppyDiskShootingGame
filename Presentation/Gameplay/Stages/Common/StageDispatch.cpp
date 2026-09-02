@@ -203,7 +203,7 @@ bool SideScrollingShooter::StageDispatch::CanHitBossWhileCollisionDisabled(
 }
 
 void SideScrollingShooter::StageDispatch::FireBossPartBarrage(
-    SideScrollingShooter& shooter, const Enemy& boss) {
+    SideScrollingShooter& shooter, Enemy& boss) {
     switch (shooter.m_stageNumber) {
     case 2:
         Stage2Module::FireBossPartBarrage(shooter, boss);
