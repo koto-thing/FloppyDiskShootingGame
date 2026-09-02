@@ -130,11 +130,11 @@ public:
         const Shot& shot, const Enemy& boss, BossPart& part);
 
     /**
-     * @brief Phase1の飛行戦艦船体が自機弾を遮るか判定する
+     * @brief Stage3の飛行戦艦船体を自機弾が通過できるようにする
      * @param shooter 現在のゲーム状態
      * @param shot 判定する自機弾
      * @param boss 判定するボス
-     * @return 船体へ命中した場合true
+     * @return 常にfalse
      */
     static bool BlocksPlayerShot(const SideScrollingShooter& shooter,
         const Shot& shot, const Enemy& boss);
@@ -206,6 +206,14 @@ public:
      */
     static bool SpawnBossDebris(
         SideScrollingShooter& shooter, const Enemy& boss, int bossPart);
+
+    /**
+     * @brief Stage3ボス撃破後の海蛇突進演出へ移行する
+     * @param shooter 更新するゲーム本体
+     * @param boss 撃破されたボス
+     * @return 撃破処理をStage3で完了した場合true
+     */
+    static bool HandleBossDefeat(SideScrollingShooter& shooter, Enemy& boss);
 
     /**
      * @brief 超巨大飛行戦艦、武装、Phase2バリアを描画する

@@ -19,6 +19,7 @@
 #include "../Gameplay/Stages/Stage3/Stage3BossModelView.h"
 #include "../Gameplay/Stages/Stage3/Stage3FunnelModelView.h"
 #include "../Gameplay/Stages/Stage4/Stage4BossModelView.h"
+#include "../Gameplay/Stages/Stage4/Stage4WeaponDroneView.h"
 #include "../Gameplay/Stages/Stage5/Stage5ModelView.h"
 
 namespace {
@@ -27,13 +28,13 @@ struct ExhibitDefinition {
     GalleryEntry entry;
     const char* name;
     const char* description;
-    std::array<const char*, 4> animations;
+    std::array<const char*, 11> animations;
     int animationCount;
     float modelScale;
     float cameraDistance;
 };
 
-constexpr std::array<ExhibitDefinition, 16> Exhibits {{
+constexpr std::array<ExhibitDefinition, 17> Exhibits {{
     {GalleryEntry::Player, "POLICE INTERCEPTOR",
         "A COMPACT POLICE FIGHTER BUILT FOR RAPID INTERCEPTION",
         {"IDLE"}, 1, 3.8f, 15.0f},
@@ -63,7 +64,10 @@ constexpr std::array<ExhibitDefinition, 16> Exhibits {{
         {"AIM", "FIRE AND RECOIL"}, 2, 5.0f, 15.0f},
     {GalleryEntry::Stage4Boss, "STAGE 4 WAR MACHINE",
         "A LUXURY ARMORED VEHICLE FUSED WITH A SUPER-HEAVY TANK",
-        {"IDLE"}, 1, 0.48f, 23.0f},
+        {"PHASE 1 MOUNTED", "PHASE 2 MOUNTED", "PHASE 3 MOUNTED",
+            "ALL WEAPONS", "PHASE 1 WEAPON", "PHASE 2 WEAPON", "PHASE 3 WEAPON",
+            "MORTAR PITCH", "ROMANCE RECOIL 0", "ROMANCE RECOIL 1", "CARRY POINTS"},
+        11, 0.48f, 23.0f},
     {GalleryEntry::Eastsource, "EASTSOURCE",
         "THE DOTONBORI ATTACK CRAFT PILOTED BY THE SYNDICATE HITMAN",
         {"IDLE"}, 1, 0.82f, 19.0f},
@@ -81,7 +85,11 @@ constexpr std::array<ExhibitDefinition, 16> Exhibits {{
         {"IDLE"}, 1, 3.3f, 15.0f},
     {GalleryEntry::Stage4Enemy, "STAGE 4 STAR MINE",
         "A GREEN OMNIDIRECTIONAL ASSAULT UNIT",
-        {"IDLE"}, 1, 3.2f, 15.0f}
+        {"IDLE"}, 1, 3.2f, 15.0f},
+    {GalleryEntry::Stage4WeaponDrone, "HEAVY WEAPON DRONE",
+        "A DEDICATED AERIAL CRANE FOR REPLACING THE WAR MACHINE'S MAIN GUN",
+        {"IDLE", "WORK CYCLE", "SIEGE MORTAR CARRY", "ROMANCE CANNON CARRY"},
+        4, 2.7f, 19.0f}
 }};
 
 constexpr float LockedColor[4] = {0.025f, 0.030f, 0.040f, 1.0f};
@@ -253,6 +261,11 @@ void GalleryScene::RenderExhibit(Renderer& renderer) const {
         renderer.Draw({static_cast<PrimitiveShape>(shape), viewProjection * world, Vector3::One,
             {displayColor[0], displayColor[1], displayColor[2], displayColor[3]}, yaw});
     };
+    auto drawLegacyPart = [&](int shape, const Vector3& position, const Vector3& scale,
+        const float color[4], float yaw, float pitch) {
+        drawPart(static_cast<int>(PrimitiveShapeFromLegacyIndex(shape)),
+            position, scale, color, yaw, pitch);
+    };
     auto drawMatrixPart = [&](PrimitiveShape shape, const Matrix4x4& world,
         const ColorF& color, auto) {
         const ColorF displayColor = unlocked ? color : ColorF {
@@ -263,18 +276,18 @@ void GalleryScene::RenderExhibit(Renderer& renderer) const {
     // 展示識別子ごとにゲーム本編と同じモデル定義へ鑑賞用状態を渡す
     switch (exhibit.entry) {
     case GalleryEntry::Player:
-        AircraftModelView::DrawPlayer({}, 0.0f, exhibit.modelScale, drawPart);
+        AircraftModelView::DrawPlayer({}, 0.0f, exhibit.modelScale, drawLegacyPart);
         break;
     case GalleryEntry::LightEnemy:
     case GalleryEntry::HeavyEnemy:
     case GalleryEntry::ArmoredEnemy:
-        AircraftModelView::DrawEnemy({}, Math::Pi, exhibit.modelScale, drawPart);
+        AircraftModelView::DrawEnemy({}, Math::Pi, exhibit.modelScale, drawLegacyPart);
         break;
     case GalleryEntry::Stage1Boss: {
         BossModelTransform transform {{0.0f, 0.1f, 0.0f}};
         transform.yaw = Math::Pi;
         transform.scale = exhibit.modelScale;
-        LegacyBossModelView::Draw(transform, drawPart);
+        LegacyBossModelView::Draw(transform, drawLegacyPart);
         break;
     }
     case GalleryEntry::Stage2Boss: {
@@ -291,39 +304,42 @@ void GalleryScene::RenderExhibit(Renderer& renderer) const {
             battleship.aimTarget = {std::sin(m_animationTime) * 7.0f, 2.0f, -8.0f};
             battleship.secondaryAimTarget = {-4.0f, std::cos(m_animationTime) * 3.0f, -7.0f};
         }
-        SandSubmarineView::Draw(submarine, drawPart);
-        LandBattleshipView::Draw(battleship, drawPart);
+        SandSubmarineView::Draw(submarine, drawLegacyPart);
+        LandBattleshipView::Draw(battleship, drawLegacyPart);
         break;
     }
     case GalleryEntry::Stage3Boss: {
         BossModelTransform transform {{0.0f, 1.6f, 0.0f}};
         transform.yaw = Math::Pi;
         transform.scale = exhibit.modelScale;
-        Stage3BossModelView::DrawStaticBody(transform, drawPart);
-        Stage3BossModelView::DrawGondolaBody(transform, drawPart);
+        Stage3BossModelView::DrawStaticBody(transform, drawLegacyPart);
+        Stage3BossModelView::DrawGondolaBody(transform, drawLegacyPart);
         const float sweep = m_animationIndex == 1 ? std::sin(m_animationTime * 1.3f) * 0.55f : 0.0f;
         const float open = m_animationIndex >= 2 ? PingPong(m_animationTime, 1.2f) : 0.0f;
         for (int i = 0; i < Stage3BossModelView::TopGunCount; ++i) {
-            Stage3BossModelView::DrawTopGun(i, transform, {0.0f, sweep, 0.0f}, false, drawPart);
+            Stage3BossModelView::DrawTopGun(
+                i, transform, {0.0f, sweep, 0.0f}, false, drawLegacyPart);
         }
         for (int i = 0; i < Stage3BossModelView::GondolaMachineGunCount; ++i) {
-            Stage3BossModelView::DrawGondolaMachineGun(i, transform, {0.0f, -sweep, 0.0f}, drawPart);
+            Stage3BossModelView::DrawGondolaMachineGun(
+                i, transform, {0.0f, -sweep, 0.0f}, drawLegacyPart);
         }
         for (int i = 0; i < Stage3BossModelView::HeavyCannonCount; ++i) {
-            Stage3BossModelView::DrawHeavyCannon(i, transform, {0.0f, sweep * 0.6f, 0.0f}, drawPart);
+            Stage3BossModelView::DrawHeavyCannon(
+                i, transform, {0.0f, sweep * 0.6f, 0.0f}, drawLegacyPart);
         }
         for (int i = 0; i < Stage3BossModelView::MissilePodCount; ++i) {
-            Stage3BossModelView::DrawMissilePod(i, transform, open, drawPart);
+            Stage3BossModelView::DrawMissilePod(i, transform, open, drawLegacyPart);
         }
         for (int i = 0; i < Stage3BossModelView::FunnelPodCount; ++i) {
-            Stage3BossModelView::DrawFunnelPod(i, transform, open, drawPart);
+            Stage3BossModelView::DrawFunnelPod(i, transform, open, drawLegacyPart);
         }
         if (m_animationIndex == 3) {
             Stage3BarrierCagePose pose;
             pose.openAmount = open;
             pose.scrollOffset = m_animationTime * 8.0f;
             pose.flicker = PingPong(m_animationTime, 5.0f);
-            Stage3BarrierCageView::Draw(transform, pose, drawPart);
+            Stage3BarrierCageView::Draw(transform, pose, drawLegacyPart);
         }
         break;
     }
@@ -332,7 +348,7 @@ void GalleryScene::RenderExhibit(Renderer& renderer) const {
         transform.yaw = Math::Pi;
         transform.scale = exhibit.modelScale;
         const float open = m_animationIndex == 1 ? PingPong(m_animationTime, 1.4f) : 0.0f;
-        Stage3FunnelModelView::DrawBarrier(transform, open, drawPart);
+        Stage3FunnelModelView::DrawBarrier(transform, open, drawLegacyPart);
         break;
     }
     case GalleryEntry::Stage3ReflectFunnel: {
@@ -343,14 +359,131 @@ void GalleryScene::RenderExhibit(Renderer& renderer) const {
         const float pitch = std::cos(m_animationTime * 0.9f) * 0.25f;
         const float recoil = m_animationIndex == 1 ?
             (std::max)(0.0f, std::sin(m_animationTime * 5.0f)) : 0.0f;
-        Stage3FunnelModelView::DrawReflectShot(transform, yaw, pitch, recoil, drawPart);
+        Stage3FunnelModelView::DrawReflectShot(
+            transform, yaw, pitch, recoil, drawLegacyPart);
         break;
     }
     case GalleryEntry::Stage4Boss: {
         BossModelTransform transform {{0.0f, -1.8f, 0.0f}};
         transform.yaw = Math::Pi;
         transform.scale = exhibit.modelScale;
-        Stage4BossModelView::Draw(transform, drawPart);
+        auto DrawAttached = [&](Stage4MainWeaponType weaponType,
+            const Stage4MainWeaponPose& pose) {
+            Stage4BossModelView::DrawBody(transform, drawPart);
+            Stage4BossModelView::DrawMainWeapon(weaponType,
+                Stage4BossModelView::MainWeaponMount(transform), pose, drawPart);
+        };
+        auto DrawStandalone = [&](Stage4MainWeaponType weaponType, const Vector3& position,
+            const Stage4MainWeaponPose& pose) {
+            BossModelTransform weaponTransform {position};
+            weaponTransform.yaw = Math::Pi;
+            weaponTransform.scale = exhibit.modelScale;
+            Stage4BossModelView::DrawMainWeapon(weaponType, weaponTransform, pose, drawPart);
+            return weaponTransform;
+        };
+
+        // Stage4展示を主砲の装着、単体運搬、可動範囲を確認するモデルテストとして使う
+        if (m_animationIndex <= 2) {
+            const auto weaponType = static_cast<Stage4MainWeaponType>(m_animationIndex);
+            DrawAttached(weaponType, Stage4BossModelView::DefaultMainWeaponPose(weaponType));
+            break;
+        }
+        if (m_animationIndex == 3 || m_animationIndex == 10) {
+            constexpr Stage4MainWeaponType WeaponTypes[] = {
+                Stage4MainWeaponType::Phase1Cannon,
+                Stage4MainWeaponType::SiegeMortar,
+                Stage4MainWeaponType::RomanceCannon
+            };
+            for (int weapon = 0; weapon < 3; ++weapon) {
+                const Vector3 position {0.0f, -1.25f, (static_cast<float>(weapon) - 1.0f) * 6.5f};
+                const Stage4MainWeaponType weaponType = WeaponTypes[weapon];
+                const Stage4MainWeaponPose pose =
+                    Stage4BossModelView::DefaultMainWeaponPose(weaponType);
+                const BossModelTransform weaponTransform =
+                    DrawStandalone(weaponType, position, pose);
+                if (m_animationIndex != 10) continue;
+
+                // 把持点を明るい球で可視化してドローン配置を確認する
+                constexpr float CarryMarkerColor[] = {0.15f, 0.95f, 1.0f, 1.0f};
+                for (int point = 0;
+                    point < Stage4BossModelView::CarryPointCount(weaponType); ++point) {
+                    const Vector3 world = Stage4BossModelView::MainWeaponPointWorldPosition(
+                        weaponTransform, pose,
+                        Stage4BossModelView::CarryPointLocalPosition(weaponType, point));
+                    drawPart(static_cast<int>(PrimitiveShape::Sphere), world,
+                        Vector3 {0.32f, 0.32f, 0.32f}, CarryMarkerColor, 0.0f, 0.0f);
+                }
+            }
+            break;
+        }
+        if (m_animationIndex >= 4 && m_animationIndex <= 6) {
+            const auto weaponType = static_cast<Stage4MainWeaponType>(m_animationIndex - 4);
+            DrawStandalone(weaponType, {0.0f, -1.25f, 0.0f},
+                Stage4BossModelView::DefaultMainWeaponPose(weaponType));
+            break;
+        }
+        if (m_animationIndex == 7) {
+            Stage4MainWeaponPose pose = Stage4BossModelView::DefaultMainWeaponPose(
+                Stage4MainWeaponType::SiegeMortar);
+            pose.barrelPitch += std::sin(m_animationTime * 1.4f) * Math::Pi * 12.5f / 180.0f;
+            DrawStandalone(Stage4MainWeaponType::SiegeMortar,
+                {0.0f, -1.25f, 0.0f}, pose);
+            break;
+        }
+        Stage4MainWeaponPose pose = Stage4BossModelView::DefaultMainWeaponPose(
+            Stage4MainWeaponType::RomanceCannon);
+        pose.recoil = m_animationIndex == 9 ? 1.0f : 0.0f;
+        DrawStandalone(Stage4MainWeaponType::RomanceCannon,
+            {0.0f, -1.25f, 0.0f}, pose);
+        break;
+    }
+    case GalleryEntry::Stage4WeaponDrone: {
+        // 単体展示では自動旋回し、作業姿勢で全可動部を往復させる
+        if (m_animationIndex < 2) {
+            Stage4WeaponDronePose pose;
+            if (m_animationIndex == 1) {
+                const float motion = PingPong(m_animationTime, 1.15f);
+                pose.leftShoulderPitch = Math::Lerp(-0.42f, 0.28f, motion);
+                pose.leftElbowPitch = Math::Lerp(0.72f, -0.28f, motion);
+                pose.leftClampOpen = motion;
+                pose.rightShoulderPitch = Math::Lerp(0.28f, -0.42f, motion);
+                pose.rightElbowPitch = Math::Lerp(-0.28f, 0.72f, motion);
+                pose.rightClampOpen = motion;
+                pose.thrusterTilt = std::sin(m_animationTime * 1.4f) * 0.42f;
+            }
+            BossModelTransform transform {{0.0f, 0.45f, 0.0f}};
+            transform.yaw = Math::Pi + m_animationTime * 0.45f;
+            transform.scale = exhibit.modelScale;
+            Stage4WeaponDroneView::Draw(transform, pose, drawPart);
+            break;
+        }
+
+        // 主砲側CarryPoint APIを使い三機または四機の把持中心を正確に配置する
+        const Stage4MainWeaponType weaponType = m_animationIndex == 2 ?
+            Stage4MainWeaponType::SiegeMortar : Stage4MainWeaponType::RomanceCannon;
+        const Stage4MainWeaponPose weaponPose =
+            Stage4BossModelView::DefaultMainWeaponPose(weaponType);
+        BossModelTransform weaponTransform {{0.0f, -1.2f, 0.0f}};
+        weaponTransform.yaw = Math::Pi;
+        weaponTransform.scale = 0.62f;
+        Stage4BossModelView::DrawMainWeapon(
+            weaponType, weaponTransform, weaponPose, drawPart);
+
+        Stage4WeaponDronePose carryPose;
+        carryPose.leftShoulderPitch = 0.08f;
+        carryPose.leftElbowPitch = -0.08f;
+        carryPose.rightShoulderPitch = -0.08f;
+        carryPose.rightElbowPitch = 0.08f;
+        carryPose.thrusterTilt = -0.12f;
+        for (int index = 0; index < Stage4BossModelView::CarryPointCount(weaponType); ++index) {
+            const Vector3 carryPoint = Stage4BossModelView::MainWeaponPointWorldPosition(
+                weaponTransform, weaponPose,
+                Stage4BossModelView::CarryPointLocalPosition(weaponType, index));
+            BossModelTransform droneTransform {{}, {}, Math::Pi, weaponTransform.scale};
+            droneTransform = Stage4WeaponDroneView::PlaceLiftPointAt(
+                droneTransform, carryPose, carryPoint);
+            Stage4WeaponDroneView::Draw(droneTransform, carryPose, drawPart);
+        }
         break;
     }
     case GalleryEntry::Eastsource: {

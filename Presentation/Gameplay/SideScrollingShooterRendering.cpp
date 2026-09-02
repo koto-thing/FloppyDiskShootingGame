@@ -22,6 +22,8 @@ constexpr float PlayerShotColor[4] = { 0.15f, 1.00f, 0.25f, 1.0f };
 constexpr float EnemyShotColor[4] = { 1.00f, 0.25f, 0.25f, 1.0f };
 constexpr float PowerItemColor[4] = { 1.00f, 0.88f, 0.12f, 1.0f };
 constexpr float ScoreItemColor[4] = { 0.25f, 0.90f, 1.00f, 1.0f };
+constexpr float ItemInsetColor[4] = { 0.04f, 0.08f, 0.12f, 1.0f };
+constexpr float ItemGlyphColor[4] = { 1.00f, 1.00f, 0.92f, 1.0f };
 
 constexpr int MissionBannerGlyphDelayFrames = 4;
 constexpr int MissionBannerGlyphPopFrames = 8;
@@ -53,6 +55,58 @@ constexpr float MissionBannerGlyphScale(int glyphAge) {
 
 static_assert(MissionBannerGlyphScale(-1) == 0.0f);
 static_assert(MissionBannerGlyphScale(MissionBannerGlyphPopFrames) == 1.0f);
+
+/**
+ * @brief 表示切り替えクールダウンの残りフレームから使用可能率を取得する
+ * @param remainingFrames クールダウンの残りフレーム数
+ * @param durationFrames クールダウンの総フレーム数
+ * @return 0から1の使用可能率
+ */
+constexpr float ViewToggleReadyRate(int remainingFrames, int durationFrames) {
+    return durationFrames > 0 ?
+        1.0f - static_cast<float>((std::clamp)(remainingFrames, 0, durationFrames)) / durationFrames : 1.0f;
+}
+
+static_assert(ViewToggleReadyRate(480, 480) == 0.0f);
+static_assert(ViewToggleReadyRate(0, 480) == 1.0f);
+
+/**
+ * @brief 表示切り替えメーターのフェード率を取得する
+ * @param remainingFrames クールダウンの残りフレーム数
+ * @param durationFrames クールダウンの総フレーム数
+ * @param fadeFrames フェードに使うフレーム数
+ * @return 0から1の不透明度
+ */
+constexpr float ViewToggleHudOpacity(
+    int remainingFrames, int durationFrames, int fadeFrames) {
+    if (remainingFrames <= 0 || durationFrames <= 0 || fadeFrames <= 0) return 0.0f;
+    const int clampedRemaining = (std::clamp)(remainingFrames, 0, durationFrames);
+    const float fadeIn = (std::min)(1.0f,
+        static_cast<float>(durationFrames - clampedRemaining) / fadeFrames);
+    const float fadeOut = (std::min)(1.0f,
+        static_cast<float>(clampedRemaining) / fadeFrames);
+    return (std::min)(fadeIn, fadeOut);
+}
+
+static_assert(ViewToggleHudOpacity(480, 480, 12) == 0.0f);
+static_assert(ViewToggleHudOpacity(468, 480, 12) == 1.0f);
+static_assert(ViewToggleHudOpacity(6, 480, 12) == 0.5f);
+static_assert(ViewToggleHudOpacity(0, 480, 12) == 0.0f);
+
+/**
+ * @brief 表示切り替え可能時の機首を白くするフレームか判定する
+ * @param frame 現在フレーム
+ * @return 白色で発光する場合true、青色で発光する場合false
+ */
+constexpr bool ViewToggleNoseIsWhite(int frame) {
+    constexpr int HalfPeriodFrames = 18;
+    const int phase = frame % (HalfPeriodFrames * 2);
+    return phase < HalfPeriodFrames;
+}
+
+static_assert(ViewToggleNoseIsWhite(0));
+static_assert(!ViewToggleNoseIsWhite(18));
+static_assert(ViewToggleNoseIsWhite(36));
 
 /**
  * @brief 機体のローカル配置をY軸回転してワールド配置へ変換する
@@ -165,16 +219,20 @@ void SideScrollingShooter::DrawAttackWarnings3D(Renderer& renderer, const Camera
 
 void SideScrollingShooter::DrawModelPrimitive(Renderer& renderer, const Camera3D& camera, int shape,
     float x, float y, float z, float w, float h, float d, const float color[4], float yaw, float pitch) {
-    // プリミティブ形状を実3DカメラのViewProjectionへ乗せて描画する
+    // 旧来の数値指定だけを従来の形状番号からenumへ変換する
+    const PrimitiveShape primitiveShape = PrimitiveShapeFromLegacyIndex(shape);
+    DrawModelPrimitive(renderer, camera, primitiveShape,
+        x, y, z, w, h, d, color, yaw, pitch);
+}
+
+void SideScrollingShooter::DrawModelPrimitive(Renderer& renderer, const Camera3D& camera,
+    PrimitiveShape shape, float x, float y, float z, float w, float h, float d,
+    const float color[4], float yaw, float pitch) {
+    // 型付き形状を変換せず実3DカメラのViewProjectionへ乗せて描画する
     const Matrix4x4 world = Matrix4x4::Translation({x, y, z}) *
         Matrix4x4::RotationY(yaw) * Matrix4x4::RotationZ(pitch) * Matrix4x4::Scale({w, h, d});
-    const PrimitiveShape primitiveShape = shape == 0 ? PrimitiveShape::Plate :
-        shape == 1 ? PrimitiveShape::Box :
-        shape == 2 ? PrimitiveShape::Cylinder :
-        shape == 3 ? PrimitiveShape::Cone :
-        shape == 4 ? PrimitiveShape::Prism : PrimitiveShape::Sphere;
     renderer.Draw({
-        primitiveShape,
+        shape,
         camera.ProjectionMatrix() * camera.ViewMatrix() * world,
         Vector3::One,
         {color[0], color[1], color[2], color[3]},
@@ -244,16 +302,34 @@ void SideScrollingShooter::DrawBlobShadow(Renderer& renderer, const Camera3D& ca
 }
 
 void SideScrollingShooter::DrawPlayerModel(Renderer& renderer, const Camera3D& camera,
-    float x, float y, float z, bool visible, float yaw) {
+    float x, float y, float z, bool visible, float yaw) const {
     if (!visible) return;
+
+    const bool canToggleView = CanToggleView();
+    const bool whiteGlow = ViewToggleNoseIsWhite(m_frame);
+    constexpr float BlueNose[4] = {0.05f, 0.45f, 2.80f, 1.0f};
+    constexpr float WhiteNose[4] = {2.40f, 2.40f, 3.00f, 1.0f};
+    constexpr float BlueGlow[4] = {0.05f, 0.35f, 1.00f, 0.24f};
+    constexpr float WhiteGlow[4] = {1.00f, 1.00f, 1.00f, 0.34f};
+    const float* noseColor = whiteGlow ? WhiteNose : BlueNose;
+    const float* glowColor = whiteGlow ? WhiteGlow : BlueGlow;
 
     // ゲーム本編とギャラリーで同じ機体定義を共有する
     auto drawPart = [&](int shape, const Vector3& partPosition, const Vector3& partScale,
         const float color[4], float partYaw, float pitch) {
-        (void)pitch;
+        const bool isNose = shape == 3;
         DrawModelPrimitive(renderer, camera, shape,
             partPosition.x, partPosition.y, partPosition.z,
-            partScale.x, partScale.y, partScale.z, color, partYaw);
+            partScale.x, partScale.y, partScale.z,
+            canToggleView && isNose ? noseColor : color, partYaw, pitch);
+        if (!canToggleView || !isNose) return;
+
+        // 青と白の高輝度な機首へ薄い拡大形状を重ね、ブルーム風の点滅にする
+        const float glowScale = whiteGlow ? 1.18f : 1.10f;
+        DrawModelPrimitive(renderer, camera, shape,
+            partPosition.x, partPosition.y, partPosition.z,
+            partScale.x * glowScale, partScale.y * glowScale, partScale.z * glowScale,
+            glowColor, partYaw, pitch);
     };
     AircraftModelView::DrawPlayer({x, y, z}, yaw, 1.0f, drawPart);
 }
@@ -358,9 +434,9 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
     // 専用モデルがない追加ステージは現行の共通機体を維持する
     auto drawPart = [&](int shape, const Vector3& partPosition, const Vector3& partScale,
         const float color[4], float partYaw, float pitch) {
-        (void)pitch;
-        DrawModelPrimitive(renderer, camera, shape, partPosition.x, partPosition.y, partPosition.z,
-            partScale.x, partScale.y, partScale.z, color, partYaw);
+        DrawModelPrimitive(renderer, camera, shape,
+            partPosition.x, partPosition.y, partPosition.z,
+            partScale.x, partScale.y, partScale.z, color, partYaw, pitch);
     };
     AircraftModelView::DrawEnemy({x, y, z}, yaw + Math::Pi, scale, drawPart);
 }
@@ -386,14 +462,8 @@ Vector2 SideScrollingShooter::ScreenShakeOffset() const {
 
 void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw) const {
     if (StageDispatch::DrawSpecialShot(*this, renderer, camera, shot, yaw)) return;
-    if (shot.enemy) {
-        DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
-            0.16f, 0.16f, 0.65f, EnemyShotColor, yaw);
-        return;
-    }
-
-    // 特殊弾は専用HLSLへ画面座標と進行方向を渡して描画する
-    if (shot.special) {
+    if (shot.enemy || shot.special) {
+        // 敵弾と特殊弾は画面座標と進行方向を埋め込みHLSLへ渡して描画する
         const Vector3 worldPosition {ToWorldX(shot.x), ToWorldY(shot.y), shot.z};
         Vector2 screenPosition;
         if (!camera.TryWorldToScreen(worldPosition, screenPosition)) return;
@@ -410,8 +480,39 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
         const Vector2 direction {
             (nextScreenPosition.x - screenPosition.x) / static_cast<float>(viewport.width) * 2.0f,
             (screenPosition.y - nextScreenPosition.y) / static_cast<float>(viewport.height) * 2.0f};
-        renderer.DrawPlayerShot({position, {0.040f, 0.020f}, std::atan2(direction.y, direction.x),
-            static_cast<float>(m_frame), static_cast<int>(shot.playerType)});
+        Vector2 size = shot.enemy ? Vector2 {0.055f, 0.028f} : Vector2 {0.040f, 0.020f};
+        if (!shot.enemy && RailBlend() > 0.0f) {
+            // 3Dでは当たり判定球を画面へ投影し、遠方でも見た目と判定範囲を一致させる
+            const float worldRadius = shot.hitRadius * WorldXScale;
+            Vector2 radiusXScreen;
+            Vector2 radiusYScreen;
+            if (camera.TryWorldToScreen(worldPosition + Vector3 {worldRadius, 0.0f, 0.0f}, radiusXScreen) &&
+                camera.TryWorldToScreen(worldPosition + Vector3 {0.0f, worldRadius, 0.0f}, radiusYScreen)) {
+                const Vector2 railSize {
+                    std::abs(radiusXScreen.x - screenPosition.x) / static_cast<float>(viewport.width) * 2.0f,
+                    std::abs(radiusYScreen.y - screenPosition.y) / static_cast<float>(viewport.height)};
+                size = Vector2::Lerp(size, railSize, RailBlend());
+            }
+        }
+        Vector2 drawPosition = position;
+        int type = shot.enemy ? 4 : static_cast<int>(shot.playerType);
+
+        // 既存のグレイズ範囲へ入った通常敵弾を反転させ、弾ごとに位相をずらして小刻みに震わせる
+        if (shot.enemy) {
+            const float dx = IsRailGameplayActive() ? ToWorldX(shot.x - m_playerX) : shot.x - m_playerX;
+            const float dy = IsRailGameplayActive() ? ToWorldY(shot.y - m_playerY) : shot.y - m_playerY;
+            const float dz = IsRailGameplayActive() ? shot.z - PlayerRailZ : 0.0f;
+            const float warningRadius = IsRailGameplayActive() ? 1.46f : 0.222f;
+            if (dx * dx + dy * dy + dz * dz <= warningRadius * warningRadius) {
+                const float phase = static_cast<float>(m_frame) * 2.73f +
+                    static_cast<float>(shot.barrageIndex) * 1.91f;
+                drawPosition.x += std::sin(phase) * 0.0045f;
+                drawPosition.y += std::cos(phase * 1.37f) * 0.0045f;
+                type = 5;
+            }
+        }
+        renderer.DrawPlayerShot({drawPosition, size, std::atan2(direction.y, direction.x),
+            static_cast<float>(m_frame), type});
         return;
     }
     DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
@@ -519,11 +620,36 @@ void SideScrollingShooter::DrawDebris(Renderer& renderer, const Camera3D& camera
  * @param camera 描画に使用するカメラ
  * @param item 描画対象の取得アイテム
  * @param yaw モデルのY軸回転角度
+ * @return なし
  */
 void SideScrollingShooter::DrawItemModel(Renderer& renderer, const Camera3D& camera,
     const Item& item, float yaw) {
+    const Matrix4x4 itemWorld = Matrix4x4::Translation(
+        {ToWorldX(item.x), ToWorldY(item.y), item.z}) * Matrix4x4::RotationY(yaw);
+    const auto drawBox = [&](const Vector3& position, const Vector3& scale, const float color[4]) {
+        DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
+            itemWorld * Matrix4x4::Translation(position) * Matrix4x4::Scale(scale), color);
+    };
+
+    if (item.type == ItemType::Power) {
+        // 角形ケースの前面へ暗い銘板とPを重ねる
+        drawBox({}, {0.38f, 0.38f, 0.22f}, PowerItemColor);
+        drawBox({0.0f, 0.0f, -0.121f}, {0.29f, 0.29f, 0.025f}, ItemInsetColor);
+        drawBox({-0.070f, 0.0f, -0.139f}, {0.040f, 0.220f, 0.020f}, ItemGlyphColor);
+        drawBox({0.010f, 0.090f, -0.139f}, {0.120f, 0.040f, 0.020f}, ItemGlyphColor);
+        drawBox({0.010f, 0.000f, -0.139f}, {0.120f, 0.040f, 0.020f}, ItemGlyphColor);
+        drawBox({0.070f, 0.045f, -0.139f}, {0.040f, 0.130f, 0.020f}, ItemGlyphColor);
+        return;
+    }
+
+    // 小型球体の手前へ5本のバーでSを表示する
     DrawModelPrimitive(renderer, camera, 5, ToWorldX(item.x), ToWorldY(item.y), item.z,
-        0.28f, 0.28f, 0.28f, item.type == ItemType::Power ? PowerItemColor : ScoreItemColor, yaw);
+        0.23f, 0.23f, 0.23f, ScoreItemColor, yaw);
+    drawBox({0.0f, 0.080f, -0.122f}, {0.150f, 0.035f, 0.018f}, ItemGlyphColor);
+    drawBox({-0.058f, 0.040f, -0.122f}, {0.035f, 0.080f, 0.018f}, ItemGlyphColor);
+    drawBox({0.0f, 0.000f, -0.122f}, {0.150f, 0.035f, 0.018f}, ItemGlyphColor);
+    drawBox({0.058f, -0.040f, -0.122f}, {0.035f, 0.080f, 0.018f}, ItemGlyphColor);
+    drawBox({0.0f, -0.080f, -0.122f}, {0.150f, 0.035f, 0.018f}, ItemGlyphColor);
 }
 
 /**
@@ -576,6 +702,31 @@ void SideScrollingShooter::DrawRestart(Renderer& renderer) const {
     char text[16];
     std::snprintf(text, sizeof(text), "RESTART %d", countdown);
     renderer.DrawText(text, TextAlign::Center, 0.038f, { 1.0f, 0.88f, 0.25f, 1.0f }, { 0.0f, 0.12f });
+}
+
+/**
+ * @brief 武装強化時の点滅メッセージを自機上へ描画する
+ * @param renderer 描画先レンダラー
+ * @param camera 現在の3Dカメラ
+ * @param playerZ 描画中の自機のワールド座標Z
+ * @return なし
+ */
+void SideScrollingShooter::DrawPowerUp(
+    Renderer& renderer, const Camera3D& camera, float playerZ) const {
+    if (m_powerUpTimer <= 0 || (m_powerUpTimer / 8) % 2 == 0) return;
+
+    // 自機上方のワールド座標を画面座標へ投影する
+    Vector2 screenPosition;
+    if (!camera.TryWorldToScreen(
+            {ToWorldX(m_playerX), ToWorldY(m_playerY) + 0.85f, playerZ}, screenPosition)) return;
+    const Viewport& viewport = camera.GetViewport();
+    const Vector2 position {
+        (screenPosition.x - static_cast<float>(viewport.x)) /
+                static_cast<float>(viewport.width) * 2.0f - 1.0f,
+        1.0f - (screenPosition.y - static_cast<float>(viewport.y)) /
+                static_cast<float>(viewport.height) * 2.0f};
+    renderer.DrawText("POWER UP", TextAlign::Center, 0.022f,
+        {1.0f, 0.88f, 0.12f, 1.0f}, position);
 }
 
 /**
@@ -645,6 +796,48 @@ void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
     }
     renderer.DrawText(phaseLabel, { -BossBarWidth, 0.81f }, 0.012f,
         { 1.0f, 0.82f, 0.30f, 1.0f });
+}
+
+/**
+ * @brief 2Dと3Dの表示切り替えクールダウンを描画する
+ * @param renderer 描画先レンダラー
+ * @param camera 現在の3Dカメラ
+ * @param playerZ 描画中の自機のワールド座標Z
+ * @return なし
+ */
+void SideScrollingShooter::DrawViewToggleCooldownHud(
+    Renderer& renderer, const Camera3D& camera, float playerZ) const {
+    constexpr int FadeFrames = 12;
+    constexpr float BarWidth = 0.30f;
+    constexpr float PlayerBarWidth = 0.11f;
+    const float readyRate = ViewToggleReadyRate(m_viewToggleCooldown, ViewToggleCooldownFrames);
+    const float opacity = ViewToggleHudOpacity(
+        m_viewToggleCooldown, ViewToggleCooldownFrames, FadeFrames);
+    if (opacity <= 0.0f) return;
+    const float trackColor[4] = {0.10f, 0.18f, 0.20f, 0.92f * opacity};
+    const float fillColor[4] = {0.20f, 0.82f, 1.00f, opacity};
+    const ColorF textColor {0.65f, 0.90f, 0.95f, opacity};
+
+    // 上部中央のトラックとFillを同じ中心座標へ配置する
+    renderer.DrawText("2D <-> 3D", TextAlign::TopCenter, 0.011f,
+        textColor, {0.0f, -0.018f});
+    DrawShape(renderer, 0.0f, 0.905f, BarWidth, 0.018f, trackColor);
+    DrawShape(renderer, 0.0f, 0.905f, BarWidth * readyRate, 0.012f, fillColor);
+
+    // 自機下方のワールド座標を画面座標へ投影して小型メーターを追従させる
+    Vector2 screenPosition;
+    if (!camera.TryWorldToScreen(
+            {ToWorldX(m_playerX), ToWorldY(m_playerY) - 0.70f, playerZ}, screenPosition)) return;
+    const Viewport& viewport = camera.GetViewport();
+    const Vector2 position {
+        (screenPosition.x - static_cast<float>(viewport.x)) /
+                static_cast<float>(viewport.width) * 2.0f - 1.0f,
+        1.0f - (screenPosition.y - static_cast<float>(viewport.y)) /
+                static_cast<float>(viewport.height) * 2.0f};
+    DrawShape(renderer, position.x, position.y, PlayerBarWidth, 0.013f, trackColor);
+    DrawShape(renderer,
+        position.x, position.y,
+        PlayerBarWidth * readyRate, 0.008f, fillColor);
 }
 
 /**
@@ -760,10 +953,10 @@ void SideScrollingShooter::DrawBossStory(Renderer& renderer) const {
         ColorF::White(), CharacterSpacing);
     if (firstLineEnd < text.size()) {
         const std::size_t secondLineStart = text[firstLineEnd] == ' ' ? firstLineEnd + 1 : firstLineEnd;
-        renderer.DrawText(text.substr(secondLineStart), {-0.78f, -0.56f}, 0.016f,
+        renderer.DrawText(text.substr(secondLineStart), {-0.78f, -0.57f}, 0.016f,
             ColorF::White(), CharacterSpacing);
     }
-    renderer.DrawText("Z: NEXT", {0.61f, -0.60f}, 0.012f,
+    renderer.DrawText("Z: NEXT   X: SKIP", {0.50f, -0.60f}, 0.012f,
         {0.65f, 0.75f, 0.82f, 1.0f}, CharacterSpacing);
 }
 

@@ -10,6 +10,12 @@
 #include "SideScrollingShooterEnemies.h"
 #include "Stages/Common/StageDefinition.h"
 
+namespace {
+constexpr float PlayerHitboxColor[4] = {1.0f, 0.08f, 0.08f, 0.24f};
+constexpr float PlayerHitRadius2D = 0.050f;
+constexpr float PlayerHitRadius3D = 0.38f;
+}
+
 void SideScrollingShooter::Render(Renderer& renderer) const {
     // 安定した2D表示では全オブジェクトを同じ奥行きへ固定する
     if (!IsRailRenderActive()) {
@@ -59,14 +65,23 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
         if (!item.active) continue;
         Item sideItem = item;
         sideItem.z = SidePlaneZ - 0.2f;
-        DrawItemModel(renderer, camera, sideItem, Math::HalfPi);
+        DrawItemModel(renderer, camera, sideItem, 0.0f);
     }
+    const bool playerVisible = m_playerDestructionTimer == 0 &&
+        (m_invincible == 0 || (m_invincible / 5) % 2 == 0);
     DrawPlayerModel(renderer, camera, ToWorldX(m_playerX), ToWorldY(m_playerY),
-        SidePlaneZ, m_playerDestructionTimer == 0 &&
-        (m_invincible == 0 || (m_invincible / 5) % 2 == 0), Math::HalfPi);
+        SidePlaneZ, playerVisible, Math::HalfPi);
+    if (m_slowMove && playerVisible) {
+        // 2D判定の画面比率をワールド寸法へ変換して表示する
+        DrawModelPrimitive(renderer, camera, 5, ToWorldX(m_playerX), ToWorldY(m_playerY), SidePlaneZ,
+            PlayerHitRadius2D * WorldXScale * 2.0f,
+            PlayerHitRadius2D * WorldYScale * 2.0f,
+            PlayerHitRadius2D * WorldYScale * 2.0f, PlayerHitboxColor);
+    }
 
     renderer.ResetCamera();
     StageDispatch::DrawOverlay2D(*this, renderer);
+    DrawPowerUp(renderer, camera, SidePlaneZ);
     DrawAttackWarnings2D(renderer);
 
     char stageStatus[48];
@@ -83,6 +98,7 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     renderer.DrawText(scoreStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.025f });
     renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
     renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
+    DrawViewToggleCooldownHud(renderer, camera, SidePlaneZ);
     renderer.DrawText(StageDispatch::IsViewLocked(*this) ?
         "MOVE: ARROWS/WASD  SHOT: Z/SPACE  3D MODE LOCKED" :
         "MOVE: ARROWS/WASD  SHOT: Z/SPACE  MODE: X", { -0.92f, -0.92f }, 0.012f,
@@ -152,7 +168,10 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     }
     for (const auto& explosion : m_explosions) {
         if (!explosion.active) continue;
-        DrawExplosion(renderer, camera, explosion);
+        // 2Dではレール変換済みの奥行きで船体背後へ隠れないよう前景面へ寄せる
+        Explosion drawExplosion = explosion;
+        drawExplosion.z = Math::Lerp(SidePlaneZ - 0.4f, explosion.z, railWeight);
+        DrawExplosion(renderer, camera, drawExplosion);
     }
     for (const auto& debris : m_debris) {
         if (!debris.active) continue;
@@ -160,7 +179,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     }
     for (const auto& item : m_items) {
         if (!item.active) continue;
-        DrawItemModel(renderer, camera, item, playerYaw);
+        DrawItemModel(renderer, camera, item, 0.0f);
     }
     const bool playerVisible = m_playerDestructionTimer == 0 &&
         (m_invincible == 0 || (m_invincible / 5) % 2 == 0);
@@ -173,10 +192,21 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     DrawPlayerModel(renderer, camera, ToWorldX(m_playerX), ToWorldY(m_playerY),
         Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight),
         playerVisible, playerYaw);
+    if (m_slowMove && playerVisible) {
+        // 視点遇移中も実際の2D/3D被弾半径に連続して追従する
+        const float hitboxWidth = Math::Lerp(
+            PlayerHitRadius2D * WorldXScale * 2.0f, PlayerHitRadius3D * 2.0f, railWeight);
+        const float hitboxHeight = Math::Lerp(
+            PlayerHitRadius2D * WorldYScale * 2.0f, PlayerHitRadius3D * 2.0f, railWeight);
+        DrawModelPrimitive(renderer, camera, 5, ToWorldX(m_playerX), ToWorldY(m_playerY),
+            Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight),
+            hitboxWidth, hitboxHeight, hitboxHeight, PlayerHitboxColor);
+    }
     DrawAttackWarnings3D(renderer, camera, railWeight);
 
     renderer.ResetCamera();
     StageDispatch::DrawOverlay3D(*this, renderer);
+    DrawPowerUp(renderer, camera, Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight));
 
     char stageStatus[48];
     char scoreStatus[32];
@@ -192,6 +222,8 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     renderer.DrawText(scoreStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.025f });
     renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
     renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
+    DrawViewToggleCooldownHud(
+        renderer, camera, Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight));
     renderer.DrawText(StageDispatch::IsViewLocked(*this) ?
         "MOVE: ARROWS/WASD  SHOT: Z/SPACE  3D MODE LOCKED" :
         "MOVE: ARROWS/WASD  SHOT: Z/SPACE  MODE: X", { -0.92f, -0.92f }, 0.012f,

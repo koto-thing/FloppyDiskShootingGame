@@ -23,6 +23,19 @@ enum class PipelineId {
 /** @brief Rendererへ渡す3D形状の種類 */
 enum class PrimitiveShape { Plate, Box, Sphere, Cylinder, Cone, Prism, Sprite2D };
 
+/**
+ * @brief 旧モデルの形状番号を現在のPrimitiveShapeへ変換する
+ * @param shape 0=Plate、1=Box、2=Cylinder、3=Cone、4=Prism、5=Sphereの旧番号
+ * @return 対応するPrimitiveShape
+ */
+constexpr PrimitiveShape PrimitiveShapeFromLegacyIndex(int shape) {
+    return shape == 0 ? PrimitiveShape::Plate :
+        shape == 1 ? PrimitiveShape::Box :
+        shape == 2 ? PrimitiveShape::Cylinder :
+        shape == 3 ? PrimitiveShape::Cone :
+        shape == 4 ? PrimitiveShape::Prism : PrimitiveShape::Sphere;
+}
+
 /** @brief 形状、変換、色をまとめた3D描画命令 */
 struct Primitive3D {
     PrimitiveShape shape = PrimitiveShape::Box;

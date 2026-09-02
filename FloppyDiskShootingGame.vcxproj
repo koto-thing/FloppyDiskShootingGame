@@ -225,6 +225,7 @@
     <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3BarrierCageView.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3FunnelModelView.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4BossModelView.h" />
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4WeaponDroneView.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5ModelView.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage1\Stage1EnemySheet.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage1\Stage1EnemySheetEasy.h" />

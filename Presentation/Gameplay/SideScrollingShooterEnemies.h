@@ -442,6 +442,7 @@ public:
                 shooter.SpawnShotDirect(enemy.x + cx * Radius, enemy.y + sy * Radius, enemy.z,
                     cx * RingSpreadSpeed(), sy * RingSpreadSpeed() * 1.4f, -RingShotSpeed(), true, i, BulletCount);
             }
+            shooter.PlayBossMachineGunSound();
             return;
         }
 
@@ -450,6 +451,7 @@ public:
             shooter.SpawnShotDirect(enemy.x - 0.06f, enemy.y + offsetY, ToRailZFromSideX(enemy.x),
                 -AimedShotSpeed(), 0.0f, 0.0f, true, i, BulletCount);
         }
+        shooter.PlayBossMachineGunSound();
     }
 
 protected:
@@ -541,6 +543,7 @@ public:
                 shooter.SpawnShotDirect(enemy.x, enemy.y, enemy.z,
                     vx, vy, -RingShotSpeed(), true, i, -BulletCount);
             }
+            shooter.PlayBossMachineGunSound();
             return;
         }
 
@@ -552,6 +555,7 @@ public:
             shooter.SpawnShotDirect(enemy.x - 0.06f, enemy.y, ToRailZFromSideX(enemy.x),
                 -AimedShotSpeed(), vy, 0.0f, true, i, -BulletCount);
         }
+        shooter.PlayBossMachineGunSound();
     }
 };
 

@@ -14,6 +14,13 @@
 
 namespace {
 using SideScrollingShooterShared::BossNameRevealFrames;
+
+constexpr float PowerAfterRestart(float power) {
+    return power > 1.0f ? power - 1.0f : 0.0f;
+}
+
+static_assert(PowerAfterRestart(3.25f) == 2.25f);
+static_assert(PowerAfterRestart(0.75f) == 0.0f);
 }
 
 #include "SideScrollingShooterEnemies.h"
@@ -140,6 +147,7 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
     m_bossBattlePending = false;
     m_chapterResultActive = false;
     m_playerDestructionTimer = 0;
+    m_powerUpTimer = 0;
     m_viewToggleRequested = false;
     m_viewMode = ViewMode::Side2D;
     m_nextViewMode = ViewMode::Side2D;
@@ -174,7 +182,7 @@ void SideScrollingShooter::StartDebugCheckpoint(int stageNumber, int chapterNumb
     m_chapterStartScore = m_score;
     m_chapterStartKills = m_kills;
     m_chapterResultTimer = 0;
-    m_missionStartTimer = MissionBannerDisplayFrames;
+    m_missionStartTimer = bossBattle ? 0 : MissionBannerDisplayFrames;
     m_frame = bossBattle ? m_stage->ChapterEndFrame(3) : m_stage->ChapterEndFrame(m_chapterNumber - 1);
     m_scroll = static_cast<float>(m_frame) * 0.008f;
     m_spawnCooldown = 35;
@@ -223,9 +231,7 @@ void SideScrollingShooter::ProcessInput() {
     m_moveDown = Input::GetKey(KeyCode::DownArrow) || Input::GetKey(KeyCode::S);
     m_slowMove = InputService::IsKeyPressed(VK_SHIFT);
     m_fire = Input::GetKey(KeyCode::Z) || Input::GetKey(KeyCode::Space);
-    m_viewToggleRequested = Input::GetKeyDown(KeyCode::X) && m_viewToggleCooldown == 0 &&
-        !StageDispatch::IsViewLocked(*this) &&
-        m_bossIntroductionPhase == BossIntroductionPhase::None;
+    m_viewToggleRequested = Input::GetKeyDown(KeyCode::X) && CanToggleView();
 
     // デバッグ用に任意の進行地点へ移動する
     if (Input::GetKeyDown(KeyCode::F1)) StartDebugCheckpoint(1, 1, false);
@@ -247,8 +253,9 @@ void SideScrollingShooter::ProcessInput() {
 }
 
 void SideScrollingShooter::Tick() {
-    // 進行停止中も画面揺れを終了へ進める
+    // 進行停止中も画面演出を終了へ進める
     m_screenShakeFrames = (std::max)(0, m_screenShakeFrames - 1);
+    m_powerUpTimer = (std::max)(0, m_powerUpTimer - 1);
 
     // ミッション開始表示中は背景を維持したまま戦闘進行と操作を止める
     if (m_missionStartTimer > 0) {
@@ -698,12 +705,11 @@ void SideScrollingShooter::TickBossStory() {
         return;
     }
 
-    // Zキー入力時だけ次の台詞へ進める
-    if (!Input::GetKeyDown(KeyCode::Z)) {
-        return;
-    }
+    // Xキーで会話全体を飛ばし、Zキーで次の台詞へ進める
+    if (Input::GetKeyDown(KeyCode::X)) m_bossStoryLine = story.lineCount;
+    else if (Input::GetKeyDown(KeyCode::Z)) ++m_bossStoryLine;
+    else return;
 
-    ++m_bossStoryLine;
     m_bossStoryActive = m_bossStoryLine < story.lineCount;
     if (!m_bossStoryActive) {
         m_bossIntroductionPhase = BossIntroductionPhase::NameReveal;
@@ -797,6 +803,19 @@ void SideScrollingShooter::DamagePlayer() {
  * @return なし
  */
 void SideScrollingShooter::RestartCurrentChapter() {
+    // ボス戦中はBキーと同じ戦闘開始状態へ戻す
+    const bool restartBossBattle = m_bossBattle;
+    m_power = PowerAfterRestart(m_power);
+    if (restartBossBattle) {
+        if (!StageDispatch::HandleDebugBossInput(*this)) {
+            StartDebugCheckpoint(m_stageNumber, 3, true);
+        }
+        ++m_chapterRetryCounts[m_chapterNumber - 1];
+        m_restartTimer = RestartDisplayFrames;
+        return;
+    }
+
+    // 通常戦では被弾時点のPowerから1.0だけ失い、0.0未満にはしない
     if (StageDispatch::TryRestartCheckpoint(*this)) return;
     ++m_chapterRetryCounts[m_chapterNumber - 1];
     m_shots = {};
@@ -806,7 +825,6 @@ void SideScrollingShooter::RestartCurrentChapter() {
     m_debris = {};
     StageDispatch::ResetGimmicks(*this);
     m_chapterResult = {};
-    m_power = m_chapterStartPower;
     m_score = m_chapterStartScore;
     m_kills = m_chapterStartKills;
     m_playerX = -0.72f;
@@ -944,4 +962,14 @@ bool SideScrollingShooter::IsRailGameplayActive() const {
 bool SideScrollingShooter::IsRailRenderActive() const {
     return m_viewMode == ViewMode::Rail3D || m_nextViewMode == ViewMode::Rail3D ||
         m_viewTransitionTimer > 0;
+}
+
+/**
+ * @brief 現在2Dと3Dの表示を切り替えられるか判定する
+ * @return 切り替え可能な場合true
+ */
+bool SideScrollingShooter::CanToggleView() const {
+    return m_viewTransitionTimer == 0 && m_viewToggleCooldown == 0 &&
+        m_missionStartTimer == 0 && !StageDispatch::IsViewLocked(*this) &&
+        m_bossIntroductionPhase == BossIntroductionPhase::None;
 }

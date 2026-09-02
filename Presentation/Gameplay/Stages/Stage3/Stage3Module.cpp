@@ -28,6 +28,7 @@ constexpr float SunColor[4] = {1.00f, 0.82f, 0.20f, 1.0f};
 constexpr float SeaSerpentColor[4] = {0.05f, 0.24f, 0.20f, 1.0f};
 constexpr float SeaSerpentBellyColor[4] = {0.28f, 0.62f, 0.48f, 1.0f};
 constexpr float SeaSerpentEyeColor[4] = {1.00f, 0.84f, 0.16f, 1.0f};
+constexpr float SeaSerpentMouthColor[4] = {0.08f, 0.015f, 0.02f, 1.0f};
 constexpr float SeaSerpentSideEyeSurfaceOffset = 0.90f;
 constexpr float SeaSerpentRailEyeSurfaceOffset = 1.70f;
 constexpr int DawnStartFrame = 500;
@@ -40,6 +41,14 @@ constexpr int BossIntroductionFrameCount =
 constexpr int BossSectionTransitionFrames = 150;
 constexpr int BossPhase2TravelFrames = 4 * 60;
 constexpr int BossPhase2DeployFrames = 4 * 60;
+constexpr int BossLaserChargeFrames = 2 * 60;
+constexpr int BossLaserFireFrames = 3 * 60;
+constexpr int BossLaserCooldownFrames = 5 * 60;
+constexpr int BossLaserCycleFrames =
+    BossLaserChargeFrames + BossLaserFireFrames + BossLaserCooldownFrames;
+constexpr float BossLaserTrackingRate = 0.005f;
+constexpr float BossLaserRadius = 0.42f;
+constexpr float BossLaserExtraLength = 24.0f;
 constexpr int BossMissileEngineStartFrame = 26;
 constexpr int BossMissileCullGraceFrames = 45;
 constexpr int BossDirectMissileHomingFrames = 42;
@@ -47,6 +56,19 @@ constexpr int BossMachineGunCycleFrames = 180;
 constexpr int BossMachineGunBurstFrames = 36;
 constexpr int BossMachineGunRandomStartFrame = 90;
 constexpr int BossMachineGunShotInterval = 5;
+constexpr int BossDefeatSequenceFrames = 12 * 60;
+constexpr int BossDefeatCameraFrames = 90;
+constexpr int BossDefeatFirstRushStartFrame = 110;
+constexpr int BossDefeatFirstRushFrames = 150;
+constexpr int BossDefeatFirstImpactFrame = 185;
+constexpr int BossDefeatSecondRushStartFrame = 300;
+constexpr int BossDefeatSecondRushFrames = 190;
+constexpr int BossDefeatSecondImpactFrame = 395;
+constexpr int BossDefeatGondolaFallFrames = 150;
+constexpr float BossDefeatFinalSeaDrop = 8.0f;
+constexpr float BossDefeatCameraLift = 8.0f;
+constexpr float BossDefeatWaterHeight = 18.0f;
+constexpr float BossDefeatGondolaFloatY = -6.6f;
 constexpr int BossTurretHp = 100;
 constexpr int BossPhase1StartHp = 1200;
 constexpr int BossTurretBreakDamage = 100;
@@ -104,7 +126,8 @@ constexpr float ReflectShotSpeed = 0.44f * BossLaterPhaseSpeedScale;
 constexpr int ReflectFunnelMissileIntervalFrames = 10 * 60;
 constexpr int ReflectFunnelMissileLifetimeFrames = 8 * 60;
 constexpr float ReflectFunnelMissileSpeed = 0.045f;
-constexpr float ReflectFunnelMissileTurnRate = 0.008f;
+constexpr float ReflectFunnelMissileTurnRate = 0.015f;
+constexpr int ReflectFunnelSpinFrames = 30;
 constexpr Vector3 ReflectFunnelTargetLocal[ShooterStages::Stage3::ReflectFunnelCount] = {
     {-5.2f, -6.5f, -1.6f},
     {-2.6f, -8.8f, 1.5f},
@@ -131,6 +154,68 @@ constexpr bool AreReflectFunnelTargetsInsideBarrier() {
 }
 static_assert(AreReflectFunnelTargetsInsideBarrier());
 static_assert(ReflectFunnelMissileLifetimeFrames < ReflectFunnelMissileIntervalFrames);
+
+/**
+ * @brief 反射成立後の砲塔2回転Yawを取得する
+ * @param remainingFrames 回転の残りフレーム数
+ * @return 0以上4Pi以下の追加Yaw
+ */
+constexpr float ReflectFunnelSpinYaw(int remainingFrames) {
+    if (remainingFrames <= 0) return 0.0f;
+    return Math::TwoPi * 2.0f *
+        static_cast<float>(ReflectFunnelSpinFrames - remainingFrames) /
+        static_cast<float>(ReflectFunnelSpinFrames - 1);
+}
+static_assert(ReflectFunnelSpinYaw(ReflectFunnelSpinFrames) == 0.0f);
+static_assert(ReflectFunnelSpinYaw(1) > Math::TwoPi * 2.0f - 0.0001f &&
+    ReflectFunnelSpinYaw(1) < Math::TwoPi * 2.0f + 0.0001f);
+static_assert(BossLaserCycleFrames == 10 * 60);
+static_assert(BossLaserChargeFrames + BossLaserFireFrames == 5 * 60);
+
+/**
+ * @brief レーザー周期中に主砲照準を追尾させるか判定する
+ * @param cycle 現在のレーザー周期フレーム
+ * @return チャージ中またはクールダウン中の場合true
+ */
+constexpr bool TracksBossLaserTarget(int cycle) {
+    return cycle < BossLaserChargeFrames ||
+        cycle >= BossLaserChargeFrames + BossLaserFireFrames;
+}
+static_assert(TracksBossLaserTarget(0));
+static_assert(!TracksBossLaserTarget(BossLaserChargeFrames));
+static_assert(TracksBossLaserTarget(BossLaserChargeFrames + BossLaserFireFrames));
+
+/**
+ * @brief Stage3ボス武装を目標へ向けるローカル回転を取得する
+ * @param transform 親Transform
+ * @param mount 武装取付情報
+ * @param aimTarget 照準するワールド座標
+ * @return XをPitch、YをYawとするローカル回転
+ */
+Vector3 BossWeaponAimRotation(const BossModelTransform& transform,
+    const Stage3BossWeaponMount& mount, const Vector3& aimTarget) {
+    const float cosine = std::cos(transform.yaw);
+    const float sine = std::sin(transform.yaw);
+    const Vector3 world {
+        transform.position.x +
+            (mount.localPosition.x * cosine + mount.localPosition.z * sine) * transform.scale,
+        transform.position.y + mount.localPosition.y * transform.scale,
+        transform.position.z +
+            (-mount.localPosition.x * sine + mount.localPosition.z * cosine) * transform.scale
+    };
+    const float dx = aimTarget.x - world.x;
+    const float dy = aimTarget.y - world.y;
+    const float dz = aimTarget.z - world.z;
+    const float localX = dx * cosine - dz * sine;
+    const float localZ = dx * sine + dz * cosine;
+    const float horizontal = (std::max)(0.001f,
+        std::sqrt(localX * localX + localZ * localZ));
+    return {
+        (std::clamp)(-std::atan2(dy, horizontal),
+            -Math::ToRadians(55.0f), Math::ToRadians(55.0f)),
+        std::atan2(localZ, -localX), 0.0f
+    };
+}
 
 /**
  * @brief Phase1進行量から戦艦を手前へ送る距離を取得する
@@ -172,6 +257,14 @@ static_assert(BossSectionAdvanceZ(1.0f) == -BossSectionAdvanceDistance);
 static_assert(BossMachineGunRandomStartFrame + BossMachineGunBurstFrames <
     BossMachineGunCycleFrames);
 static_assert(BossMachineGunSpread(1u) >= -1.0f && BossMachineGunSpread(1u) <= 1.0f);
+static_assert(BossDefeatCameraFrames < BossDefeatFirstRushStartFrame);
+static_assert(BossDefeatFirstImpactFrame <
+    BossDefeatFirstRushStartFrame + BossDefeatFirstRushFrames);
+static_assert(BossDefeatSecondImpactFrame <
+    BossDefeatSecondRushStartFrame + BossDefeatSecondRushFrames);
+static_assert(BossDefeatSecondImpactFrame + BossDefeatGondolaFallFrames <
+    BossDefeatSequenceFrames);
+static_assert(BossDefeatGondolaFloatY < BossPhase2SideWorldY);
 
 }
 
@@ -513,6 +606,7 @@ void SideScrollingShooter::Stage3Module::TickBoss(
             if (!funnel.active) continue;
             ++activeFunnels;
             ++funnel.age;
+            if (funnel.spinFrames > 0) --funnel.spinFrames;
             const int index = static_cast<int>(&funnel - shooter.m_stage3.reflectFunnels.data());
             const Vector3 target = WorldPosition(ReflectFunnelTargetLocal[index]);
             funnel.x += (FromWorldX(target.x) - funnel.x) * 0.08f;
@@ -533,7 +627,7 @@ void SideScrollingShooter::Stage3Module::TickBoss(
                 const Vector3 local = Stage3BossModelView::FunnelLaunchLocalPosition(port);
                 const Vector3 launch = WorldPosition(local);
                 funnel = {FromWorldX(launch.x), FromWorldY(launch.y), launch.z,
-                    ReflectFunnelHp, 0, port, true};
+                    ReflectFunnelHp, 0, port, 0, true};
                 shooter.m_stage3.funnelPortCooldowns[port] = ReflectFunnelPortCooldownFrames;
                 shooter.m_stage3.nextFunnelPort = (port + 1) % Stage3BossModelView::FunnelPodCount;
                 break;
@@ -584,16 +678,33 @@ void SideScrollingShooter::Stage3Module::TickBoss(
             const auto& source = shooter.m_stage3.reflectFunnels[owner];
             if (!source.active || source.age < ReflectFunnelMissileIntervalFrames ||
                 source.age % ReflectFunnelMissileIntervalFrames != 0) continue;
-            const float dx = ToWorldX(shooter.m_playerX - source.x);
-            const float dy = ToWorldY(shooter.m_playerY - source.y);
-            const float dz = shooter.IsRailGameplayActive() ? PlayerRailZ - source.z : 0.0f;
-            const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
+            const Vector3 sourceWorld {ToWorldX(source.x), ToWorldY(source.y), source.z};
+            const Vector3 playerWorld {ToWorldX(shooter.m_playerX),
+                ToWorldY(shooter.m_playerY),
+                shooter.IsRailGameplayActive() ? PlayerRailZ : source.z};
+            const float aimDx = playerWorld.x - sourceWorld.x;
+            const float aimDy = playerWorld.y - sourceWorld.y;
+            const float aimDz = playerWorld.z - sourceWorld.z;
+            const float horizontal = (std::max)(0.001f,
+                std::sqrt(aimDx * aimDx + aimDz * aimDz));
+            const float gunYaw = std::atan2(aimDz, -aimDx) +
+                ReflectFunnelSpinYaw(source.spinFrames);
+            const float gunPitch = -std::atan2(aimDy, horizontal);
+            const Vector3 muzzleLocal = Stage3FunnelModelView::ReflectShotMuzzleLocalPosition(
+                gunYaw, gunPitch, 0.0f);
+            constexpr float FunnelScale = 1.6f;
+            const Vector3 muzzle = sourceWorld + muzzleLocal * FunnelScale;
+            const float dx = playerWorld.x - muzzle.x;
+            const float dy = playerWorld.y - muzzle.y;
+            const float dz = playerWorld.z - muzzle.z;
+            const float length = (std::max)(0.001f,
+                std::sqrt(dx * dx + dy * dy + dz * dz));
             for (auto& shot : shooter.m_shots) {
                 if (shot.active) continue;
                 shot = {};
-                shot.x = source.x;
-                shot.y = source.y;
-                shot.z = source.z;
+                shot.x = FromWorldX(muzzle.x);
+                shot.y = FromWorldY(muzzle.y);
+                shot.z = muzzle.z;
                 shot.transitionSideX = shot.x;
                 shot.transitionSideY = shot.y;
                 shot.vx = FromWorldX(dx / length * ReflectFunnelMissileSpeed);
@@ -606,6 +717,7 @@ void SideScrollingShooter::Stage3Module::TickBoss(
                 shot.barrageIndex = owner;
                 shot.stage2.kind = ShooterStages::Stage2::ShotKind::FunnelMissile;
                 shot.active = true;
+                shooter.PlayMissileLaunchSound();
                 break;
             }
         }
@@ -649,6 +761,13 @@ void SideScrollingShooter::Stage3Module::TickBoss(
         boss.phase = static_cast<float>(section + 1);
         boss.motionAge = BossSectionTransitionFrames;
     } else {
+        // 下部ゴンドラを避け、上部甲板の砲台跡から爆発と黒煙を発生させる
+        const BossModelTransform transform = BossTransform(shooter, boss);
+        for (int i = 0; i < Stage3BossModelView::TopGunCount; ++i) {
+            const Vector3 position = Stage3BossModelView::TopGunWorldPosition(i, transform);
+            shooter.SpawnExplosion(
+                FromWorldX(position.x), FromWorldY(position.y), position.z, true);
+        }
         boss.phase = BossPhase2Travel;
         boss.motionAge = BossPhase2TravelFrames;
         boss.bossPhase = BossNormalPhase2;
@@ -816,40 +935,7 @@ bool SideScrollingShooter::Stage3Module::TryHitBossPart(
 }
 
 bool SideScrollingShooter::Stage3Module::BlocksPlayerShot(
-    const SideScrollingShooter& shooter, const Shot& shot, const Enemy& boss) {
-    if (shooter.m_bossIntroductionPhase != BossIntroductionPhase::None ||
-        boss.phase >= static_cast<float>(Stage3BossModelView::Phase1SectionCount)) {
-        return false;
-    }
-
-    // 描画に使う三つの主船体と同じ中心を球で覆い、装甲へ入った弾を止める
-    constexpr Vector3 HullCenters[] = {
-        {0.0f, 0.0f, 0.0f}, {-6.15f, 0.0f, 0.0f}, {6.10f, -0.02f, 0.0f}
-    };
-    constexpr float HullRadii[] = {2.95f, 2.45f, 2.30f};
-    const BossModelTransform transform = BossTransform(shooter, boss);
-    const float cosine = std::cos(transform.yaw);
-    const float sine = std::sin(transform.yaw);
-    const bool railMode = shooter.IsRailGameplayActive();
-    for (std::size_t index = 0; index < std::size(HullCenters); ++index) {
-        const Vector3 local = HullCenters[index];
-        const Vector3 center {
-            transform.position.x + (local.x * cosine + local.z * sine) * transform.scale,
-            transform.position.y + local.y * transform.scale,
-            transform.position.z + (-local.x * sine + local.z * cosine) * transform.scale
-        };
-        const float radius = HullRadii[index] * transform.scale;
-        const bool hit = railMode ?
-            Hit3DSegment(
-                ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
-                ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
-                shot.hitRadius * WorldXScale, center.x, center.y, center.z, radius) :
-            Hit(shot.x, shot.y, shot.hitRadius,
-                FromWorldX(center.x), FromWorldY(center.y), radius / WorldXScale);
-        if (hit) {
-            return true;
-        }
-    }
+    const SideScrollingShooter&, const Shot&, const Enemy&) {
     return false;
 }
 
@@ -893,12 +979,9 @@ void SideScrollingShooter::Stage3Module::FireBossPartBarrage(
     SideScrollingShooter& shooter, const Enemy& boss) {
     if (boss.phase == BossPhase2Survival) {
         const int elapsed = Phase2SurvivalFrames - boss.motionAge;
-        const int cycleLength = elapsed < Phase2SurvivalFrames / 2 ? 360 : 300;
-        const int cycle = elapsed % cycleLength;
+        const int cycle = elapsed % BossLaserCycleFrames;
         const bool machineGunFrame = cycle == 0 || cycle == 32 || cycle == 64;
-        const bool heavyCannonFrame = cycle == 132;
         const bool missileFrame = cycle == 220;
-        if (!machineGunFrame && !heavyCannonFrame && !missileFrame) return;
 
         const BossModelTransform transform = BossTransform(shooter, boss);
         const Vector3 target {
@@ -941,22 +1024,62 @@ void SideScrollingShooter::Stage3Module::FireBossPartBarrage(
                 shot.special = true;
                 shot.stage2.kind = kind;
                 shot.active = true;
+                if (kind != ShooterStages::Stage2::ShotKind::None) {
+                    shooter.PlayMissileLaunchSound();
+                }
                 break;
             }
         };
 
-        // 各周期で機銃、大口径砲、追尾ミサイルを順番に使用する
+        // チャージとクールダウン中は遅れて追尾し、照射中だけ照準を固定する
+        auto& state = shooter.m_stage3;
+        if (!state.laserTargetInitialized) {
+            state.laserTargetX = target.x;
+            state.laserTargetY = target.y;
+            state.laserTargetZ = target.z;
+            state.laserTargetInitialized = true;
+        } else if (TracksBossLaserTarget(cycle)) {
+            state.laserTargetX += (target.x - state.laserTargetX) * BossLaserTrackingRate;
+            state.laserTargetY += (target.y - state.laserTargetY) * BossLaserTrackingRate;
+            state.laserTargetZ += (target.z - state.laserTargetZ) * BossLaserTrackingRate;
+        }
+        if (cycle >= BossLaserChargeFrames &&
+            cycle < BossLaserChargeFrames + BossLaserFireFrames &&
+            shooter.m_invincible == 0) {
+            for (int i = 0; i < Stage3BossModelView::HeavyCannonCount; ++i) {
+                Vector3 mount = WorldPosition(
+                    Stage3BossModelView::HeavyCannonMount(i).localPosition);
+                Vector3 laserTarget {
+                    state.laserTargetX, state.laserTargetY, state.laserTargetZ};
+                if (!shooter.IsRailGameplayActive()) {
+                    mount.z = SidePlaneZ;
+                    laserTarget.z = SidePlaneZ;
+                }
+                const Vector3 aim = BossWeaponAimRotation(transform,
+                    Stage3BossModelView::HeavyCannonMount(i), laserTarget);
+                const Vector3 direction = (laserTarget - mount).Normalized();
+                mount = Stage3BossModelView::HeavyCannonMuzzleWorldPosition(
+                    i, transform, aim);
+                if (!shooter.IsRailGameplayActive()) mount.z = SidePlaneZ;
+                const Vector3 end = mount + direction *
+                    ((laserTarget - mount).Length() + BossLaserExtraLength);
+                if (Hit3DSegment(mount.x, mount.y, mount.z,
+                    end.x, end.y, end.z, BossLaserRadius,
+                    target.x, target.y, target.z, 0.38f)) {
+                    shooter.DamagePlayer();
+                    break;
+                }
+            }
+        }
+
+        if (!machineGunFrame && !missileFrame) return;
+
+        // レーザー周期中も既存の機銃と追尾ミサイルを使用する
         if (machineGunFrame) {
             for (int i = 0; i < Stage3BossModelView::GondolaMachineGunCount; ++i) {
                 SpawnAimed(Stage3BossModelView::GondolaMachineGunMount(i).localPosition,
                     0.50f * BossLaterPhaseSpeedScale, 1,
                     ShooterStages::Stage2::ShotKind::None, 0.025f);
-            }
-        } else if (heavyCannonFrame) {
-            for (int i = 0; i < Stage3BossModelView::HeavyCannonCount; ++i) {
-                SpawnAimed(Stage3BossModelView::HeavyCannonMount(i).localPosition,
-                    0.32f * BossLaterPhaseSpeedScale, 3,
-                    ShooterStages::Stage2::ShotKind::Missile, 0.070f);
             }
         } else {
             for (int i = 0; i < Stage3BossModelView::MissilePodCount; ++i) {
@@ -1011,6 +1134,7 @@ void SideScrollingShooter::Stage3Module::FireBossPartBarrage(
             shot.stage2.kind = ShooterStages::Stage2::ShotKind::Funnel;
             shot.stage2.delayedEngine = true;
             shot.active = true;
+            shooter.PlayMissileLaunchSound();
             break;
         }
     }
@@ -1030,6 +1154,7 @@ void SideScrollingShooter::Stage3Module::FireBossMachineGun(
         ToWorldY(shooter.m_playerY),
         shooter.IsRailGameplayActive() ? PlayerRailZ : SidePlaneZ
     };
+    bool fired = false;
     for (int slot = 0; slot < Stage3BossModelView::Phase1TurretsPerSection; ++slot) {
         const int partIndex = Stage3BossModelView::Phase1PartIndex(section, slot);
         if (boss.bossPartHp[partIndex] <= 0) continue;
@@ -1075,9 +1200,11 @@ void SideScrollingShooter::Stage3Module::FireBossMachineGun(
             shot.hitRadius = 0.022f;
             shot.enemy = true;
             shot.active = true;
+            fired = true;
             break;
         }
     }
+    if (fired) shooter.PlayBossMachineGunSound();
 }
 
 void SideScrollingShooter::Stage3Module::TickSpecialShotBeforeMove(
@@ -1110,7 +1237,7 @@ void SideScrollingShooter::Stage3Module::TickSpecialShotBeforeMove(
             shot.active = false;
             return;
         }
-        const auto& funnel = shooter.m_stage3.reflectFunnels[target];
+        auto& funnel = shooter.m_stage3.reflectFunnels[target];
         const float dx = ToWorldX(funnel.x - shot.x);
         const float dy = ToWorldY(funnel.y - shot.y);
         const float dz = shooter.IsRailGameplayActive() ? funnel.z - shot.z : 0.0f;
@@ -1128,6 +1255,7 @@ void SideScrollingShooter::Stage3Module::TickSpecialShotBeforeMove(
         shot.vy = FromWorldY(playerDy / playerLength * ReflectShotSpeed);
         shot.vz = playerDz / playerLength * ReflectShotSpeed;
         shot.stage2.kind = ShooterStages::Stage2::ShotKind::ReflectAttack;
+        funnel.spinFrames = ReflectFunnelSpinFrames;
         return;
     }
     if (shot.stage2.kind == ShooterStages::Stage2::ShotKind::ReflectAttack) {
@@ -1218,12 +1346,30 @@ bool SideScrollingShooter::Stage3Module::DrawSpecialShot(
     if (shot.stage2.kind != ShooterStages::Stage2::ShotKind::ReflectPass &&
         shot.stage2.kind != ShooterStages::Stage2::ShotKind::ReflectAttack) return false;
     (void)shooter;
-    constexpr float Core[4] = {1.00f, 0.32f, 0.04f, 1.0f};
-    constexpr float Glow[4] = {1.00f, 0.72f, 0.16f, 0.82f};
-    DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
-        0.22f, 0.22f, 0.64f, Glow, yaw);
-    DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
-        0.12f, 0.12f, 0.40f, Core, yaw);
+    (void)yaw;
+    constexpr float Ball[4] = {0.96f, 0.95f, 0.90f, 1.0f};
+    constexpr float Seam[4] = {0.78f, 0.05f, 0.04f, 1.0f};
+    const float x = ToWorldX(shot.x);
+    const float y = ToWorldY(shot.y);
+    DrawModelPrimitive(renderer, camera, 5, x, y, shot.z,
+        0.34f, 0.34f, 0.34f, Ball);
+
+    // 前面の赤い2列の縫い目を飛行中に回転させる
+    const float rotation = static_cast<float>(shot.age) * 0.09f;
+    const float cosine = std::cos(rotation);
+    const float sine = std::sin(rotation);
+    for (float side : {-1.0f, 1.0f}) {
+        for (int stitch = -2; stitch <= 2; ++stitch) {
+            const float localY = static_cast<float>(stitch) * 0.085f;
+            const float localX = side *
+                (0.105f + static_cast<float>(stitch * stitch) * 0.014f);
+            const float seamX = localX * cosine - localY * sine;
+            const float seamY = localX * sine + localY * cosine;
+            DrawModelPrimitive(renderer, camera, 5,
+                x + seamX, y + seamY, shot.z - 0.285f,
+                0.040f, 0.040f, 0.025f, Seam);
+        }
+    }
     return true;
 }
 
@@ -1246,6 +1392,28 @@ bool SideScrollingShooter::Stage3Module::SpawnBossDebris(
             shape, scale.x, scale.y, scale.z, color, 54, 42, false);
     };
     Stage3BossModelView::DrawTopGun(topGunIndex, transform, {}, false, SpawnPart);
+    return true;
+}
+
+bool SideScrollingShooter::Stage3Module::HandleBossDefeat(
+    SideScrollingShooter& shooter, Enemy& boss) {
+    if (!boss.active) return false;
+
+    // 戦闘物を消して2D固定の撃破演出へ移り、船体は演出描画用に残す
+    shooter.m_shots = {};
+    shooter.m_items = {};
+    shooter.m_stage3.reflectFunnels = {};
+    boss.hp = 0;
+    boss.collisionEnabled = false;
+    shooter.m_bossHp = 0;
+    shooter.m_score += 5000;
+    shooter.UnlockGallery(GalleryEntry::Stage3Boss);
+    shooter.UnlockGallery(GalleryEntry::Stage3BarrierFunnel);
+    shooter.UnlockGallery(GalleryEntry::Stage3ReflectFunnel);
+    shooter.m_clear = true;
+    shooter.m_clearTimer = BossDefeatSequenceFrames;
+    shooter.m_viewToggleRequested = false;
+    shooter.RequestViewMode(ViewMode::Side2D);
     return true;
 }
 
@@ -1275,6 +1443,48 @@ bool SideScrollingShooter::Stage3Module::DrawBossModel(
             drawScale.x, drawScale.y, drawScale.z, color, partYaw, partPitch);
     };
 
+    // 撃破演出では一回目に中央を穿ち、二回目に上部船体全体を消失させる
+    if (shooter.m_clear) {
+        const int defeatAge = BossDefeatSequenceFrames - shooter.m_clearTimer;
+        const int damageStage = defeatAge >= BossDefeatSecondImpactFrame ? 2 :
+            (defeatAge >= BossDefeatFirstImpactFrame ? 1 : 0);
+        Stage3BossModelView::DrawDamagedStaticBody(transform, damageStage, DrawPart);
+
+        BossModelTransform gondolaTransform = transform;
+        if (damageStage >= 2) {
+            const float floatProgress = SmoothStep(Math::Clamp01(
+                static_cast<float>(defeatAge - BossDefeatSecondImpactFrame) /
+                    BossDefeatGondolaFallFrames));
+            // 固定済みの海面へ切り離されたゴンドラだけを落下させる
+            gondolaTransform.position.y = Math::Lerp(
+                transform.position.y, BossDefeatGondolaFloatY, floatProgress) +
+                std::sin(static_cast<float>(defeatAge - BossDefeatSecondImpactFrame) * 0.045f) *
+                    0.10f * floatProgress;
+        }
+        auto DrawGondolaPart = [&](int shape, const Vector3& position, const Vector3& scale,
+            const float color[4], float partYaw, float partPitch) {
+            // 上部消失後は吊り支柱も除去してゴンドラ外殻だけを海面へ残す
+            if (damageStage >= 2 && scale.x < 0.70f && scale.y > 3.0f) return;
+            DrawPart(shape, position, scale, color, partYaw, partPitch);
+        };
+        Stage3BossModelView::DrawGondolaBody(gondolaTransform, DrawGondolaPart);
+
+        // 突進時刻に合わせて破孔と飲み込み位置へ爆炎を重ねる
+        auto DrawImpact = [&](int impactFrame, float width, float y) {
+            const int effectAge = defeatAge - impactFrame;
+            if (effectAge < 0 || effectAge >= 48) return;
+            const float progress = static_cast<float>(effectAge) / 48.0f;
+            const Matrix4x4 world = Matrix4x4::Translation(
+                {transform.position.x, y, transform.position.z - 1.0f}) *
+                Matrix4x4::Scale({width * (0.65f + progress), width, 1.0f});
+            renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * world,
+                progress, 4});
+        };
+        DrawImpact(BossDefeatFirstImpactFrame, 2.8f, transform.position.y + 0.5f);
+        DrawImpact(BossDefeatSecondImpactFrame, 5.6f, transform.position.y + 0.2f);
+        return true;
+    }
+
     // 巨大船体と未破壊の全砲台を常時描画し、現在区画だけを発光させる
     Stage3BossModelView::DrawStaticBody(transform, DrawPart);
     Stage3BossModelView::DrawGondolaBody(transform, DrawPart);
@@ -1297,37 +1507,102 @@ bool SideScrollingShooter::Stage3Module::DrawBossModel(
     }
     if (boss.phase < BossPhase2Travel) return true;
 
-    auto AimRotation = [&transform, &target](const Stage3BossWeaponMount& mount) {
-        const float cosine = std::cos(transform.yaw);
-        const float sine = std::sin(transform.yaw);
-        const Vector3 world {
-            transform.position.x +
-                (mount.localPosition.x * cosine + mount.localPosition.z * sine) * transform.scale,
-            transform.position.y + mount.localPosition.y * transform.scale,
-            transform.position.z +
-                (-mount.localPosition.x * sine + mount.localPosition.z * cosine) * transform.scale
-        };
-        const float dx = target.x - world.x;
-        const float dy = target.y - world.y;
-        const float dz = target.z - world.z;
-        const float localX = dx * cosine - dz * sine;
-        const float localZ = dx * sine + dz * cosine;
-        const float horizontal = (std::max)(0.001f,
-            std::sqrt(localX * localX + localZ * localZ));
-        return Vector3 {
-            (std::clamp)(-std::atan2(dy, horizontal),
-                -Math::ToRadians(55.0f), Math::ToRadians(55.0f)),
-            std::atan2(localZ, -localX), 0.0f
-        };
-    };
     if (boss.phase < BossPhase3Survival) {
         for (int i = 0; i < Stage3BossModelView::GondolaMachineGunCount; ++i) {
             Stage3BossModelView::DrawGondolaMachineGun(i, transform,
-                AimRotation(Stage3BossModelView::GondolaMachineGunMount(i)), DrawPart);
+                BossWeaponAimRotation(transform,
+                    Stage3BossModelView::GondolaMachineGunMount(i), target), DrawPart);
         }
+        const Vector3 laserTarget = shooter.m_stage3.laserTargetInitialized ? Vector3 {
+            shooter.m_stage3.laserTargetX,
+            shooter.m_stage3.laserTargetY,
+            Math::Lerp(transform.position.z, shooter.m_stage3.laserTargetZ, railWeight)
+        } : target;
         for (int i = 0; i < Stage3BossModelView::HeavyCannonCount; ++i) {
             Stage3BossModelView::DrawHeavyCannon(i, transform,
-                AimRotation(Stage3BossModelView::HeavyCannonMount(i)), DrawPart);
+                BossWeaponAimRotation(transform,
+                    Stage3BossModelView::HeavyCannonMount(i), laserTarget), DrawPart);
+        }
+
+        // Phase2生存戦では2秒チャージ後に両主砲から3秒間レーザーを照射する
+        const int laserCycle = Phase2SurvivalFrames - boss.motionAge;
+        if (boss.phase == BossPhase2Survival &&
+            laserCycle % BossLaserCycleFrames <
+                BossLaserChargeFrames + BossLaserFireFrames &&
+            shooter.m_stage3.laserTargetInitialized) {
+            const int cycle = laserCycle % BossLaserCycleFrames;
+            const bool charging = cycle < BossLaserChargeFrames;
+            const float chargeProgress = (std::min)(1.0f,
+                static_cast<float>(cycle + 1) / BossLaserChargeFrames);
+            const float cosine = std::cos(transform.yaw);
+            const float sine = std::sin(transform.yaw);
+            for (int i = 0; i < Stage3BossModelView::HeavyCannonCount; ++i) {
+                const Vector3 local =
+                    Stage3BossModelView::HeavyCannonMount(i).localPosition;
+                const Vector3 worldMount {
+                    transform.position.x +
+                        (local.x * cosine + local.z * sine) * transform.scale,
+                    transform.position.y + local.y * transform.scale,
+                    transform.position.z +
+                        (-local.x * sine + local.z * cosine) * transform.scale
+                };
+                Vector3 mount = Stage3BossModelView::HeavyCannonMuzzleWorldPosition(
+                    i, transform, BossWeaponAimRotation(transform,
+                        Stage3BossModelView::HeavyCannonMount(i), laserTarget));
+                mount.z = Math::Lerp(transform.position.z, mount.z, railWeight);
+                const Vector3 delta = laserTarget - mount;
+                const Vector3 direction = (laserTarget - worldMount) /
+                    (std::max)(0.001f, (laserTarget - worldMount).Length());
+                const float beamLength = delta.Length() + BossLaserExtraLength;
+                const Vector3 beamCenter = mount + direction * (beamLength * 0.5f);
+                const float beamYaw = std::atan2(direction.z, -direction.x);
+                const float beamPitch = -std::asin(direction.y);
+                auto DrawLaserLayer = [&](float width, float progress, int effectType) {
+                    const Matrix4x4 world = Matrix4x4::Translation(beamCenter) *
+                        Matrix4x4::RotationY(beamYaw) * Matrix4x4::RotationZ(beamPitch) *
+                        Matrix4x4::Scale({beamLength * 0.5f, width, 1.0f});
+                    renderer.DrawRailgun({
+                        camera.ProjectionMatrix() * camera.ViewMatrix() * world,
+                        progress, effectType});
+                };
+                if (charging) {
+                    DrawLaserLayer(BossLaserRadius *
+                        Math::Lerp(0.08f, 1.0f, chargeProgress), chargeProgress, 3);
+                } else {
+                    const float pulse = static_cast<float>(laserCycle % 30) / 30.0f;
+                    DrawLaserLayer(BossLaserRadius * 1.7f, pulse, 2);
+                    DrawLaserLayer(BossLaserRadius, pulse, 0);
+                }
+            }
+        }
+    }
+
+    // Phase2終了後は爆破されたゴンドラ砲塔の取付跡から黒煙を上げる
+    if (boss.phase >= BossPhase3Survival) {
+        int smokeIndex = 0;
+        auto DrawTurretSmoke = [&](const Stage3BossWeaponMount& mount, float size) {
+            const float cosine = std::cos(transform.yaw);
+            const float sine = std::sin(transform.yaw);
+            const Vector3& local = mount.localPosition;
+            const Vector3 position {
+                transform.position.x + (local.x * cosine + local.z * sine) * transform.scale,
+                transform.position.y + local.y * transform.scale,
+                Math::Lerp(transform.position.z,
+                    transform.position.z + (-local.x * sine + local.z * cosine) * transform.scale,
+                    railWeight)
+            };
+            const float smokeSize = size * transform.scale;
+            const Matrix4x4 world = Matrix4x4::Translation(position) *
+                Matrix4x4::Scale({smokeSize, smokeSize * 1.7f, 1.0f});
+            renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * world,
+                static_cast<float>(boss.age) / 30.0f +
+                    static_cast<float>(smokeIndex++) * 0.37f, 1});
+        };
+        for (int i = 0; i < Stage3BossModelView::GondolaMachineGunCount; ++i) {
+            DrawTurretSmoke(Stage3BossModelView::GondolaMachineGunMount(i), 0.48f);
+        }
+        for (int i = 0; i < Stage3BossModelView::HeavyCannonCount; ++i) {
+            DrawTurretSmoke(Stage3BossModelView::HeavyCannonMount(i), 0.64f);
         }
     }
 
@@ -1358,7 +1633,8 @@ bool SideScrollingShooter::Stage3Module::DrawBossModel(
             const float dz = playerTarget.z - position.z;
             const float horizontal = (std::max)(0.001f, std::sqrt(dx * dx + dz * dz));
             const BossModelTransform funnel {position, {}, 0.0f, 1.6f};
-            Stage3FunnelModelView::DrawReflectShot(funnel, std::atan2(dz, -dx),
+            Stage3FunnelModelView::DrawReflectShot(funnel,
+                std::atan2(dz, -dx) + ReflectFunnelSpinYaw(state.spinFrames),
                 -std::atan2(dy, horizontal), 0.0f, DrawPart);
         }
     }
@@ -1459,6 +1735,13 @@ void SideScrollingShooter::Stage3Module::ApplyCameraCorrection(
 
 float SideScrollingShooter::Stage3Module::SideCameraY(
     const SideScrollingShooter& shooter) {
+    // Phase3終了位置の船体は動かさずカメラだけを少し上へ送る
+    if (shooter.m_clear) {
+        const int defeatAge = BossDefeatSequenceFrames - shooter.m_clearTimer;
+        const float lift = SmoothStep(Math::Clamp01(
+            static_cast<float>(defeatAge) / BossDefeatCameraFrames));
+        return BossPhase2SideCenterY + BossDefeatCameraLift * lift;
+    }
     if (!shooter.m_bossBattle || !shooter.m_enemies[0].active) return 0.0f;
     const Enemy& boss = shooter.m_enemies[0];
     if (boss.phase < BossPhase2Travel) return 0.0f;
@@ -1521,8 +1804,7 @@ bool SideScrollingShooter::Stage3Module::ShouldDrawEnemy(
 
 bool SideScrollingShooter::Stage3Module::IsViewLocked(
     const SideScrollingShooter& shooter) {
-    (void)shooter;
-    return false;
+    return shooter.m_clear;
 }
 
 void SideScrollingShooter::Stage3Module::TickBossIntroduction(
@@ -1552,6 +1834,13 @@ int SideScrollingShooter::Stage3Module::BossIntroductionFrames() {
 float SideScrollingShooter::Stage3Module::BossSeaDrop(
     const SideScrollingShooter& shooter) {
     if (!shooter.m_bossBattle) return 0.0f;
+    if (shooter.m_clear) {
+        const int defeatAge = BossDefeatSequenceFrames - shooter.m_clearTimer;
+        const float restore = SmoothStep(Math::Clamp01(
+            static_cast<float>(defeatAge) / BossDefeatCameraFrames));
+        // 食い付き開始前に海面を最終位置へ固定して着水時の背景移動を防ぐ
+        return Math::Lerp(BossSeaDropDistance, BossDefeatFinalSeaDrop, restore);
+    }
     if (shooter.m_bossIntroductionPhase != BossIntroductionPhase::Entrance) {
         return BossSeaDropDistance;
     }
@@ -1677,6 +1966,7 @@ void SideScrollingShooter::Stage3Module::DrawBackground2D(
     const float cloudColor[4] = {CloudColor[0], CloudColor[1], CloudColor[2], dayBlend};
     const float sunColor[4] = {SunColor[0], SunColor[1], SunColor[2], dayBlend};
     const float seaDrop = BossSeaDrop(shooter);
+    const float waterHeight = shooter.m_clear ? BossDefeatWaterHeight : 10.0f;
 
     // 朝に合わせて太陽を昇らせ、Cubeの雲を空の上部へ流す
     if (dayBlend > 0.01f) {
@@ -1702,9 +1992,10 @@ void SideScrollingShooter::Stage3Module::DrawBackground2D(
         }
     }
 
-    // 海面の上端Y=-6を保ち、ドット絵調の波と泡を横スクロールさせる
-    DrawModelPrimitive(renderer, camera, 1, 0.0f, -11.0f - seaDrop, SidePlaneZ + 14.0f,
-        60.0f, 10.0f, 0.3f, waterColor);
+    // 海面の上端Y=-6を保ち、撃破演出中は画面下端まで水面を延長する
+    DrawModelPrimitive(renderer, camera, 1, 0.0f,
+        -6.0f - seaDrop - waterHeight * 0.5f, SidePlaneZ + 14.0f,
+        60.0f, waterHeight, 0.3f, waterColor);
     for (int i = 0; i < 24; ++i) {
         const float x = WrapNdcX(i * 0.29f -
             shooter.m_scroll * (0.18f + (i % 3) * 0.05f)) * 18.0f;
@@ -1720,7 +2011,9 @@ void SideScrollingShooter::Stage3Module::DrawBackground2D(
                 width * 0.42f, 0.07f, 0.19f, foamColor);
         }
     }
-    if (!shooter.m_bossBattle) DrawSeaSerpent(shooter, renderer, camera, 0.0f);
+    if (!shooter.m_bossBattle || shooter.m_clear) {
+        DrawSeaSerpent(shooter, renderer, camera, 0.0f);
+    }
 }
 
 void SideScrollingShooter::Stage3Module::DrawBackground3D(
@@ -1750,6 +2043,8 @@ void SideScrollingShooter::Stage3Module::DrawBackground3D(
     const float cloudColor[4] = {CloudColor[0], CloudColor[1], CloudColor[2], dayBlend};
     const float sunColor[4] = {SunColor[0], SunColor[1], SunColor[2], dayBlend};
     const float seaDrop = BossSeaDrop(shooter);
+    const float sideWaterHeight = shooter.m_clear ? BossDefeatWaterHeight : 10.0f;
+    const float sideWaterY = -6.0f - seaDrop - sideWaterHeight * 0.5f;
 
     // 太陽と雲は横視点の配置からレール空間へ補間する
     if (dayBlend > 0.01f) {
@@ -1804,10 +2099,10 @@ void SideScrollingShooter::Stage3Module::DrawBackground3D(
 
     // 横視点の海面と同じ波配置をレール空間へ補間する
     DrawModelPrimitive(renderer, camera, 1, 0.0f,
-        Math::Lerp(-11.0f, -4.0f, railWeight) - seaDrop,
+        Math::Lerp(sideWaterY, -4.0f - seaDrop, railWeight),
         Math::Lerp(SidePlaneZ + 14.0f, 45.0f, railWeight),
         Math::Lerp(60.0f, 140.0f, railWeight),
-        Math::Lerp(10.0f, 0.7f, railWeight),
+        Math::Lerp(sideWaterHeight, 0.7f, railWeight),
         Math::Lerp(0.3f, 140.0f, railWeight), waterColor);
     for (int i = 0; i < 24; ++i) {
         const float sideX = WrapNdcX(i * 0.29f -
@@ -1835,7 +2130,9 @@ void SideScrollingShooter::Stage3Module::DrawBackground3D(
                 Math::Lerp(0.19f, 0.72f, railWeight), foamColor);
         }
     }
-    if (!shooter.m_bossBattle) DrawSeaSerpent(shooter, renderer, camera, railWeight);
+    if (!shooter.m_bossBattle || shooter.m_clear) {
+        DrawSeaSerpent(shooter, renderer, camera, railWeight);
+    }
 }
 
 bool SideScrollingShooter::Stage3Module::HitsHazard(
@@ -1888,11 +2185,52 @@ void SideScrollingShooter::Stage3Module::DrawSeaSerpent(
     const SideScrollingShooter& shooter, Renderer& renderer,
     const Camera3D& camera, float railWeight) {
     SeaSerpentMotion motion {};
-    if (!GetSeaSerpentMotion(shooter.m_frame, motion)) {
+    bool rearRush = false;
+    if (shooter.m_clear) {
+        const int defeatAge = BossDefeatSequenceFrames - shooter.m_clearTimer;
+        int rushAge = defeatAge - BossDefeatFirstRushStartFrame;
+        int rushFrames = BossDefeatFirstRushFrames;
+        const bool secondRush = defeatAge >= BossDefeatSecondRushStartFrame;
+        if (secondRush) {
+            rushAge = defeatAge - BossDefeatSecondRushStartFrame;
+            rushFrames = BossDefeatSecondRushFrames;
+        }
+        if (rushAge < 0 || rushAge >= rushFrames) return;
+        rearRush = !secondRush;
+
+        // 一回目は画面奥から、二回目は横から上部船体へ食い付く
+        motion.segmentCount = secondRush ? 34 : 26;
+        motion.progress = static_cast<float>(rushAge) / static_cast<float>(rushFrames - 1);
+        motion.direction = secondRush ? -1.0f : 1.0f;
+        motion.travel = secondRush ? 34.0f : 0.0f;
+        motion.sideOriginX = secondRush ? -motion.direction * motion.travel * 0.5f : 0.0f;
+        motion.railOriginX = motion.sideOriginX;
+        motion.railOriginZ = 20.0f;
+        motion.railDirection = motion.direction;
+        motion.railTravel = motion.travel;
+        motion.elevation = secondRush ? 12.0f : 10.5f;
+        motion.segmentSpacing = secondRush ? 0.76f : 0.82f;
+        motion.segmentDelay = secondRush ? 0.028f : 0.036f;
+        motion.scale = secondRush ? 6.2f : 3.6f;
+    } else if (!GetSeaSerpentMotion(shooter.m_frame, motion)) {
         return;
     }
 
-    // 通常跳躍、低空横断、超巨大ジャンプを判定と同じ胴体節配置で描画する
+    auto SideX = [&](const SeaSerpentSegment& segment, int segmentIndex) {
+        if (!rearRush) return segment.sideX;
+        return std::sin(static_cast<float>(segmentIndex) * 0.72f + segment.progress * 2.0f) *
+            (0.18f + static_cast<float>(segmentIndex) * 0.025f);
+    };
+    auto SideZ = [&](const SeaSerpentSegment& segment) {
+        if (rearRush) {
+            // 中間時刻だけ船体手前まで迫り、前後では画面奥へ戻す
+            const float approach = std::sin(Math::Pi * segment.progress);
+            return Math::Lerp(SidePlaneZ + 28.0f, SidePlaneZ + 1.0f, approach);
+        }
+        return shooter.m_clear ? SidePlaneZ + 1.0f : SidePlaneZ + 13.1f;
+    };
+
+    // 通常時は海面跳躍、撃破時は奥行き突進または横突進として描画する
     for (int i = 0; i < motion.segmentCount; ++i) {
         const SeaSerpentSegment segment = GetSeaSerpentSegment(motion, i);
         const float sideWidth = 1.18f * segment.scale;
@@ -1906,13 +2244,14 @@ void SideScrollingShooter::Stage3Module::DrawSeaSerpent(
         }
         const float sideVisibleScale = std::sqrt(sideVisibleHeight / sideHeight);
         const float railVisibleScale = std::sqrt(railVisibleHeight / railSize);
-        const float x = Math::Lerp(segment.sideX, segment.railX, railWeight);
-        const float sideY = -6.0f + (segment.elevation < sideHeight ?
+        const float x = Math::Lerp(SideX(segment, i), segment.railX, railWeight);
+        const float sideBaseY = shooter.m_clear ? -10.8f : -6.0f - BossSeaDrop(shooter);
+        const float sideY = sideBaseY + (segment.elevation < sideHeight ?
             sideVisibleHeight * 0.5f : segment.elevation - sideHeight * 0.5f);
         const float railY = -3.65f + (segment.elevation < railSize ?
             railVisibleHeight * 0.5f : segment.elevation - railSize * 0.5f);
         const float y = Math::Lerp(sideY, railY, railWeight);
-        const float z = Math::Lerp(SidePlaneZ + 13.1f, segment.railZ, railWeight);
+        const float z = Math::Lerp(SideZ(segment), segment.railZ, railWeight);
         DrawModelPrimitive(renderer, camera, 5, x, y, z,
             Math::Lerp(sideWidth * sideVisibleScale,
                 railSize * railVisibleScale, railWeight),
@@ -1934,13 +2273,15 @@ void SideScrollingShooter::Stage3Module::DrawSeaSerpent(
         head.elevation / (1.35f * head.scale)) * 1.35f * head.scale;
     const float headRailVisibleHeight = Math::Clamp01(
         head.elevation / (2.50f * head.scale)) * 2.50f * head.scale;
-    const float headX = Math::Lerp(head.sideX, head.railX, railWeight);
-    const float headSideY = -6.0f + (head.elevation < 1.35f * head.scale ?
+    const float headX = Math::Lerp(SideX(head, 0), head.railX, railWeight);
+    const float sideBaseY = shooter.m_clear ? -10.8f : -6.0f - BossSeaDrop(shooter);
+    const float headSideY = sideBaseY + (head.elevation < 1.35f * head.scale ?
         headSideVisibleHeight * 0.5f : head.elevation - 1.35f * head.scale * 0.5f);
     const float headRailY = -3.65f + (head.elevation < 2.50f * head.scale ?
         headRailVisibleHeight * 0.5f : head.elevation - 2.50f * head.scale * 0.5f);
     const float headY = Math::Lerp(headSideY, headRailY, railWeight);
-    const float headZ = Math::Lerp(SidePlaneZ + 13.1f, head.railZ, railWeight);
+    const float headZ = Math::Lerp(SideZ(head), head.railZ, railWeight);
+    const Vector3 headPosition {headX, headY, headZ};
 
     // 頭が海面を出入りする短い時間だけ、水滴を初速と重力による放物線で飛ばす
     const float emergeProgress = std::asin((std::min)(
@@ -1950,7 +2291,7 @@ void SideScrollingShooter::Stage3Module::DrawSeaSerpent(
     const float splashTime = Math::Clamp01((head.progress -
         (splashCenter - emergeProgress)) / (emergeProgress * 2.0f));
     const bool splashActive = std::abs(head.progress - splashCenter) <= emergeProgress;
-    if (splashActive) {
+    if (!shooter.m_clear && splashActive) {
         for (int i = 0; i < 17; ++i) {
             const float spread = static_cast<float>(i - 8) *
                 0.22f * motion.scale * splashTime;
@@ -1963,7 +2304,8 @@ void SideScrollingShooter::Stage3Module::DrawSeaSerpent(
             const float railSplashX = head.railX - motion.direction * spread;
             DrawModelPrimitive(renderer, camera, 5,
                 Math::Lerp(sideSplashX, railSplashX, railWeight),
-                Math::Lerp(-5.75f + dropletHeight, -3.45f + dropletHeight, railWeight),
+                Math::Lerp(sideBaseY + 0.25f + dropletHeight,
+                    -3.45f + dropletHeight, railWeight),
                 Math::Lerp(SidePlaneZ + 13.0f,
                     head.railZ - motion.railDirection * spread, railWeight),
                 Math::Lerp(0.16f, 0.42f, railWeight) * motion.scale,
@@ -1971,10 +2313,25 @@ void SideScrollingShooter::Stage3Module::DrawSeaSerpent(
                 Math::Lerp(0.10f, 0.32f, railWeight) * motion.scale, FoamColor);
         }
     }
+    if (shooter.m_clear &&
+        (headSideVisibleHeight >= 1.35f * head.scale ||
+            headRailVisibleHeight >= 2.50f * head.scale)) {
+        // 奥行き突進はカメラ側、横突進は進行方向へ口を置いて食い付き方向を示す
+        Vector3 mouthPosition = headPosition;
+        if (rearRush) {
+            mouthPosition += (camera.Position() - headPosition).Normalized() *
+                (0.62f * motion.scale);
+        } else {
+            mouthPosition.x += motion.direction * 0.58f * motion.scale;
+            mouthPosition.z -= 0.10f;
+        }
+        DrawModelPrimitive(renderer, camera, 5, mouthPosition.x, mouthPosition.y,
+            mouthPosition.z, 0.62f * motion.scale, 0.38f * motion.scale,
+            0.18f * motion.scale, SeaSerpentMouthColor);
+    }
     if (headSideVisibleHeight >= 1.35f * head.scale ||
         headRailVisibleHeight >= 2.50f * head.scale) {
         // 目をカメラ側の頭部表面より前へ置き、移動中も胴体へ埋まらないようにする
-        const Vector3 headPosition {headX, headY, headZ};
         const Vector3 eyePosition = headPosition +
             camera.Right() * (Math::Lerp(0.36f, 0.82f, railWeight) * motion.scale) +
             camera.Up() * (Math::Lerp(0.30f, 0.72f, railWeight) * motion.scale) +

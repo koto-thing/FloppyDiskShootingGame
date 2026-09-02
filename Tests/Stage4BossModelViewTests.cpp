@@ -83,4 +83,72 @@ void RunStage4BossModelViewTests() {
     });
     assert(std::fabs(cannonYaw) < 0.0001f);
     assert(cannonPitch < -0.37f && cannonPitch > -0.39f);
+
+    // 車体と三種類の交換式主砲が独立したPrimitive数で描画されることを確認する
+    int bodyCount = 0;
+    Stage4BossModelView::DrawBody({}, [&](int, const Vector3&, const Vector3&,
+        const float[4], float, float) {
+        ++bodyCount;
+    });
+    assert(bodyCount == Stage4BossModelView::PrimitiveCount -
+        Stage4BossModelView::MainCannonPrimitiveCount);
+    constexpr Stage4MainWeaponType WeaponTypes[] = {
+        Stage4MainWeaponType::Phase1Cannon,
+        Stage4MainWeaponType::SiegeMortar,
+        Stage4MainWeaponType::RomanceCannon
+    };
+    constexpr int WeaponPrimitiveCounts[] = {
+        Stage4BossModelView::MainCannonPrimitiveCount,
+        Stage4BossModelView::SiegeMortarPrimitiveCount,
+        Stage4BossModelView::RomanceCannonPrimitiveCount
+    };
+    for (int weapon = 0; weapon < 3; ++weapon) {
+        int weaponCount = 0;
+        Stage4BossModelView::DrawMainWeapon(WeaponTypes[weapon], {},
+            Stage4BossModelView::DefaultMainWeaponPose(WeaponTypes[weapon]),
+            [&](int, const Vector3&, const Vector3&, const float[4], float, float) {
+                ++weaponCount;
+            });
+        assert(weaponCount == WeaponPrimitiveCounts[weapon]);
+    }
+
+    // 共通マウントが親移動、Yaw、拡縮を反映して独立Transformになることを確認する
+    const BossModelTransform mounted = Stage4BossModelView::MainWeaponMount(transform);
+    assert(std::fabs(mounted.position.x - 1.0f) < 0.0001f);
+    assert(std::fabs(mounted.position.y - 9.1f) < 0.0001f);
+    assert(std::fabs(mounted.position.z - 9.5f) < 0.0001f);
+    assert(std::fabs(mounted.yaw - transform.yaw) < 0.0001f);
+    assert(std::fabs(mounted.scale - transform.scale) < 0.0001f);
+
+    // 迫撃砲の仰角とロマン砲の後座量が砲口位置へ反映されることを確認する
+    const Vector3 mortarLow = Stage4BossModelView::SiegeMortarMuzzleLocalPosition(
+        Math::Pi * 40.0f / 180.0f);
+    const Vector3 mortarHigh = Stage4BossModelView::SiegeMortarMuzzleLocalPosition(
+        Math::Pi * 65.0f / 180.0f);
+    assert(mortarHigh.y > mortarLow.y);
+    assert(mortarHigh.x > mortarLow.x);
+    const Vector3 romanceReady = Stage4BossModelView::RomanceCannonMuzzleLocalPosition(0.0f, 0.0f);
+    const Vector3 romanceRecoiled = Stage4BossModelView::RomanceCannonMuzzleLocalPosition(0.0f, 1.0f);
+    assert(romanceReady.x < romanceRecoiled.x);
+    assert(std::fabs(romanceRecoiled.x - romanceReady.x - 2.40f) < 0.0001f);
+
+    // 各主砲が仕様数の運搬把持点を公開し範囲外入力を安全に扱うことを確認する
+    static_assert(Stage4BossModelView::CarryPointCount(
+        Stage4MainWeaponType::Phase1Cannon) == 2);
+    static_assert(Stage4BossModelView::CarryPointCount(
+        Stage4MainWeaponType::SiegeMortar) == 3);
+    static_assert(Stage4BossModelView::CarryPointCount(
+        Stage4MainWeaponType::RomanceCannon) == 4);
+    assert(Stage4BossModelView::CarryPointLocalPosition(
+        Stage4MainWeaponType::RomanceCannon, -1) == Vector3::Zero);
+    assert(Stage4BossModelView::CarryPointLocalPosition(
+        Stage4MainWeaponType::RomanceCannon, 4) == Vector3::Zero);
+
+    // パージ用補助エンジン噴射口が各主砲の下面に配置されることを確認する
+    assert(Stage4BossModelView::PurgeThrusterLocalPosition(
+        Stage4MainWeaponType::Phase1Cannon).y < 0.0f);
+    assert(Stage4BossModelView::PurgeThrusterLocalPosition(
+        Stage4MainWeaponType::SiegeMortar).y < 0.0f);
+    assert(Stage4BossModelView::PurgeThrusterLocalPosition(
+        Stage4MainWeaponType::RomanceCannon).y < 0.0f);
 }

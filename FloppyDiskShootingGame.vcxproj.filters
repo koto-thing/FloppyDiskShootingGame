@@ -258,6 +258,9 @@
     <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4BossModelView.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4WeaponDroneView.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3BossModelView.h">
       <Filter>Header Files</Filter>
     </ClInclude>

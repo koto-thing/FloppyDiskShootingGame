@@ -10,6 +10,43 @@ public:
     Stage4Module() = delete;
 
     /**
+     * @brief Stage 4固有の主砲交換状態を初期化する
+     * @param shooter 初期化するゲーム本体
+     * @return なし
+     */
+    static void Reset(SideScrollingShooter& shooter);
+
+    /**
+     * @brief Stage 4主砲交換のデバッグ入力を処理する
+     * @param shooter 更新するゲーム本体
+     * @return なし
+     */
+    static void ProcessDebugInput(SideScrollingShooter& shooter);
+
+    /**
+     * @brief 必要なら主砲交換を開始して一フレーム進める
+     * @param shooter 更新するゲーム本体
+     * @param boss Stage 4ボス
+     * @return 主砲交換中の場合true、通常行動を続ける場合false
+     */
+    static bool TickWeaponSwap(SideScrollingShooter& shooter, Enemy& boss);
+
+    /**
+     * @brief 現在主砲交換中か判定する
+     * @param shooter 判定するゲーム本体
+     * @return 交換中の場合true
+     */
+    static bool IsWeaponSwapActive(const SideScrollingShooter& shooter);
+
+    /**
+     * @brief Stage 4ボス被弾後の三段階フェーズ遷移とHP保護を処理する
+     * @param shooter 更新するゲーム本体
+     * @param boss 被弾したStage 4ボス
+     * @return ボスを撃破した場合true
+     */
+    static bool HandleBossPhaseAfterDamage(SideScrollingShooter& shooter, Enemy& boss);
+
+    /**
      * @brief Stage 4の敵出現とボス弾幕定義を取得する
      * @return Stage 4の不変定義
      */
@@ -117,6 +154,32 @@ public:
         Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw);
 
 private:
+    /**
+     * @brief 現在主砲から指定主砲への交換を開始する
+     * @param shooter 更新するゲーム本体
+     * @param boss Stage 4ボス
+     * @param incomingWeapon 搬入する主砲
+     * @return なし
+     */
+    static void BeginWeaponSwap(SideScrollingShooter& shooter, Enemy& boss,
+        ShooterStages::Stage4::MainWeaponType incomingWeapon);
+
+    /**
+     * @brief 現在の交換工程を次へ進める
+     * @param shooter 更新するゲーム本体
+     * @return なし
+     */
+    static void AdvanceWeaponSwap(SideScrollingShooter& shooter);
+
+    /**
+     * @brief 指定主砲への交換をデバッグ開始する
+     * @param shooter 更新するゲーム本体
+     * @param incomingWeapon 搬入する主砲
+     * @return なし
+     */
+    static void StartDebugWeaponSwap(SideScrollingShooter& shooter,
+        ShooterStages::Stage4::MainWeaponType incomingWeapon);
+
     /**
      * @brief Stage 4主砲身から重力砲丸を生成する
      * @param shooter 弾を生成するゲーム本体

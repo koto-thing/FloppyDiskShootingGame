@@ -146,6 +146,20 @@ public:
     }
 
     /**
+     * @brief 大口径砲の砲身先端ワールド座標を取得する
+     * @param index 0以上HeavyCannonCount未満の部位番号
+     * @param transform 親Transform
+     * @param localRotation XをPitch、YをYawとする追加回転
+     * @return 砲身中心線上の先端ワールド座標
+     */
+    static Vector3 HeavyCannonMuzzleWorldPosition(int index,
+        const BossModelTransform& transform, const Vector3& localRotation) {
+        return TransformLocalPosition(transform,
+            MountedLocalPosition(HeavyCannonMount(index), localRotation,
+                {-2.63f, -0.48f, 0.0f}));
+    }
+
+    /**
      * @brief ミサイルポッドの取付情報を取得する
      * @param index 0以上MissilePodCount未満の部位番号
      * @return 指定したミサイルポッドの取付情報
@@ -181,12 +195,12 @@ public:
      */
     template<class DrawPart>
     static void DrawStaticBody(const BossModelTransform& transform, DrawPart&& drawPart) {
-        // 長い中央胴体へ小さな前後胴体を深く重ねて連続した葉巻型を作る
-        Part(transform, drawPart, 5, {0.0f, 0.0f, 0.0f}, {13.8f, 5.8f, 5.9f}, Hull);
-        Part(transform, drawPart, 5, {-6.15f, 0.0f, 0.0f}, {4.8f, 4.8f, 4.9f}, Hull);
-        Part(transform, drawPart, 5, {6.10f, -0.02f, 0.0f}, {4.6f, 4.5f, 4.6f}, Hull);
-        Part(transform, drawPart, 5, {-8.20f, -0.05f, 0.0f}, {2.9f, 3.5f, 3.6f}, Armor);
-        Part(transform, drawPart, 5, {8.05f, -0.08f, 0.0f}, {2.7f, 3.1f, 3.2f}, Armor);
+        // 長い中央胴体へ大小の箱型胴体を重ねて重厚な区画感を作る
+        Part(transform, drawPart, 1, {0.0f, 0.0f, 0.0f}, {13.8f, 5.8f, 5.9f}, Hull);
+        Part(transform, drawPart, 1, {-6.15f, 0.0f, 0.0f}, {4.8f, 4.8f, 4.9f}, Hull);
+        Part(transform, drawPart, 1, {6.10f, -0.02f, 0.0f}, {4.6f, 4.5f, 4.6f}, Hull);
+        Part(transform, drawPart, 1, {-8.20f, -0.05f, 0.0f}, {2.9f, 3.5f, 3.6f}, Armor);
+        Part(transform, drawPart, 1, {8.05f, -0.08f, 0.0f}, {2.7f, 3.1f, 3.2f}, Armor);
 
         // 艦首を丸く尖らせ、艦尾は細い尾端へ長く絞る
         Part(transform, drawPart, 5, {-9.65f, -0.05f, 0.0f}, {1.85f, 2.25f, 2.35f}, LightArmor);
@@ -222,6 +236,32 @@ public:
         Part(transform, drawPart, 5, {-8.7f, 0.9f, 1.55f}, {0.34f, 0.34f, 0.34f}, Warning);
         Part(transform, drawPart, 5, {7.5f, 1.0f, -1.45f}, {0.28f, 0.28f, 0.28f}, Warning);
         Part(transform, drawPart, 5, {7.5f, 1.0f, 1.45f}, {0.28f, 0.28f, 0.28f}, Warning);
+    }
+
+    /**
+     * @brief 撃破演出の損傷段階に応じて上部船体メッシュを描画する
+     * @param transform 親Transform
+     * @param damageStage 0を無傷、1を中央破孔、2以上を全損とする損傷段階
+     * @param drawPart 描画関数
+     * @return なし
+     */
+    template<class DrawPart>
+    static void DrawDamagedStaticBody(const BossModelTransform& transform,
+        int damageStage, DrawPart&& drawPart) {
+        if (damageStage >= 2) return;
+
+        // 一回目の突進後は中央Primitive群を除外して背景まで抜ける大穴を作る
+        auto DrawRemainingPart = [&](int shape, const Vector3& position, const Vector3& scale,
+            const float color[4], float yaw, float pitch) {
+            const float cosine = std::cos(transform.yaw);
+            const float sine = std::sin(transform.yaw);
+            const Vector3 offset = position - transform.position;
+            const float localX = transform.scale > Math::Epsilon ?
+                (offset.x * cosine - offset.z * sine) / transform.scale : 0.0f;
+            if (damageStage == 1 && std::abs(localX) < 3.25f) return;
+            drawPart(shape, position, scale, color, yaw, pitch);
+        };
+        DrawStaticBody(transform, DrawRemainingPart);
     }
 
     /**
@@ -425,6 +465,34 @@ private:
     }
 
     /**
+     * @brief 武装支点基準の位置へPitchとYawを適用する
+     * @param mount 武装取付情報
+     * @param localRotation XをPitch、YをYawとする追加回転
+     * @param partPosition 武装支点基準の座標
+     * @return モデル原点基準の回転後座標
+     */
+    static Vector3 MountedLocalPosition(const Stage3BossWeaponMount& mount,
+        const Vector3& localRotation, const Vector3& partPosition) {
+        const float pitch = mount.localRotation.x + localRotation.x;
+        const float yaw = mount.localRotation.y + localRotation.y;
+        const float pitchCosine = std::cos(pitch);
+        const float pitchSine = std::sin(pitch);
+        const Vector3 pitched {
+            partPosition.x * pitchCosine - partPosition.y * pitchSine,
+            partPosition.x * pitchSine + partPosition.y * pitchCosine,
+            partPosition.z
+        };
+        const float yawCosine = std::cos(yaw);
+        const float yawSine = std::sin(yaw);
+        const Vector3 rotated {
+            pitched.x * yawCosine + pitched.z * yawSine,
+            pitched.y,
+            -pitched.x * yawSine + pitched.z * yawCosine
+        };
+        return mount.localPosition + rotated;
+    }
+
+    /**
      * @brief モデルローカル部品を親Transformへ合成して描画する
      * @param transform 親Transform
      * @param drawPart 描画関数
@@ -465,21 +533,8 @@ private:
         // PitchとYawを支点周りの部品位置にも反映する
         const float pitch = mount.localRotation.x + localRotation.x;
         const float yaw = mount.localRotation.y + localRotation.y;
-        const float pitchCosine = std::cos(pitch);
-        const float pitchSine = std::sin(pitch);
-        const Vector3 pitched {
-            partPosition.x * pitchCosine - partPosition.y * pitchSine,
-            partPosition.x * pitchSine + partPosition.y * pitchCosine,
-            partPosition.z
-        };
-        const float yawCosine = std::cos(yaw);
-        const float yawSine = std::sin(yaw);
-        const Vector3 rotated {
-            pitched.x * yawCosine + pitched.z * yawSine,
-            pitched.y,
-            -pitched.x * yawSine + pitched.z * yawCosine
-        };
-        Part(transform, drawPart, shape, mount.localPosition + rotated, scale, color, yaw, pitch);
+        Part(transform, drawPart, shape,
+            MountedLocalPosition(mount, localRotation, partPosition), scale, color, yaw, pitch);
     }
 };
 

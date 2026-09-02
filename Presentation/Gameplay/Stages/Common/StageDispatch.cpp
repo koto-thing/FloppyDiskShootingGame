@@ -43,11 +43,19 @@ void SideScrollingShooter::StageDispatch::ResetGimmicks(SideScrollingShooter& sh
 }
 
 void SideScrollingShooter::StageDispatch::ResetScriptState(SideScrollingShooter& shooter) {
+    Stage4Module::Reset(shooter);
     Stage5Module::Reset(shooter);
 }
 
 void SideScrollingShooter::StageDispatch::ProcessDebugInput(SideScrollingShooter& shooter) {
-    Stage5Module::ProcessDebugInput(shooter);
+    switch (shooter.m_stageNumber) {
+    case 4:
+        Stage4Module::ProcessDebugInput(shooter);
+        break;
+    case 5:
+        Stage5Module::ProcessDebugInput(shooter);
+        break;
+    }
 }
 
 bool SideScrollingShooter::StageDispatch::HandleDebugBossInput(SideScrollingShooter& shooter) {
@@ -289,6 +297,7 @@ bool SideScrollingShooter::StageDispatch::HandleBossDefeat(
     SideScrollingShooter& shooter, Enemy& boss) {
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::HandleBossDefeat(shooter, boss);
+    case 3: return Stage3Module::HandleBossDefeat(shooter, boss);
     case 5: return Stage5Module::HandleBossDefeat(shooter, boss);
     default: return false;
     }
