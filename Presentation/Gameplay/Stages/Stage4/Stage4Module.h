@@ -35,6 +35,42 @@ public:
     static void FireBossPartBarrage(SideScrollingShooter& shooter, const Enemy& boss);
 
     /**
+     * @brief Stage 4特殊弾を座標加算前に更新する
+     * @param shooter 更新するゲーム本体
+     * @param shot 更新する弾
+     * @return なし
+     */
+    static void TickSpecialShotBeforeMove(SideScrollingShooter& shooter, Shot& shot);
+
+    /**
+     * @brief Stage 4特殊弾を座標加算後に更新する
+     * @param shooter 更新するゲーム本体
+     * @param shot 更新する弾
+     * @param previousX 座標加算前のゲーム座標X
+     * @param previousY 座標加算前のゲーム座標Y
+     * @param previousZ 座標加算前のワールド座標Z
+     * @return なし
+     */
+    static void TickSpecialShotAfterMove(
+        SideScrollingShooter& shooter, Shot& shot,
+        float previousX, float previousY, float previousZ);
+
+    /**
+     * @brief Stage 4特殊弾が画面外カリング猶予中か判定する
+     * @param shot 判定する弾
+     * @return カリングを保留する場合true、通常カリングを行う場合false
+     */
+    static bool IsShotCullProtected(const Shot& shot);
+
+    /**
+     * @brief Stage 4敵弾のプレイヤー命中半径を取得する
+     * @param shot 判定する敵弾
+     * @param railMode レール表示中の場合true
+     * @return 表示モードと弾種に対応する命中半径
+     */
+    static float EnemyShotHitRadius(const Shot& shot, bool railMode);
+
+    /**
      * @brief Stage 4ボスの破壊済み砲部位を飛散部品へ変換する
      * @param shooter デブリを生成するゲーム本体
      * @param boss デブリ生成元のStage 4ボス
@@ -56,7 +92,27 @@ public:
     static bool DrawBossModel(const SideScrollingShooter& shooter,
         Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw);
 
+    /**
+     * @brief Stage 4特殊弾の専用描画を試みる
+     * @param shooter 現在のゲーム状態
+     * @param renderer 描画先レンダラー
+     * @param camera 現在の描画カメラ
+     * @param shot 描画対象の弾
+     * @param yaw 表示モードに対応するY軸回転
+     * @return 専用描画を行った場合true、共通描画を使用する場合false
+     */
+    static bool DrawSpecialShot(const SideScrollingShooter& shooter,
+        Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw);
+
 private:
+    /**
+     * @brief Stage 4主砲身から重力砲丸を生成する
+     * @param shooter 弾を生成するゲーム本体
+     * @param boss 発射元となるStage 4ボス
+     * @return なし
+     */
+    static void SpawnMainCannonball(SideScrollingShooter& shooter, const Enemy& boss);
+
     /**
      * @brief Stage 4ボスモデルのY軸回転を取得する
      * @param shooter 現在のゲーム状態

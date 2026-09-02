@@ -7,6 +7,7 @@
 #include "../../Engine/Graphics/Camera3D.h"
 #include "Stages/Stage1/Stage1State.h"
 #include "Stages/Stage2/Stage2State.h"
+#include "Stages/Stage4/Stage4State.h"
 #include "Stages/Stage5/Stage5State.h"
 
 class AudioService;
@@ -109,6 +110,7 @@ private:
         int barrageCount = 0;
         int age = 0;
         ShooterStages::Stage2::ShotState stage2 {};
+        ShooterStages::Stage4::ShotState stage4 {};
         PlayerType playerType = Homing;
         bool enemy = false;
         bool special = false;
@@ -215,6 +217,8 @@ private:
         bool destruction = false;
         bool active = false;
         int effectType = 0;
+        float hitRadius = 0.0f;
+        bool damagedPlayer = false;
     };
 
     /** @brief 撃破された機体モデルから分離して飛散する部品 */

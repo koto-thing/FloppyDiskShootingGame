@@ -111,7 +111,9 @@ void SideScrollingShooter::TickShots() {
     for (auto& shot : m_shots) {
         if (!shot.active) continue;
         StageDispatch::TickSpecialShotBeforeMove(*this, shot);
+        const float previousX = shot.x;
         const float previousY = shot.y;
+        const float previousZ = shot.z;
 
         /** @brief 追尾弾を最寄りの前方敵へ旋回させる */
         if (!shot.enemy && shot.special && shot.playerType == Homing) {
@@ -121,7 +123,8 @@ void SideScrollingShooter::TickShots() {
         shot.x += shot.vx;
         shot.y += shot.vy;
         shot.z += shot.vz;
-        StageDispatch::TickSpecialShotAfterMove(*this, shot, previousY);
+        StageDispatch::TickSpecialShotAfterMove(*this, shot, previousX, previousY, previousZ);
+        if (!shot.active) continue;
         if (!IsRailGameplayActive()) {
             shot.z = ToRailZFromSideX(shot.x);
         }
@@ -676,6 +679,20 @@ void SideScrollingShooter::PlayHitSound() {
 void SideScrollingShooter::TickExplosions() {
     for (auto& explosion : m_explosions) {
         if (!explosion.active) continue;
+        if (explosion.effectType == 1 && !explosion.damagedPlayer &&
+            explosion.age <= AttackWarningFrames && m_invincible == 0) {
+            const bool playerHit = IsRailGameplayActive() ?
+                Hit3D(ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ, 0.38f,
+                    ToWorldX(explosion.x), ToWorldY(explosion.y), explosion.z,
+                    explosion.hitRadius * WorldXScale) :
+                Hit(m_playerX, m_playerY, 0.050f, explosion.x, explosion.y,
+                    explosion.hitRadius);
+            if (playerHit) {
+                explosion.damagedPlayer = true;
+                DamagePlayer();
+                return;
+            }
+        }
         const int lifetime = explosion.effectType == 1 ? MortarExplosionLifetimeFrames :
             (explosion.destruction ? DestructionExplosionLifetimeFrames : ExplosionLifetimeFrames);
         if (++explosion.age >= lifetime) explosion.active = false;
@@ -727,7 +744,7 @@ void SideScrollingShooter::SpawnMortarExplosion(float x, float y, float z) {
         if (explosion.active) continue;
         explosion = {
             x, y, IsRailGameplayActive() ? z : ToRailZFromSideX(x),
-            0, false, true, 1
+            0, false, true, 1, 0.55f
         };
         return;
     }

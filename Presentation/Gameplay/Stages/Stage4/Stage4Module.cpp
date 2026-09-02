@@ -6,12 +6,21 @@
 #include "Stage4BossModelView.h"
 #include "Stage4EnemySheet.h"
 
+using ShooterStages::Stage4::ShotKind;
+
 namespace {
 
 constexpr float Stage4BossScale = 1.00f;
 constexpr float Stage4ModelYawOffset = -Math::HalfPi;
 constexpr float Stage4TrackWheelRadius = 0.74f;
+constexpr float Stage4CannonballSpeed = 0.56f;
+constexpr float Stage4CannonballGravity = 0.00135f;
+constexpr float Stage4CannonMuzzleDistance = 4.47f;
+constexpr float Stage4CannonballRailRadius = 0.52f;
+constexpr float Stage4CannonballSideRadius = 0.075f;
+constexpr float Stage4RailGroundGameY = -0.829545f;
 constexpr Vector3 Stage4MainCannonLocal {-5.75f, 3.55f, 0.0f};
+constexpr Vector3 Stage4MainCannonPivotLocal {-3.25f, 3.55f, 0.0f};
 constexpr Vector3 Stage4SecondaryGunLocal[] = {
     {-3.40f, 3.76f, -3.45f}, {-3.40f, 3.76f, 3.45f},
     {-4.40f, 3.08f, -7.65f}, {-4.40f, 3.08f, 7.65f},
@@ -127,6 +136,11 @@ void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
         if (boss.bossPartHp[part] <= 0) continue;
         if (part != BossNose && SecondaryGunIndex(part) < 0) continue;
 
+        if (part == BossNose) {
+            SpawnMainCannonball(shooter, boss);
+            continue;
+        }
+
         const Vector3 world = LocalToWorld(shooter, boss, BossPartLocalPosition(part));
         const int bulletCount = shooter.m_stage->BossPartBulletCount(
             part, static_cast<BossPhase>(boss.bossPhase), shooter.IsRailGameplayActive());
@@ -161,6 +175,77 @@ void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
             }
         }
     }
+}
+
+void SideScrollingShooter::Stage4Module::TickSpecialShotBeforeMove(
+    SideScrollingShooter& shooter, Shot& shot) {
+    (void)shooter;
+    if (!shot.enemy || shot.stage4.kind != ShotKind::Cannonball) return;
+
+    // 重力付き砲撃だけ毎フレーム落下速度を増やす
+    if (shot.stage4.gravity) shot.vy -= Stage4CannonballGravity;
+    ++shot.age;
+}
+
+void SideScrollingShooter::Stage4Module::TickSpecialShotAfterMove(
+    SideScrollingShooter& shooter, Shot& shot,
+    float previousX, float previousY, float previousZ) {
+    if (!shot.enemy || shot.stage4.kind != ShotKind::Cannonball) return;
+
+    // 3D中は自機レーン到達を優先しつつ、手前で地面や端に当たる場合はそちらを着弾扱いにする
+    const float groundY = shooter.IsRailGameplayActive() ?
+        Stage4RailGroundGameY : Side2DPlayerMinY;
+    const bool hitGround = previousY > groundY && shot.y <= groundY;
+    const bool hitEdge = shooter.IsRailGameplayActive() ?
+        (shot.z <= 0.0f || shot.z >= 72.0f ||
+            std::abs(shot.x) >= 1.2f || std::abs(shot.y) >= 1.24f) :
+        (shot.x <= Side2DPlayerMinX || shot.x >= Side2DPlayerMaxX ||
+            shot.y >= Side2DPlayerMaxY);
+    const bool hitPlayerZ = shooter.IsRailGameplayActive() &&
+        ((previousZ <= PlayerRailZ && shot.z >= PlayerRailZ) ||
+            (previousZ >= PlayerRailZ && shot.z <= PlayerRailZ));
+    if (!hitGround && !hitEdge && !hitPlayerZ) return;
+
+    bool impactAtPlayerZ = false;
+    float impactZ = shot.z;
+    if (hitPlayerZ) {
+        const auto crossRatio = [](float previous, float current, float target) {
+            const float travel = current - previous;
+            return std::abs(travel) <= 0.0001f ? 0.0f : (target - previous) / travel;
+        };
+        const auto useEarliest = [](float& current, float candidate) {
+            if (candidate >= 0.0f && candidate < current) current = candidate;
+        };
+        const float zRatio = crossRatio(previousZ, shot.z, PlayerRailZ);
+        float obstacleRatio = 2.0f;
+        if (hitGround) useEarliest(obstacleRatio, crossRatio(previousY, shot.y, groundY));
+        if (shot.z <= 0.0f) useEarliest(obstacleRatio, crossRatio(previousZ, shot.z, 0.0f));
+        if (shot.z >= 72.0f) useEarliest(obstacleRatio, crossRatio(previousZ, shot.z, 72.0f));
+        if (shot.x <= -1.2f) useEarliest(obstacleRatio, crossRatio(previousX, shot.x, -1.2f));
+        if (shot.x >= 1.2f) useEarliest(obstacleRatio, crossRatio(previousX, shot.x, 1.2f));
+        if (shot.y <= -1.24f) useEarliest(obstacleRatio, crossRatio(previousY, shot.y, -1.24f));
+        if (shot.y >= 1.24f) useEarliest(obstacleRatio, crossRatio(previousY, shot.y, 1.24f));
+        if (zRatio <= obstacleRatio) {
+            impactAtPlayerZ = true;
+            impactZ = PlayerRailZ;
+        }
+    }
+
+    shooter.SpawnMortarExplosion(
+        shot.x, hitGround && !impactAtPlayerZ ? groundY : shot.y, impactZ);
+    shot.active = false;
+}
+
+bool SideScrollingShooter::Stage4Module::IsShotCullProtected(const Shot& shot) {
+    return shot.stage4.kind == ShotKind::Cannonball;
+}
+
+float SideScrollingShooter::Stage4Module::EnemyShotHitRadius(
+    const Shot& shot, bool railMode) {
+    if (shot.stage4.kind != ShotKind::Cannonball) {
+        return railMode ? 0.28f : 0.022f;
+    }
+    return railMode ? Stage4CannonballRailRadius : Stage4CannonballSideRadius;
 }
 
 bool SideScrollingShooter::Stage4Module::SpawnBossDebris(
@@ -199,6 +284,24 @@ bool SideScrollingShooter::Stage4Module::SpawnBossDebris(
     return true;
 }
 
+bool SideScrollingShooter::Stage4Module::DrawSpecialShot(
+    const SideScrollingShooter& shooter, Renderer& renderer,
+    const Camera3D& camera, const Shot& shot, float yaw) {
+    if (!shot.enemy || shot.stage4.kind != ShotKind::Cannonball) return false;
+
+    // 主砲弾は通常敵弾より大きな鉄球として描画する
+    constexpr float ShellColor[] = {0.035f, 0.032f, 0.030f, 1.0f};
+    constexpr float HotCoreColor[] = {0.85f, 0.18f, 0.035f, 1.0f};
+    const float radius = shooter.IsRailGameplayActive() ?
+        Stage4CannonballRailRadius : Stage4CannonballSideRadius * WorldXScale;
+    DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
+        radius, radius, radius, ShellColor, yaw + shot.age * 0.12f);
+    DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z - 0.02f,
+        radius * 0.36f, radius * 0.36f, radius * 0.36f, HotCoreColor,
+        yaw + shot.age * 0.18f);
+    return true;
+}
+
 float SideScrollingShooter::Stage4Module::ModelYaw(const SideScrollingShooter& shooter) {
     return (shooter.IsRailGameplayActive() ? 0.0f : Math::HalfPi) + Stage4ModelYawOffset;
 }
@@ -224,4 +327,46 @@ Vector3 SideScrollingShooter::Stage4Module::BossPartLocalPosition(BossPart part)
     const int secondaryGun = SecondaryGunIndex(part);
     if (secondaryGun >= 0) return Stage4SecondaryGunLocal[secondaryGun];
     return Stage4MainCannonLocal;
+}
+
+void SideScrollingShooter::Stage4Module::SpawnMainCannonball(
+    SideScrollingShooter& shooter, const Enemy& boss) {
+    Shot* available = nullptr;
+    for (auto& shot : shooter.m_shots) {
+        if (!shot.active) {
+            available = &shot;
+            break;
+        }
+    }
+    if (available == nullptr) return;
+
+    // 見た目の主砲と同じピボット、照準先から砲口位置と射出方向を決める
+    const Vector3 pivot = LocalToWorld(shooter, boss, Stage4MainCannonPivotLocal);
+    const Vector3 aimTarget {
+        ToWorldX(boss.turretAimX),
+        ToWorldY(boss.turretAimY),
+        shooter.IsRailGameplayActive() ? boss.turretAimZ : pivot.z
+    };
+    const Vector3 delta = aimTarget - pivot;
+    const float length = (std::max)(0.001f,
+        std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z));
+    const Vector3 direction = delta / length;
+    const Vector3 muzzle = pivot + direction * Stage4CannonMuzzleDistance;
+
+    Shot& shot = *available;
+    shot = {};
+    shot.x = FromWorldX(muzzle.x);
+    shot.y = FromWorldY(muzzle.y);
+    shot.z = muzzle.z;
+    shot.transitionSideX = shot.x;
+    shot.transitionSideY = shot.y;
+    shot.vx = FromWorldX(direction.x * Stage4CannonballSpeed);
+    shot.vy = FromWorldY(direction.y * Stage4CannonballSpeed);
+    shot.vz = shooter.IsRailGameplayActive() ? direction.z * Stage4CannonballSpeed : 0.0f;
+    shot.hitRadius = Stage4CannonballSideRadius;
+    shot.damage = 2;
+    shot.enemy = true;
+    shot.stage4.kind = ShotKind::Cannonball;
+    shot.stage4.gravity = false;
+    shot.active = true;
 }

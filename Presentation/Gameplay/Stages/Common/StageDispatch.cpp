@@ -222,14 +222,22 @@ void SideScrollingShooter::StageDispatch::TickSpecialShotBeforeMove(
     case 2:
         Stage2Module::TickSpecialShotBeforeMove(shooter, shot);
         break;
+    case 4:
+        Stage4Module::TickSpecialShotBeforeMove(shooter, shot);
+        break;
     }
 }
 
 void SideScrollingShooter::StageDispatch::TickSpecialShotAfterMove(
-    SideScrollingShooter& shooter, Shot& shot, float previousY) {
+    SideScrollingShooter& shooter, Shot& shot,
+    float previousX, float previousY, float previousZ) {
     switch (shooter.m_stageNumber) {
     case 2:
         Stage2Module::TickSpecialShotAfterMove(shooter, shot, previousY);
+        break;
+    case 4:
+        Stage4Module::TickSpecialShotAfterMove(
+            shooter, shot, previousX, previousY, previousZ);
         break;
     }
 }
@@ -238,6 +246,7 @@ bool SideScrollingShooter::StageDispatch::IsShotCullProtected(
     const SideScrollingShooter& shooter, const Shot& shot) {
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::IsShotCullProtected(shot);
+    case 4: return Stage4Module::IsShotCullProtected(shot);
     default: return false;
     }
 }
@@ -246,6 +255,7 @@ float SideScrollingShooter::StageDispatch::EnemyShotHitRadius(
     const SideScrollingShooter& shooter, const Shot& shot) {
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::EnemyShotHitRadius(shot, shooter.IsRailGameplayActive());
+    case 4: return Stage4Module::EnemyShotHitRadius(shot, shooter.IsRailGameplayActive());
     default: return shooter.IsRailGameplayActive() ? 0.28f : 0.022f;
     }
 }
@@ -419,6 +429,7 @@ bool SideScrollingShooter::StageDispatch::DrawSpecialShot(
     const Camera3D& camera, const Shot& shot, float yaw) {
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
+    case 4: return Stage4Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
     default: return false;
     }
 }

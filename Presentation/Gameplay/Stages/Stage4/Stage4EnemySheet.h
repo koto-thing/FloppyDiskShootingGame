@@ -198,7 +198,8 @@ public:
     int BossPartBulletCount(BossPart part, BossPhase phase, bool railMode) const override {
         (void)railMode;
         if (part == BossNose) {
-            return phase == BossSpecialPhase1 || phase == BossSpecialPhase2 ? 5 : 3;
+            (void)phase;
+            return 1;
         }
         if (part >= BossFunnelHatch0 && part < BossFunnelHatch0 + 6) {
             return phase == BossSpecialPhase1 || phase == BossSpecialPhase2 ? 2 : 1;

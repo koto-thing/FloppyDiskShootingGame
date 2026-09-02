@@ -196,11 +196,14 @@ public:
      * @brief ステージ固有弾を座標加算後に更新する
      * @param shooter 更新対象
      * @param shot 更新する弾
+     * @param previousX 座標加算前のゲーム座標X
      * @param previousY 座標加算前のゲーム座標Y
+     * @param previousZ 座標加算前のワールド座標Z
      * @return なし
      */
     static void TickSpecialShotAfterMove(
-        SideScrollingShooter& shooter, Shot& shot, float previousY);
+        SideScrollingShooter& shooter, Shot& shot,
+        float previousX, float previousY, float previousZ);
 
     /**
      * @brief ステージ固有弾が画面外カリング猶予中か判定する
