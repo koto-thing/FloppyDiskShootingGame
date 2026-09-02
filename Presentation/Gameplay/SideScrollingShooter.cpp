@@ -1475,6 +1475,9 @@ void SideScrollingShooter::InitializeSideObjects() {
 
 void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, float y, float railZ) {
     constexpr float SideEnemyEntryX = 2.80f;
+
+    // 出現敵をランダムにさせる処理
+    /*
     static constexpr int SpawnableEnemyTypes[] = {
         Stage::HeavyEnemy, Stage::StraightShooterEnemy,
         Stage::ArmoredEnemy, Stage::CircleShooterEnemy
@@ -1483,6 +1486,7 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
     if (enemyType != Stage::BossEnemy) {
         enemyType = SpawnableEnemyTypes[static_cast<int>(GameplayRandom::Range(0.0f, 3.999f))];
     }
+    */
 
     for (auto& enemy : m_enemies) {
         if (enemy.active) continue;
@@ -2383,9 +2387,10 @@ Stage5ModelTransform SideScrollingShooter::TayamaTransform() const {
 
     // 通常チャプターでは遠景の都市構造として見せ、後半ほど接近させる
     if (m_stage5Phase == Stage5Phase::Approach) {
+        const int chapterLength = m_stage != nullptr ? m_stage->ChapterFrameLength() : ChapterLengthFrames;
         const float chapterProgress = Math::Clamp01(
-            static_cast<float>(m_frame - (m_chapterNumber - 1) * ChapterLengthFrames) /
-            static_cast<float>(ChapterLengthFrames));
+            static_cast<float>(m_frame - (m_chapterNumber - 1) * chapterLength) /
+            static_cast<float>(chapterLength));
         y = -9.0f + static_cast<float>(m_chapterNumber - 1) * 2.4f + chapterProgress * 1.2f;
         z = 88.0f - static_cast<float>(m_chapterNumber - 1) * 6.0f;
         scale = 0.82f + static_cast<float>(m_chapterNumber - 1) * 0.12f;

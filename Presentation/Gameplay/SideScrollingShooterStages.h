@@ -35,8 +35,6 @@ public:
     };
 
     struct Chapter {
-        int firstFrame = 0;
-        int endFrame = 0;
         const EnemySpawnRule* spawnRules = nullptr;
         int spawnRuleCount = 0;
     };
@@ -57,12 +55,19 @@ public:
         return false;
     }
     /**
+     * @brief 1チャプターの長さを取得する
+     * @return 1チャプターのフレーム数
+     */
+    virtual int ChapterFrameLength() const {
+        return SideScrollingShooter::ChapterLengthFrames;
+    }
+    /**
      * @brief 指定チャプターの終了フレームを取得する
      * @param chapterNumber チャプター番号
      * @return 指定チャプターの終了フレーム
      */
     virtual int ChapterEndFrame(int chapterNumber) const {
-        return chapterNumber * SideScrollingShooter::ChapterLengthFrames;
+        return chapterNumber * ChapterFrameLength();
     }
     virtual bool TrySelectEnemySpawn(int frame, EnemySpawnRule& spawn, int& chapterNumber) const = 0;
     virtual void ConfigureEnemy(SideScrollingShooter& shooter, Enemy& enemy,
@@ -188,13 +193,21 @@ public:
     }
 
 protected:
+    template<int RuleCount>
+    static constexpr Chapter MakeChapter(const EnemySpawnRule (&rules)[RuleCount]) {
+        return { rules, RuleCount };
+    }
+
     bool TrySelectByChapters(const Chapter* chapters, int chapterCount, int frame,
         EnemySpawnRule& spawn, int& chapterNumber) const {
+        const int chapterFrameLength = ChapterFrameLength();
         for (int chapterIndex = 0; chapterIndex < chapterCount; ++chapterIndex) {
-            const Chapter& chapter = chapters[chapterIndex];
-            if (frame < chapter.firstFrame || frame >= chapter.endFrame) continue;
+            const int chapterFirstFrame = chapterIndex * chapterFrameLength;
+            if (frame < chapterFirstFrame || frame >= chapterFirstFrame + chapterFrameLength) continue;
             chapterNumber = chapterIndex + 1;
-            return TrySelectByRules(chapter.spawnRules, chapter.spawnRuleCount, frame, spawn);
+            const Chapter& chapter = chapters[chapterIndex];
+            return TrySelectByRules(chapter.spawnRules, chapter.spawnRuleCount,
+                frame - chapterFirstFrame, spawn);
         }
         return false;
     }
@@ -226,9 +239,9 @@ public:
     int StageIndex() const override { return 3; }
     bool TrySelectEnemySpawn(int frame, EnemySpawnRule& spawn, int& chapterNumber) const override {
         static constexpr EnemySpawnRule Chapter1[] = {{3, 24, 54, 1.10f, -0.82f, 0.88f, 50.0f}, {4, 110, 250, 1.12f, -0.40f, -0.42f, 60.0f}};
-        static constexpr EnemySpawnRule Chapter2[] = {{3, 510, 52, 1.10f, 0.28f, -0.88f, 40.0f}, {5, 570, 165, 1.14f, 0.82f, 0.32f, 56.0f}, {1, 650, 230, 1.16f, 0.05f, 0.54f, 60.0f}};
-        static constexpr EnemySpawnRule Chapter3[] = {{4, 1010, 140, 1.12f, -0.85f, -0.18f, 60.0f}, {5, 1060, 145, 1.14f, -0.28f, 0.86f, 50.0f}, {1, 1120, 180, 1.16f, 0.82f, -0.68f, 60.0f}};
-        constexpr Chapter Chapters[] = {{0, 500, Chapter1, 2}, {500, 1000, Chapter2, 3}, {1000, 1500, Chapter3, 3}};
+        static constexpr EnemySpawnRule Chapter2[] = {{3, 10, 52, 1.10f, 0.28f, -0.88f, 40.0f}, {5, 70, 165, 1.14f, 0.82f, 0.32f, 56.0f}, {1, 150, 230, 1.16f, 0.05f, 0.54f, 60.0f}};
+        static constexpr EnemySpawnRule Chapter3[] = {{4, 10, 140, 1.12f, -0.85f, -0.18f, 60.0f}, {5, 60, 145, 1.14f, -0.28f, 0.86f, 50.0f}, {1, 120, 180, 1.16f, 0.82f, -0.68f, 60.0f}};
+        constexpr Chapter Chapters[] = {MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)};
         return TrySelectByChapters(Chapters, 3, frame, spawn, chapterNumber);
     }
     int BossBulletCount(bool) const override { return 5; }
@@ -245,9 +258,9 @@ public:
     int StageIndex() const override { return 4; }
     bool TrySelectEnemySpawn(int frame, EnemySpawnRule& spawn, int& chapterNumber) const override {
         static constexpr EnemySpawnRule Chapter1[] = {{4, 20, 48, 1.10f, -0.82f, -0.68f, 60.0f}, {5, 90, 210, 1.14f, -0.28f, 0.86f, 50.0f}};
-        static constexpr EnemySpawnRule Chapter2[] = {{4, 510, 46, 1.12f, 0.28f, 0.18f, 60.0f}, {3, 560, 125, 1.10f, 0.82f, -0.88f, 34.0f}, {1, 630, 190, 1.16f, -0.40f, 0.54f, 60.0f}};
-        static constexpr EnemySpawnRule Chapter3[] = {{5, 1010, 110, 1.14f, -0.82f, 0.86f, 50.0f}, {4, 1050, 105, 1.12f, 0.82f, -0.18f, 60.0f}, {3, 1120, 135, 1.10f, 0.28f, -0.88f, 40.0f}};
-        constexpr Chapter Chapters[] = {{0, 500, Chapter1, 2}, {500, 1000, Chapter2, 3}, {1000, 1500, Chapter3, 3}};
+        static constexpr EnemySpawnRule Chapter2[] = {{4, 10, 46, 1.12f, 0.28f, 0.18f, 60.0f}, {3, 60, 125, 1.10f, 0.82f, -0.88f, 34.0f}, {1, 130, 190, 1.16f, -0.40f, 0.54f, 60.0f}};
+        static constexpr EnemySpawnRule Chapter3[] = {{5, 10, 110, 1.14f, -0.82f, 0.86f, 50.0f}, {4, 50, 105, 1.12f, 0.82f, -0.18f, 60.0f}, {3, 120, 135, 1.10f, 0.28f, -0.88f, 40.0f}};
+        constexpr Chapter Chapters[] = {MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)};
         return TrySelectByChapters(Chapters, 3, frame, spawn, chapterNumber);
     }
     int BossBulletCount(bool) const override { return 7; }
@@ -280,9 +293,9 @@ public:
      */
     bool TrySelectEnemySpawn(int frame, EnemySpawnRule& spawn, int& chapterNumber) const override {
         static constexpr EnemySpawnRule Chapter1[] = {{5, 18, 42, 1.14f, -0.82f, 0.86f, 50.0f}, {4, 75, 180, 1.12f, -0.28f, -0.42f, 60.0f}};
-        static constexpr EnemySpawnRule Chapter2[] = {{5, 510, 95, 1.14f, 0.28f, -0.32f, 56.0f}, {3, 550, 105, 1.10f, 0.82f, 0.88f, 34.0f}, {1, 610, 145, 1.16f, -0.85f, 0.54f, 60.0f}};
-        static constexpr EnemySpawnRule Chapter3[] = {{4, 1010, 82, 1.12f, -0.82f, -0.68f, 60.0f}, {5, 1040, 80, 1.14f, 0.82f, 0.32f, 56.0f}, {3, 1090, 95, 1.10f, -0.28f, -0.88f, 40.0f}, {1, 1150, 120, 1.16f, 0.28f, 0.68f, 60.0f}};
-        constexpr Chapter Chapters[] = {{0, 500, Chapter1, 2}, {500, 1000, Chapter2, 3}, {1000, 1500, Chapter3, 4}};
+        static constexpr EnemySpawnRule Chapter2[] = {{5, 10, 95, 1.14f, 0.28f, -0.32f, 56.0f}, {3, 50, 105, 1.10f, 0.82f, 0.88f, 34.0f}, {1, 110, 145, 1.16f, -0.85f, 0.54f, 60.0f}};
+        static constexpr EnemySpawnRule Chapter3[] = {{4, 10, 82, 1.12f, -0.82f, -0.68f, 60.0f}, {5, 40, 80, 1.14f, 0.82f, 0.32f, 56.0f}, {3, 90, 95, 1.10f, -0.28f, -0.88f, 40.0f}, {1, 150, 120, 1.16f, 0.28f, 0.68f, 60.0f}};
+        constexpr Chapter Chapters[] = {MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)};
         return TrySelectByChapters(Chapters, 3, frame, spawn, chapterNumber);
     }
     /**

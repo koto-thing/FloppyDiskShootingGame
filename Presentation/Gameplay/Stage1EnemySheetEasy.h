@@ -10,6 +10,16 @@
  */
 class SideScrollingShooter::Stage1EnemySheetEasy final : public SideScrollingShooter::Stage1EnemySheet {
 public:
+    static constexpr int ChapterLength = 500;
+
+    /**
+     * @brief 1チャプターの長さを取得する
+     * @return EASY用チャプターのフレーム数
+     */
+    int ChapterFrameLength() const override {
+        return ChapterLength;
+    }
+
     /**
      * @brief 指定フレームで出現させるEASY用の敵を取得する
      * @param frame 現在のステージフレーム
@@ -24,16 +34,16 @@ public:
         };
         // チャプター2は通常機と円形弾幕砲台を出現させる
         static constexpr EnemySpawnRule Chapter2[] = {
-            {BasicEnemy, 540, 100, 1.12f, 0.42f, -0.12f, 60.0f},
-            {CircleShooterEnemy, 650, 320, 1.14f, 0.35f, -0.32f, 54.0f}
+            {BasicEnemy, 40, 100, 1.12f, 0.42f, -0.12f, 60.0f},
+            {CircleShooterEnemy, 150, 320, 1.14f, 0.35f, -0.32f, 54.0f}
         };
         // チャプター3は狙撃機と重装機を低頻度で出現させる
         static constexpr EnemySpawnRule Chapter3[] = {
-            {StraightShooterEnemy, 1060, 280, 1.10f, -0.78f, 0.86f, 48.0f},
-            {HeavyEnemy, 1200, 360, 1.16f, 0.22f, 0.30f, 60.0f}
+            {StraightShooterEnemy, 60, 280, 1.10f, -0.78f, 0.86f, 48.0f},
+            {HeavyEnemy, 200, 360, 1.16f, 0.22f, 0.30f, 60.0f}
         };
         constexpr Chapter Chapters[] = {
-            {0, 500, Chapter1, 1}, {500, 1000, Chapter2, 2}, {1000, 1500, Chapter3, 2}
+            MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)
         };
         return TrySelectByChapters(Chapters, 3, frame, spawn, chapterNumber);
     }
