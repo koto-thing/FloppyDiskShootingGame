@@ -8,110 +8,14 @@
 #include "../../Engine/Input/KeyCode.h"
 #include "../../Infrastructure/ExternalServices/AudioService.h"
 #include "SideScrollingShooterShared.h"
+#include "Stages/Common/StageDispatch.h"
 
 namespace {
 using SideScrollingShooterShared::BossNameRevealFrames;
-using SideScrollingShooterShared::Stage2BossApproachFrames;
-using SideScrollingShooterShared::Stage2BossAssemblyFrames;
-using SideScrollingShooterShared::Stage5DistantThunder;
-using SideScrollingShooterShared::Stage5Thunder;
-
-constexpr int Stage1BossRushSegmentFrames = 36;
-constexpr int Stage1BossRushSegmentCount = 4;
-constexpr int Stage1BossRushFrames = Stage1BossRushSegmentFrames * Stage1BossRushSegmentCount;
-constexpr int Stage1BossSettleFrames = 96;
-constexpr int Stage1BossEntranceFrames = Stage1BossRushFrames + Stage1BossSettleFrames;
-
-constexpr int Stage2BossEntranceFrames = Stage2BossApproachFrames + Stage2BossAssemblyFrames;
-
-/**
- * @brief ステージ1ボス出現演出の高速移動区間を取得する
- * @param age 出現演出の経過フレーム
- * @return 0から3までの高速移動区間
- */
-constexpr int Stage1BossRushSegment(int age) {
-    if (age <= 0) return 0;
-    const int segment = age / Stage1BossRushSegmentFrames;
-    return segment < Stage1BossRushSegmentCount ? segment : Stage1BossRushSegmentCount - 1;
-}
-
-static_assert(Stage1BossRushSegment(0) == 0);
-static_assert(Stage1BossRushSegment(Stage1BossRushFrames - 1) == 3);
-static_assert(Stage1BossEntranceFrames == 240);
-static_assert(Stage2BossEntranceFrames == 180);
-
 }
 
 #include "SideScrollingShooterEnemies.h"
-#include "SideScrollingShooterStages.h"
-#include "Stage1EnemySheet.h"
-#include "Stage1EnemySheetEasy.h"
-#include "Stage1EnemySheetHard.h"
-#include "Stage1EnemySheetNormal.h"
-#include "Stage2EnemySheet.h"
-#include "Stage2EnemySheetEasy.h"
-#include "Stage2EnemySheetHard.h"
-#include "Stage2EnemySheetNormal.h"
-#include "Stage1Story.h"
-
-/**
- * @brief 指定難易度のステージ1敵出現シートを取得する
- * @param difficulty 取得する難易度
- * @return 難易度に対応するステージ1敵出現シート
- */
-const SideScrollingShooter::Stage& SideScrollingShooter::Stage1EnemySheetInstance(DifficultyType difficulty) {
-    static const Stage1EnemySheetEasy easyStage;
-    static const Stage1EnemySheetNormal normalStage;
-    static const Stage1EnemySheetHard hardStage;
-    switch (difficulty) {
-    case Hard: return hardStage;
-    case Normal: return normalStage;
-    default: return easyStage;
-    }
-}
-
-/**
- * @brief 指定難易度のステージ2敵出現シートを取得する
- * @param difficulty 取得する難易度
- * @return 難易度に対応するステージ2敵出現シート
- */
-const SideScrollingShooter::Stage& SideScrollingShooter::Stage2EnemySheetInstance(DifficultyType difficulty) {
-    static const Stage2EnemySheetEasy easyStage;
-    static const Stage2EnemySheetNormal normalStage;
-    static const Stage2EnemySheetHard hardStage;
-    switch (difficulty) {
-    case Hard: return hardStage;
-    case Normal: return normalStage;
-    default: return easyStage;
-    }
-}
-
-/**
- * @brief ステージ3の定義を取得する
- * @return ステージ3の定義
- */
-const SideScrollingShooter::Stage& SideScrollingShooter::Stage3Instance() {
-    static const Stage3 stage;
-    return stage;
-}
-
-/**
- * @brief ステージ4の定義を取得する
- * @return ステージ4の定義
- */
-const SideScrollingShooter::Stage& SideScrollingShooter::Stage4Instance() {
-    static const Stage4 stage;
-    return stage;
-}
-
-/**
- * @brief ステージ5の定義を取得する
- * @return ステージ5の定義
- */
-const SideScrollingShooter::Stage& SideScrollingShooter::Stage5Instance() {
-    static const Stage5 stage;
-    return stage;
-}
+#include "Stages/Common/StageDefinition.h"
 
 /**
  * @brief 指定番号のステージ定義を取得する
@@ -119,13 +23,7 @@ const SideScrollingShooter::Stage& SideScrollingShooter::Stage5Instance() {
  * @return 指定番号に対応するステージ定義
  */
 const SideScrollingShooter::Stage& SideScrollingShooter::StageForNumber(int stageNumber, DifficultyType difficulty) {
-    switch (stageNumber) {
-    case 2: return Stage2EnemySheetInstance(difficulty);
-    case 3: return Stage3Instance();
-    case 4: return Stage4Instance();
-    case 5: return Stage5Instance();
-    default: return Stage1EnemySheetInstance(difficulty);
-    }
+    return StageDispatch::Definition(stageNumber, difficulty);
 }
 
 const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::BasicEnemyBehaviorInstance() {
@@ -145,11 +43,6 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::ArmoredEnemyBeh
 
 const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::BossEnemyBehaviorInstance() {
     static const BossEnemyBehavior behavior;
-    return behavior;
-}
-
-const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::Stage2BossEnemyBehaviorInstance() {
-    static const Stage2BossEnemyBehavior behavior;
     return behavior;
 }
 
@@ -207,7 +100,7 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
     m_items = {};
     m_explosions = {};
     m_debris = {};
-    ResetStageGimmicks();
+    StageDispatch::ResetGimmicks(*this);
     m_stageNumber = 1;
     m_chapterNumber = 1;
     if (resetRetryCounts) m_chapterRetryCounts = {};
@@ -247,7 +140,7 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
     m_viewTransitionTimer = 0;
     m_viewToggleCooldown = 0;
     m_viewTransitionProgress = 0.0f;
-    ResetStage5();
+    StageDispatch::ResetScriptState(*this);
 }
 
 /**
@@ -263,7 +156,7 @@ void SideScrollingShooter::StartDebugCheckpoint(int stageNumber, int chapterNumb
     m_items = {};
     m_explosions = {};
     m_debris = {};
-    ResetStageGimmicks();
+    StageDispatch::ResetGimmicks(*this);
 
     // 指定範囲をゲーム内の進行範囲へ収める
     m_stageNumber = (std::clamp)(stageNumber, 1, 5);
@@ -303,16 +196,11 @@ void SideScrollingShooter::StartDebugCheckpoint(int stageNumber, int chapterNumb
     m_viewTransitionProgress = 0.0f;
     m_playerX = -0.72f;
     m_playerY = 0.0f;
-    ResetStage5();
+    StageDispatch::ResetScriptState(*this);
 
     if (bossBattle) {
         m_chapterNumber = 3;
-        if (m_stageNumber == 5) {
-            m_missionStartTimer = 0;
-            m_viewMode = ViewMode::Rail3D;
-            m_nextViewMode = ViewMode::Rail3D;
-            StartStage5Phase(Stage5Phase::EastsourceBattle);
-        } else {
+        if (!StageDispatch::StartDebugBoss(*this)) {
             StartBossBattle();
         }
         m_bossStoryActive = false;
@@ -328,7 +216,7 @@ void SideScrollingShooter::ProcessInput() {
     m_moveDown = Input::GetKey(KeyCode::DownArrow) || Input::GetKey(KeyCode::S);
     m_fire = Input::GetKey(KeyCode::Z) || Input::GetKey(KeyCode::Space);
     m_viewToggleRequested = Input::GetKeyDown(KeyCode::X) && m_viewToggleCooldown == 0 &&
-        !IsStage5ViewLocked() &&
+        !StageDispatch::IsViewLocked(*this) &&
         m_bossIntroductionPhase == BossIntroductionPhase::None;
 
     // デバッグ用に任意の進行地点へ移動する
@@ -340,19 +228,10 @@ void SideScrollingShooter::ProcessInput() {
     if (Input::GetKeyDown(KeyCode::Alpha1)) StartDebugCheckpoint(m_stageNumber, 1, false);
     if (Input::GetKeyDown(KeyCode::Alpha2)) StartDebugCheckpoint(m_stageNumber, 2, false);
     if (Input::GetKeyDown(KeyCode::Alpha3)) StartDebugCheckpoint(m_stageNumber, 3, false);
-    if (Input::GetKeyDown(KeyCode::B)) {
-        if (m_stageNumber == 5) StartDebugStage5Phase(Stage5Phase::EastsourceBattle);
-        else StartDebugCheckpoint(m_stageNumber, 3, true);
+    if (Input::GetKeyDown(KeyCode::B) && !StageDispatch::HandleDebugBossInput(*this)) {
+        StartDebugCheckpoint(m_stageNumber, 3, true);
     }
-#ifdef _DEBUG
-    if (Input::GetKeyDown(KeyCode::F6)) StartDebugStage5Phase(Stage5Phase::WallClimbLower);
-    if (Input::GetKeyDown(KeyCode::F7)) StartDebugStage5Phase(Stage5Phase::WallClimbMiddle);
-    if (Input::GetKeyDown(KeyCode::F8)) StartDebugStage5Phase(Stage5Phase::WallClimbUpper);
-    if (Input::GetKeyDown(KeyCode::F9)) StartDebugStage5Phase(Stage5Phase::TayamaFireControl);
-    if (Input::GetKeyDown(KeyCode::F10)) StartDebugStage5Phase(Stage5Phase::TayamaLiftEngines);
-    if (Input::GetKeyDown(KeyCode::F11)) StartDebugStage5Phase(Stage5Phase::TayamaCommandCore);
-    if (Input::GetKeyDown(KeyCode::F12)) StartDebugStage5Phase(Stage5Phase::TayamaCollapse);
-#endif
+    StageDispatch::ProcessDebugInput(*this);
 
     if (m_clear && Input::GetKeyDown(KeyCode::R)) {
         Reset(false);
@@ -382,7 +261,7 @@ void SideScrollingShooter::Tick() {
         TickExplosions();
         TickDebris();
         --m_clearTimer;
-        if (m_stageNumber < 5 && m_clearTimer <= 0) StartNextStage();
+        if (m_clearTimer <= 0 && StageDispatch::HasNextStage(*this)) StartNextStage();
         return;
     }
     if (m_playerDestructionTimer > 0) {
@@ -429,41 +308,27 @@ void SideScrollingShooter::Tick() {
         return;
     }
 
-    // Stage 5後半は絶対フレームではなく専用状態と経過時間で進行する
-    if (m_stageNumber == 5 && m_stage5Phase != Stage5Phase::Approach) {
-        TickStage5();
-    } else if (m_stageNumber == 5 && m_chapterNumber == 3 && m_frame % 150 == 30) {
-        // TAYAMA浮上に同期して道路上の小型構造物を決定的な間隔で崩す
-        const float side = (m_frame / 150) % 2 == 0 ? -1.0f : 1.0f;
-        SpawnExplosion(side * 0.88f, -0.72f, 52.0f, true);
-    }
+    StageDispatch::TickBeforeFrame(*this);
 
     ++m_frame;
-    if (ShouldAdvanceStageScroll()) m_scroll += 0.008f;
+    if (StageDispatch::ShouldAdvanceStageScroll(*this)) m_scroll += 0.008f;
     m_shotCooldown = (std::max)(0, m_shotCooldown - 1);
     m_specialShotCooldown = (std::max)(0, m_specialShotCooldown - 1);
     m_invincible = (std::max)(0, m_invincible - 1);
     m_viewToggleCooldown = (std::max)(0, m_viewToggleCooldown - 1);
-    m_stage5SoundCooldown = (std::max)(0, m_stage5SoundCooldown - 1);
-    if (m_stageNumber == 5 && m_stage5Phase < Stage5Phase::TayamaCommandCore &&
-        m_stage5SoundCooldown == 0) {
-        if (m_frame % 397 == 0) PlayStage5Cue(Stage5DistantThunder);
-        if (m_chapterNumber >= 2 && m_frame % 241 == 0) PlayStage5Cue(Stage5Thunder);
-    }
+    StageDispatch::TickAfterFrame(*this);
     if (!m_bossBattle && !m_chapterResultActive &&
-        (m_stageNumber != 5 || m_stage5Phase == Stage5Phase::Approach) &&
+        StageDispatch::UsesChapterTimeline(*this) &&
         m_frame >= m_stage->ChapterEndFrame(m_chapterNumber)) {
         FinishChapter();
     }
 
     TickPlayer();
-    TickStageGimmicks();
+    StageDispatch::TickWorld(*this);
 
     // 3Dから2Dへ確定するフレームだけは、座標変換直後の特殊障害物との誤接触を除外する
     if (!completingRailToSideTransition &&
-        ((m_stageNumber == 1 && HitsStage1Meteor(m_playerX, m_playerY, PlayerRailZ, 0.055f)) ||
-        (m_stageNumber == 2 && HitsDesertBoneArch(m_playerX, m_playerY, PlayerRailZ, 0.055f)) ||
-        (m_stageNumber == 3 && HitsOceanSeaSerpent(m_playerX, m_playerY, PlayerRailZ, 0.055f)))) {
+        StageDispatch::HitsHazard(*this, m_playerX, m_playerY, PlayerRailZ, 0.055f)) {
         DamagePlayer();
         return;
     }
@@ -485,7 +350,7 @@ void SideScrollingShooter::Tick() {
     if (firedPlayerShot) PlayShotSound();
 
     if (!m_bossBattle && !m_chapterResultActive &&
-        (m_stageNumber != 5 || m_stage5Phase == Stage5Phase::Approach)) {
+        StageDispatch::UsesChapterTimeline(*this)) {
         for (int spawnIndex = 0;; ++spawnIndex) {
             Stage::EnemySpawnRule spawn;
             if (!m_stage->TrySelectEnemySpawn(m_frame, spawnIndex, spawn, m_chapterNumber)) {
@@ -514,10 +379,7 @@ void SideScrollingShooter::TickChapterResult() {
         if (shot.enemy) shot.active = false;
     }
     if (m_chapterNumber == 3) {
-        if (m_stageNumber == 5) {
-            StartStage5Phase(Stage5Phase::EastsourceIntro);
-            return;
-        }
+        if (StageDispatch::HandleChapterResult(*this)) return;
         m_bossBattlePending = true;
         return;
     }
@@ -527,10 +389,7 @@ void SideScrollingShooter::TickChapterResult() {
     m_chapterStartPower = m_power;
     m_chapterStartScore = m_score;
     m_chapterStartKills = m_kills;
-    if (m_stageNumber == 5) {
-        SaveStage5Checkpoint(m_chapterNumber == 2 ?
-            Stage5Checkpoint::Chapter2 : Stage5Checkpoint::Chapter3);
-    }
+    StageDispatch::OnChapterStarted(*this);
 }
 
 /**
@@ -625,24 +484,6 @@ void SideScrollingShooter::RequestViewMode(ViewMode mode) {
     } else {
         InitializeSideObjects();
     }
-}
-
-/**
- * @brief Stage 5後半で3D表示が固定されているか取得する
- * @return 3D表示が固定されている場合true
- */
-bool SideScrollingShooter::IsStage5ViewLocked() const {
-    return m_stageNumber == 5 && m_stage5Phase != Stage5Phase::Approach;
-}
-
-/**
- * @brief 現在の進行状態で背景スクロールを更新するか取得する
- * @return 背景スクロールを更新する場合true
- */
-bool SideScrollingShooter::ShouldAdvanceStageScroll() const {
-    if (m_stageNumber != 5) return true;
-    return m_stage5Phase <= Stage5Phase::WallClimbUpper ||
-        m_stage5Phase == Stage5Phase::EastsourceFall;
 }
 
 void SideScrollingShooter::InitializeRailObjects() {
@@ -819,10 +660,10 @@ void SideScrollingShooter::StartBossBattle() {
 
 /**
  * @brief 全ステージをクリア済みか取得する
- * @return TAYAMA崩壊と静かな飛行が完了した場合true
+ * @return 最終ステージの完了条件を満たした場合true、進行中の場合false
  */
 bool SideScrollingShooter::IsAllStagesCleared() const {
-    return m_stageNumber == 5 && m_stage5Phase == Stage5Phase::EndingReady;
+    return StageDispatch::IsGameCleared(*this);
 }
 
 /**
@@ -835,7 +676,7 @@ int SideScrollingShooter::Score() const {
 
 /** @brief ボス戦前会話を進行する */
 void SideScrollingShooter::TickBossStory() {
-    const BossStory story = BossStories::ForStage(m_stageNumber);
+    const BossStory story = StageDispatch::Story(m_stageNumber);
     if (m_bossStoryLine >= story.lineCount) {
         m_bossStoryActive = false;
         return;
@@ -860,46 +701,10 @@ void SideScrollingShooter::TickBossStory() {
  */
 void SideScrollingShooter::TickBossIntroduction() {
     Enemy& boss = m_enemies[0];
-
-    // ステージ1は画面の上下を交互に横断してから端から低速で定位置へ入る
-    if (m_bossIntroductionPhase == BossIntroductionPhase::Entrance && m_stageNumber == 1) {
-        constexpr float SideX[] = {3.25f, -3.25f, 3.25f, -3.25f, 3.25f};
-        constexpr float SideY[] = {1.05f, -1.08f, -0.82f, 1.05f, 0.0f};
-        constexpr float RailX[] = {1.45f, -1.45f, 1.45f, -1.45f, 1.45f};
-        constexpr float RailY[] = {1.05f, -1.08f, -0.82f, 1.05f, 0.0f};
-        if (m_bossIntroductionTimer < Stage1BossRushFrames) {
-            const int segment = Stage1BossRushSegment(m_bossIntroductionTimer);
-            const float segmentProgress = SmoothStep(static_cast<float>(
-                m_bossIntroductionTimer - segment * Stage1BossRushSegmentFrames) /
-                static_cast<float>(Stage1BossRushSegmentFrames));
-            if (IsRailGameplayActive()) {
-                boss.x = Math::Lerp(RailX[segment], RailX[segment + 1], segmentProgress);
-                boss.y = Math::Lerp(RailY[segment], RailY[segment + 1], segmentProgress);
-                boss.z = 32.0f;
-            } else {
-                boss.x = Math::Lerp(SideX[segment], SideX[segment + 1], segmentProgress);
-                boss.y = Math::Lerp(SideY[segment], SideY[segment + 1], segmentProgress);
-                boss.z = ToRailZFromSideX(boss.x);
-            }
-        } else {
-            const float settleProgress = SmoothStep(static_cast<float>(
-                m_bossIntroductionTimer - Stage1BossRushFrames) /
-                static_cast<float>(Stage1BossSettleFrames));
-            if (IsRailGameplayActive()) {
-                boss.x = Math::Lerp(RailX[4], 0.0f, settleProgress);
-                boss.y = 0.0f;
-                boss.z = Math::Lerp(32.0f, 48.0f, settleProgress);
-            } else {
-                boss.x = Math::Lerp(SideX[4], 1.80f, settleProgress);
-                boss.y = 0.0f;
-                boss.z = ToRailZFromSideX(boss.x);
-            }
-        }
-    }
+    StageDispatch::TickBossIntroduction(*this);
 
     ++m_bossIntroductionTimer;
-    const int entranceFrames = m_stageNumber == 1 ? Stage1BossEntranceFrames :
-        (m_stageNumber == 2 ? Stage2BossEntranceFrames : 1);
+    const int entranceFrames = StageDispatch::BossIntroductionFrames(*this);
     if (m_bossIntroductionPhase == BossIntroductionPhase::Entrance &&
         m_bossIntroductionTimer >= entranceFrames) {
         // 定位置を既存ステージ定義へ戻して会話へ移行する
@@ -921,17 +726,13 @@ void SideScrollingShooter::TickBossIntroduction() {
 /** @brief 次のステージの戦闘状態を初期化する */
 void SideScrollingShooter::StartNextStage() {
     ++m_stageNumber;
-    if (m_stageNumber > 5) {
-        m_stageNumber = 5;
-        return;
-    }
 
     // スコアと残機を維持したまま、次のステージ用に戦闘オブジェクトを初期化する
     m_shots = {};
     m_enemies = {};
     m_explosions = {};
     m_debris = {};
-    ResetStageGimmicks();
+    StageDispatch::ResetGimmicks(*this);
     m_stage = &StageForNumber(m_stageNumber, m_difficulty);
     m_chapterNumber = 1;
     m_chapterRetryCounts = {};
@@ -958,7 +759,7 @@ void SideScrollingShooter::StartNextStage() {
     m_bossBattlePending = false;
     m_chapterResultActive = false;
     m_invincible = (std::max)(m_invincible, 90);
-    ResetStage5();
+    StageDispatch::ResetScriptState(*this);
 }
 
 /**
@@ -966,11 +767,7 @@ void SideScrollingShooter::StartNextStage() {
  * @return なし
  */
 void SideScrollingShooter::DamagePlayer() {
-    if (m_stageNumber == 5 &&
-        (m_stage5Phase == Stage5Phase::TayamaCollapse ||
-            m_stage5Phase == Stage5Phase::EndingReady)) {
-        return;
-    }
+    if (StageDispatch::IsPlayerDamageIgnored(*this)) return;
     if (m_playerDestructionTimer > 0) return;
 
     // 敵撃破と同じ破壊爆発を自機位置へ生成してから復帰を待つ
@@ -984,17 +781,14 @@ void SideScrollingShooter::DamagePlayer() {
  * @return なし
  */
 void SideScrollingShooter::RestartCurrentChapter() {
-    if (m_stageNumber == 5 && m_stage5Phase != Stage5Phase::Approach) {
-        RestartStage5Checkpoint();
-        return;
-    }
+    if (StageDispatch::TryRestartCheckpoint(*this)) return;
     ++m_chapterRetryCounts[m_chapterNumber - 1];
     m_shots = {};
     m_enemies = {};
     m_items = {};
     m_explosions = {};
     m_debris = {};
-    ResetStageGimmicks();
+    StageDispatch::ResetGimmicks(*this);
     m_chapterResult = {};
     m_power = m_chapterStartPower;
     m_score = m_chapterStartScore;
@@ -1094,7 +888,7 @@ float SideScrollingShooter::ToSideXFromRailZ(float z) {
  */
 float SideScrollingShooter::PlayerRailMinY() const {
     constexpr float PlayerHalfHeight = 0.16f;
-    const float groundTopY = m_stageNumber == 1 ? -3.275f : -3.65f;
+    const float groundTopY = StageDispatch::RailGroundY(*this);
     return FromWorldY(groundTopY + PlayerHalfHeight);
 }
 

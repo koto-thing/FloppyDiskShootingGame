@@ -5,12 +5,12 @@
 #include "../../Domain/ValueObjects/DifficultyType.h"
 #include "../../Domain/ValueObjects/PlayerType.h"
 #include "../../Engine/Graphics/Camera3D.h"
+#include "Stages/Stage1/Stage1State.h"
+#include "Stages/Stage2/Stage2State.h"
+#include "Stages/Stage5/Stage5State.h"
 
 class AudioService;
 class Renderer;
-struct EastsourceModelState;
-struct Stage5ModelTransform;
-struct TayamaModelState;
 
 /**
  * @brief 固定長プールで動作する横スクロールシューティングのゲーム本体
@@ -58,7 +58,7 @@ public:
     void Render(Renderer& renderer) const;
     /**
      * @brief 全ステージをクリア済みか取得する
-     * @return 最終ステージのミッション終了表示が完了した場合true
+     * @return 最終ステージのミッション終了表示が完了した場合true、進行中の場合false
      */
     bool IsAllStagesCleared() const;
     /**
@@ -77,18 +77,21 @@ private:
     class Stage2EnemySheetEasy;
     class Stage2EnemySheetNormal;
     class Stage2EnemySheetHard;
-    class Stage3;
-    class Stage4;
-    class Stage5;
     class EnemyBehavior;
     class BasicEnemyBehavior;
     class HeavyEnemyBehavior;
     class ArmoredEnemyBehavior;
     class BossEnemyBehavior;
-    class Stage2BossEnemyBehavior;
     class StraightShooterEnemyBehavior;
     class CircleShooterEnemyBehavior;
     class SquareShooterEnemyBehavior;
+    class StageDispatch;
+    class Stage1Module;
+    class Stage2Module;
+    class Stage3Module;
+    class Stage4Module;
+    class Stage5Module;
+    class CityBackgroundModule;
 
     struct Shot {
         float x = 0.0f;
@@ -104,18 +107,9 @@ private:
         int barrageIndex = -1;
         int barrageCount = 0;
         int age = 0;
-        int funnelDustAge = -1;
-        float funnelDustX = 0.0f;
-        float funnelDustY = 0.0f;
-        float funnelDustZ = 0.0f;
-        float funnelEngineVx = 0.0f;
-        float funnelEngineVy = 0.0f;
-        float funnelEngineVz = 0.0f;
+        ShooterStages::Stage2::ShotState stage2 {};
         PlayerType playerType = Homing;
         bool enemy = false;
-        bool funnel = false;
-        bool funnelDelayedEngine = false;
-        bool missile = false;
         bool special = false;
         bool piercing = false;
         bool grazed = false;
@@ -155,20 +149,6 @@ private:
         BossPhaseCount
     };
     static_assert(BossPhaseCount == 4);
-
-    /** @brief Stage2ボス専用の行動状態 */
-    enum class Stage2BossAction {
-        Idle,
-        MainGunCharge,
-        MainGunFire,
-        MainGunCooldown,
-        Dive,
-        Underground,
-        Warning,
-        Charge,
-        Recover,
-        Separating
-    };
 
     /**
      * @brief 本体HPから現在の攻撃フェーズを取得する
@@ -220,14 +200,6 @@ private:
         std::array<int, BossPartCount> bossPartHp {};
         std::array<int, BossPartCount> bossPartMaxHp {};
         std::array<int, BossPartCount> bossPartHitFlashFrames {};
-        Stage2BossAction stage2BossAction = Stage2BossAction::Idle;
-        int stage2BossActionAge = 0;
-        float landBattleshipOffsetY = 0.0f;
-        float landBattleshipOffsetX = 0.0f;
-        float landBattleshipOffsetZ = 0.0f;
-        float sandSubmarineOffsetY = 0.0f;
-        float sandSubmarineOffsetX = 0.0f;
-        float sandSubmarineOffsetZ = 0.0f;
         bool collisionEnabled = true;
         const EnemyBehavior* behavior = nullptr;
         bool active = false;
@@ -245,13 +217,6 @@ private:
 
     /** @brief 撃破された機体モデルから分離して飛散する部品 */
     struct Debris {
-        enum class Effect {
-            None,
-            Stage2Sink,
-            Stage2Impact,
-            Stage2ImpactPiece
-        };
-
         float x = 0.0f;
         float y = 0.0f;
         float z = 0.0f;
@@ -268,20 +233,9 @@ private:
         int age = 0;
         int lifetime = 36;
         int shrinkStartAge = 36;
-        int effectAge = -1;
-        Effect effect = Effect::None;
+        ShooterStages::Stage2::DebrisState stage2 {};
         bool gravity = false;
         bool active = false;
-    };
-
-    /** @brief ステージ1を横切る破壊可能な隕石 */
-    struct Meteor {
-        float travel = 0.0f;
-        float scale = 1.0f;
-        float yaw = 0.0f;
-        float spin = 0.0f;
-        int hp = 0;
-        bool destroyed = false;
     };
 
     enum class ItemType {
@@ -319,15 +273,8 @@ private:
     static constexpr int DestructionExplosionLifetimeFrames = 48;
     static constexpr int AttackWarningFrames = 12;
     static constexpr int BossPartHitFlashFrames = 12;
-    static constexpr int Stage2RailgunCycleFrames = 180;
-    static constexpr int Stage2RailgunFireFrame = 60;
-    static constexpr int Stage2RailgunVisualFrames = 12;
-    static constexpr int Stage2RailgunMirageFrames = 36;
-    static_assert(Stage2RailgunFireFrame + Stage2RailgunMirageFrames <= Stage2RailgunCycleFrames);
     static constexpr int DebrisCapacity = 96;
     static constexpr int DebrisLifetimeFrames = 36;
-    static constexpr int MeteorCount = 6;
-    static constexpr int BoneArchMaxHp = 12000;
     static constexpr float MaxPower = 4.0f;
     static constexpr int ChapterLengthFrames = 500;
     static constexpr int ChapterResultCountUpFrames = 120;
@@ -366,145 +313,52 @@ private:
     };
 
 public:
-    /** @brief Stage 5専用の進行状態 */
-    enum class Stage5Phase {
-        Approach,
-        EastsourceIntro,
-        EastsourceBattle,
-        EastsourceFall,
-        WallClimbTransition,
-        WallClimbLower,
-        WallClimbMiddle,
-        WallClimbUpper,
-        RooftopArrival,
-        CarrierTransformation,
-        TayamaFireControl,
-        TayamaLiftEngines,
-        TayamaCommandCore,
-        TayamaCollapse,
-        EndingReady
-    };
+    using Stage5Phase = ShooterStages::Stage5::Phase;
+    using Stage5Checkpoint = ShooterStages::Stage5::Checkpoint;
+    using SearchlightPhase = ShooterStages::Stage5::SearchlightPhase;
+    using TayamaWeakpoint = ShooterStages::Stage5::TayamaWeakpoint;
+    using SearchlightState = ShooterStages::Stage5::SearchlightState;
+    using TayamaWeakpointState = ShooterStages::Stage5::TayamaWeakpointState;
 
-    /** @brief Stage 5の被弾復帰地点 */
-    enum class Stage5Checkpoint {
-        Chapter1,
-        Chapter2,
-        Chapter3,
-        Eastsource,
-        WallClimbLower,
-        WallClimbMiddle,
-        WallClimbUpper,
-        TayamaFireControl,
-        TayamaLiftEngines,
-        TayamaCommandCore
-    };
-
-    /** @brief サーチライトの索敵状態 */
-    enum class SearchlightPhase {
-        Searching,
-        Detecting,
-        Locked,
-        Firing,
-        Cooldown
-    };
-
-    /** @brief TAYAMAの破壊可能な弱点 */
-    enum class TayamaWeakpoint {
-        LeftSearchlight,
-        RightSearchlight,
-        FireControlRadar,
-        LeftLiftEngine,
-        RightLiftEngine,
-        CommandCore,
-        Count
-    };
-
-    /** @brief 壁面およびTAYAMAのサーチライト状態 */
-    struct SearchlightState {
-        SearchlightPhase phase = SearchlightPhase::Searching;
-        float beamX = 0.0f;
-        float beamY = 0.0f;
-        float lockedX = 0.0f;
-        float lockedY = 0.0f;
-        int detectionFrames = 0;
-        int timer = 0;
-        int volley = 0;
-        int hp = 0;
-        bool destroyed = false;
-    };
-
-    /** @brief TAYAMA弱点の固定長状態 */
-    struct TayamaWeakpointState {
-        TayamaWeakpoint type = TayamaWeakpoint::LeftSearchlight;
-        int hp = 0;
-        int maxHp = 0;
-        bool active = false;
-        bool destroyed = false;
-        int hitFlashFrames = 0;
-    };
-
-    static constexpr int Stage5SearchlightCount = 3;
-    static constexpr int TayamaWeakpointCount = static_cast<int>(TayamaWeakpoint::Count);
-    static constexpr int EastsourceMaxHp = 1200;
-    static constexpr int EastsourceNoseHp = 180;
-    static constexpr int EastsourceWingHp = 240;
-    static constexpr int EastsourceEngineHp = 210;
-    static constexpr int WallClimbTransitionFrames = 120;
-    static constexpr int WallClimbLowerFrames = 420;
-    static constexpr int WallClimbMiddleFrames = 480;
-    static constexpr int WallClimbUpperFrames = 540;
-    static constexpr int RooftopArrivalFrames = 180;
-    static constexpr int CarrierTransformationFrames = 120;
-    static constexpr int TayamaCollapseFrames = 540;
-    static constexpr int Stage5QuietFlightFrames = 60;
-    static constexpr int SearchlightLockFrames = 45;
-    static constexpr int SearchlightWarningFrames = 24;
-    static constexpr int SearchlightVolleyCount = 3;
-    static constexpr int SearchlightVolleyIntervalFrames = 10;
-    static constexpr float SearchlightDetectionRadius = 0.27f;
+    static constexpr int Stage5SearchlightCount = ShooterStages::Stage5::SearchlightCount;
+    static constexpr int TayamaWeakpointCount = ShooterStages::Stage5::TayamaWeakpointCount;
+    static constexpr int EastsourceMaxHp = ShooterStages::Stage5::EastsourceMaxHp;
+    static constexpr int EastsourceNoseHp = ShooterStages::Stage5::EastsourceNoseHp;
+    static constexpr int EastsourceWingHp = ShooterStages::Stage5::EastsourceWingHp;
+    static constexpr int EastsourceEngineHp = ShooterStages::Stage5::EastsourceEngineHp;
+    static constexpr int WallClimbTransitionFrames = ShooterStages::Stage5::WallClimbTransitionFrames;
+    static constexpr int WallClimbLowerFrames = ShooterStages::Stage5::WallClimbLowerFrames;
+    static constexpr int WallClimbMiddleFrames = ShooterStages::Stage5::WallClimbMiddleFrames;
+    static constexpr int WallClimbUpperFrames = ShooterStages::Stage5::WallClimbUpperFrames;
+    static constexpr int RooftopArrivalFrames = ShooterStages::Stage5::RooftopArrivalFrames;
+    static constexpr int CarrierTransformationFrames = ShooterStages::Stage5::CarrierTransformationFrames;
+    static constexpr int TayamaCollapseFrames = ShooterStages::Stage5::TayamaCollapseFrames;
+    static constexpr int Stage5QuietFlightFrames = ShooterStages::Stage5::QuietFlightFrames;
+    static constexpr int SearchlightLockFrames = ShooterStages::Stage5::SearchlightLockFrames;
+    static constexpr int SearchlightWarningFrames = ShooterStages::Stage5::SearchlightWarningFrames;
+    static constexpr int SearchlightVolleyCount = ShooterStages::Stage5::SearchlightVolleyCount;
+    static constexpr int SearchlightVolleyIntervalFrames = ShooterStages::Stage5::SearchlightVolleyIntervalFrames;
+    static constexpr float SearchlightDetectionRadius = ShooterStages::Stage5::SearchlightDetectionRadius;
 
     /**
      * @brief Stage 5の状態遷移が正規経路か判定する
      * @param from 遷移元
      * @param to 遷移先
-     * @return 正規経路の場合true
+     * @return 正規経路の場合true、許可しない遷移の場合false
      */
     static constexpr bool IsValidStage5Transition(Stage5Phase from, Stage5Phase to) {
-        return (from == Stage5Phase::Approach && to == Stage5Phase::EastsourceIntro) ||
-            (from == Stage5Phase::EastsourceIntro && to == Stage5Phase::EastsourceBattle) ||
-            (from == Stage5Phase::EastsourceBattle && to == Stage5Phase::EastsourceFall) ||
-            (from == Stage5Phase::EastsourceFall && to == Stage5Phase::WallClimbTransition) ||
-            (from == Stage5Phase::WallClimbTransition && to == Stage5Phase::WallClimbLower) ||
-            (from == Stage5Phase::WallClimbLower && to == Stage5Phase::WallClimbMiddle) ||
-            (from == Stage5Phase::WallClimbMiddle && to == Stage5Phase::WallClimbUpper) ||
-            (from == Stage5Phase::WallClimbUpper && to == Stage5Phase::RooftopArrival) ||
-            (from == Stage5Phase::RooftopArrival && to == Stage5Phase::CarrierTransformation) ||
-            (from == Stage5Phase::CarrierTransformation && to == Stage5Phase::TayamaFireControl) ||
-            (from == Stage5Phase::TayamaFireControl && to == Stage5Phase::TayamaLiftEngines) ||
-            (from == Stage5Phase::TayamaLiftEngines && to == Stage5Phase::TayamaCommandCore) ||
-            (from == Stage5Phase::TayamaCommandCore && to == Stage5Phase::TayamaCollapse) ||
-            (from == Stage5Phase::TayamaCollapse && to == Stage5Phase::EndingReady);
+        return ShooterStages::Stage5::IsValidTransition(from, to);
     }
 
     /**
      * @brief 指定弱点が現在フェーズで有効か判定する
      * @param weakpoint 判定する弱点
      * @param phase 現在のStage 5状態
-     * @return ダメージを受ける場合true
+     * @return ダメージを受ける場合true、無効な弱点の場合false
      */
     static constexpr bool IsTayamaWeakpointActiveForPhase(
         TayamaWeakpoint weakpoint, Stage5Phase phase) {
-        if (phase == Stage5Phase::TayamaFireControl) {
-            return weakpoint == TayamaWeakpoint::LeftSearchlight ||
-                weakpoint == TayamaWeakpoint::RightSearchlight ||
-                weakpoint == TayamaWeakpoint::FireControlRadar;
-        }
-        if (phase == Stage5Phase::TayamaLiftEngines) {
-            return weakpoint == TayamaWeakpoint::LeftLiftEngine ||
-                weakpoint == TayamaWeakpoint::RightLiftEngine;
-        }
-        return phase == Stage5Phase::TayamaCommandCore &&
-            weakpoint == TayamaWeakpoint::CommandCore;
+        return ShooterStages::Stage5::IsWeakpointActiveForPhase(weakpoint, phase);
     }
 
 private:
@@ -518,11 +372,6 @@ private:
 
     void Reset(bool resetRetryCounts = true);
     /**
-     * @brief Stage 5専用状態を初期化する
-     * @return なし
-     */
-    void ResetStage5();
-    /**
      * @brief デバッグ用に指定ステージとチャプターから開始する
      * @param stageNumber 開始するステージ番号
      * @param chapterNumber 開始するチャプター番号
@@ -530,22 +379,6 @@ private:
      * @return なし
      */
     void StartDebugCheckpoint(int stageNumber, int chapterNumber, bool bossBattle);
-    /**
-     * @brief Stage 5の指定状態からデバッグ開始する
-     * @param phase 開始する状態
-     * @return なし
-     */
-    void StartDebugStage5Phase(Stage5Phase phase);
-    /**
-     * @brief 指定難易度のステージ1敵出現シートを取得する
-     * @param difficulty 取得する難易度
-     * @return 難易度に対応するステージ1敵出現シート
-     */
-    static const Stage& Stage1EnemySheetInstance(DifficultyType difficulty);
-    static const Stage& Stage2EnemySheetInstance(DifficultyType difficulty);
-    static const Stage& Stage3Instance();
-    static const Stage& Stage4Instance();
-    static const Stage& Stage5Instance();
     /**
      * @brief 指定番号のステージ定義を取得する
      * @param stageNumber 取得するステージ番号
@@ -556,7 +389,6 @@ private:
     static const EnemyBehavior& HeavyEnemyBehaviorInstance();
     static const EnemyBehavior& ArmoredEnemyBehaviorInstance();
     static const EnemyBehavior& BossEnemyBehaviorInstance();
-    static const EnemyBehavior& Stage2BossEnemyBehaviorInstance();
     static const EnemyBehavior& StraightShooterEnemyBehaviorInstance();
     static const EnemyBehavior& CircleShooterEnemyBehaviorInstance();
     static const EnemyBehavior& SquareShooterEnemyBehaviorInstance();
@@ -568,203 +400,11 @@ private:
      * @return なし
      */
     void RequestViewMode(ViewMode mode);
-    /**
-     * @brief Stage 5後半で3D表示が固定されているか取得する
-     * @return 3D表示が固定されている場合true
-     */
-    bool IsStage5ViewLocked() const;
-    /**
-     * @brief 現在の進行状態で背景スクロールを更新するか取得する
-     * @return 背景スクロールを更新する場合true
-     */
-    bool ShouldAdvanceStageScroll() const;
-    /**
-     * @brief Stage 5専用シーケンスを更新する
-     * @return なし
-     */
-    void TickStage5();
-    /**
-     * @brief Stage 5状態を開始する
-     * @param phase 開始する状態
-     * @param saveCheckpoint 復帰地点として保存する場合true
-     * @return なし
-     */
-    void StartStage5Phase(Stage5Phase phase, bool saveCheckpoint = true);
-    /**
-     * @brief EASTSOURCE戦を戦闘可能な状態で開始する
-     * @return なし
-     */
-    void StartEastsourceBattle();
-    /**
-     * @brief EASTSOURCEの移動と攻撃を更新する
-     * @param eastsource 更新するEASTSOURCE本体
-     * @return なし
-     */
-    void TickEastsource(Enemy& eastsource);
-    /**
-     * @brief EASTSOURCE撃破後の信号消失演出へ移行する
-     * @param eastsource 撃破されたEASTSOURCE本体
-     * @return なし
-     */
-    void DefeatEastsource(Enemy& eastsource);
-    /**
-     * @brief 現在のStage 5チェックポイントへ復帰する
-     * @return なし
-     */
-    void RestartStage5Checkpoint();
-    /**
-     * @brief 現在状態をStage 5チェックポイントとして保存する
-     * @param checkpoint 保存する復帰地点
-     * @return なし
-     */
-    void SaveStage5Checkpoint(Stage5Checkpoint checkpoint);
-    /**
-     * @brief 指定数のサーチライトを更新する
-     * @param activeCount 更新するライト数
-     * @param tayamaWeakpoints TAYAMA弱点と破壊状態を共有する場合true
-     * @return なし
-     */
-    void TickSearchlights(int activeCount, bool tayamaWeakpoints);
-    /**
-     * @brief 壁面区画のサーチライトを初期化する
-     * @param activeCount 有効にするライト数
-     * @return なし
-     */
-    void ResetWallSearchlights(int activeCount);
-    /**
-     * @brief サーチライトの保存済み地点へ集中砲火を生成する
-     * @param light 発射に使用するライト状態
-     * @param lightIndex 発射元ライト番号
-     * @return なし
-     */
-    void FireSearchlightVolley(const SearchlightState& light, int lightIndex);
-    /**
-     * @brief 指定地点へ向かう敵弾を生成する
-     * @param sourceX 発射元ゲーム座標X
-     * @param sourceY 発射元ゲーム座標Y
-     * @param sourceZ 発射元レール座標Z
-     * @param targetX 固定目標ゲーム座標X
-     * @param targetY 固定目標ゲーム座標Y
-     * @param targetZ 固定目標レール座標Z
-     * @param speed ワールド空間の弾速
-     * @return なし
-     */
-    void SpawnEnemyShotAt(float sourceX, float sourceY, float sourceZ,
-        float targetX, float targetY, float targetZ, float speed);
-    /**
-     * @brief TAYAMA戦の更新処理
-     * @return なし
-     */
-    void TickTayama();
-    /**
-     * @brief TAYAMAの攻略フェーズを開始する
-     * @param phase 開始する攻略状態
-     * @param resetCurrentHp 現在フェーズのHPを初期値へ戻す場合true
-     * @return なし
-     */
-    void StartTayamaPhase(Stage5Phase phase, bool resetCurrentHp = true);
-    /**
-     * @brief 自機弾をTAYAMAの有効弱点へ適用する
-     * @param shot 判定する自機弾
-     * @return TAYAMAへ命中した場合true
-     */
-    bool TryDamageTayama(Shot& shot);
-    /**
-     * @brief 自機弾を壁面サーチライトへ適用する
-     * @param shot 判定する自機弾
-     * @return ライトへ命中した場合true
-     */
-    bool TryDamageWallSearchlight(Shot& shot);
-    /**
-     * @brief EASTSOURCEの描画と当たり判定で共有する親Transformを取得する
-     * @param eastsource EASTSOURCE本体
-     * @return ワールド座標へ変換する親Transform
-     */
-    Stage5ModelTransform EastsourceTransform(const Enemy& eastsource) const;
-    /**
-     * @brief EASTSOURCEの部位状態をモデルグループへ変換する
-     * @param eastsource EASTSOURCE本体
-     * @return 描画と当たり判定へ渡すモデル状態
-     */
-    EastsourceModelState EastsourceState(const Enemy& eastsource) const;
-    /**
-     * @brief TAYAMAの描画と当たり判定で共有する親Transformを取得する
-     * @return 現在の進行に対応する親Transform
-     */
-    Stage5ModelTransform TayamaTransform() const;
-    /**
-     * @brief 現在の弱点と崩壊状態をTAYAMAモデルグループへ変換する
-     * @return 描画と当たり判定へ渡すモデル状態
-     */
-    TayamaModelState TayamaState() const;
-    /**
-     * @brief 現在フェーズで有効なTAYAMA弱点HP合計をHUDへ反映する
-     * @return なし
-     */
-    void UpdateTayamaBossHp();
-    /**
-     * @brief Stage 5用の効果音をクールダウン付きで再生する
-     * @param cue 効果音種別
-     * @return なし
-     */
-    void PlayStage5Cue(int cue);
-    /**
-     * @brief Stage2ボス撃破演出の振動音または最終爆発音を再生する
-     * @param finalExplosion 最終爆発音を再生する場合true
-     * @return なし
-     */
-    void PlayStage2DefeatSound(bool finalExplosion);
     void InitializeRailObjects();
     void InitializeSideObjects();
     void TickPlayer();
     void TickEnemies();
     void TickShots();
-    /** @brief ステージ固有の破壊可能ギミックを更新する */
-    void TickStageGimmicks();
-    /** @brief ステージ固有の破壊可能ギミックを初期状態へ戻す */
-    void ResetStageGimmicks();
-    /**
-     * @brief 自機弾がステージ固有ギミックへ命中した場合にダメージを適用する
-     * @param shot 命中判定対象の自機弾
-     * @return ギミックへ命中した場合true
-     */
-    bool TryDamageStageGimmick(Shot& shot);
-    /**
-     * @brief 砂漠を横切る骨アーチへ指定球が接触したか判定する
-     * @param x 判定対象のゲーム座標X
-     * @param y 判定対象のゲーム座標Y
-     * @param z 判定対象のレール座標Z
-     * @param radius 判定対象の半径
-     * @return 骨アーチに接触している場合true
-     */
-    bool HitsDesertBoneArch(float x, float y, float z, float radius) const;
-    /**
-     * @brief ステージ1を横切る隕石へ指定球が接触したか判定する
-     * @param x 判定対象のゲーム座標X
-     * @param y 判定対象のゲーム座標Y
-     * @param z 判定対象のレール座標Z
-     * @param radius 判定対象の半径
-     * @return 隕石に接触している場合true
-     */
-    bool HitsStage1Meteor(float x, float y, float z, float radius) const;
-    /**
-     * @brief 指定球が接触しているステージ1隕石の番号を取得する
-     * @param x 判定対象のゲーム座標X
-     * @param y 判定対象のゲーム座標Y
-     * @param z 判定対象のレール座標Z
-     * @param radius 判定対象の半径
-     * @return 接触した隕石の番号、接触していない場合-1
-     */
-    int FindStage1Meteor(float x, float y, float z, float radius) const;
-    /**
-     * @brief 海面からアーチ状に飛び出すウミヘビへ指定球が接触したか判定する
-     * @param x 判定対象のゲーム座標X
-     * @param y 判定対象のゲーム座標Y
-     * @param z 判定対象のレール座標Z
-     * @param radius 判定対象の半径
-     * @return ウミヘビに接触している場合true
-     */
-    bool HitsOceanSeaSerpent(float x, float y, float z, float radius) const;
     /** @brief 生存中の爆発エフェクトを更新する */
     void TickExplosions();
     /** @brief 飛散中の機体部品を更新する */
@@ -799,7 +439,7 @@ private:
      * @brief ボス本体へダメージを与え、攻撃フェーズを更新する
      * @param boss ダメージ対象のボス
      * @param damage 与えるダメージ
-     * @return ボスを撃破した場合true
+     * @return ボスを撃破した場合true、生存している場合false
      */
     bool DamageBoss(Enemy& boss, int damage);
     /**
@@ -827,25 +467,6 @@ private:
     void SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy,
         int barrageIndex = -1, int barrageCount = 0);
     /**
-     * @brief 潜砂艦から慣性飛行後に自機へ突進するファンネルを射出する
-     * @param x 発射X座標
-     * @param y 発射Y座標
-     * @param z 発射Z座標
-     * @param launchIndex 同時射出内の配置番号
-     * @param delayedEngine 短い落下後に補助エンジンを起動する場合true
-     * @return なし
-     */
-    void SpawnStage2Funnel(float x, float y, float z, bool delayedEngine = false);
-    /**
-     * @brief 潜砂艦の側面ハッチから自機狙いのミサイルを発射する
-     * @param x 発射X座標
-     * @param y 発射Y座標
-     * @param z 発射Z座標
-     * @param side 側面ハッチの左右符号
-     * @return なし
-     */
-    void SpawnStage2Missile(float x, float y, float z, float side);
-    /**
      * @brief 命中または敵撃破位置へ爆発エフェクトを生成する
      * @param x 2D座標系のX座標
      * @param y 2D座標系のY座標
@@ -857,23 +478,10 @@ private:
     /** @brief 機体モデルを構成する部品を飛散エフェクトとして生成する */
     void SpawnEnemyDebris(const Enemy& enemy, int bossPart = -1);
     /** @brief 飛散するモデル部品を固定長プールへ追加する */
-    void SpawnDebrisPiece(float x, float y, float z, float vx, float vy, float vz,
+    Debris* SpawnDebrisPiece(float x, float y, float z, float vx, float vy, float vz,
         float yaw, float spin, int shape, float width, float height, float depth,
         const float color[4], int lifetime = DebrisLifetimeFrames,
-        int shrinkStartAge = DebrisLifetimeFrames, bool gravity = false,
-        Debris::Effect effect = Debris::Effect::None);
-    /**
-     * @brief 砂漠の骨アーチを破壊して小さな骨を飛散させる
-     * @return なし
-     */
-    void DestroyDesertBoneArch();
-    /**
-     * @brief 被弾または破壊された隕石から当たり判定を持たない小隕石を飛散させる
-     * @param meteor 破片の発生元となる隕石
-     * @param count 発生させる小隕石の数
-     * @return なし
-     */
-    void SpawnMeteorDebris(const Meteor& meteor, int count);
+        int shrinkStartAge = DebrisLifetimeFrames, bool gravity = false);
     void FireSpecialShots();
     void UpdateHomingShot(Shot& shot);
     void DamagePlayer();
@@ -884,27 +492,19 @@ private:
      * @param shot 判定対象の自機弾
      * @param boss 判定対象のボス
      * @param part 命中した部位の格納先
-     * @return 部位へ命中した場合true
+     * @return 部位へ命中した場合true、命中しない場合false
      */
     bool TryHitBossPart(const Shot& shot, const Enemy& boss, BossPart& part) const;
-    bool TryHitStage2BossBody(const Shot& shot, const Enemy& boss) const;
     /**
-     * @brief Stage2潜砂艦のPhase1接地基準Y座標を取得する
-     * @param boss 座標を求めるStage2ボス
-     * @return 切削爪が地中へ収まる潜砂艦のワールドY座標
+     * @brief 共通または移行中のボス部位判定を行う
+     * @param shot 判定対象の自機弾
+     * @param boss 判定対象のボス
+     * @param part 命中した部位の格納先
+     * @return 部位へ命中した場合true、命中しない場合false
      */
-    float Stage2Phase1SubmarineWorldY(const Enemy& boss) const;
-    /**
-     * @brief Stage2潜砂艦の現在の親Y座標を取得する
-     * @param boss 座標を求めるStage2ボス
-     * @return 描画と当たり判定で共有するワールドY座標
-     */
-    float Stage2SubmarineWorldY(const Enemy& boss) const;
-    float Stage2BattleshipWorldY(const Enemy& boss) const;
+    bool TryHitDefaultBossPart(const Shot& shot, const Enemy& boss, BossPart& part) const;
     void PlayShotSound();
     void PlayHitSound();
-    /** @brief Stage2レールガン発射時の雷撃音を再生する */
-    void PlayRailgunSound();
     static bool Hit(float ax, float ay, float ar, float bx, float by, float br);
     static bool Hit3D(float ax, float ay, float az, float ar, float bx, float by, float bz, float br);
     /**
@@ -920,7 +520,7 @@ private:
      * @param targetY 対象球のワールド座標Y
      * @param targetZ 対象球のワールド座標Z
      * @param targetRadius 対象球の半径
-     * @return 移動区間内で接触する場合true
+     * @return 移動区間内で接触する場合true、接触しない場合false
      */
     static bool Hit3DSegment(float startX, float startY, float startZ,
         float endX, float endY, float endZ, float movingRadius,
@@ -949,25 +549,6 @@ private:
     void Render2D(Renderer& renderer) const;
     void Render3D(Renderer& renderer) const;
     /**
-     * @brief Stage 5の要塞、照明、崩壊演出を3D空間へ描画する
-     * @param renderer 描画先レンダラー
-     * @param camera 現在の3Dカメラ
-     * @return なし
-     */
-    void RenderStage5(Renderer& renderer, const Camera3D& camera) const;
-    /**
-     * @brief Stage 5の雨、稲光、照準表示を画面空間へ描画する
-     * @param renderer 描画先レンダラー
-     * @return なし
-     */
-    void DrawStage5Weather(Renderer& renderer) const;
-    /**
-     * @brief Stage 5専用HUDを描画する
-     * @param renderer 描画先レンダラー
-     * @return なし
-     */
-    void DrawStage5Hud(Renderer& renderer) const;
-    /**
      * @brief 2D画面上の敵攻撃予告を十字フラッシュとして描画する
      * @param renderer 描画先レンダラー
      * @return なし
@@ -981,30 +562,6 @@ private:
      * @return なし
      */
     void DrawAttackWarnings3D(Renderer& renderer, const Camera3D& camera, float railWeight) const;
-    /**
-     * @brief プリミティブ球だけで構成した砂漠の巨大骨アーチを描画する
-     * @param renderer 描画先レンダラー
-     * @param camera 現在の3Dカメラ
-     * @param railWeight 横視点からレール視点への補間率
-     * @return なし
-     */
-    void DrawDesertBoneArch(Renderer& renderer, const Camera3D& camera, float railWeight) const;
-    /**
-     * @brief プリミティブ球だけで構成したステージ1の巨大隕石を描画する
-     * @param renderer 描画先レンダラー
-     * @param camera 現在の3Dカメラ
-     * @param railWeight 横視点からレール視点への補間率
-     * @return なし
-     */
-    void DrawStage1Meteor(Renderer& renderer, const Camera3D& camera, float railWeight) const;
-    /**
-     * @brief 海面から飛び出す巨大ウミヘビを描画する
-     * @param renderer 描画先レンダラー
-     * @param camera 現在の3Dカメラ
-     * @param railWeight 横視点からレール視点への補間率
-     * @return なし
-     */
-    void DrawOceanSeaSerpent(Renderer& renderer, const Camera3D& camera, float railWeight) const;
     void DrawBossHud(Renderer& renderer) const;
     /** @brief ボス戦前会話を画面へ描画する */
     void DrawBossStory(Renderer& renderer) const;
@@ -1053,17 +610,6 @@ private:
      */
     static void DrawBlobShadow(Renderer& renderer, const Camera3D& camera,
         float x, float z, float groundTopY, float width, float depth, float opacity);
-    /**
-     * @brief 砂面から放物線状に舞う砂埃を描画する
-     * @param renderer 描画先レンダラー
-     * @param camera 現在の3Dカメラ
-     * @param position 発生地点のワールド座標
-     * @param age 発生からの経過フレーム
-     * @param railWeight 3D表示の補間率
-     * @return なし
-     */
-    static void DrawSandDust(Renderer& renderer, const Camera3D& camera,
-        const Vector3& position, int age, float railWeight);
     static void DrawPlayerModel(Renderer& renderer, const Camera3D& camera,
         float x, float y, float z, bool visible, float yaw = 0.0f);
     void DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw = 0.0f) const;
@@ -1071,8 +617,8 @@ private:
     /** @brief 爆発エフェクトをHLSLへ渡す描画コマンドとして記録する */
     static void DrawExplosion(Renderer& renderer, const Camera3D& camera, const Explosion& explosion);
     /** @brief 飛散中の機体部品を描画する */
-    static void DrawDebris(Renderer& renderer, const Camera3D& camera,
-        const Debris& debris, float railWeight);
+    void DrawDebris(Renderer& renderer, const Camera3D& camera,
+        const Debris& debris, float railWeight) const;
     /** @brief 取得アイテムを描画する */
     static void DrawItemModel(Renderer& renderer, const Camera3D& camera,
         const Item& item, float yaw = 0.0f);
@@ -1088,8 +634,9 @@ private:
     std::array<Item, ItemCapacity> m_items {};
     std::array<Explosion, ExplosionCapacity> m_explosions {};
     std::array<Debris, DebrisCapacity> m_debris {};
-    std::array<SearchlightState, Stage5SearchlightCount> m_searchlights {};
-    std::array<TayamaWeakpointState, TayamaWeakpointCount> m_tayamaWeakpoints {};
+    ShooterStages::Stage1::State m_stage1 {};
+    ShooterStages::Stage2::State m_stage2 {};
+    ShooterStages::Stage5::State m_stage5 {};
     AudioService* m_audio = nullptr;
     const Stage* m_stage = nullptr;
     PlayerType m_playerType = Homing;
@@ -1097,10 +644,6 @@ private:
     float m_playerX = -0.72f;
     float m_playerY = 0.0f;
     float m_scroll = 0.0f;
-    float m_tayamaTransformation = 0.0f;
-    float m_stage5CheckpointPower = 0.0f;
-    float m_stage5CoreTargetX = 0.0f;
-    float m_stage5CoreTargetY = 0.0f;
     int m_frame = 0;
     int m_spawnCooldown = 0;
     int m_shotCooldown = 0;
@@ -1127,15 +670,6 @@ private:
     int m_missionStartTimer = 0;
     float m_power = 0.0f;
     int m_clearTimer = 0;
-    int m_stage5PhaseTimer = 0;
-    int m_stage5CheckpointScore = 0;
-    int m_stage5CheckpointKills = 0;
-    int m_stage5SoundCooldown = 0;
-    int m_stage5AttackTimer = 0;
-    int m_stage5GuardSpawnCooldown = 0;
-    std::array<Meteor, MeteorCount> m_meteors {};
-    int m_boneArchHp = BoneArchMaxHp;
-    bool m_boneArchDestroyed = false;
     bool m_moveLeft = false;
     bool m_moveRight = false;
     bool m_moveUp = false;
@@ -1146,8 +680,6 @@ private:
     bool m_bossBattlePending = false;
     bool m_chapterResultActive = false;
     bool m_viewToggleRequested = false;
-    Stage5Phase m_stage5Phase = Stage5Phase::Approach;
-    Stage5Checkpoint m_stage5Checkpoint = Stage5Checkpoint::Chapter1;
     ViewMode m_viewMode = ViewMode::Side2D;
     ViewMode m_nextViewMode = ViewMode::Side2D;
     int m_viewTransitionTimer = 0;

@@ -2,6 +2,8 @@
 
 #include <cmath>
 
+#include "../Common/StageDefinition.h"
+
 /**
  * @brief ステージ1の難易度共通設定を定義する
  */
@@ -184,10 +186,12 @@ public:
 
     /**
      * @brief ステージ1ボスが突進攻撃中か取得する
+     * @param shooter ゲーム本体
      * @param boss 判定するボス
-     * @return 突進攻撃中の場合true
+     * @return 突進攻撃中の場合true、通常攻撃中の場合false
      */
-    bool IsBossSpecialAttackActive(const Enemy& boss) const override {
+    bool IsBossSpecialAttackActive(const SideScrollingShooter& shooter, const Enemy& boss) const override {
+        (void)shooter;
         return (boss.bossPhase == BossNormalPhase2 || boss.bossPhase == BossSpecialPhase2) && boss.phase > 0.0f;
     }
 

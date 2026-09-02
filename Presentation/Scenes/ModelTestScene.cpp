@@ -1,5 +1,5 @@
 #include "ModelTestScene.h"
-#include "../Gameplay/Stage4BossModelView.h"
+#include "../Gameplay/Stages/Stage4/Stage4BossModelView.h"
 
 #include "../../Engine/Graphics/Renderer.h"
 #include "../../Engine/Input/Input.h"

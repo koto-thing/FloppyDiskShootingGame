@@ -17,16 +17,37 @@
     <ClCompile Include="Presentation\Gameplay\SideScrollingShooterCombat.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Presentation\Gameplay\SideScrollingShooterStage5.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Presentation\Gameplay\SideScrollingShooterGimmicks.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Presentation\Gameplay\SideScrollingShooterRendering.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Presentation\Gameplay\SideScrollingShooterBackgrounds.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\Gameplay\Stages\Common\StageDispatch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\Gameplay\Stages\Common\CityBackgroundModule.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\Gameplay\Stages\Stage1\Stage1Module.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\Gameplay\Stages\Stage2\Stage2Module.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\Gameplay\Stages\Stage2\Stage2Rendering.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\Gameplay\Stages\Stage3\Stage3Module.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\Gameplay\Stages\Stage4\Stage4Module.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\Gameplay\Stages\Stage5\Stage5Module.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Presentation\Gameplay\Stages\Stage5\Stage5Rendering.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Presentation\Scenes\TestStage.cpp">
@@ -192,40 +213,97 @@
     <ClInclude Include="Temp\ShootingGame.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Presentation\Gameplay\Stage1Story.h">
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage1\Stage1Story.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Presentation\Gameplay\Stage1EnemySheetEasy.h">
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage1\Stage1EnemySheet.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Presentation\Gameplay\Stage1EnemySheetHard.h">
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage1\Stage1EnemySheetEasy.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Presentation\Gameplay\Stage1EnemySheetNormal.h">
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage1\Stage1EnemySheetHard.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Presentation\Gameplay\Stage2EnemySheet.h">
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage1\Stage1EnemySheetNormal.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Presentation\Gameplay\Stage2EnemySheetEasy.h">
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2EnemySheet.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Presentation\Gameplay\Stage2EnemySheetHard.h">
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2EnemySheetEasy.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Presentation\Gameplay\Stage2EnemySheetNormal.h">
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2EnemySheetHard.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Presentation\Gameplay\BossModelView.h">
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2EnemySheetNormal.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Presentation\Gameplay\Stage4BossModelView.h">
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2BossModelView.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Presentation\Gameplay\Stage5ModelView.h">
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4BossModelView.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5ModelView.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Presentation\Gameplay\SideScrollingShooterShared.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Common\StageDispatch.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Common\StageDefinition.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Common\BossStory.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Common\BossModelTransform.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Common\CityBackgroundModule.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage1\Stage1Module.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage1\Stage1State.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2State.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2Module.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2Story.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3Module.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3Story.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4Module.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4Story.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5State.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5Module.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5Story.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\SideScrollingShooterEnemies.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

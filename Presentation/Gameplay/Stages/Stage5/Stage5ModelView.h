@@ -5,8 +5,8 @@
 #include <cmath>
 #include <cstddef>
 
-#include "../../Engine/Graphics/IRenderBackend.h"
-#include "../../Engine/Math/Math.h"
+#include "../../../../Engine/Graphics/IRenderBackend.h"
+#include "../../../../Engine/Math/Math.h"
 
 /** @brief Stage5モデルのローカル位置、XYZ回転、寸法を表す */
 struct Stage5PartTransform {
@@ -153,7 +153,7 @@ struct EastsourceModelState {
     /**
      * @brief 指定グループを描画および当たり判定へ含めるか判定する
      * @param group 判定するパーツグループ
-     * @return 表示中かつ未破壊ならtrue
+     * @return 表示中かつ未破壊ならtrue、非表示または破壊済みならfalse
      */
     constexpr bool IsVisible(EastsourcePartGroup group) const {
         const std::size_t index = static_cast<std::size_t>(group);
@@ -289,7 +289,7 @@ struct TayamaModelState {
     /**
      * @brief 指定グループを描画および当たり判定へ含めるか判定する
      * @param group 判定するパーツグループ
-     * @return 表示中かつ未破壊ならtrue
+     * @return 表示中かつ未破壊ならtrue、非表示または破壊済みならfalse
      */
     constexpr bool IsVisible(TayamaPartGroup group) const {
         const std::size_t index = static_cast<std::size_t>(group);
@@ -463,7 +463,7 @@ constexpr std::size_t EastsourceGroupSize(EastsourcePartGroup group) {
 
 /**
  * @brief 全TAYAMAグループに最低一つの共有変形パーツがあるか確認する
- * @return 全グループが空でなければtrue
+ * @return 全グループが空でなければtrue、空のグループがあればfalse
  */
 constexpr bool TayamaHasEveryGroup() {
     std::array<std::size_t, TayamaPartGroupCount> counts {};
