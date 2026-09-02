@@ -62,6 +62,7 @@
     <ClCompile Include="Tests\UITests.cpp" />
     <ClCompile Include="Tests\InputTests.cpp" />
     <ClCompile Include="Tests\ScoreRepositoryTests.cpp" />
+    <ClCompile Include="Tests\Stage2BossModelViewTests.cpp" />
     <ClCompile Include="Tests\Stage4BossModelViewTests.cpp" />
     <ClCompile Include="Tests\Stage3BossModelViewTests.cpp" />
     <ClCompile Include="Tests\Stage3BarrierCageViewTests.cpp" />

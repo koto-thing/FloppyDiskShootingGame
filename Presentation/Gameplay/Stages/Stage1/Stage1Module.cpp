@@ -3,6 +3,7 @@
 #include <cmath>
 
 #include "../../../../Engine/Graphics/Renderer.h"
+#include "../../GameplayRandom.h"
 #include "../../SideScrollingShooterShared.h"
 #include "../../SideScrollingShooterEnemies.h"
 #include "../Common/StageDefinition.h"
@@ -19,6 +20,11 @@ constexpr float GridColor[4] = { 0.05f, 0.22f, 0.16f, 1.0f };
 constexpr float StarColor[4] = { 0.55f, 0.70f, 0.85f, 1.0f };
 constexpr float MeteorColor[4] = { 0.30f, 0.22f, 0.18f, 1.0f };
 constexpr float MeteorCraterColor[4] = { 0.95f, 0.38f, 0.08f, 1.0f };
+constexpr int MeteorSpawnMinFrames = 120;
+constexpr int MeteorSpawnMaxFrames = 240;
+constexpr float MeteorStartTravel = -60.0f;
+constexpr float MeteorEndTravel = 140.0f;
+constexpr float MeteorBaseSpeed = 0.32f;
 
 constexpr int Stage1BossRushSegmentFrames = 36;
 constexpr int Stage1BossRushSegmentCount = 4;
@@ -53,6 +59,9 @@ constexpr int Stage1BossRushSegment(int age) {
 static_assert(Stage1BossRushSegment(0) == 0);
 static_assert(Stage1BossRushSegment(Stage1BossRushFrames - 1) == 3);
 static_assert(Stage1BossEntranceFrames == 240);
+static_assert(MeteorSpawnMinFrames < MeteorSpawnMaxFrames);
+static_assert(MeteorStartTravel < 0.0f);
+static_assert(MeteorBaseSpeed / 0.92f > MeteorBaseSpeed / 2.05f);
 
 }
 
@@ -69,24 +78,43 @@ const SideScrollingShooter::Stage& SideScrollingShooter::Stage1Module::Definitio
 }
 
 void SideScrollingShooter::Stage1Module::Reset(SideScrollingShooter& shooter) {
-    constexpr float Travel[] = { 0.0f, 11.5f, 24.8f, 37.0f, 50.6f, 63.4f };
     constexpr float Scale[] = { 1.75f, 1.10f, 2.05f, 1.38f, 1.62f, 0.92f };
     constexpr float Spin[] = { 0.035f, -0.052f, 0.028f, -0.041f, 0.046f, -0.061f };
 
-    // 固定配置と耐久値を既存順序のまま復元する
+    // 全隕石を非表示で初期化し、最初の1個も画面外から投入する
     for (int i = 0; i < ShooterStages::Stage1::MeteorCount; ++i) {
-        shooter.m_stage1.meteors[i] = { Travel[i], Scale[i], static_cast<float>(i) * 0.7f, Spin[i],
-            4 + i % 3, false };
+        shooter.m_stage1.meteors[i] = { MeteorStartTravel, Scale[i], static_cast<float>(i) * 0.7f,
+            Spin[i], 0.0f, 4 + i % 3, true };
     }
+    shooter.m_stage1.nextMeteorIndex = 0;
+    shooter.m_stage1.spawnFrames = MeteorSpawnMinFrames / 2;
 }
 
 void SideScrollingShooter::Stage1Module::TickWorld(SideScrollingShooter& shooter) {
-    // 大小の異なる隕石をそれぞれ移動・回転させる
+    // 表示中の隕石を小さいものほど高速で移動させる
     for (auto& meteor : shooter.m_stage1.meteors) {
         if (meteor.destroyed) continue;
-        meteor.travel += 0.10f + meteor.scale * 0.06f;
-        if (meteor.travel >= 72.0f) meteor.travel -= 72.0f;
+        meteor.travel += MeteorBaseSpeed / meteor.scale;
+        if (meteor.travel >= MeteorEndTravel) meteor.destroyed = true;
         meteor.yaw += meteor.spin;
+    }
+
+    // 共通タイマーで隕石を1個ずつまばらに投入する
+    if (shooter.m_stage1.spawnFrames-- > 0) return;
+    for (int offset = 0; offset < ShooterStages::Stage1::MeteorCount; ++offset) {
+        const int index = (shooter.m_stage1.nextMeteorIndex + offset) %
+            ShooterStages::Stage1::MeteorCount;
+        ShooterStages::Stage1::Meteor& meteor = shooter.m_stage1.meteors[index];
+        if (!meteor.destroyed) continue;
+
+        meteor.travel = MeteorStartTravel;
+        meteor.pathPhase = GameplayRandom::Range(0.0f, Math::TwoPi);
+        meteor.hp = 4 + index % 3;
+        meteor.destroyed = false;
+        shooter.m_stage1.nextMeteorIndex = (index + 1) % ShooterStages::Stage1::MeteorCount;
+        shooter.m_stage1.spawnFrames = static_cast<int>(GameplayRandom::Range(
+            static_cast<float>(MeteorSpawnMinFrames), static_cast<float>(MeteorSpawnMaxFrames)));
+        break;
     }
 }
 
@@ -252,10 +280,11 @@ int SideScrollingShooter::Stage1Module::FindMeteor(const SideScrollingShooter& s
         const ShooterStages::Stage1::Meteor& meteor = shooter.m_stage1.meteors[i];
         if (meteor.destroyed) continue;
         const float sideX = 1.85f - std::fmod(meteor.travel * 0.0325f, 4.40f);
-        const float sideY = 0.55f + std::sin(meteor.travel * 0.105f) * 0.34f;
+        const float sideY = 0.55f + std::sin(meteor.travel * 0.105f + meteor.pathPhase) * 0.34f;
         if (shooter.IsRailGameplayActive()) {
-            const float railX = std::sin(meteor.travel * 0.090f) * 7.0f;
-            const float railY = 0.80f + std::sin(meteor.travel * 0.135f) * 2.0f;
+            const float railX = std::sin(meteor.travel * 0.090f + meteor.pathPhase) * 7.0f;
+            const float railY = 0.80f + std::sin(
+                meteor.travel * 0.135f + meteor.pathPhase * 1.37f) * 2.0f;
             if (Hit3D(ToWorldX(x), ToWorldY(y), z, radius * WorldXScale,
                 railX, railY, 72.0f - meteor.travel, 2.70f * meteor.scale)) {
                 return i;
@@ -270,9 +299,10 @@ int SideScrollingShooter::Stage1Module::FindMeteor(const SideScrollingShooter& s
 void SideScrollingShooter::Stage1Module::SpawnMeteorDebris(
     SideScrollingShooter& shooter, const ShooterStages::Stage1::Meteor& meteor, int count) {
     const float sideX = 1.85f - std::fmod(meteor.travel * 0.0325f, 4.40f);
-    const float sideY = 0.55f + std::sin(meteor.travel * 0.105f) * 0.34f;
-    const float railX = std::sin(meteor.travel * 0.090f) * 7.0f;
-    const float railY = 0.80f + std::sin(meteor.travel * 0.135f) * 2.0f;
+    const float sideY = 0.55f + std::sin(meteor.travel * 0.105f + meteor.pathPhase) * 0.34f;
+    const float railX = std::sin(meteor.travel * 0.090f + meteor.pathPhase) * 7.0f;
+    const float railY = 0.80f + std::sin(
+        meteor.travel * 0.135f + meteor.pathPhase * 1.37f) * 2.0f;
     const bool railMode = shooter.IsRailGameplayActive();
     const float x = railMode ? railX : ToWorldX(sideX);
     const float y = railMode ? railY : ToWorldY(sideY);
@@ -297,9 +327,10 @@ void SideScrollingShooter::Stage1Module::DrawMeteors(
         const ShooterStages::Stage1::Meteor& meteor = shooter.m_stage1.meteors[i];
         if (meteor.destroyed) continue;
         const float sideX = 1.85f - std::fmod(meteor.travel * 0.0325f, 4.40f);
-        const float sideY = 0.55f + std::sin(meteor.travel * 0.105f) * 0.34f;
-        const float railX = std::sin(meteor.travel * 0.090f) * 7.0f;
-        const float railY = 0.80f + std::sin(meteor.travel * 0.135f) * 2.0f;
+        const float sideY = 0.55f + std::sin(meteor.travel * 0.105f + meteor.pathPhase) * 0.34f;
+        const float railX = std::sin(meteor.travel * 0.090f + meteor.pathPhase) * 7.0f;
+        const float railY = 0.80f + std::sin(
+            meteor.travel * 0.135f + meteor.pathPhase * 1.37f) * 2.0f;
         const float x = Math::Lerp(ToWorldX(sideX), railX, railWeight);
         const float y = Math::Lerp(ToWorldY(sideY), railY, railWeight);
         const float z = Math::Lerp(SidePlaneZ + 1.2f, 72.0f - meteor.travel, railWeight);

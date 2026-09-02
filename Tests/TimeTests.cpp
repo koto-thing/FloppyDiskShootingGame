@@ -20,6 +20,7 @@ void RunScoreRepositoryTests();
 void RunStage3BossModelViewTests();
 void RunStage3BarrierCageViewTests();
 void RunStage3FunnelModelViewTests();
+void RunStage2BossModelViewTests();
 void RunStage4BossModelViewTests();
 void RunStage5ModelViewTests();
 #include <thread>
@@ -201,6 +202,7 @@ int main()
         RunStage3BossModelViewTests();
         RunStage3BarrierCageViewTests();
         RunStage3FunnelModelViewTests();
+        RunStage2BossModelViewTests();
         RunStage4BossModelViewTests();
         RunStage5ModelViewTests();
     } catch (const std::exception& exception) {
