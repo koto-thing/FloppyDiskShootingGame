@@ -27,6 +27,40 @@ constexpr float ItemGlyphColor[4] = { 1.00f, 1.00f, 0.92f, 1.0f };
 
 constexpr int MissionBannerGlyphDelayFrames = 4;
 constexpr int MissionBannerGlyphPopFrames = 8;
+constexpr int BossWarningFadeFrames = 24;
+
+/**
+ * @brief ボス警告帯の表示フレームからフェード率を取得する
+ * @param age 登場演出の経過フレーム数
+ * @param duration 登場演出の総フレーム数
+ * @return 0から1のフェード率
+ */
+constexpr float BossWarningFade(int age, int duration) {
+    if (duration <= 1) return 1.0f;
+    const float fadeIn = (std::clamp)(
+        static_cast<float>(age) / BossWarningFadeFrames, 0.0f, 1.0f);
+    const float fadeOut = (std::clamp)(
+        static_cast<float>(duration - 1 - age) / BossWarningFadeFrames, 0.0f, 1.0f);
+    return (std::min)(fadeIn, fadeOut);
+}
+
+static_assert(BossWarningFade(0, 180) == 0.0f);
+static_assert(BossWarningFade(BossWarningFadeFrames, 180) == 1.0f);
+static_assert(BossWarningFade(179, 180) == 0.0f);
+
+/**
+ * @brief 残HPをHPバー上のX座標へ変換する
+ * @param halfWidth HPバーの半幅
+ * @param hp フェーズが切り替わる残HP
+ * @param maxHp ボスの最大HP
+ * @return HPバー上のX座標
+ */
+constexpr float BossPhaseDividerX(float halfWidth, int hp, int maxHp) {
+    return -halfWidth + halfWidth * 2.0f * static_cast<float>(hp) /
+        static_cast<float>(maxHp);
+}
+
+static_assert(BossPhaseDividerX(0.5f, 75, 100) == 0.25f);
 
 /**
  * @brief 画面揺れの残りフレームから減衰率を取得する
@@ -572,6 +606,41 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
 }
 
 /**
+ * @brief 移動中または発光中の小型ボムを描画する
+ * @param renderer 描画先レンダラー
+ * @param camera 描画に使用するカメラ
+ * @param bomb 描画対象のボム
+ * @return なし
+ */
+void SideScrollingShooter::DrawBomb(
+    Renderer& renderer, const Camera3D& camera, const Bomb& bomb) const {
+    constexpr float BombBodyColor[4] = {0.03f, 0.10f, 0.24f, 1.0f};
+    constexpr float BombBlueColor[4] = {0.08f, 0.65f, 3.20f, 1.0f};
+    constexpr float BombFuseColor[4] = {0.65f, 0.78f, 0.92f, 1.0f};
+    const bool charging = bomb.age >= BombTravelFrames;
+    const Vector3 center {ToWorldX(bomb.x), ToWorldY(bomb.y), bomb.z};
+    const float pulse = charging ? 1.0f + std::sin(static_cast<float>(bomb.age) * 1.1f) * 0.12f : 1.0f;
+
+    // 球形本体と短い信管で小型爆弾を構成する
+    DrawModelPrimitive(renderer, camera, 5, center.x, center.y, center.z,
+        0.48f * pulse, 0.48f * pulse, 0.48f * pulse,
+        charging ? BombBlueColor : BombBodyColor);
+    DrawModelPrimitive(renderer, camera, 2, center.x, center.y + 0.30f, center.z,
+        0.12f, 0.22f, 0.12f, BombFuseColor);
+
+    // 中央到達後は青い光輪を重ねて爆発直前を知らせる
+    if (charging) {
+        const float chargeProgress = static_cast<float>(bomb.age - BombTravelFrames) /
+            static_cast<float>(BombChargeFrames);
+        const float glowSize = 0.82f + chargeProgress * 0.72f;
+        const Matrix4x4 glowWorld = Matrix4x4::Translation(center) *
+            Matrix4x4::Scale({glowSize, glowSize, 1.0f});
+        renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * glowWorld,
+            chargeProgress * 0.32f, BombExplosionEffectType});
+    }
+}
+
+/**
  * @brief 爆発エフェクトをHLSLへ渡す描画コマンドとして記録する
  * @param renderer 描画先レンダラー
  * @param camera 描画に使用するカメラ
@@ -579,6 +648,17 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
  * @return なし
  */
 void SideScrollingShooter::DrawExplosion(Renderer& renderer, const Camera3D& camera, const Explosion& explosion) {
+    if (explosion.effectType == BombExplosionEffectType) {
+        const float progress = static_cast<float>(explosion.age) / BombExplosionLifetimeFrames;
+        const float size = 1.10f + progress * 8.50f;
+        const Matrix4x4 world = Matrix4x4::Translation(
+            {ToWorldX(explosion.x), ToWorldY(explosion.y), explosion.z}) *
+            Matrix4x4::Scale({size, size, 1.0f});
+        renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * world,
+            progress, BombExplosionEffectType});
+        return;
+    }
+
     if (explosion.effectType == 1) {
         const float progress = static_cast<float>(explosion.age) / MortarExplosionLifetimeFrames;
         const float fireProgress = Math::Clamp01(progress * 2.20f);
@@ -792,7 +872,9 @@ void SideScrollingShooter::DrawMissionBanner(Renderer& renderer) const {
 
     char startText[24];
     std::snprintf(startText, sizeof(startText), "MISSION %d START", m_stageNumber);
-    const std::string_view text = m_clear ? "ARRESTED" : startText;
+    const std::string_view text = m_tutorialMode ?
+        (m_clear ? "TUTORIAL COMPLETE" : "TUTORIAL START") :
+        (m_clear ? "ARRESTED" : startText);
     const int remainingFrames = m_clear ? (std::max)(0, m_clearTimer) : m_missionStartTimer;
     const int elapsedFrames = (m_clear ? ClearWaitFrames : MissionBannerDisplayFrames) - remainingFrames;
     const float fade = remainingFrames < 20 ? static_cast<float>(remainingFrames) / 20.0f : 1.0f;
@@ -814,6 +896,90 @@ void SideScrollingShooter::DrawMissionBanner(Renderer& renderer) const {
     }
 }
 
+/**
+ * @brief 実際のHPフェーズ境界へボスHPバーの区切りを描画する
+ * @param renderer 描画先レンダラー
+ * @param y HPバーの中心Y座標
+ * @param halfWidth HPバーの半幅
+ * @param maxHp ボスの最大HP
+ * @param color 区切り線のRGBA色
+ * @return なし
+ */
+void SideScrollingShooter::DrawBossPhaseDividers(Renderer& renderer, float y,
+    float halfWidth, int maxHp, const float color[4]) const {
+    if (maxHp <= 1) return;
+
+    // ponytail: HPが数千程度の間は定義済みフェーズ判定の線形走査で十分、上限増加時はStageへ境界列を持たせる
+    int previousPhase = m_stage->BossPhaseForHp(maxHp, maxHp);
+    for (int hp = maxHp - 1; hp > 0; --hp) {
+        const int phase = m_stage->BossPhaseForHp(hp, maxHp);
+        if (phase == previousPhase) continue;
+        DrawShape(renderer, BossPhaseDividerX(halfWidth, hp, maxHp),
+            y, 0.008f, 0.035f, color);
+        previousPhase = phase;
+    }
+}
+
+/** @brief チュートリアル案内を描画する @param renderer 描画先 */
+void SideScrollingShooter::DrawTutorialHud(Renderer& renderer) const {
+    constexpr float CharacterSpacing = 0.0025f;
+    if (m_tutorialStep >= TutorialStepCount) return;
+    constexpr const char* Titles[] = {
+        "MOVE", "FOCUS MOVE", "SHOT", "BOMB", "2D <-> 3D"
+    };
+    constexpr const char* Instructions[] = {
+        "DODGE THE METEORS",
+        "PASS THROUGH THE NARROW GAPS",
+        "DESTROY ALL TARGETS",
+        "CLEAR THE UNAVOIDABLE BARRAGE",
+        "ESCAPE THE 2D BARRAGE"
+    };
+    char progress[24];
+    std::snprintf(progress, sizeof(progress), "LESSON %d / %d", m_tutorialStep + 1, TutorialStepCount);
+    renderer.DrawText(progress, TextAlign::TopCenter, 0.014f,
+        {0.65f, 0.90f, 0.95f, 1.0f}, {0.0f, -0.04f}, CharacterSpacing);
+    renderer.DrawText(Titles[m_tutorialStep], TextAlign::Center, 0.030f,
+        {1.0f, 0.78f, 0.12f, 1.0f}, {0.0f, 0.74f}, CharacterSpacing);
+    renderer.DrawText(Instructions[m_tutorialStep], TextAlign::Center, 0.015f,
+        {0.85f, 0.95f, 0.90f, 1.0f}, {0.0f, 0.60f}, CharacterSpacing);
+}
+
+/** @brief 文字表示領域へ共通の黒いHUD背景を描画する @param renderer 描画先 @return なし */
+void SideScrollingShooter::DrawHudBackground(Renderer& renderer) const {
+    constexpr ColorF HudBackground {0.0f, 0.0f, 0.0f, 0.82f};
+    // ステータスと操作文字の背面だけを覆い、残りはプレイ領域として開放する
+    renderer.Draw(Rect {{0.0f, 0.92f}, {2.0f, 0.08f}}, HudBackground);
+    renderer.Draw(Rect {{0.0f, -0.92f}, {2.0f, 0.08f}}, HudBackground);
+}
+
+/**
+ * @brief チュートリアルの操作キーを自機上部へ表示する
+ * @param renderer 描画先レンダラー
+ * @param camera 自機位置の投影に使うカメラ
+ * @param playerZ 描画中の自機Z座標
+ * @return なし
+ */
+void SideScrollingShooter::DrawTutorialControlHint(
+    Renderer& renderer, const Camera3D& camera, float playerZ) const {
+    if (!m_tutorialMode || m_missionStartTimer > 0 ||
+        m_tutorialStep >= TutorialStepCount) return;
+
+    constexpr const char* Hints[] = {
+        "MOVE WASD", "SLOW SHIFT", "Z ATTACK", "C BOMB", "X SHIFT"
+    };
+    Vector2 screenPosition;
+    if (!camera.TryWorldToScreen(
+            {ToWorldX(m_playerX), ToWorldY(m_playerY) + 0.95f, playerZ}, screenPosition)) return;
+    const Viewport& viewport = camera.GetViewport();
+    const Vector2 position {
+        (screenPosition.x - static_cast<float>(viewport.x)) /
+                static_cast<float>(viewport.width) * 2.0f - 1.0f,
+        1.0f - (screenPosition.y - static_cast<float>(viewport.y)) /
+                static_cast<float>(viewport.height) * 2.0f};
+    renderer.DrawText(Hints[m_tutorialStep], TextAlign::Center, 0.015f,
+        {0.35f, 1.0f, 0.85f, 1.0f}, position, 0.0025f);
+}
+
 void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
     if (StageDispatch::DrawHud(*this, renderer)) return;
     if (!m_bossBattle || m_clear || m_bossIntroductionPhase != BossIntroductionPhase::None) {
@@ -830,11 +996,8 @@ void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
     DrawShape(renderer, 0.0f, 0.76f, BossBarWidth, 0.025f, BossBarBack);
     DrawShape(renderer, BossBarWidth * (1.0f - hpRate), 0.76f,
         BossBarWidth * hpRate, 0.018f, BossBarFill);
-    // 4フェーズの境界をHPバー上に常時表示する
-    for (int phase = 1; phase < BossPhaseCount; ++phase) {
-        DrawShape(renderer, -BossBarWidth + BossBarWidth * 2.0f * static_cast<float>(phase) / static_cast<float>(BossPhaseCount),
-            0.755f, 0.008f, 0.035f, BossBarDivider);
-    }
+    // 実際のフェーズ判定が切り替わるHPへ黄色い区切り線を重ねる
+    DrawBossPhaseDividers(renderer, 0.755f, BossBarWidth, bossMaxHp, BossBarDivider);
     const BossStory story = StageDispatch::Story(m_stageNumber);
     renderer.DrawText(story.bossName, TextAlign::Center, 0.014f,
         { 1.0f, 0.45f, 0.65f, 1.0f }, { 0.0f, 0.86f });
@@ -852,6 +1015,52 @@ void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
 }
 
 /**
+ * @brief ボス登場中に上下の警告帯を描画する
+ * @param renderer 描画先レンダラー
+ * @return なし
+ */
+void SideScrollingShooter::DrawBossWarning(Renderer& renderer) const {
+    // 共通登場フェーズと独自進行のStage 5登場フェーズを同じ警告帯へまとめる
+    const bool standardEntrance =
+        m_bossIntroductionPhase == BossIntroductionPhase::Entrance;
+    const bool stage5Entrance = m_stageNumber == 5 &&
+        m_stage5.phase == ShooterStages::Stage5::Phase::EastsourceIntro;
+    if (!standardEntrance && !stage5Entrance) return;
+
+    constexpr std::string_view WarningText =
+        "/// WARNING /// WARNING /// WARNING /// WARNING /// WARNING /// WARNING /// WARNING ///";
+    constexpr float TextSize = 0.035f;
+    constexpr float CharacterSpacing = 0.006f;
+    constexpr float PhraseAdvance = 0.72f;
+    constexpr float ScrollPerFrame = 0.008f;
+    const int age = stage5Entrance ? m_stage5.phaseTimer : m_bossIntroductionTimer;
+    const int duration = stage5Entrance ? ShooterStages::Stage5::EastsourceIntroFrames :
+        StageDispatch::BossIntroductionFrames(*this);
+    const float alpha = SmoothStep(BossWarningFade(age, duration));
+    const float scroll = std::fmod(
+        static_cast<float>(age) * ScrollPerFrame, PhraseAdvance);
+    const float firstGlyphX = -1.0f + TextSize * renderer.AspectRatio();
+
+    // 既存HUDを半透明の黒帯で上書きして内側の赤線でプレイ領域と分ける
+    renderer.Draw(Rect {{0.0f, 0.90f}, {1.0f, 0.10f}},
+        {0.015f, 0.005f, 0.008f, 0.92f * alpha});
+    renderer.Draw(Rect {{0.0f, -0.90f}, {1.0f, 0.10f}},
+        {0.015f, 0.005f, 0.008f, 0.92f * alpha});
+    renderer.Draw(Rect {{0.0f, 0.80f}, {1.0f, 0.004f}},
+        {1.0f, 0.04f, 0.04f, alpha});
+    renderer.Draw(Rect {{0.0f, -0.80f}, {1.0f, 0.004f}},
+        {1.0f, 0.04f, 0.04f, alpha});
+
+    // 上段は左、下段は右へ同じ速度で流して警告文字を途切れさせない
+    const ColorF warningColor {1.0f, 0.045f, 0.035f, alpha};
+    renderer.DrawText(WarningText, {firstGlyphX - scroll, 0.90f},
+        TextSize, warningColor, CharacterSpacing);
+    renderer.DrawText(WarningText,
+        {firstGlyphX - PhraseAdvance + scroll, -0.90f},
+        TextSize, warningColor, CharacterSpacing);
+}
+
+/**
  * @brief 2Dと3Dの表示切り替えクールダウンを描画する
  * @param renderer 描画先レンダラー
  * @param camera 現在の3Dカメラ
@@ -861,23 +1070,15 @@ void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
 void SideScrollingShooter::DrawViewToggleCooldownHud(
     Renderer& renderer, const Camera3D& camera, float playerZ) const {
     constexpr int FadeFrames = 12;
-    constexpr float BarWidth = 0.30f;
-    constexpr float PlayerBarWidth = 0.11f;
+    constexpr float BarWidth = 0.11f;
     const float readyRate = ViewToggleReadyRate(m_viewToggleCooldown, ViewToggleCooldownFrames);
     const float opacity = ViewToggleHudOpacity(
         m_viewToggleCooldown, ViewToggleCooldownFrames, FadeFrames);
     if (opacity <= 0.0f) return;
     const float trackColor[4] = {0.10f, 0.18f, 0.20f, 0.92f * opacity};
     const float fillColor[4] = {0.20f, 0.82f, 1.00f, opacity};
-    const ColorF textColor {0.65f, 0.90f, 0.95f, opacity};
 
-    // 上部中央のトラックとFillを同じ中心座標へ配置する
-    renderer.DrawText("2D <-> 3D", TextAlign::TopCenter, 0.011f,
-        textColor, {0.0f, -0.018f});
-    DrawShape(renderer, 0.0f, 0.905f, BarWidth, 0.018f, trackColor);
-    DrawShape(renderer, 0.0f, 0.905f, BarWidth * readyRate, 0.012f, fillColor);
-
-    // 自機下方のワールド座標を画面座標へ投影して小型メーターを追従させる
+    // 自機下方のワールド座標を画面座標へ投影してメーターを追従させる
     Vector2 screenPosition;
     if (!camera.TryWorldToScreen(
             {ToWorldX(m_playerX), ToWorldY(m_playerY) - 0.70f, playerZ}, screenPosition)) return;
@@ -887,10 +1088,10 @@ void SideScrollingShooter::DrawViewToggleCooldownHud(
                 static_cast<float>(viewport.width) * 2.0f - 1.0f,
         1.0f - (screenPosition.y - static_cast<float>(viewport.y)) /
                 static_cast<float>(viewport.height) * 2.0f};
-    DrawShape(renderer, position.x, position.y, PlayerBarWidth, 0.013f, trackColor);
-    DrawShape(renderer,
-        position.x, position.y,
-        PlayerBarWidth * readyRate, 0.008f, fillColor);
+
+    // 暗いトラック上へ切り替え可能率を水色で表示する
+    DrawShape(renderer, position.x, position.y, BarWidth, 0.013f, trackColor);
+    DrawShape(renderer, position.x, position.y, BarWidth * readyRate, 0.008f, fillColor);
 }
 
 /**

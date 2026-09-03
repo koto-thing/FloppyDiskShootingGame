@@ -6,6 +6,8 @@
 
 #include "../../Engine/Graphics/Renderer.h"
 #include "../../Engine/Time/Time.h"
+#include "../../Infrastructure/Repositories/SettingsRepository.h"
+#include "../Common/SpaceBackground.h"
 
 namespace {
 constexpr float CrawlSpeed = 0.115f;
@@ -77,7 +79,8 @@ void StoryScene::Tick() {
  * @return ゲームプレイシーン
  */
 SceneType StoryScene::NextScene() const {
-    return SceneType::TestStage;
+    return SettingsRepository {}.Load().tutorialCompleted ?
+        SceneType::TestStage : SceneType::TutorialStage;
 }
 
 /**
@@ -102,23 +105,8 @@ void StoryScene::Render(Renderer& renderer) {
 
 /** @brief 奥の消失点から星を手前へ加速させて主観的な航行感を表現する */
 void StoryScene::RenderStars(Renderer& renderer) const {
-    // 画面全域へ均等に配置した遠景星で空白領域を埋める
-    for (int index = 0; index < 120; ++index) {
-        const unsigned int seed = static_cast<unsigned int>(index * 22695477 + 1);
-        const float x = -1.04f + static_cast<float>(seed % 997u) / 997.0f * 2.08f;
-        const float initialY = static_cast<float>((seed / 997u) % 991u) / 991.0f * 2.08f;
-        const float speed = 0.015f + static_cast<float>(index % 4) * 0.006f;
-        float wrappedY = std::fmod(initialY + m_backgroundTime * speed, 2.08f);
-        if (wrappedY < 0.0f) wrappedY += 2.08f;
-        const float y = wrappedY - 1.04f;
-        const float twinkle = 0.42f + 0.18f *
-            std::sin(m_backgroundTime * (1.1f + static_cast<float>(index % 5) * 0.17f) +
-                static_cast<float>(seed % 31u));
-        const float size = index % 11 == 0 ? 0.0030f : 0.0017f;
-        renderer.Draw(Rect { { x, y }, { size, size } },
-            { StarColor.r * twinkle, StarColor.g * twinkle,
-              StarColor.b * twinkle, 0.55f });
-    }
+    // UIシーンと同じ遠景星を描画して星空の見た目を統一する
+    SpaceBackground::Render(renderer, m_backgroundTime);
 
     // 消失点から手前へ迫る星を遠景の上へ重ねる
     for (int index = 0; index < 96; ++index) {

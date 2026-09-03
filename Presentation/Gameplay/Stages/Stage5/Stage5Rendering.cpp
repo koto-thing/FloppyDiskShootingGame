@@ -496,6 +496,7 @@ void SideScrollingShooter::Stage5Module::DrawStage5Hud(const SideScrollingShoote
     constexpr float Back[] = {0.08f, 0.05f, 0.12f, 0.90f};
     constexpr float Fill[] = {0.96f, 0.14f, 0.24f, 1.0f};
     constexpr float Accent[] = {0.16f, 0.82f, 1.0f, 1.0f};
+    constexpr float Divider[] = {1.0f, 0.82f, 0.30f, 1.0f};
     constexpr float BarWidth = 0.62f;
 
     if (shooter.m_stage5.phase == Stage5Phase::EastsourceBattle) {
@@ -503,11 +504,8 @@ void SideScrollingShooter::Stage5Module::DrawStage5Hud(const SideScrollingShoote
         shooter.DrawShape(renderer, 0.0f, 0.76f, BarWidth, 0.025f, Back);
         shooter.DrawShape(renderer, BarWidth * (1.0f - hpRate), 0.76f,
             BarWidth * hpRate, 0.018f, Fill);
-        for (int phaseDivider = 1; phaseDivider < BossPhaseCount; ++phaseDivider) {
-            const float x = -BarWidth + BarWidth * 2.0f *
-                static_cast<float>(phaseDivider) / static_cast<float>(BossPhaseCount);
-            shooter.DrawShape(renderer, x, 0.755f, 0.008f, 0.035f, Accent);
-        }
+        shooter.DrawBossPhaseDividers(
+            renderer, 0.755f, BarWidth, EastsourceMaxHp, Divider);
         renderer.DrawText("EASTSOURCE", TextAlign::Center, 0.017f,
             {1.0f, 0.42f, 0.55f, 1.0f}, {0.0f, 0.86f});
         constexpr const char* Labels[] = {"PRECISION", "CROSSFIRE", "PURSUIT", "LAST CONTRACT"};

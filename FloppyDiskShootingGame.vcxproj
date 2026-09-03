@@ -130,12 +130,13 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
+      <Optimization>MinSpace</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/FS /utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/FS /utf-8 /Gw %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -169,6 +170,7 @@
     <ClCompile Include="Presentation\Gameplay\Stages\Stage4\Stage4Module.cpp" />
     <ClCompile Include="Presentation\Gameplay\Stages\Stage5\Stage5Module.cpp" />
     <ClCompile Include="Presentation\Gameplay\Stages\Stage5\Stage5Rendering.cpp" />
+    <ClCompile Include="Presentation\Common\SpaceBackground.cpp" />
     <ClCompile Include="Presentation\CreditScene\CreditContentController.cpp" />
     <ClCompile Include="Presentation\CreditScene\CreditContentPresenter.cpp" />
     <ClCompile Include="Presentation\CreditScene\CreditSceneContent.cpp" />
@@ -180,6 +182,7 @@
     <ClCompile Include="Presentation\Scenes\RankingScene.cpp" />
     <ClCompile Include="Presentation\Scenes\OptionScene.cpp" />
     <ClCompile Include="Presentation\Scenes\TestStage.cpp" />
+    <ClCompile Include="Presentation\Scenes\TutorialStage.cpp" />
     <ClCompile Include="Presentation\Scenes\GalleryScene.cpp" />
     <ClCompile Include="Presentation\Scenes\TitleScene.cpp" />
     <ClCompile Include="Presentation\TitleScene\TitleSceneColumn.cpp" />
@@ -203,8 +206,10 @@
     <ClInclude Include="Infrastructure\Repositories\UserDataPath.h" />
     <ClInclude Include="Application\Interfaces\IScene.h" />
     <ClInclude Include="Application\UseCases\SceneManager.h" />
+    <ClInclude Include="Presentation\Common\SpaceBackground.h" />
     <ClInclude Include="Presentation\CreditScene\CreditContentController.h" />
     <ClInclude Include="Presentation\CreditScene\CreditContentPresenter.h" />
+    <ClInclude Include="Presentation\Gameplay\Voices\VoiceSamples.h" />
     <ClInclude Include="Presentation\ModeSelectionScene\ModeSelectionStateController.h" />
     <ClInclude Include="Presentation\Scenes\CreditScene.h" />
     <ClInclude Include="Presentation\CreditScene\CreditSceneColumn.h" />
@@ -215,6 +220,7 @@
     <ClInclude Include="Presentation\Scenes\RankingScene.h" />
     <ClInclude Include="Presentation\Scenes\OptionScene.h" />
     <ClInclude Include="Presentation\Scenes\TestStage.h" />
+    <ClInclude Include="Presentation\Scenes\TutorialStage.h" />
     <ClInclude Include="Presentation\Scenes\GalleryScene.h" />
     <ClInclude Include="Presentation\Gameplay\SideScrollingShooter.h" />
     <ClInclude Include="Presentation\Gameplay\SideScrollingShooterShared.h" />
@@ -290,9 +296,6 @@
     <None Include="Shaders\SpellCircleShader.hlsl">
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </None>
-    <None Include="Shaders\TextShader.hlsl">
-      <ExcludedFromBuild>true</ExcludedFromBuild>
-    </None>
     <None Include="Shaders\PixelUpscaleShader.hlsl">
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </None>
@@ -301,11 +304,14 @@
     <Folder Include=".agents\" />
     <Folder Include="View\" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Presentation\Gameplay\Voices\VoiceDpcmDecoder.h" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
   <Target Name="CopyShaders" AfterTargets="AfterBuild">
-    <Copy SourceFiles="Shaders\ObjectShader.hlsl;Shaders\BackgroundShader.hlsl;Shaders\SpellCircleShader.hlsl;Shaders\TextShader.hlsl;Shaders\PixelUpscaleShader.hlsl" DestinationFolder="$(OutDir)Shaders" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="Shaders\ObjectShader.hlsl;Shaders\BackgroundShader.hlsl;Shaders\SpellCircleShader.hlsl;Shaders\PixelUpscaleShader.hlsl" DestinationFolder="$(OutDir)Shaders" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="CopyMML" AfterTargets="AfterBuild">
     <Copy SourceFiles="mml\test.mml" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('mml\test.mml')" />

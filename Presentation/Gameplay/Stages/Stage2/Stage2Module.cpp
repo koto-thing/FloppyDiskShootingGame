@@ -423,6 +423,20 @@ void SideScrollingShooter::Stage2Module::SpawnFunnel(
         shot.stage2.kind = ShotKind::Funnel;
         shot.stage2.delayedEngine = delayedEngine;
         shot.active = true;
+
+        // 短いノイズを初回だけ合成し、ファンネル射出の風切り音として再生する
+        if (shooter.m_audio) {
+            static const std::vector<int16_t> launchSound = [] {
+                Audio::SfxrParams sound;
+                sound.waveType = Audio::SfxrWaveType::Noise;
+                sound.attackTime = 0.025f;
+                sound.sustainTime = 0.10f;
+                sound.decayTime = 0.18f;
+                sound.masterVolume = 0.32f;
+                return Audio::SfxrGenerator::GeneratePCM(sound);
+            }();
+            shooter.m_audio->PlaySE(launchSound);
+        }
         return;
     }
 }

@@ -13,6 +13,9 @@ struct Meteor {
     float pathPhase = 0.0f;
     int hp = 0;
     bool destroyed = true;
+    float tutorialY = 0.0f;
+    bool straightPath = false;
+    float speedScale = 1.0f;
 };
 
 /** @brief ステージ1に配置する隕石数 */

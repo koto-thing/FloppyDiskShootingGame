@@ -7,6 +7,7 @@
 #include <limits>
 
 #include "../../../../Engine/Graphics/Renderer.h"
+#include "../../../../Infrastructure/ExternalServices/AudioService.h"
 #include "../../SideScrollingShooterEnemies.h"
 #include "../../SideScrollingShooterShared.h"
 #include "../Common/StageDefinition.h"
@@ -34,6 +35,8 @@ constexpr float SeaSerpentEyeColor[4] = {1.00f, 0.84f, 0.16f, 1.0f};
 constexpr float SeaSerpentMouthColor[4] = {0.08f, 0.015f, 0.02f, 1.0f};
 constexpr float SeaSerpentSideEyeSurfaceOffset = 0.90f;
 constexpr float SeaSerpentRailEyeSurfaceOffset = 1.70f;
+constexpr int SeaSerpentCycleFrames = 420;
+constexpr int SeaSerpentWarningFrames = 90;
 constexpr int DawnStartFrame = 500;
 constexpr int DawnFrame = 750;
 constexpr int BossAscentFrames = 150;
@@ -115,6 +118,7 @@ constexpr float BossPhase2SideTopY = BossPhase2SideWorldY +
     Stage3BarrierCageView::BarrierTopY * BossSideModelScale;
 constexpr float BossPhase2SideCenterY =
     (BossPhase2SideBottomY + BossPhase2SideTopY) * 0.5f;
+constexpr float BossBarrierPlayerMarginX = 0.35f;
 constexpr float BossBarrierPlayerMarginY = 0.35f;
 constexpr float BossPhase2Travel = 3.0f;
 constexpr float BossPhase2Deploy = 4.0f;
@@ -126,6 +130,15 @@ constexpr int ReflectFunnelHp = 30;
 constexpr int ReflectFunnelPortCooldownFrames = 5 * 60;
 constexpr int ReflectFunnelLaunchFrames = 60;
 constexpr float ReflectShotSpeed = 0.44f * BossLaterPhaseSpeedScale;
+
+constexpr float SeaSerpentWarningIntensity(int frame, int startFrame) {
+    return Math::Clamp01(static_cast<float>(frame - startFrame + SeaSerpentWarningFrames) /
+        static_cast<float>(SeaSerpentWarningFrames));
+}
+
+static_assert(SeaSerpentWarningIntensity(10, 100) == 0.0f);
+static_assert(SeaSerpentWarningIntensity(55, 100) == 0.5f);
+static_assert(SeaSerpentWarningIntensity(100, 100) == 1.0f);
 constexpr int ReflectFunnelMissileIntervalFrames = 10 * 60;
 constexpr int ReflectFunnelMissileLifetimeFrames = 8 * 60;
 constexpr float ReflectFunnelMissileSpeed = 0.045f;
@@ -498,6 +511,37 @@ const SideScrollingShooter::Stage& SideScrollingShooter::Stage3Module::Definitio
 
 void SideScrollingShooter::Stage3Module::Reset(SideScrollingShooter& shooter) {
     shooter.m_stage3 = {};
+}
+
+void SideScrollingShooter::Stage3Module::TickAfterFrame(SideScrollingShooter& shooter) {
+    SeaSerpentMotion motion {};
+    if (shooter.m_bossBattle || !GetSeaSerpentMotion(shooter.m_frame, motion) ||
+        motion.progress != 0.0f ||
+        motion.scale < 3.0f || !shooter.m_audio) {
+        return;
+    }
+
+    // 低い水塊の衝撃へ広帯域ノイズを重ねて巨大な飛沫を作る
+    Audio::SfxrParams impact;
+    impact.waveType = Audio::SfxrWaveType::Sine;
+    impact.startFrequency = 0.16f;
+    impact.minFrequency = 0.025f;
+    impact.slide = -0.20f;
+    impact.sustainTime = 0.18f;
+    impact.decayTime = 0.62f;
+    impact.masterVolume = 0.88f;
+    shooter.m_audio->PlaySE(impact);
+
+    Audio::SfxrParams spray;
+    spray.waveType = Audio::SfxrWaveType::Noise;
+    spray.startFrequency = 0.72f;
+    spray.minFrequency = 0.08f;
+    spray.slide = -0.34f;
+    spray.attackTime = 0.025f;
+    spray.sustainTime = 0.30f;
+    spray.decayTime = 0.72f;
+    spray.masterVolume = 0.76f;
+    shooter.m_audio->PlaySE(spray);
 }
 
 void SideScrollingShooter::Stage3Module::ConfigureBossSpawn(
@@ -1762,6 +1806,29 @@ float SideScrollingShooter::Stage3Module::SideCameraY(
     return Math::Lerp(0.0f, BossPhase2SideCenterY, progress);
 }
 
+Vector2 SideScrollingShooter::Stage3Module::PlayerXRange(
+    const SideScrollingShooter& shooter) {
+    const bool railMode = shooter.IsRailGameplayActive();
+    const Vector2 defaultRange = railMode ? Vector2 {-1.2f, 1.2f} :
+        Vector2 {Side2DPlayerMinX, Side2DPlayerMaxX};
+    if (!shooter.m_bossBattle || !shooter.m_enemies[0].active) return defaultRange;
+    const Enemy& boss = shooter.m_enemies[0];
+    if (boss.phase < BossPhase2Travel) return defaultRange;
+
+    // 視点ごとに横方向を向くバリア辺から機体の余白を引く
+    const float barrierHalfRange = FromWorldX(
+        (railMode ? Stage3BarrierCageView::BarrierHalfWidth * BossModelScale :
+            Stage3BarrierCageView::BarrierHalfLength * BossSideModelScale) -
+        BossBarrierPlayerMarginX);
+    const float progress = boss.phase == BossPhase2Travel ? SmoothStep(
+        1.0f - static_cast<float>(boss.motionAge) /
+            static_cast<float>(BossPhase2TravelFrames)) : 1.0f;
+    return {
+        Math::Lerp(defaultRange.x, (std::max)(defaultRange.x, -barrierHalfRange), progress),
+        Math::Lerp(defaultRange.y, (std::min)(defaultRange.y, barrierHalfRange), progress)
+    };
+}
+
 Vector2 SideScrollingShooter::Stage3Module::SidePlayerYRange(
     const SideScrollingShooter& shooter) {
     if (!shooter.m_bossBattle || !shooter.m_enemies[0].active) {
@@ -1876,7 +1943,6 @@ float SideScrollingShooter::Stage3Module::NightBlend(int frame) {
 
 bool SideScrollingShooter::Stage3Module::GetSeaSerpentMotion(
     int frame, SeaSerpentMotion& motion) {
-    constexpr int CycleFrames = 420;
     constexpr int Duration[] = {112, 138, 172};
     constexpr int Segments[] = {14, 16, 23};
     constexpr float Elevation[] = {8.2f, 6.4f, 12.0f};
@@ -1886,9 +1952,9 @@ bool SideScrollingShooter::Stage3Module::GetSeaSerpentMotion(
     constexpr float Scale[] = {1.70f, 2.00f, 3.20f};
     static_assert(Segments[2] > Segments[0] &&
         Elevation[2] > Elevation[0] && Scale[2] > Scale[0]);
-    const int cycle = frame / CycleFrames;
+    const int cycle = frame / SeaSerpentCycleFrames;
     const int action = cycle % 3;
-    const int cycleFrame = frame % CycleFrames;
+    const int cycleFrame = frame % SeaSerpentCycleFrames;
     const int startFrame = 48 + (cycle * 97) % 170;
     if (cycleFrame < startFrame || cycleFrame >= startFrame + Duration[action]) {
         return false;
@@ -2166,8 +2232,13 @@ bool SideScrollingShooter::Stage3Module::HitsHazard(
             const float visibleScale = segment.scale * std::sqrt(visibleHeight / railHeight);
             const float railY = -3.65f + (segment.elevation < railHeight ?
                 visibleHeight * 0.5f : segment.elevation - railHeight * 0.5f);
-            if (Hit3D(ToWorldX(x), ToWorldY(y), z, radius * WorldXScale,
-                segment.railX, railY, segment.railZ, 1.25f * visibleScale)) {
+            const float movingRadius = radius * WorldXScale;
+            const float horizontalRadius = 1.25f * visibleScale + movingRadius;
+            const float verticalRadius = visibleHeight * 0.5f + movingRadius;
+            if (SideScrollingShooterShared::HitsEllipsoid(
+                ToWorldX(x) - segment.railX, ToWorldY(y) - railY,
+                z - segment.railZ, horizontalRadius, verticalRadius,
+                horizontalRadius)) {
                 return true;
             }
         } else {
@@ -2224,6 +2295,41 @@ void SideScrollingShooter::Stage3Module::DrawSeaSerpent(
         motion.segmentDelay = secondRush ? 0.028f : 0.036f;
         motion.scale = secondRush ? 6.2f : 3.6f;
     } else if (!GetSeaSerpentMotion(shooter.m_frame, motion)) {
+        const int futureFrame = shooter.m_frame + SeaSerpentWarningFrames;
+        if (shooter.m_frame / SeaSerpentCycleFrames !=
+                futureFrame / SeaSerpentCycleFrames ||
+            !GetSeaSerpentMotion(futureFrame, motion) || motion.scale < 3.0f) {
+            return;
+        }
+
+        // 巨大個体の出現地点へ予兆を集め、3Dでは水面上の円周へ飛沫を並べる
+        const int cycle = futureFrame / SeaSerpentCycleFrames;
+        const int startFrame = cycle * SeaSerpentCycleFrames + 48 + (cycle * 97) % 170;
+        const float intensity = SeaSerpentWarningIntensity(shooter.m_frame, startFrame);
+        const int dropletCount = 6 + static_cast<int>(18.0f * intensity);
+        for (int i = 0; i < dropletCount; ++i) {
+            const float angle = Math::TwoPi * static_cast<float>(i) /
+                static_cast<float>(dropletCount);
+            const float phase = std::fmod(static_cast<float>(shooter.m_frame) *
+                (0.08f + static_cast<float>(i % 4) * 0.012f) + i * 0.37f, 1.0f);
+            const float radius = (0.35f + phase * 1.35f) * motion.scale * intensity;
+            const float height = (0.15f + std::sin(Math::Pi * phase) *
+                (0.35f + 1.25f * intensity)) * motion.scale;
+            const float sideOffset = std::cos(angle) * radius;
+            const float railX = motion.railOriginX + std::cos(angle) * radius;
+            const float railZ = motion.railOriginZ + std::sin(angle) * radius;
+            DrawModelPrimitive(renderer, camera, 5,
+                Math::Lerp(motion.sideOriginX + sideOffset, railX, railWeight),
+                Math::Lerp(-6.0f - BossSeaDrop(shooter) + height,
+                    -3.45f + height, railWeight),
+                Math::Lerp(SidePlaneZ + 13.0f, railZ, railWeight),
+                Math::Lerp(0.10f, 0.30f, railWeight) * motion.scale *
+                    (0.45f + intensity * 0.55f),
+                Math::Lerp(0.18f, 0.48f, railWeight) * motion.scale *
+                    (0.45f + intensity * 0.55f),
+                Math::Lerp(0.08f, 0.24f, railWeight) * motion.scale,
+                FoamColor);
+        }
         return;
     }
 
@@ -2306,19 +2412,21 @@ void SideScrollingShooter::Stage3Module::DrawSeaSerpent(
         for (int i = 0; i < 17; ++i) {
             const float spread = static_cast<float>(i - 8) *
                 0.22f * motion.scale * splashTime;
+            const float angle = Math::TwoPi * static_cast<float>(i) / 17.0f;
             const float launchVelocity = (1.05f +
                 static_cast<float>((i * 5) % 4) * 0.22f) * motion.scale;
             const float gravity = launchVelocity * 2.0f;
             const float dropletHeight = launchVelocity * splashTime -
                 gravity * splashTime * splashTime * 0.5f;
             const float sideSplashX = head.sideX - motion.direction * spread;
-            const float railSplashX = head.railX - motion.direction * spread;
+            const float railSplashX = head.railX + std::cos(angle) * std::abs(spread);
+            const float railSplashZ = head.railZ + std::sin(angle) * std::abs(spread);
             DrawModelPrimitive(renderer, camera, 5,
                 Math::Lerp(sideSplashX, railSplashX, railWeight),
                 Math::Lerp(sideBaseY + 0.25f + dropletHeight,
                     -3.45f + dropletHeight, railWeight),
                 Math::Lerp(SidePlaneZ + 13.0f,
-                    head.railZ - motion.railDirection * spread, railWeight),
+                    railSplashZ, railWeight),
                 Math::Lerp(0.16f, 0.42f, railWeight) * motion.scale,
                 Math::Lerp(0.28f, 0.65f, railWeight) * motion.scale,
                 Math::Lerp(0.10f, 0.32f, railWeight) * motion.scale, FoamColor);

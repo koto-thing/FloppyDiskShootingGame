@@ -134,6 +134,20 @@ VS_OUTPUT VSExplosion(uint vertexId : SV_VertexID)
 
 float4 PSExplosion(VS_OUTPUT input) : SV_TARGET
 {
+    if (u_shapeType > 4.5f)
+    {
+        // ボム専用の青白い中心光と膨張する光輪を生成する
+        float progress = saturate(u_progress);
+        float distanceFromCenter = length(input.uv);
+        float core = 1.0f - smoothstep(0.02f, 0.30f + progress * 0.22f, distanceFromCenter);
+        float ringRadius = 0.16f + progress * 0.80f;
+        float ring = 1.0f - smoothstep(0.025f, 0.10f, abs(distanceFromCenter - ringRadius));
+        float alpha = saturate((core + ring) * (1.0f - progress * 0.82f));
+        if (alpha < 0.01f) discard;
+        float3 color = lerp(float3(0.02f, 0.20f, 1.0f), float3(0.72f, 0.94f, 1.0f), core);
+        return float4(color, alpha);
+    }
+
     if (u_shapeType > 3.5f)
     {
         // 迫撃砲着弾時に地表を走る高温の衝撃波を生成する
@@ -1316,9 +1330,9 @@ void D3D12RenderingService::SetCamera(const CameraMatrices& matrices, const View
     m_hasCamera = viewport.IsValid();
     if (m_hasCamera) {
         // ウィンドウ基準のカメラ領域を低解像度RenderTargetへ写像する
-        const float scaleX = m_frameRetroEffectEnabled
+        const float scaleX = m_frameRetroEffectEnabled && !m_sceneUpscaled
             ? static_cast<float>(LOW_RES_WIDTH) / static_cast<float>(m_width) : 1.0f;
-        const float scaleY = m_frameRetroEffectEnabled
+        const float scaleY = m_frameRetroEffectEnabled && !m_sceneUpscaled
             ? static_cast<float>(LOW_RES_HEIGHT) / static_cast<float>(m_height) : 1.0f;
         const LONG left = static_cast<LONG>(viewport.x * scaleX);
         const LONG top = static_cast<LONG>(viewport.y * scaleY);
@@ -1494,7 +1508,7 @@ void D3D12RenderingService::DrawExplosion(const ExplosionVisual& explosion) {
     // 爆発専用PSOで画面正対クアッドを発行する
     const int previousPipelineType = m_currentPipelineType;
     m_commandList->SetPipelineState((explosion.effectType == 0 || explosion.effectType == 3 ||
-        explosion.effectType == 4) ?
+        explosion.effectType == 4 || explosion.effectType == 5) ?
         m_pipelineStateExplosion.Get() : m_pipelineStateExplosionSmoke.Get());
     m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);

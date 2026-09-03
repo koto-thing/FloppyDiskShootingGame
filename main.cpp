@@ -20,6 +20,7 @@
 #include "Engine/Graphics/Renderer.h"
 #include "Presentation/Scenes/TitleScene.h"
 #include "Presentation/Scenes/TestStage.h"
+#include "Presentation/Scenes/TutorialStage.h"
 #include "Presentation/Scenes/GalleryScene.h"
 #include "Presentation/Scenes/CreditScene.h"
 #include "Presentation/Scenes/ModeSelectionScene.h"
@@ -129,6 +130,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     app.AddScene<ModeSelectionScene>(SceneType::ModeSelection);
     app.AddScene<StoryScene>(SceneType::Story);
     app.AddScene<TestStage>(SceneType::TestStage);
+    app.AddScene<TutorialStage>(SceneType::TutorialStage);
     app.AddScene<GalleryScene>(SceneType::Gallery);
     app.AddScene<OptionScene>(SceneType::Option);
     app.AddScene<CreditScene>(SceneType::Credit);
@@ -164,6 +166,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         Time::BeginFrame();
 
         app.ProcessInput();
+
+        // デバッグ確認用に現在位置を問わずチュートリアルへ移動する
+        if (Input::GetKeyDown(KeyCode::F7)) {
+            app.RequestTransition(SceneType::TutorialStage);
+        }
 
         constexpr int maxFixedStepsPerFrame = 8;
         int fixedStepCount = 0;

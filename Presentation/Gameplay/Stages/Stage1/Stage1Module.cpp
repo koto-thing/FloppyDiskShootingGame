@@ -1,5 +1,6 @@
 #include "Stage1Module.h"
 
+#include <algorithm>
 #include <cmath>
 
 #include "../../../../Engine/Graphics/Renderer.h"
@@ -22,15 +23,63 @@ constexpr float MeteorColor[4] = { 0.30f, 0.22f, 0.18f, 1.0f };
 constexpr float MeteorCraterColor[4] = { 0.95f, 0.38f, 0.08f, 1.0f };
 constexpr int MeteorSpawnMinFrames = 120;
 constexpr int MeteorSpawnMaxFrames = 240;
+constexpr int MeteorBossSpawnMinFrames = 60;
+constexpr int MeteorBossSpawnMaxFrames = 120;
 constexpr float MeteorStartTravel = -60.0f;
 constexpr float MeteorEndTravel = 140.0f;
 constexpr float MeteorBaseSpeed = 0.32f;
+constexpr float MeteorSideWidth = 2.20f;
+constexpr float MeteorSideHeight = 2.55f;
+constexpr float MeteorSideDepth = 1.45f;
+constexpr float MeteorRailDiameter = 5.30f;
 
 constexpr int Stage1BossRushSegmentFrames = 36;
 constexpr int Stage1BossRushSegmentCount = 4;
 constexpr int Stage1BossRushFrames = Stage1BossRushSegmentFrames * Stage1BossRushSegmentCount;
 constexpr int Stage1BossSettleFrames = 96;
 constexpr int Stage1BossEntranceFrames = Stage1BossRushFrames + Stage1BossSettleFrames;
+
+constexpr int BossDefeatMoveSegmentFrames = 45;
+constexpr int BossDefeatMoveSegmentCount = 6;
+constexpr int BossDefeatImpactFrame = BossDefeatMoveSegmentFrames * BossDefeatMoveSegmentCount;
+constexpr int BossDefeatBreakIntervalFrames = 60;
+constexpr int BossDefeatFinalExplosionFrame = BossDefeatImpactFrame +
+    BossDefeatBreakIntervalFrames * 5 + 30;
+constexpr int BossDefeatSequenceFrames = BossDefeatFinalExplosionFrame + 60;
+constexpr float BossDefeatMeteorX = -0.92f;
+constexpr float BossDefeatMeteorY = -0.15f;
+constexpr float BossDefeatMeteorScale = 4.50f;
+constexpr float BossDefeatMeteorBottomMargin = 0.20f;
+constexpr int BossDefeatMeteorRiseFrames = 180;
+constexpr float BossDefeatPlayerRetreatSpeed = 0.035f;
+constexpr float BossDefeatImpactX = -0.42f;
+
+/**
+ * @brief ボスHPに応じた隕石出現間隔を取得する
+ * @param fullHpInterval ボスHP満タン時の出現間隔
+ * @param zeroHpInterval ボスHPゼロ時の出現間隔
+ * @param hp 現在のボスHP
+ * @param maxHp ボスの最大HP
+ * @return HP減少に合わせて短縮した出現間隔
+ */
+constexpr int MeteorSpawnIntervalForBossHp(
+    int fullHpInterval, int zeroHpInterval, int hp, int maxHp) {
+    if (maxHp <= 0) return fullHpInterval;
+    const int clampedHp = hp < 0 ? 0 : (hp > maxHp ? maxHp : hp);
+    return zeroHpInterval +
+        (fullHpInterval - zeroHpInterval) * clampedHp / maxHp;
+}
+
+/**
+ * @brief Stage 1ボス撃破演出の高速移動区間を取得する
+ * @param age 撃破演出の経過フレーム
+ * @return 0から5までの高速移動区間
+ */
+constexpr int BossDefeatMoveSegment(int age) {
+    if (age <= 0) return 0;
+    const int segment = age / BossDefeatMoveSegmentFrames;
+    return segment < BossDefeatMoveSegmentCount ? segment : BossDefeatMoveSegmentCount - 1;
+}
 
 /**
  * @brief スクロール座標をNDCの横幅へ循環させる
@@ -43,6 +92,16 @@ float WrapNdcX(float value) {
         wrapped += 2.0f;
     }
     return wrapped - 1.0f;
+}
+
+/**
+ * @brief 隕石の2D表示Y座標を取得する
+ * @param meteor 座標を取得する隕石
+ * @return 2D表示Y座標
+ */
+float MeteorSideY(const ShooterStages::Stage1::Meteor& meteor) {
+    return meteor.straightPath ? meteor.tutorialY :
+        0.55f + std::sin(meteor.travel * 0.105f + meteor.pathPhase) * 0.34f;
 }
 
 /**
@@ -59,7 +118,14 @@ constexpr int Stage1BossRushSegment(int age) {
 static_assert(Stage1BossRushSegment(0) == 0);
 static_assert(Stage1BossRushSegment(Stage1BossRushFrames - 1) == 3);
 static_assert(Stage1BossEntranceFrames == 240);
+static_assert(BossDefeatMoveSegment(0) == 0);
+static_assert(BossDefeatMoveSegment(BossDefeatImpactFrame - 1) == 5);
+static_assert(BossDefeatImpactFrame < BossDefeatFinalExplosionFrame);
+static_assert(BossDefeatFinalExplosionFrame < BossDefeatSequenceFrames);
 static_assert(MeteorSpawnMinFrames < MeteorSpawnMaxFrames);
+static_assert(MeteorSpawnIntervalForBossHp(120, 60, 480, 480) == 120);
+static_assert(MeteorSpawnIntervalForBossHp(120, 60, 240, 480) == 90);
+static_assert(MeteorSpawnIntervalForBossHp(120, 60, 0, 480) == 60);
 static_assert(MeteorStartTravel < 0.0f);
 static_assert(MeteorBaseSpeed / 0.92f > MeteorBaseSpeed / 2.05f);
 
@@ -94,10 +160,16 @@ void SideScrollingShooter::Stage1Module::TickWorld(SideScrollingShooter& shooter
     // 表示中の隕石を小さいものほど高速で移動させる
     for (auto& meteor : shooter.m_stage1.meteors) {
         if (meteor.destroyed) continue;
-        meteor.travel += MeteorBaseSpeed / meteor.scale;
-        if (meteor.travel >= MeteorEndTravel) meteor.destroyed = true;
+        meteor.travel += MeteorBaseSpeed / meteor.scale * meteor.speedScale;
+        const float sideX = 1.85f - std::fmod(meteor.travel * 0.0325f, 4.40f);
+        const float sideHalfWidth = 1.10f * meteor.scale / SideScrollingShooter::WorldXScale;
+        if ((shooter.m_tutorialMode && sideX + sideHalfWidth <= SideScrollingShooter::Side2DPlayerMinX) ||
+            (!shooter.m_tutorialMode && meteor.travel >= MeteorEndTravel)) meteor.destroyed = true;
         meteor.yaw += meteor.spin;
     }
+
+    // チュートリアルでは課題用の3個以外を追加生成しない
+    if (shooter.m_tutorialMode) return;
 
     // 共通タイマーで隕石を1個ずつまばらに投入する
     if (shooter.m_stage1.spawnFrames-- > 0) return;
@@ -112,10 +184,33 @@ void SideScrollingShooter::Stage1Module::TickWorld(SideScrollingShooter& shooter
         meteor.hp = 4 + index % 3;
         meteor.destroyed = false;
         shooter.m_stage1.nextMeteorIndex = (index + 1) % ShooterStages::Stage1::MeteorCount;
+        const int spawnMinFrames = shooter.m_bossBattle ? MeteorSpawnIntervalForBossHp(
+            MeteorSpawnMinFrames, MeteorBossSpawnMinFrames,
+            shooter.m_bossHp, shooter.m_stage->BossMaxHp()) : MeteorSpawnMinFrames;
+        const int spawnMaxFrames = shooter.m_bossBattle ? MeteorSpawnIntervalForBossHp(
+            MeteorSpawnMaxFrames, MeteorBossSpawnMaxFrames,
+            shooter.m_bossHp, shooter.m_stage->BossMaxHp()) : MeteorSpawnMaxFrames;
         shooter.m_stage1.spawnFrames = static_cast<int>(GameplayRandom::Range(
-            static_cast<float>(MeteorSpawnMinFrames), static_cast<float>(MeteorSpawnMaxFrames)));
+            static_cast<float>(spawnMinFrames), static_cast<float>(spawnMaxFrames)));
         break;
     }
+}
+
+bool SideScrollingShooter::Stage1Module::HandleBossInteractionAfterTick(
+    SideScrollingShooter& shooter, Enemy& boss) {
+    const float radius = shooter.IsRailGameplayActive() ?
+        boss.behavior->CollisionRadius3D(boss) / WorldXScale :
+        boss.behavior->CollisionRadius(boss);
+    const int meteorIndex = FindMeteor(shooter, boss.x, boss.y, boss.z, radius);
+    if (meteorIndex < 0) return false;
+
+    // 接触した隕石だけを破壊し、既存の破壊演出を再利用する
+    ShooterStages::Stage1::Meteor& meteor = shooter.m_stage1.meteors[meteorIndex];
+    SpawnMeteorDebris(shooter, meteor, 8);
+    meteor.destroyed = true;
+    shooter.SpawnExplosion(boss.x, boss.y, boss.z, true);
+    shooter.PlayHitSound();
+    return false;
 }
 
 bool SideScrollingShooter::Stage1Module::HitsHazard(const SideScrollingShooter& shooter,
@@ -274,24 +369,149 @@ int SideScrollingShooter::Stage1Module::BossIntroductionFrames() {
     return Stage1BossEntranceFrames;
 }
 
+bool SideScrollingShooter::Stage1Module::HandleBossDefeat(
+    SideScrollingShooter& shooter, Enemy& boss) {
+    if (!boss.active) return false;
+
+    // 戦闘物を消して2D固定の撃破演出へ移り、ボス本体は段階破壊用に残す
+    shooter.m_shots = {};
+    shooter.m_items = {};
+    shooter.m_bomb = {};
+    boss.hp = 0;
+    boss.collisionEnabled = false;
+    boss.age = 0;
+    for (int part = 0; part < BossPartCount; ++part) {
+        if (boss.bossPartHp[part] > 0) {
+            boss.bossPartHp[part] = (std::min)(boss.bossPartHp[part],
+                (std::max)(1, boss.bossPartMaxHp[part] * 30 / 100));
+        }
+    }
+    shooter.m_bossHp = 0;
+    shooter.m_displayBossHp = 0.0f;
+    shooter.m_score += 5000;
+    shooter.UnlockGallery(GalleryEntry::Stage1Boss);
+    shooter.m_clear = true;
+    shooter.m_clearTimer = BossDefeatSequenceFrames;
+    shooter.m_viewToggleRequested = false;
+    shooter.RequestViewMode(ViewMode::Side2D);
+
+    // 通常隕石を片付け、衝突対象となる大型隕石を画面下へ配置する
+    for (auto& meteor : shooter.m_stage1.meteors) meteor.destroyed = true;
+    ShooterStages::Stage1::Meteor& meteor = shooter.m_stage1.meteors[0];
+    const float meteorStartY = Side2DPlayerMinY -
+        MeteorSideHeight * BossDefeatMeteorScale * 0.5f / WorldYScale -
+        BossDefeatMeteorBottomMargin;
+    meteor = {(1.85f - BossDefeatMeteorX) / 0.0325f, BossDefeatMeteorScale, 0.0f, 0.012f,
+        0.0f, 99, false, meteorStartY, true, 0.0f};
+    return true;
+}
+
+void SideScrollingShooter::Stage1Module::TickBossDefeat(
+    SideScrollingShooter& shooter) {
+    if (!shooter.m_clear) return;
+
+    // 撃破演出を見やすくするため主人公機を2D移動範囲の左端へ自動退避させる
+    static_assert((Side2DPlayerMaxX - Side2DPlayerMinX) / BossDefeatPlayerRetreatSpeed <
+        BossDefeatMeteorRiseFrames);
+    shooter.m_playerX = (std::max)(Side2DPlayerMinX,
+        shooter.m_playerX - BossDefeatPlayerRetreatSpeed);
+
+    Enemy& boss = shooter.m_enemies[0];
+    if (!boss.active) return;
+
+    const int age = BossDefeatSequenceFrames - shooter.m_clearTimer;
+    ShooterStages::Stage1::Meteor& meteor = shooter.m_stage1.meteors[0];
+    const float meteorStartY = Side2DPlayerMinY -
+        MeteorSideHeight * BossDefeatMeteorScale * 0.5f / WorldYScale -
+        BossDefeatMeteorBottomMargin;
+    const float meteorRise = SmoothStep(Math::Clamp01(
+        static_cast<float>(age) / BossDefeatMeteorRiseFrames));
+    meteor.tutorialY = Math::Lerp(meteorStartY, BossDefeatMeteorY, meteorRise);
+    meteor.yaw += meteor.spin;
+    constexpr float PathX[] = {1.80f, 0.58f, 1.58f, 0.65f, 1.48f, 0.62f, BossDefeatImpactX};
+    constexpr float PathY[] = {0.00f, 0.88f, -0.86f, -0.70f, 0.82f, 0.18f, BossDefeatMeteorY};
+    static_assert(PathX[0] > 0.0f && PathX[1] > 0.0f && PathX[2] > 0.0f &&
+        PathX[3] > 0.0f && PathX[4] > 0.0f && PathX[5] > 0.0f);
+
+    // 画面右半分を上下に暴走し、最後の一区間だけ左側の隕石へ突入する
+    if (age < BossDefeatImpactFrame) {
+        const int segment = BossDefeatMoveSegment(age);
+        const float progress = SmoothStep(static_cast<float>(
+            age - segment * BossDefeatMoveSegmentFrames) /
+            static_cast<float>(BossDefeatMoveSegmentFrames));
+        boss.x = Math::Lerp(PathX[segment], PathX[segment + 1], progress);
+        boss.y = Math::Lerp(PathY[segment], PathY[segment + 1], progress);
+    } else {
+        // 衝突後は小さく振動しながら隕石へ食い込んだ位置へ留める
+        const float decay = 1.0f - Math::Clamp01(static_cast<float>(
+            age - BossDefeatImpactFrame) / 240.0f);
+        boss.x = BossDefeatImpactX + std::sin(static_cast<float>(age) * 0.47f) * 0.018f * decay;
+        boss.y = BossDefeatMeteorY + std::sin(static_cast<float>(age) * 0.31f) * 0.025f * decay;
+    }
+    boss.z = ToRailZFromSideX(boss.x);
+    ++boss.age;
+
+    // 衝突の瞬間に隕石表面と機体へ爆発を発生させる
+    if (age == BossDefeatImpactFrame) {
+        shooter.SpawnExplosion(boss.x - 0.20f, boss.y, boss.z, true);
+        SpawnMeteorDebris(shooter, shooter.m_stage1.meteors[0], 6);
+        shooter.PlayHitSound();
+    }
+
+    // 外装を一定間隔で剥がし、機体全体が一度に消えないよう段階破壊する
+    constexpr BossPart BreakOrder[] = {
+        BossLeftWing, BossRightWing, BossLeftEngine, BossRightEngine, BossNose
+    };
+    constexpr float ExplosionX[] = {-0.04f, 0.04f, 0.10f, 0.10f, -0.22f};
+    constexpr float ExplosionY[] = {0.20f, -0.18f, 0.28f, -0.28f, 0.04f};
+    for (int index = 0; index < 5; ++index) {
+        const int breakFrame = BossDefeatImpactFrame +
+            BossDefeatBreakIntervalFrames * (index + 1);
+        if (age != breakFrame) continue;
+        const BossPart part = BreakOrder[index];
+        if (boss.bossPartHp[part] > 0) shooter.SpawnEnemyDebris(boss, part);
+        boss.bossPartHp[part] = 0;
+        shooter.SpawnExplosion(
+            boss.x + ExplosionX[index], boss.y + ExplosionY[index], boss.z, true);
+        shooter.PlayHitSound();
+    }
+
+    // 最後に残った中央船体を分解し、余韻を残して次ステージへ進む
+    if (age == BossDefeatFinalExplosionFrame) {
+        shooter.SpawnExplosion(boss.x, boss.y, boss.z, true);
+        shooter.SpawnEnemyDebris(boss);
+        boss.active = false;
+        shooter.PlayHitSound();
+    }
+}
+
 int SideScrollingShooter::Stage1Module::FindMeteor(const SideScrollingShooter& shooter,
     float x, float y, float z, float radius) {
     for (int i = 0; i < ShooterStages::Stage1::MeteorCount; ++i) {
         const ShooterStages::Stage1::Meteor& meteor = shooter.m_stage1.meteors[i];
         if (meteor.destroyed) continue;
         const float sideX = 1.85f - std::fmod(meteor.travel * 0.0325f, 4.40f);
-        const float sideY = 0.55f + std::sin(meteor.travel * 0.105f + meteor.pathPhase) * 0.34f;
+        const float sideY = MeteorSideY(meteor);
         if (shooter.IsRailGameplayActive()) {
             const float railX = std::sin(meteor.travel * 0.090f + meteor.pathPhase) * 7.0f;
             const float railY = 0.80f + std::sin(
                 meteor.travel * 0.135f + meteor.pathPhase * 1.37f) * 2.0f;
             if (Hit3D(ToWorldX(x), ToWorldY(y), z, radius * WorldXScale,
-                railX, railY, 72.0f - meteor.travel, 2.70f * meteor.scale)) {
+                railX, railY, 72.0f - meteor.travel,
+                MeteorRailDiameter * 0.5f * meteor.scale)) {
                 return i;
             }
             continue;
         }
-        if (Hit(x, y, radius, sideX, sideY, 0.42f * meteor.scale)) return i;
+
+        // 横視点の扁平な見た目と同じ楕円へ判定対象の半径を加える
+        const float hitWidth = MeteorSideWidth * 0.5f * meteor.scale +
+            radius * WorldXScale;
+        const float hitHeight = MeteorSideHeight * 0.5f * meteor.scale +
+            radius * WorldYScale;
+        if (SideScrollingShooterShared::HitsEllipsoid(
+            ToWorldX(x - sideX), ToWorldY(y - sideY), 0.0f,
+            hitWidth, hitHeight, 1.0f)) return i;
     }
     return -1;
 }
@@ -299,7 +519,7 @@ int SideScrollingShooter::Stage1Module::FindMeteor(const SideScrollingShooter& s
 void SideScrollingShooter::Stage1Module::SpawnMeteorDebris(
     SideScrollingShooter& shooter, const ShooterStages::Stage1::Meteor& meteor, int count) {
     const float sideX = 1.85f - std::fmod(meteor.travel * 0.0325f, 4.40f);
-    const float sideY = 0.55f + std::sin(meteor.travel * 0.105f + meteor.pathPhase) * 0.34f;
+    const float sideY = MeteorSideY(meteor);
     const float railX = std::sin(meteor.travel * 0.090f + meteor.pathPhase) * 7.0f;
     const float railY = 0.80f + std::sin(
         meteor.travel * 0.135f + meteor.pathPhase * 1.37f) * 2.0f;
@@ -327,16 +547,16 @@ void SideScrollingShooter::Stage1Module::DrawMeteors(
         const ShooterStages::Stage1::Meteor& meteor = shooter.m_stage1.meteors[i];
         if (meteor.destroyed) continue;
         const float sideX = 1.85f - std::fmod(meteor.travel * 0.0325f, 4.40f);
-        const float sideY = 0.55f + std::sin(meteor.travel * 0.105f + meteor.pathPhase) * 0.34f;
+        const float sideY = MeteorSideY(meteor);
         const float railX = std::sin(meteor.travel * 0.090f + meteor.pathPhase) * 7.0f;
         const float railY = 0.80f + std::sin(
             meteor.travel * 0.135f + meteor.pathPhase * 1.37f) * 2.0f;
         const float x = Math::Lerp(ToWorldX(sideX), railX, railWeight);
         const float y = Math::Lerp(ToWorldY(sideY), railY, railWeight);
         const float z = Math::Lerp(SidePlaneZ + 1.2f, 72.0f - meteor.travel, railWeight);
-        const float width = Math::Lerp(2.20f, 5.30f, railWeight) * meteor.scale;
-        const float height = Math::Lerp(2.55f, 5.30f, railWeight) * meteor.scale;
-        const float depth = Math::Lerp(1.45f, 5.30f, railWeight) * meteor.scale;
+        const float width = Math::Lerp(MeteorSideWidth, MeteorRailDiameter, railWeight) * meteor.scale;
+        const float height = Math::Lerp(MeteorSideHeight, MeteorRailDiameter, railWeight) * meteor.scale;
+        const float depth = Math::Lerp(MeteorSideDepth, MeteorRailDiameter, railWeight) * meteor.scale;
 
         // 本体とクレーターを同じ回転角で動かし、視点遷移中も形状を維持する
         DrawModelPrimitive(renderer, camera, 5,
