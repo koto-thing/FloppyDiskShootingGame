@@ -37,6 +37,10 @@ constexpr float Stage4CannonMuzzleDistance = 4.47f;
 constexpr float Stage4CannonballSideRadius = 0.075f;
 constexpr float Stage4GiantCannonballSideRadius = 0.150f;
 constexpr float Stage4GiantExplosionRadius = 0.65f;
+constexpr float Stage4RomanceCannonballSpeed = 1.00f;
+constexpr float Stage4RomanceCannonballSideRadius = 0.320f;
+constexpr float Stage4RomanceExplosionRadius = 1.25f;
+constexpr int Stage4RomanceCannonRecoilFrames = 158;
 constexpr float Stage4RailGroundGameY = -0.829545f;
 constexpr float Stage4BodyHitRadius = 3.35f;
 constexpr int Stage4MainCannonRecoilFrames = 30;
@@ -607,7 +611,8 @@ void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
 
         if (part == BossNose) {
             SpawnMainCannonball(shooter, boss);
-            boss.recoilAge = Stage4MainCannonRecoilFrames;
+            boss.recoilAge = shooter.m_stage4.currentWeapon == Stage4Weapon::RomanceCannon ?
+                Stage4RomanceCannonRecoilFrames : Stage4MainCannonRecoilFrames;
             continue;
         }
 
@@ -856,10 +861,27 @@ void SideScrollingShooter::Stage4Module::SpawnMainCannonball(
         ChooseNextSiegeMortarAim(shooter);
         return;
     }
+    if (logicalWeapon == Stage4Weapon::RomanceCannon) {
+        SpawnRomanceCannonShot(shooter, muzzle, weaponPose);
+        return;
+    }
 
     SpawnCannonballShot(shooter, muzzle,
         Phase1CannonVelocity(phase1Direction, shooter.IsRailGameplayActive()),
         Stage4CannonballSideRadius, 0.55f, false, true, 2);
+}
+
+void SideScrollingShooter::Stage4Module::SpawnRomanceCannonShot(
+    SideScrollingShooter& shooter, const Vector3& muzzle,
+    const Stage4MainWeaponPose& pose) {
+    Vector3 velocity = SiegeMortarVelocity(ModelYaw(shooter), pose.localYaw,
+        pose.barrelPitch, Stage4RomanceCannonballSpeed);
+    if (!shooter.IsRailGameplayActive()) velocity.z = 0.0f;
+
+    // 画面縦幅を覆う超巨大爆発として扱う
+    SpawnCannonballShot(shooter, muzzle, velocity,
+        Stage4RomanceCannonballSideRadius, Stage4RomanceExplosionRadius,
+        false, true, 4);
 }
 
 void SideScrollingShooter::Stage4Module::SpawnSiegeMortarBarrage(

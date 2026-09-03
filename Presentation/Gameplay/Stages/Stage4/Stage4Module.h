@@ -210,6 +210,17 @@ private:
         const Vector3& muzzle, const Stage4MainWeaponPose& pose);
 
     /**
+     * @brief Phase3主砲から超特大砲丸を生成する
+     * @param shooter 弾を生成するゲーム本体
+     * @param muzzle 砲口ワールド座標
+     * @param pose 発射時の主砲姿勢
+     * @return なし
+     */
+    static void SpawnRomanceCannonShot(
+        SideScrollingShooter& shooter, const Vector3& muzzle,
+        const Stage4MainWeaponPose& pose);
+
+    /**
      * @brief 次回射撃に向けた迫撃砲照準角をランダムに決める
      * @param shooter 更新するゲーム本体
      * @return なし
