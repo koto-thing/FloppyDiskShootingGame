@@ -22,6 +22,10 @@ constexpr float PowerAfterRestart(float power) {
     return power > 1.0f ? power - 1.0f : 0.0f;
 }
 
+constexpr float PowerAfterDebugIncrease(float power, float maxPower) {
+    return power + 1.0f < maxPower ? power + 1.0f : maxPower;
+}
+
 /**
  * @brief 敵出現数と撃破数からボムボーナスの獲得条件を判定する
  * @param defeatCount 敵撃破数
@@ -32,11 +36,32 @@ constexpr bool EarnsChapterBombBonus(int defeatCount, int spawnCount) {
     return spawnCount > 0 && defeatCount * 10 >= spawnCount * 9;
 }
 
+constexpr int ScaleHpByPercent(int hp, int percent) {
+    return hp <= 0 ? 0 : (std::max)(1, (hp * percent + 50) / 100);
+}
+
+constexpr int ChapterProgressPercentForFrame(int frame, int startFrame, int endFrame, bool bossBattle) {
+    if (bossBattle) return 100;
+    const int duration = endFrame > startFrame ? endFrame - startFrame : 1;
+    const int elapsed = frame <= startFrame ? 0 : (frame >= endFrame ? duration : frame - startFrame);
+    return elapsed * 100 / duration;
+}
+
 static_assert(PowerAfterRestart(3.25f) == 2.25f);
 static_assert(PowerAfterRestart(0.75f) == 0.0f);
+static_assert(PowerAfterDebugIncrease(2.25f, 4.0f) == 3.25f);
+static_assert(PowerAfterDebugIncrease(3.50f, 4.0f) == 4.0f);
 static_assert(EarnsChapterBombBonus(9, 10));
 static_assert(!EarnsChapterBombBonus(8, 9));
 static_assert(!EarnsChapterBombBonus(0, 0));
+static_assert(ScaleHpByPercent(10, 70) == 7);
+static_assert(ScaleHpByPercent(10, 100) == 10);
+static_assert(ScaleHpByPercent(10, 150) == 15);
+static_assert(ScaleHpByPercent(1, 70) == 1);
+static_assert(ChapterProgressPercentForFrame(0, 0, 1000, false) == 0);
+static_assert(ChapterProgressPercentForFrame(500, 0, 1000, false) == 50);
+static_assert(ChapterProgressPercentForFrame(1000, 0, 1000, false) == 100);
+static_assert(ChapterProgressPercentForFrame(1200, 1000, 2000, true) == 100);
 
 /** @brief 無線風に加工した自機撃破音声を取得する @return 44100Hz PCMデータ */
 const std::vector<std::int16_t>& MomijiDeathVoice() {
@@ -47,6 +72,42 @@ const std::vector<std::int16_t>& MomijiDeathVoice() {
 
 #include "SideScrollingShooterEnemies.h"
 #include "Stages/Common/StageDefinition.h"
+
+/**
+ * @brief 難易度に応じたHPへ変換する
+ * @param hp Normal基準のHP
+ * @param difficulty 使用する難易度
+ * @return 難易度倍率を適用したHP
+ */
+constexpr int SideScrollingShooter::ScaleHpForDifficulty(int hp, DifficultyType difficulty) {
+    if (difficulty == Easy) return ScaleHpByPercent(hp, 70);
+    if (difficulty == Hard) return ScaleHpByPercent(hp, 150);
+    return ScaleHpByPercent(hp, 100);
+}
+
+/** @brief 敵機HPへ難易度倍率を適用する */
+void SideScrollingShooter::ApplyDifficultyToEnemyHp(Enemy& enemy) const {
+    enemy.hp = ScaleHpForDifficulty(enemy.hp, m_difficulty);
+    enemy.maxHp = enemy.hp;
+}
+
+/** @brief ボス本体と部位HPへ難易度倍率を適用する */
+void SideScrollingShooter::ApplyDifficultyToBossHp(Enemy& boss) const {
+    boss.hp = ScaleHpForDifficulty(boss.hp, m_difficulty);
+    boss.maxHp = boss.hp;
+    for (int& hp : boss.bossPartHp) {
+        hp = ScaleHpForDifficulty(hp, m_difficulty);
+    }
+    boss.bossPartMaxHp = boss.bossPartHp;
+}
+
+/** @brief Stage 5専用弱点HPへ難易度倍率を適用する */
+void SideScrollingShooter::ApplyDifficultyToStage5WeakpointHp() {
+    for (auto& weakpoint : m_stage5.tayamaWeakpoints) {
+        weakpoint.hp = ScaleHpForDifficulty(weakpoint.hp, m_difficulty);
+        weakpoint.maxHp = ScaleHpForDifficulty(weakpoint.maxHp, m_difficulty);
+    }
+}
 
 /**
  * @brief 指定番号のステージ定義を取得する
@@ -309,6 +370,11 @@ void SideScrollingShooter::ProcessInput() {
     if (Input::GetKeyDown(KeyCode::Alpha1)) StartDebugCheckpoint(m_stageNumber, 1, false);
     if (Input::GetKeyDown(KeyCode::Alpha2)) StartDebugCheckpoint(m_stageNumber, 2, false);
     if (Input::GetKeyDown(KeyCode::Alpha3)) StartDebugCheckpoint(m_stageNumber, 3, false);
+    if (Input::GetKeyDown(KeyCode::P)) {
+        const int previousPowerLevel = PowerLevel();
+        m_power = PowerAfterDebugIncrease(m_power, MaxPower);
+        if (PowerLevel() > previousPowerLevel) m_powerUpTimer = 120;
+    }
     if (Input::GetKeyDown(KeyCode::B) && !StageDispatch::HandleDebugBossInput(*this)) {
         StartDebugCheckpoint(m_stageNumber, 3, true);
     }
@@ -753,7 +819,7 @@ void SideScrollingShooter::StartBossBattle(bool playWarningSound) {
     Enemy& boss = m_enemies[0];
     m_stage->ConfigureBoss(boss, IsRailGameplayActive());
     m_stage->ConfigureBossPartHp(boss);
-    boss.bossPartMaxHp = boss.bossPartHp;
+    ApplyDifficultyToBossHp(boss);
     m_bossHp = boss.hp;
     m_displayBossHp = static_cast<float>(m_bossHp);
     boss.bossPhase = BossNormalPhase1;
@@ -1188,6 +1254,19 @@ float SideScrollingShooter::PlayerRailMinY() const {
  */
 int SideScrollingShooter::PowerLevel() const {
     return static_cast<int>(m_power);
+}
+
+/**
+ * @brief 現在チャプター内の到達率を取得する
+ * @return 0から100までの到達率
+ */
+int SideScrollingShooter::ChapterProgressPercent() const {
+    if (m_stage == nullptr) return 0;
+
+    // 現在チャプターの開始/終了フレームから進行率を求める
+    const int startFrame = m_stage->ChapterEndFrame(m_chapterNumber - 1);
+    const int endFrame = m_stage->ChapterEndFrame(m_chapterNumber);
+    return ChapterProgressPercentForFrame(m_frame, startFrame, endFrame, m_bossBattle);
 }
 
 /**

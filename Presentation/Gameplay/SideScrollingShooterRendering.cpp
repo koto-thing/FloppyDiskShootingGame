@@ -995,7 +995,7 @@ void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
     constexpr float BossBarFill[4] = { 0.95f, 0.15f, 0.45f, 1.0f };
     constexpr float BossBarDivider[4] = { 1.00f, 0.82f, 0.30f, 0.95f };
     constexpr float BossBarWidth = 0.62f;
-    const int bossMaxHp = m_stage->BossMaxHp();
+    const int bossMaxHp = m_enemies[0].maxHp > 0 ? m_enemies[0].maxHp : m_stage->BossMaxHp();
     const float hpRate = bossMaxHp > 0 ? Math::Clamp01(m_displayBossHp / bossMaxHp) : 0.0f;
     DrawShape(renderer, 0.0f, 0.76f, BossBarWidth, 0.025f, BossBarBack);
     DrawShape(renderer, BossBarWidth * (1.0f - hpRate), 0.76f,

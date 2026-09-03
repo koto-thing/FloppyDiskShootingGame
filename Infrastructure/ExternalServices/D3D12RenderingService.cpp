@@ -62,13 +62,13 @@ float4 PSPlayerShot(VS_OUTPUT input) : SV_TARGET
     }
     else if (u_shotType < 2.5f)
     {
-        // SPREAD: 中心核と発光リングを持つ赤紫色の小型光弾
+        // SPREAD: 中心核と発光リングを持つ黄色の小型光弾
         float distanceFromCenter = length(uv);
         float core = 1.0f - smoothstep(0.05f, 0.34f, distanceFromCenter);
         float body = 1.0f - smoothstep(0.30f, 0.78f, distanceFromCenter);
         float ring = 1.0f - smoothstep(0.035f, 0.13f, abs(distanceFromCenter - 0.58f));
         alpha = saturate(body + ring * 0.72f);
-        color = lerp(float3(1.0f, 0.08f, 0.32f), float3(1.0f, 0.82f, 1.0f),
+        color = lerp(float3(1.0f, 0.78f, 0.02f), float3(1.0f, 1.0f, 0.72f),
             saturate(core + ring * 0.35f)) * pulse;
     }
     else if (u_shotType < 3.5f)

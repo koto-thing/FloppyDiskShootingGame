@@ -39,11 +39,11 @@ public:
     /** @brief 機体タイプ別の自機弾パラメータ */
     inline static constexpr std::array<PlayerShotParameters, 3> PlayerShotConfigs {{
         // HOMING
-        { 10, 2, 0.038f, 5.0f, 0.08f, 0.20f, 0.025f, 1, 0.075f, false },
+        { 10, 2, 0.038f, 5.0f, 0.08f, 0.20f, 0.025f, 1, 0.100f, false },
         // PIERCING
-        { 14, 2, 0.052f, 0.0f, 0.10f, 0.20f, 0.032f, 2, 0.000f, true },
+        { 14, 2, 0.052f, 0.0f, 0.12f, 0.09f, 0.032f, 1, 0.000f, true },
         // SPREAD
-        { 12, 5, 0.043f, 24.0f, 0.17f, 0.00f, 0.022f, 1, 0.000f, false },
+        { 12, 7, 0.043f, 65.0f, 0.17f, 0.00f, 0.022f, 1, 0.000f, false },
     }};
 
     /** @brief 全機体共通の通常弾パラメータ */
@@ -325,7 +325,7 @@ private:
         bool bombAwarded = false;
     };
 
-    static constexpr int ShotCapacity = 64;
+    static constexpr int ShotCapacity = 128;
     static constexpr int EnemyCapacity = 12;
     static constexpr int ItemCapacity = 48;
     static constexpr int ExplosionCapacity = ShotCapacity + 32;
@@ -512,6 +512,19 @@ private:
     void TickChapterExitEnemies();
     /** @brief 現在のチャプター戦績を確定して表示を開始する */
     void FinishChapter();
+    /**
+     * @brief 難易度に応じたHPへ変換する
+     * @param hp Normal基準のHP
+     * @param difficulty 使用する難易度
+     * @return 難易度倍率を適用したHP
+     */
+    static constexpr int ScaleHpForDifficulty(int hp, DifficultyType difficulty);
+    /** @brief 敵機HPへ難易度倍率を適用する */
+    void ApplyDifficultyToEnemyHp(Enemy& enemy) const;
+    /** @brief ボス本体と部位HPへ難易度倍率を適用する */
+    void ApplyDifficultyToBossHp(Enemy& boss) const;
+    /** @brief Stage 5専用弱点HPへ難易度倍率を適用する */
+    void ApplyDifficultyToStage5WeakpointHp();
     void SpawnEnemy(int enemyType, float sideX, float railX, float y, float railZ);
     /**
      * @brief 未解放の展示だけを永続データへ追加する
@@ -667,6 +680,11 @@ private:
     float PlayerRailMinY() const;
     /** @brief 現在のPowerから弾強化段階を取得する */
     int PowerLevel() const;
+    /**
+     * @brief 現在チャプター内の到達率を取得する
+     * @return 0から100までの到達率
+     */
+    int ChapterProgressPercent() const;
     /** @brief チャプターの総合スコアを算出する */
     static int CalculateChapterTotalScore(const ChapterResult& result);
     float RailBlend() const;

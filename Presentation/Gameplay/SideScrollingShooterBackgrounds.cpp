@@ -102,8 +102,7 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     char powerStatus[32];
     char progressStatus[32];
     char bombStatus[16];
-    const int progress = (std::min)(100,
-        static_cast<int>(m_scroll / m_stage->BossStartDistance() * 100.0f));
+    const int progress = ChapterProgressPercent();
     std::snprintf(stageStatus, sizeof(stageStatus), "STAGE %d/5  CHAPTER %d/3", m_stageNumber, m_chapterNumber);
     std::snprintf(scoreStatus, sizeof(scoreStatus), "SCORE %06d", m_score);
     std::snprintf(powerStatus, sizeof(powerStatus), "POWER %.2f / %.2f", m_power, MaxPower);
@@ -235,8 +234,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     char powerStatus[32];
     char progressStatus[32];
     char bombStatus[16];
-    const int progress = (std::min)(100,
-        static_cast<int>(m_scroll / m_stage->BossStartDistance() * 100.0f));
+    const int progress = ChapterProgressPercent();
     std::snprintf(stageStatus, sizeof(stageStatus), "STAGE %d/5  CHAPTER %d/3", m_stageNumber, m_chapterNumber);
     std::snprintf(scoreStatus, sizeof(scoreStatus), "SCORE %06d", m_score);
     std::snprintf(powerStatus, sizeof(powerStatus), "POWER %.2f / %.2f", m_power, MaxPower);
