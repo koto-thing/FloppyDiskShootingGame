@@ -16,18 +16,18 @@ public:
     bool TrySelectEnemySpawn(int frame, int spawnIndex,
         EnemySpawnRule& spawn, int& chapterNumber) const override {
         static constexpr EnemySpawnRule Chapter1[] = {
-            {ArmoredEnemy, 15, 38, 1.10f, -0.82f, -0.68f, 60.0f},
-            {CircleShooterEnemy, 70, 160, 1.14f, -0.28f, 0.86f, 50.0f}
+            {ArmoredEnemy, 20, 48, 1.10f, -0.82f, -0.68f, 60.0f},
+            {CircleShooterEnemy, 90, 210, 1.14f, -0.28f, 0.86f, 50.0f}
         };
         static constexpr EnemySpawnRule Chapter2[] = {
-            {ArmoredEnemy, 10, 36, 1.12f, 0.28f, 0.18f, 60.0f},
-            {StraightShooterEnemy, 48, 96, 1.10f, 0.82f, -0.88f, 34.0f},
-            {HeavyEnemy, 105, 150, 1.16f, -0.40f, 0.54f, 60.0f}
+            {ArmoredEnemy, 10, 46, 1.12f, 0.28f, 0.18f, 60.0f},
+            {StraightShooterEnemy, 60, 125, 1.10f, 0.82f, -0.88f, 34.0f},
+            {HeavyEnemy, 130, 190, 1.16f, -0.40f, 0.54f, 60.0f}
         };
         static constexpr EnemySpawnRule Chapter3[] = {
-            {CircleShooterEnemy, 10, 86, 1.14f, -0.82f, 0.86f, 50.0f},
-            {ArmoredEnemy, 42, 82, 1.12f, 0.82f, -0.18f, 60.0f},
-            {StraightShooterEnemy, 90, 108, 1.10f, 0.28f, -0.88f, 40.0f}
+            {CircleShooterEnemy, 10, 110, 1.14f, -0.82f, 0.86f, 50.0f},
+            {ArmoredEnemy, 50, 105, 1.12f, 0.82f, -0.18f, 60.0f},
+            {StraightShooterEnemy, 120, 135, 1.10f, 0.28f, -0.88f, 40.0f}
         };
         constexpr Chapter Chapters[] = {
             MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)

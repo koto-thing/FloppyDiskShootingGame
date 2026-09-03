@@ -217,11 +217,7 @@ public:
      * @return ステージ1ボスの攻撃フェーズ
      */
     int BossPhaseForHp(int hp, int maxHp) const override {
-        (void)maxHp;
-        if (hp > BossPhaseHp[1]) return BossNormalPhase1;
-        if (hp > BossPhaseHp[2]) return BossSpecialPhase1;
-        if (hp > BossPhaseHp[3]) return BossNormalPhase2;
-        return BossSpecialPhase2;
+        return SideScrollingShooter::BossPhaseForHp(hp, maxHp);
     }
 
     int BossBulletCount(bool railMode) const override {

@@ -464,6 +464,7 @@ void SideScrollingShooter::Stage5Module::Reset(SideScrollingShooter& shooter) {
         {TayamaWeakpoint::RightLiftEngine, 360, 360, false, false, 0},
         {TayamaWeakpoint::CommandCore, 900, 900, false, false, 0}
     }};
+    shooter.ApplyDifficultyToStage5WeakpointHp();
 }
 
 /**
@@ -558,7 +559,7 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
         Enemy& eastsource = shooter.m_enemies[0];
         shooter.m_stage->ConfigureBoss(eastsource, true);
         shooter.m_stage->ConfigureBossPartHp(eastsource);
-        eastsource.bossPartMaxHp = eastsource.bossPartHp;
+        shooter.ApplyDifficultyToBossHp(eastsource);
         eastsource.x = 1.45f;
         eastsource.y = 0.30f;
         eastsource.z = 66.0f;
@@ -646,7 +647,7 @@ void SideScrollingShooter::Stage5Module::StartEastsourceBattle(SideScrollingShoo
         eastsource = {};
         shooter.m_stage->ConfigureBoss(eastsource, true);
         shooter.m_stage->ConfigureBossPartHp(eastsource);
-        eastsource.bossPartMaxHp = eastsource.bossPartHp;
+        shooter.ApplyDifficultyToBossHp(eastsource);
     }
     eastsource.collisionEnabled = true;
     eastsource.age = 0;

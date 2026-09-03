@@ -5,7 +5,7 @@
 /** @brief HARD用のステージ1敵出現シートを定義する */
 class SideScrollingShooter::Stage1EnemySheetHard final : public SideScrollingShooter::Stage1EnemySheet {
 public:
-    static constexpr int ChapterLength = 500;
+    static constexpr int ChapterLength = 1000;
 
     /**
      * @brief 1チャプターの長さを取得する
@@ -25,27 +25,34 @@ public:
      */
     bool TrySelectEnemySpawn(int frame, int spawnIndex,
         EnemySpawnRule& spawn, int& chapterNumber) const override {
-        // チャプター1は通常機と狙撃機を高頻度で出現させる
+        // チャプター1は通常機と直進狙撃機を出現させる
         static constexpr EnemySpawnRule Chapter1[] = {
-            {BasicEnemy, 20, 48, 1.08f, -0.72f, -0.54f, 60.0f},
-            {StraightShooterEnemy, 100, 210, 1.10f, -0.18f, 0.86f, 48.0f}
+            {BasicEnemy, 25, 70, 2.6f, -0.72f, -0.54f, 60.0f},
+            {StraightShooterEnemy, 160, 360, 2.6f, -0.18f, 0.86f, 48.0f}
         };
-        // チャプター2は3種類の敵を高頻度で出現させる
+        // チャプター2は通常機、円形弾幕砲台、重装機を出現させる
         static constexpr EnemySpawnRule Chapter2[] = {
-            {BasicEnemy, 10, 42, 1.12f, 0.42f, -0.12f, 60.0f},
-            {CircleShooterEnemy, 50, 120, 1.14f, 0.35f, -0.32f, 54.0f},
-            {HeavyEnemy, 110, 160, 1.16f, 0.70f, 0.58f, 60.0f}
+            {BasicEnemy, 25, 60, 2.6f, 0.42f, -0.12f, 60.0f},
+            {CircleShooterEnemy, 80, 210, 2.6f, 0.35f, -0.32f, 54.0f},
+            {HeavyEnemy, 50, 200, 2.6f, 0.70f, 0.58f, 60.0f}
         };
-        // チャプター3は全種類を高頻度で出現させる
+        // チャプター3は通常機、直進狙撃機、円形弾幕砲台、重装機を出現させる
         static constexpr EnemySpawnRule Chapter3[] = {
-            {StraightShooterEnemy, 10, 100, 1.10f, -0.78f, 0.86f, 48.0f},
-            {CircleShooterEnemy, 40, 110, 1.14f, 0.78f, -0.86f, 36.0f},
-            {HeavyEnemy, 90, 130, 1.16f, 0.22f, 0.30f, 60.0f},
-            {ArmoredEnemy, 160, 240, 1.16f, -0.36f, -0.30f, 60.0f}
+            {BasicEnemy, 25, 50, 2.6f, 0.42f, -0.12f, 60.0f},
+            {StraightShooterEnemy, 20, 140, 2.6f, -0.78f, 0.86f, 48.0f},
+            {CircleShooterEnemy, 100, 200, 2.6f, 0.78f, -0.86f, 36.0f},
+            {HeavyEnemy, 50, 150, 2.6f, 0.22f, 0.30f, 60.0f}
         };
         constexpr Chapter Chapters[] = {
             MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)
         };
-        return TrySelectByChapters(Chapters, 3, frame, spawnIndex, spawn, chapterNumber);
+        const bool selected = TrySelectByChapters(Chapters, 3, frame, spawnIndex, spawn, chapterNumber);
+        // YとZの生成範囲をランダム化
+        if (selected) {
+            spawn.y = GameplayRandom::Range(-0.86f, 0.86f);
+            spawn.railX = GameplayRandom::Range(-1.0f, 1.0f);
+        }
+
+        return selected;
     }
 };

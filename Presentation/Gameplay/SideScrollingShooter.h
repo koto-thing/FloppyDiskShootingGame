@@ -512,6 +512,19 @@ private:
     void TickChapterExitEnemies();
     /** @brief 現在のチャプター戦績を確定して表示を開始する */
     void FinishChapter();
+    /**
+     * @brief 難易度に応じたHPへ変換する
+     * @param hp Normal基準のHP
+     * @param difficulty 使用する難易度
+     * @return 難易度倍率を適用したHP
+     */
+    static constexpr int ScaleHpForDifficulty(int hp, DifficultyType difficulty);
+    /** @brief 敵機HPへ難易度倍率を適用する */
+    void ApplyDifficultyToEnemyHp(Enemy& enemy) const;
+    /** @brief ボス本体と部位HPへ難易度倍率を適用する */
+    void ApplyDifficultyToBossHp(Enemy& boss) const;
+    /** @brief Stage 5専用弱点HPへ難易度倍率を適用する */
+    void ApplyDifficultyToStage5WeakpointHp();
     void SpawnEnemy(int enemyType, float sideX, float railX, float y, float railZ);
     /**
      * @brief 未解放の展示だけを永続データへ追加する

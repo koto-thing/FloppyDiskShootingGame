@@ -714,12 +714,13 @@ void SideScrollingShooter::Stage5Module::DrawStage5Hud(const SideScrollingShoote
     constexpr float BarWidth = 0.62f;
 
     if (shooter.m_stage5.phase == Stage5Phase::EastsourceBattle) {
-        const float hpRate = Math::Clamp01(shooter.m_displayBossHp / static_cast<float>(EastsourceMaxHp));
+        const int maxHp = shooter.m_enemies[0].maxHp > 0 ? shooter.m_enemies[0].maxHp : EastsourceMaxHp;
+        const float hpRate = Math::Clamp01(shooter.m_displayBossHp / static_cast<float>(maxHp));
         shooter.DrawShape(renderer, 0.0f, 0.76f, BarWidth, 0.025f, Back);
         shooter.DrawShape(renderer, BarWidth * (1.0f - hpRate), 0.76f,
             BarWidth * hpRate, 0.018f, Fill);
         shooter.DrawBossPhaseDividers(
-            renderer, 0.755f, BarWidth, EastsourceMaxHp, Divider);
+            renderer, 0.755f, BarWidth, maxHp, Divider);
         renderer.DrawText("EASTSOURCE", TextAlign::Center, 0.017f,
             {1.0f, 0.42f, 0.55f, 1.0f}, {0.0f, 0.86f});
         constexpr const char* Labels[] = {"PRECISION", "CROSSFIRE", "PURSUIT", "LAST CONTRACT"};

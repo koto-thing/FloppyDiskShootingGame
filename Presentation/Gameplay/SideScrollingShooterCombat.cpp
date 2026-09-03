@@ -481,6 +481,7 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
         auto ConfigureLinked = [&](Enemy& enemy, int role, float fixedY, float linkRailX) {
             enemy.active = true;
             m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
+            ApplyDifficultyToEnemyHp(enemy);
             enemy.railAnchorX = linkRailX;
             enemy.baseX = IsRailGameplayActive() ? linkRailX : (std::max)(sideX, SideEnemyEntryX);
             enemy.x = enemy.baseX;
@@ -500,6 +501,7 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
         if (enemy.active) continue;
         enemy.active = true;
         m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
+        ApplyDifficultyToEnemyHp(enemy);
 
         // 初めて画面へ出現した通常敵を永続ギャラリーへ登録する
         switch (enemy.type) {

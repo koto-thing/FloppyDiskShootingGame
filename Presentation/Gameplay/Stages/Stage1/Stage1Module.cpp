@@ -184,12 +184,14 @@ void SideScrollingShooter::Stage1Module::TickWorld(SideScrollingShooter& shooter
         meteor.hp = 4 + index % 3;
         meteor.destroyed = false;
         shooter.m_stage1.nextMeteorIndex = (index + 1) % ShooterStages::Stage1::MeteorCount;
+        const int bossMaxHp = shooter.m_enemies[0].maxHp > 0 ?
+            shooter.m_enemies[0].maxHp : shooter.m_stage->BossMaxHp();
         const int spawnMinFrames = shooter.m_bossBattle ? MeteorSpawnIntervalForBossHp(
             MeteorSpawnMinFrames, MeteorBossSpawnMinFrames,
-            shooter.m_bossHp, shooter.m_stage->BossMaxHp()) : MeteorSpawnMinFrames;
+            shooter.m_bossHp, bossMaxHp) : MeteorSpawnMinFrames;
         const int spawnMaxFrames = shooter.m_bossBattle ? MeteorSpawnIntervalForBossHp(
             MeteorSpawnMaxFrames, MeteorBossSpawnMaxFrames,
-            shooter.m_bossHp, shooter.m_stage->BossMaxHp()) : MeteorSpawnMaxFrames;
+            shooter.m_bossHp, bossMaxHp) : MeteorSpawnMaxFrames;
         shooter.m_stage1.spawnFrames = static_cast<int>(GameplayRandom::Range(
             static_cast<float>(spawnMinFrames), static_cast<float>(spawnMaxFrames)));
         break;

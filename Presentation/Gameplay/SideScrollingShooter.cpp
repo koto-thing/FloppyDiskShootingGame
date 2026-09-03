@@ -36,6 +36,10 @@ constexpr bool EarnsChapterBombBonus(int defeatCount, int spawnCount) {
     return spawnCount > 0 && defeatCount * 10 >= spawnCount * 9;
 }
 
+constexpr int ScaleHpByPercent(int hp, int percent) {
+    return hp <= 0 ? 0 : (std::max)(1, (hp * percent + 50) / 100);
+}
+
 static_assert(PowerAfterRestart(3.25f) == 2.25f);
 static_assert(PowerAfterRestart(0.75f) == 0.0f);
 static_assert(PowerAfterDebugIncrease(2.25f, 4.0f) == 3.25f);
@@ -43,6 +47,10 @@ static_assert(PowerAfterDebugIncrease(3.50f, 4.0f) == 4.0f);
 static_assert(EarnsChapterBombBonus(9, 10));
 static_assert(!EarnsChapterBombBonus(8, 9));
 static_assert(!EarnsChapterBombBonus(0, 0));
+static_assert(ScaleHpByPercent(10, 70) == 7);
+static_assert(ScaleHpByPercent(10, 100) == 10);
+static_assert(ScaleHpByPercent(10, 150) == 15);
+static_assert(ScaleHpByPercent(1, 70) == 1);
 
 /** @brief 無線風に加工した自機撃破音声を取得する @return 44100Hz PCMデータ */
 const std::vector<std::int16_t>& MomijiDeathVoice() {
@@ -53,6 +61,42 @@ const std::vector<std::int16_t>& MomijiDeathVoice() {
 
 #include "SideScrollingShooterEnemies.h"
 #include "Stages/Common/StageDefinition.h"
+
+/**
+ * @brief 難易度に応じたHPへ変換する
+ * @param hp Normal基準のHP
+ * @param difficulty 使用する難易度
+ * @return 難易度倍率を適用したHP
+ */
+constexpr int SideScrollingShooter::ScaleHpForDifficulty(int hp, DifficultyType difficulty) {
+    if (difficulty == Easy) return ScaleHpByPercent(hp, 70);
+    if (difficulty == Hard) return ScaleHpByPercent(hp, 150);
+    return ScaleHpByPercent(hp, 100);
+}
+
+/** @brief 敵機HPへ難易度倍率を適用する */
+void SideScrollingShooter::ApplyDifficultyToEnemyHp(Enemy& enemy) const {
+    enemy.hp = ScaleHpForDifficulty(enemy.hp, m_difficulty);
+    enemy.maxHp = enemy.hp;
+}
+
+/** @brief ボス本体と部位HPへ難易度倍率を適用する */
+void SideScrollingShooter::ApplyDifficultyToBossHp(Enemy& boss) const {
+    boss.hp = ScaleHpForDifficulty(boss.hp, m_difficulty);
+    boss.maxHp = boss.hp;
+    for (int& hp : boss.bossPartHp) {
+        hp = ScaleHpForDifficulty(hp, m_difficulty);
+    }
+    boss.bossPartMaxHp = boss.bossPartHp;
+}
+
+/** @brief Stage 5専用弱点HPへ難易度倍率を適用する */
+void SideScrollingShooter::ApplyDifficultyToStage5WeakpointHp() {
+    for (auto& weakpoint : m_stage5.tayamaWeakpoints) {
+        weakpoint.hp = ScaleHpForDifficulty(weakpoint.hp, m_difficulty);
+        weakpoint.maxHp = ScaleHpForDifficulty(weakpoint.maxHp, m_difficulty);
+    }
+}
 
 /**
  * @brief 指定番号のステージ定義を取得する
@@ -764,7 +808,7 @@ void SideScrollingShooter::StartBossBattle(bool playWarningSound) {
     Enemy& boss = m_enemies[0];
     m_stage->ConfigureBoss(boss, IsRailGameplayActive());
     m_stage->ConfigureBossPartHp(boss);
-    boss.bossPartMaxHp = boss.bossPartHp;
+    ApplyDifficultyToBossHp(boss);
     m_bossHp = boss.hp;
     m_displayBossHp = static_cast<float>(m_bossHp);
     boss.bossPhase = BossNormalPhase1;
