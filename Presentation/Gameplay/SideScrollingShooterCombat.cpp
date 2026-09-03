@@ -13,6 +13,8 @@
 #include "Stages/Common/StageDefinition.h"
 
 namespace {
+constexpr float MortarExplosionDepthHitRadius = 0.85f;
+
 /**
  * @brief ボムの発射位置から画面中央までの座標を求める
  * @param start 発射位置
@@ -73,8 +75,8 @@ void SideScrollingShooter::TickPlayer() {
     const float maxY = IsRailGameplayActive() && !fullScreenRailMovement ?
         StageDispatch::RailPlayerMaxY(*this) : sideYRange.y;
     const float speedScale = m_slowMove ? 0.5f : 1.0f;
-    m_playerX = (std::clamp)(m_playerX + dx * 0.018f * speedScale, xRange.x, xRange.y);
-    m_playerY = (std::clamp)(m_playerY + dy * 0.024f * speedScale, minY, maxY);
+    m_playerX = (std::clamp)(m_playerX + dx * 0.023f * speedScale, xRange.x, xRange.y);
+    m_playerY = (std::clamp)(m_playerY + dy * 0.029f * speedScale, minY, maxY);
 }
 
 /**
@@ -109,9 +111,10 @@ void SideScrollingShooter::TickPlayerWeapons() {
  */
 void SideScrollingShooter::TickBomb() {
     // 同時に存在できるボムは一個だけとする
-    if (m_bombRequested && !m_bomb.active) {
+    if (m_bombRequested && !m_bomb.active && m_bombCount > 0) {
         m_bomb = {m_playerX, m_playerY, m_playerX, m_playerY,
             PlayerRailZ + 6.0f, 0, true};
+        --m_bombCount;
     }
     if (!m_bomb.active) return;
 
@@ -138,7 +141,11 @@ void SideScrollingShooter::DetonateBomb() {
                 enemy.x <= Side2DPlayerMaxX + Side2DShotCullMargin &&
                 enemy.y >= sideYRange.x - Side2DShotCullMargin &&
                 enemy.y <= sideYRange.y + Side2DShotCullMargin;
-        if (visible) enemy.active = false;
+        if (visible) {
+            enemy.active = false;
+            ++m_kills;
+            ++m_chapterResult.enemyDefeatCount;
+        }
     }
 
     // 敵弾は固定長プール上の全種類を一括で消去する
@@ -563,6 +570,7 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
             enemy.active = true;
             m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
             enemy.entersFromTop = false;
+            ApplyDifficultyToEnemyHp(enemy);
             enemy.railAnchorX = linkRailX;
             enemy.baseX = IsRailGameplayActive() ? linkRailX : (std::max)(sideX, SideEnemyEntryX);
             enemy.x = enemy.baseX;
@@ -583,6 +591,7 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
         enemy.active = true;
         m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
         enemy.entersFromTop = false;
+        ApplyDifficultyToEnemyHp(enemy);
 
         // 初めて画面へ出現した通常敵を永続ギャラリーへ登録する
         switch (enemy.type) {
@@ -856,9 +865,8 @@ void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, 
 void SideScrollingShooter::FireSpecialShots() {
     const auto& config = PlayerShotConfigs[static_cast<size_t>(m_playerType)];
     const int powerLevel = PowerLevel();
-    const int projectileCount = m_playerType == Spread ? config.projectileCount + powerLevel * 2 :
-        config.projectileCount + powerLevel;
-    const int damage = m_playerType == Piercing ? config.damage + powerLevel : config.damage;
+    const int projectileCount = m_playerType == Spread ? config.projectileCount + powerLevel : config.projectileCount + powerLevel;
+    const int damage = config.damage;
     constexpr float DegreesToRadians = 3.1415926535f / 180.0f;
 
     /** @brief 弾数に応じて左右対称の角度と発射位置を求める */
@@ -1080,10 +1088,12 @@ void SideScrollingShooter::TickExplosions() {
         if (!explosion.active) continue;
         if (explosion.effectType == 1 && !explosion.damagedPlayer &&
             explosion.age <= AttackWarningFrames && m_invincible == 0) {
+            const float depthDistance = std::abs(PlayerRailZ - explosion.z);
             const bool playerHit = IsRailGameplayActive() ?
-                Hit3D(ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ, 0.38f,
-                    ToWorldX(explosion.x), ToWorldY(explosion.y), explosion.z,
-                    explosion.hitRadius * WorldXScale) :
+                depthDistance <= MortarExplosionDepthHitRadius &&
+                    Hit(ToWorldX(m_playerX), ToWorldY(m_playerY), 0.38f,
+                        ToWorldX(explosion.x), ToWorldY(explosion.y),
+                        explosion.hitRadius * WorldXScale) :
                 Hit(m_playerX, m_playerY, 0.050f, explosion.x, explosion.y,
                     explosion.hitRadius);
             if (playerHit) {
@@ -1137,14 +1147,15 @@ void SideScrollingShooter::SpawnExplosion(
  * @param x 2D座標系のX座標
  * @param y 2D座標系のY座標
  * @param z 3Dレール座標系のZ座標
+ * @param hitRadius 爆破当たり判定半径
  * @return なし
  */
-void SideScrollingShooter::SpawnMortarExplosion(float x, float y, float z) {
+void SideScrollingShooter::SpawnMortarExplosion(float x, float y, float z, float hitRadius) {
     for (auto& explosion : m_explosions) {
         if (explosion.active) continue;
         explosion = {
             x, y, IsRailGameplayActive() ? z : ToRailZFromSideX(x),
-            0, false, true, 1, 0.55f
+            0, false, true, 1, hitRadius
         };
         return;
     }

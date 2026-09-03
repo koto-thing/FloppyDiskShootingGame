@@ -285,7 +285,7 @@ public:
 };
 
 /**
- * @brief 上下端から出現する直進狙撃機を制御する
+ * @brief 自機狙い弾を高頻度で発射する直進狙撃機を制御する
  */
 class SideScrollingShooter::StraightShooterEnemyBehavior final : public SideScrollingShooter::EnemyBehavior {
 public:
@@ -294,7 +294,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 20;
+        return 15;
     }
 
     void ConfigureSpawn(SideScrollingShooter& shooter, Enemy& enemy,
@@ -366,7 +366,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 30;
+        return 20;
     }
 
     void ConfigureSpawn(SideScrollingShooter& shooter, Enemy& enemy,
@@ -509,7 +509,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 50;
+        return 30;
     }
 
     void ConfigureSpawn(SideScrollingShooter& shooter, Enemy& enemy,
@@ -660,7 +660,7 @@ public:
     }
 
 	int MaxHp() const override {
-		return 80;
+		return 50;
 	}
 
     int Score(const Enemy&) const override {
@@ -712,7 +712,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 25;
+        return 20;
     }
 
     int Score(const Enemy&) const override {
@@ -812,7 +812,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 40;
+        return 50;
     }
 
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {

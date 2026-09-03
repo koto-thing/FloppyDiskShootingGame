@@ -702,10 +702,11 @@ void SideScrollingShooter::DrawExplosion(Renderer& renderer, const Camera3D& cam
         const float progress = static_cast<float>(explosion.age) / MortarExplosionLifetimeFrames;
         const float fireProgress = Math::Clamp01(progress * 2.20f);
         const float shockProgress = Math::Clamp01(progress * 1.35f);
+        const float scale = explosion.hitRadius > 0.0f ? explosion.hitRadius / 0.55f : 1.0f;
         const Vector3 center {ToWorldX(explosion.x), ToWorldY(explosion.y), explosion.z};
 
         // 迫撃砲の着弾点から大火球、横方向の衝撃波、遅れて残る黒煙を重ねる
-        const float fireSize = 1.45f + fireProgress * 2.85f;
+        const float fireSize = (1.45f + fireProgress * 2.85f) * scale;
         const Matrix4x4 fireWorld = Matrix4x4::Translation(center) *
             Matrix4x4::Scale({fireSize, fireSize * 1.10f, 1.0f});
         renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * fireWorld, fireProgress});
@@ -721,12 +722,12 @@ void SideScrollingShooter::DrawExplosion(Renderer& renderer, const Camera3D& cam
             renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * lobeWorld, lobeProgress});
         }
 
-        const float shockSize = 1.10f + shockProgress * 4.40f;
+        const float shockSize = (1.10f + shockProgress * 4.40f) * scale;
         const Matrix4x4 shockWorld = Matrix4x4::Translation(center + Vector3 {0.0f, -0.10f, 0.0f}) *
             Matrix4x4::Scale({shockSize * 1.70f, shockSize * 0.42f, 1.0f});
         renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * shockWorld, shockProgress, 4});
 
-        const float smokeSize = 1.55f + progress * 3.10f;
+        const float smokeSize = (1.55f + progress * 3.10f) * scale;
         const Matrix4x4 smokeWorld = Matrix4x4::Translation(center + Vector3 {0.0f, progress * 0.80f, 0.0f}) *
             Matrix4x4::Scale({smokeSize, smokeSize * 1.45f, 1.0f});
         renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * smokeWorld, progress, 2});
@@ -859,6 +860,10 @@ void SideScrollingShooter::DrawChapterResult(Renderer& renderer) const {
     renderer.DrawText(line, TextAlign::Center, 0.016f, { 0.85f, 0.95f, 1.0f, alpha }, { 0.0f, -0.16f }, CharacterSpacing);
     std::snprintf(line, sizeof(line), "TOTAL SCORE    %06d", total);
     renderer.DrawText(line, TextAlign::Center, 0.020f, { 1.0f, 0.88f, 0.25f, alpha }, { 0.0f, -0.31f }, CharacterSpacing);
+    if (m_chapterResult.bombAwarded && (m_chapterResultTimer / 8) % 2 != 0) {
+        renderer.DrawText("BOMB GET", TextAlign::Center, 0.022f,
+            {0.35f, 0.85f, 1.0f, alpha}, {0.0f, -0.47f}, CharacterSpacing);
+    }
 }
 
 /**
@@ -1029,7 +1034,7 @@ void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
     constexpr float BossBarFill[4] = { 0.95f, 0.15f, 0.45f, 1.0f };
     constexpr float BossBarDivider[4] = { 1.00f, 0.82f, 0.30f, 0.95f };
     constexpr float BossBarWidth = 0.62f;
-    const int bossMaxHp = m_stage->BossMaxHp();
+    const int bossMaxHp = m_enemies[0].maxHp > 0 ? m_enemies[0].maxHp : m_stage->BossMaxHp();
     const float hpRate = bossMaxHp > 0 ? Math::Clamp01(m_displayBossHp / bossMaxHp) : 0.0f;
     DrawShape(renderer, 0.0f, 0.76f, BossBarWidth, 0.025f, BossBarBack);
     DrawShape(renderer, BossBarWidth * (1.0f - hpRate), 0.76f,

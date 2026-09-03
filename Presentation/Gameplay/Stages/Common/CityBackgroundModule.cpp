@@ -36,6 +36,12 @@ constexpr float SideRoadBottomY = -11.3f;
 constexpr float UpperTrafficY = -7.15f;
 constexpr float LaneDividerY = -8.65f;
 constexpr float LowerTrafficY = -9.65f;
+constexpr float Stage4SideRoadTopY = -6.0f;
+constexpr float Stage4SideRoadCenterY = -8.65f;
+constexpr float Stage4SideRoadBottomY = -11.3f;
+constexpr float Stage4UpperTrafficY = -7.15f;
+constexpr float Stage4LaneDividerY = -8.65f;
+constexpr float Stage4LowerTrafficY = -9.65f;
 constexpr int CityBuildingCount = 30;
 constexpr float CityBuildingNdcSpacing = 2.0f / CityBuildingCount;
 static_assert(TruckRailCycleLength > 120.0f);
@@ -44,6 +50,10 @@ static_assert(SideRoadTopY > UpperTrafficY &&
     UpperTrafficY > LaneDividerY &&
     LaneDividerY > LowerTrafficY &&
     LowerTrafficY > SideRoadBottomY);
+static_assert(Stage4SideRoadTopY > Stage4UpperTrafficY &&
+    Stage4UpperTrafficY > Stage4LaneDividerY &&
+    Stage4LaneDividerY > Stage4LowerTrafficY &&
+    Stage4LowerTrafficY > Stage4SideRoadBottomY);
 
 /**
  * @brief 都市背景の交通車両を描画するか判定する

@@ -96,7 +96,6 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     DrawPowerUp(renderer, camera, SidePlaneZ);
     DrawTutorialControlHint(renderer, camera, SidePlaneZ);
     DrawViewToggleCooldownHud(renderer, camera, SidePlaneZ);
-    DrawAttackWarnings2D(renderer);
 
     // チュートリアル固有HUDだけを描画し、通常ステージ情報との重なりを防ぐ
     if (m_tutorialMode) return;
@@ -105,16 +104,18 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     char scoreStatus[32];
     char powerStatus[32];
     char progressStatus[32];
-    const int progress = (std::min)(100,
-        static_cast<int>(m_scroll / m_stage->BossStartDistance() * 100.0f));
+    char bombStatus[16];
+    const int progress = ChapterProgressPercent();
     std::snprintf(stageStatus, sizeof(stageStatus), "STAGE %d/5  CHAPTER %d/3", m_stageNumber, m_chapterNumber);
     std::snprintf(scoreStatus, sizeof(scoreStatus), "SCORE %06d", m_score);
     std::snprintf(powerStatus, sizeof(powerStatus), "POWER %.2f / %.2f", m_power, MaxPower);
     std::snprintf(progressStatus, sizeof(progressStatus), "DIST %03d%%", progress);
+    std::snprintf(bombStatus, sizeof(bombStatus), "BOMB %d", m_bombCount);
     renderer.DrawText(stageStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.025f });
     renderer.DrawText(scoreStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.025f });
     renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
     renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
+    renderer.DrawText(bombStatus, TextAlign::TopCenter, 0.014f, { 0.55f, 0.85f, 1.0f, 1.0f }, { 0.0f, -0.025f });
     renderer.DrawText(StageDispatch::IsViewLocked(*this) ?
         "MOVE: ARROWS/WASD  SHOT: Z/SPACE  BOMB: C  3D MODE LOCKED" :
         "MOVE: ARROWS/WASD  SHOT: Z/SPACE  BOMB: C  MODE: X", { -0.92f, -0.92f }, 0.012f,
@@ -228,8 +229,6 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
             Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight),
             hitboxWidth, hitboxHeight, hitboxHeight, PlayerHitboxColor);
     }
-    DrawAttackWarnings3D(renderer, camera, railWeight);
-
     renderer.ResetCamera();
     DrawHudBackground(renderer);
     StageDispatch::DrawOverlay3D(*this, renderer);
@@ -246,16 +245,18 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     char scoreStatus[32];
     char powerStatus[32];
     char progressStatus[32];
-    const int progress = (std::min)(100,
-        static_cast<int>(m_scroll / m_stage->BossStartDistance() * 100.0f));
+    char bombStatus[16];
+    const int progress = ChapterProgressPercent();
     std::snprintf(stageStatus, sizeof(stageStatus), "STAGE %d/5  CHAPTER %d/3", m_stageNumber, m_chapterNumber);
     std::snprintf(scoreStatus, sizeof(scoreStatus), "SCORE %06d", m_score);
     std::snprintf(powerStatus, sizeof(powerStatus), "POWER %.2f / %.2f", m_power, MaxPower);
     std::snprintf(progressStatus, sizeof(progressStatus), "DIST %03d%%", progress);
+    std::snprintf(bombStatus, sizeof(bombStatus), "BOMB %d", m_bombCount);
     renderer.DrawText(stageStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.025f });
     renderer.DrawText(scoreStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.025f });
     renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
     renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
+    renderer.DrawText(bombStatus, TextAlign::TopCenter, 0.014f, { 0.55f, 0.85f, 1.0f, 1.0f }, { 0.0f, -0.025f });
     renderer.DrawText(StageDispatch::IsViewLocked(*this) ?
         "MOVE: ARROWS/WASD  SHOT: Z/SPACE  BOMB: C  3D MODE LOCKED" :
         "MOVE: ARROWS/WASD  SHOT: Z/SPACE  BOMB: C  MODE: X", { -0.92f, -0.92f }, 0.012f,

@@ -30,6 +30,11 @@ enum class Stage5AdType {
     TayamaFace,
     Count
 };
+/** @brief Stage5のNEO AIZUビル形状 */
+enum class Stage5BuildingType { Slender, Vision, Narrow, Rounded, Arcade, Utility, Count };
+
+/** @brief Stage5の独立広告形状 */
+enum class Stage5AdType { VerticalNeon, Hanging, Rooftop, LightBox, Hologram, Lantern, Marquee, Count };
 
 /** @brief 広告取付位置の用途 */
 enum class Stage5SignMountKind { LeftWall, RightWall, FrontLarge, Rooftop, CornerBand };
@@ -48,6 +53,10 @@ public:
     inline static constexpr ColorF WindowDark {0.04f, 0.08f, 0.16f, 1.0f};
     inline static constexpr ColorF FrameMetal {0.30f, 0.38f, 0.52f, 1.0f};
     inline static constexpr ColorF NeonAccent {0.12f, 0.82f, 0.98f, 1.0f};
+    inline static constexpr ColorF Wall {0.055f, 0.10f, 0.20f, 1.0f};
+    inline static constexpr ColorF DarkWall {0.025f, 0.05f, 0.11f, 1.0f};
+    inline static constexpr ColorF Window {0.04f, 0.08f, 0.16f, 1.0f};
+    inline static constexpr ColorF Cyan {0.12f, 0.82f, 0.98f, 1.0f};
     inline static constexpr ColorF Pink {0.90f, 0.18f, 0.76f, 1.0f};
     inline static constexpr ColorF Orange {0.92f, 0.58f, 0.18f, 1.0f};
     inline static constexpr ColorF Red {0.80f, 0.20f, 0.18f, 1.0f};

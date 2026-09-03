@@ -69,6 +69,8 @@ void RunStage4BossModelViewTests() {
     // 主砲身は親Yawではなく照準先へのYaw/Pitchで描画されることを確認する
     BossModelTransform aimingTransform {{0.0f, 0.0f, 0.0f}, {-8.25f, 5.55f, 0.0f},
         0.0f, 1.0f, true};
+    aimingTransform.mainGunMinElevation = Stage4BossModelView::Phase1CannonMinElevation;
+    aimingTransform.mainGunMaxElevation = Stage4BossModelView::Phase1CannonMaxElevation;
     float cannonYaw = 0.0f;
     float cannonPitch = 0.0f;
     int aimingVisited = 0;
@@ -83,6 +85,43 @@ void RunStage4BossModelViewTests() {
     });
     assert(std::fabs(cannonYaw) < 0.0001f);
     assert(cannonPitch < -0.37f && cannonPitch > -0.39f);
+    aimingTransform.mainGunTracksYaw = false;
+    aimingTransform.aimTarget = {-8.25f, 5.55f, 20.0f};
+    aimingVisited = 0;
+    Stage4BossModelView::Draw(aimingTransform, [&](int, const Vector3&, const Vector3&,
+        const float[4], float yaw, float pitch) {
+        if (aimingVisited++ != Stage4BossModelView::ChassisPrimitiveCount +
+            Stage4BossModelView::TrackPrimitiveCount +
+            Stage4BossModelView::LuxuryBodyPrimitiveCount +
+            Stage4BossModelView::MainTurretPrimitiveCount) return;
+        cannonYaw = yaw;
+        cannonPitch = pitch;
+    });
+    assert(std::fabs(cannonYaw) < 0.0001f);
+    assert(cannonPitch < -0.37f && cannonPitch > -0.39f);
+    aimingTransform.mainGunTracksYaw = true;
+    aimingTransform.aimTarget = {-8.25f, -8.0f, 0.0f};
+    aimingVisited = 0;
+    Stage4BossModelView::Draw(aimingTransform, [&](int, const Vector3&, const Vector3&,
+        const float[4], float, float pitch) {
+        if (aimingVisited++ != Stage4BossModelView::ChassisPrimitiveCount +
+            Stage4BossModelView::TrackPrimitiveCount +
+            Stage4BossModelView::LuxuryBodyPrimitiveCount +
+            Stage4BossModelView::MainTurretPrimitiveCount) return;
+        cannonPitch = pitch;
+    });
+    assert(std::fabs(cannonPitch + Stage4BossModelView::Phase1CannonMinElevation) < 0.0001f);
+    aimingTransform.aimTarget = {-0.01f, 100.0f, 0.0f};
+    aimingVisited = 0;
+    Stage4BossModelView::Draw(aimingTransform, [&](int, const Vector3&, const Vector3&,
+        const float[4], float, float pitch) {
+        if (aimingVisited++ != Stage4BossModelView::ChassisPrimitiveCount +
+            Stage4BossModelView::TrackPrimitiveCount +
+            Stage4BossModelView::LuxuryBodyPrimitiveCount +
+            Stage4BossModelView::MainTurretPrimitiveCount) return;
+        cannonPitch = pitch;
+    });
+    assert(std::fabs(cannonPitch + Stage4BossModelView::Phase1CannonMaxElevation) < 0.0001f);
 
     // 車体と三種類の交換式主砲が独立したPrimitive数で描画されることを確認する
     int bodyCount = 0;
@@ -125,8 +164,18 @@ void RunStage4BossModelViewTests() {
         Math::Pi * 40.0f / 180.0f);
     const Vector3 mortarHigh = Stage4BossModelView::SiegeMortarMuzzleLocalPosition(
         Math::Pi * 65.0f / 180.0f);
+    const Vector3 mortarHorizontal = Stage4BossModelView::SiegeMortarMuzzleLocalPosition(
+        Stage4BossModelView::SiegeMortarMinPitch);
+    const Vector3 mortarMax = Stage4BossModelView::SiegeMortarMuzzleLocalPosition(
+        Stage4BossModelView::SiegeMortar2DMaxPitch);
+    const Vector3 mortarOverMax = Stage4BossModelView::SiegeMortarMuzzleLocalPosition(
+        Math::Pi);
     assert(mortarHigh.y > mortarLow.y);
     assert(mortarHigh.x > mortarLow.x);
+    assert(mortarHorizontal.y < mortarLow.y);
+    assert(mortarMax.y > mortarHigh.y);
+    assert(std::fabs(mortarMax.x - mortarOverMax.x) < 0.0001f);
+    assert(std::fabs(mortarMax.y - mortarOverMax.y) < 0.0001f);
     const Vector3 romanceReady = Stage4BossModelView::RomanceCannonMuzzleLocalPosition(0.0f, 0.0f);
     const Vector3 romanceRecoiled = Stage4BossModelView::RomanceCannonMuzzleLocalPosition(0.0f, 1.0f);
     assert(romanceReady.x < romanceRecoiled.x);
