@@ -101,6 +101,9 @@ struct State {
     float siegeMortarTargetPitch = 0.91629785f;
     float siegeMortarYaw = 0.0f;
     float siegeMortarTargetYaw = 0.0f;
+    float rushAimX = 0.0f;
+    float rushAimY = 0.0f;
+    float rushAimZ = 0.0f;
 };
 
 /**
@@ -178,7 +181,10 @@ struct ShotState {
     ShotKind kind = ShotKind::None;
     bool gravity = false;
     bool detonateAtPlayerZ = true;
+    bool fixedSideExplosionX = false;
+    float gravityScale = 1.0f;
     float explosionRadius = 0.55f;
+    float sideExplosionX = 0.0f;
 };
 
 }

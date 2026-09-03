@@ -78,7 +78,7 @@ public:
         const int recoilType = boss.recoilType;
         const bool rushing = IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) && rushPhase > 0.0f;
         boss.x = 1.80f;
-        boss.y = -0.5f;
+        boss.y = -1.05f;
         boss.z = ToRailZFromSideX(boss.x);
         boss.baseX = boss.x;
         boss.baseY = boss.y;
@@ -146,6 +146,7 @@ public:
 
         // Phase1は一定間隔で後退、突進、待機、復帰を行う
         Stage4Module::TickSiegeMortarAim(shooter);
+        bool rushedThisFrame = false;
         if (IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) &&
             (boss.phase > 0.0f || boss.age % RushIntervalFrames == 0)) {
             int rushFrame = static_cast<int>(boss.phase);
@@ -153,11 +154,15 @@ public:
                 boss.actionX = boss.baseX;
                 boss.actionY = boss.baseY;
                 boss.actionZ = boss.baseZ;
+                shooter.m_stage4.rushAimX = boss.turretAimX;
+                shooter.m_stage4.rushAimY = boss.turretAimY;
+                shooter.m_stage4.rushAimZ = boss.turretAimZ;
                 rushFrame = 1;
             }
 
             boss.motionAge = 0;
             ApplyRushPosition(boss, shooter.IsRailGameplayActive(), rushFrame);
+            rushedThisFrame = true;
 
             boss.phase = rushFrame < RushTotalFrames ?
                 static_cast<float>(rushFrame + 1) : 0.0f;
@@ -176,7 +181,8 @@ public:
         }
         ApplyMainCannonRecoil(boss, shooter.IsRailGameplayActive());
 
-        // 砲の照準は突進中も自機位置へ追従する
+        // 砲の通常照準は次の攻撃に向けて自機位置へ追従する
+        if (rushedThisFrame) return;
         boss.turretAimX += (shooter.m_playerX - boss.turretAimX) * TurretTrackingRate;
         boss.turretAimY += (shooter.m_playerY - boss.turretAimY) * TurretTrackingRate;
         const float targetZ = shooter.IsRailGameplayActive() ?
@@ -254,7 +260,7 @@ public:
     }
 
 private:
-    inline static constexpr int RushIntervalFrames = 400;
+    inline static constexpr int RushIntervalFrames = 700;
     inline static constexpr int RushWindupFrames = 42;
     inline static constexpr int RushChargeFrames = 61;
     inline static constexpr int RushWaitFrames = 48;
