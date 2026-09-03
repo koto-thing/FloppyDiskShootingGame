@@ -41,10 +41,8 @@ constexpr float Stage4GiantExplosionRadius = 0.65f;
 constexpr float Stage4RomanceCannonballSpeed = 1.00f;
 constexpr float Stage4RomanceCannonballSideRadius = 0.320f;
 constexpr float Stage4RomanceExplosionRadius = 1.25f;
-constexpr int Stage4RomanceCannonRecoilFrames = 158;
 constexpr float Stage4RailGroundGameY = -0.829545f;
 constexpr float Stage4BodyHitRadius = 3.35f;
-constexpr int Stage4MainCannonRecoilFrames = 30;
 constexpr Vector3 Stage4MainCannonLocal {-5.75f, 3.55f, 0.0f};
 constexpr Vector3 Stage4MainCannonPivotLocal {-3.25f, 3.55f, 0.0f};
 constexpr Vector3 Stage4BodyHitLocal[] = {
@@ -320,6 +318,7 @@ void SideScrollingShooter::Stage4Module::BeginWeaponSwap(
     state.timer = 0;
     boss.phase = 0.0f;
     boss.recoilAge = 0;
+    boss.recoilType = 0;
 
     // 交換開始時に敵弾を消して演出と主砲なし状態を読みやすくする
     for (auto& shot : shooter.m_shots) {
@@ -612,8 +611,9 @@ void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
 
         if (part == BossNose) {
             SpawnMainCannonball(shooter, boss);
-            boss.recoilAge = shooter.m_stage4.currentWeapon == Stage4Weapon::RomanceCannon ?
-                Stage4RomanceCannonRecoilFrames : Stage4MainCannonRecoilFrames;
+            boss.recoilType = shooter.m_stage4.currentWeapon == Stage4Weapon::RomanceCannon ? 1 : 0;
+            boss.recoilAge = Stage4EnemySheet::MainCannonRecoilFramesForWeapon(
+                shooter.m_stage4.currentWeapon);
             continue;
         }
 
