@@ -17,8 +17,7 @@ constexpr float BuildingColor[4] = {0.055f, 0.10f, 0.20f, 1.0f};
 constexpr float WindowCyanColor[4] = {0.12f, 0.82f, 0.98f, 1.0f};
 constexpr float WindowMagentaColor[4] = {0.90f, 0.18f, 0.76f, 1.0f};
 constexpr float MoonColor[4] = {0.86f, 0.90f, 0.72f, 1.0f};
-constexpr float RoadColor[4] = {0.075f, 0.09f, 0.16f, 1.0f};
-constexpr float Stage4RoadColor[4] = {0.105f, 0.125f, 0.19f, 1.0f};
+constexpr float CityRoadColor[4] = {0.105f, 0.125f, 0.19f, 1.0f};
 constexpr float LaneColor[4] = {0.72f, 0.84f, 0.88f, 1.0f};
 constexpr float CarBodyColor[4] = {0.18f, 0.76f, 0.96f, 1.0f};
 constexpr float CarAccentColor[4] = {0.98f, 0.24f, 0.70f, 1.0f};
@@ -31,6 +30,12 @@ constexpr float TruckRailWidth = 4.8f;
 constexpr float TruckRailHeight = 6.0f;
 constexpr float TruckRailDepth = 13.5f;
 constexpr float TruckRailCycleLength = 220.0f;
+constexpr float SideRoadTopY = -6.0f;
+constexpr float SideRoadCenterY = -8.65f;
+constexpr float SideRoadBottomY = -11.3f;
+constexpr float UpperTrafficY = -7.15f;
+constexpr float LaneDividerY = -8.65f;
+constexpr float LowerTrafficY = -9.65f;
 constexpr float Stage4SideRoadTopY = -6.0f;
 constexpr float Stage4SideRoadCenterY = -8.65f;
 constexpr float Stage4SideRoadBottomY = -11.3f;
@@ -41,6 +46,10 @@ constexpr int CityBuildingCount = 30;
 constexpr float CityBuildingNdcSpacing = 2.0f / CityBuildingCount;
 static_assert(TruckRailCycleLength > 120.0f);
 static_assert(CityBuildingCount * CityBuildingNdcSpacing == 2.0f);
+static_assert(SideRoadTopY > UpperTrafficY &&
+    UpperTrafficY > LaneDividerY &&
+    LaneDividerY > LowerTrafficY &&
+    LowerTrafficY > SideRoadBottomY);
 static_assert(Stage4SideRoadTopY > Stage4UpperTrafficY &&
     Stage4UpperTrafficY > Stage4LaneDividerY &&
     Stage4LaneDividerY > Stage4LowerTrafficY &&
@@ -78,7 +87,7 @@ float SideScrollingShooter::CityBackgroundModule::WrapDistance(float value, floa
     return wrapped;
 }
 
-void SideScrollingShooter::CityBackgroundModule::DrawStage4Road(
+void SideScrollingShooter::CityBackgroundModule::DrawRoad(
     const SideScrollingShooter& shooter, Renderer& renderer,
     const Camera3D& camera, float sideHalfWidth, float railWeight) {
     constexpr float SideRoadZ = SidePlaneZ + 13.55f;
@@ -87,16 +96,16 @@ void SideScrollingShooter::CityBackgroundModule::DrawStage4Road(
     // 画面下部を覆う道路面を横視点からレール空間へ連続して展開する
     DrawModelPrimitive(renderer, camera, 1,
         0.0f,
-        Math::Lerp(Stage4SideRoadCenterY, -3.60f, railWeight),
+        Math::Lerp(SideRoadCenterY, -3.60f, railWeight),
         Math::Lerp(SideRoadZ, 45.0f, railWeight),
         Math::Lerp(60.0f, 24.0f, railWeight),
-        Math::Lerp(Stage4SideRoadTopY - Stage4SideRoadBottomY, 0.10f, railWeight),
-        Math::Lerp(0.22f, 140.0f, railWeight), Stage4RoadColor);
+        Math::Lerp(SideRoadTopY - SideRoadBottomY, 0.10f, railWeight),
+        Math::Lerp(0.22f, 140.0f, railWeight), CityRoadColor);
 
     // 遠い路肩を細く遅く、手前を太く速く流して2Dのまま路面へ奥行きを付ける
     for (int lane = -1; lane <= 1; ++lane) {
-        const float sideY = lane < 0 ? Stage4SideRoadTopY + 0.08f :
-            (lane > 0 ? Stage4SideRoadBottomY + 0.18f : Stage4LaneDividerY);
+        const float sideY = lane < 0 ? SideRoadTopY + 0.08f :
+            (lane > 0 ? SideRoadBottomY + 0.18f : LaneDividerY);
         const float sideSegmentWidth = lane < 0 ? 3.8f : (lane > 0 ? 4.4f : 2.2f);
         const float sideSegmentHeight = lane < 0 ? 0.09f : (lane > 0 ? 0.18f : 0.10f);
         const float sideScrollRate = lane < 0 ? 0.24f : (lane > 0 ? 0.60f : 0.42f);
@@ -129,11 +138,13 @@ void SideScrollingShooter::CityBackgroundModule::DrawStage4Road(
         const float sideX = WrapNdcX(
             static_cast<float>(i) * 0.31f +
             sideDirection * shooter.m_scroll * sideSpeed) * (sideHalfWidth + 2.0f);
-        const float sideY = lowerLane ? Stage4LowerTrafficY : Stage4UpperTrafficY;
+        const float sideY = lowerLane ? LowerTrafficY : UpperTrafficY;
         const float railX = -8.5f + static_cast<float>(i % 4) * 5.6f;
+        const float railDirection = i % 4 < 2 ? -1.0f : 1.0f;
         const float railSpeed = i % 2 == 0 ? 175.0f : 105.0f;
         const float railZ = 8.0f + WrapDistance(
-            static_cast<float>(i) * 19.0f - shooter.m_scroll * railSpeed, 120.0f);
+            static_cast<float>(i) * 19.0f +
+            railDirection * shooter.m_scroll * railSpeed, 120.0f);
         const float x = Math::Lerp(sideX, railX, railWeight);
         const float y = Math::Lerp(sideY, RailRoadTopY + 0.52f * 0.5f, railWeight);
         const float z = Math::Lerp(SideRoadZ - 0.24f, railZ, railWeight);
@@ -217,26 +228,8 @@ void SideScrollingShooter::CityBackgroundModule::DrawBackground2D(
         0.0f, -11.0f, SidePlaneZ + 14.0f,
         60.0f, 10.0f, 0.3f, StreetColor);
 
-    // Stage 4は横向きの2.5D道路、Stage 5は従来の横向き交通を描画する
-    if (shooter.m_stageNumber == 4) {
-        DrawStage4Road(shooter, renderer, camera, backgroundHalfWidth, 0.0f);
-    } else {
-        constexpr float RoadZ = SidePlaneZ + 13.55f;
-        DrawModelPrimitive(renderer, camera, 1,
-            0.0f, -10.0f, RoadZ, 60.0f, 8.0f, 0.22f, RoadColor);
-        for (int i = 0; i < 9; ++i) {
-            const float x = WrapNdcX(i * 0.29f - shooter.m_scroll * 1.15f) *
-                (backgroundHalfWidth + 2.0f);
-            constexpr float Y = -6.0f + 0.42f * 0.5f;
-            const float* bodyColor = i % 2 == 0 ? CarBodyColor : CarAccentColor;
-            DrawModelPrimitive(renderer, camera, 1,
-                x, Y, RoadZ - 0.16f, 1.75f, 0.42f, 0.12f, bodyColor);
-            DrawModelPrimitive(renderer, camera, 1,
-                x, Y + 0.30f, RoadZ - 0.18f, 0.92f, 0.28f, 0.13f, BuildingColor);
-            DrawModelPrimitive(renderer, camera, 1,
-                x + 0.72f, Y, RoadZ - 0.20f, 0.18f, 0.11f, 0.14f, LaneColor);
-        }
-    }
+    // Stage 4とStage 5で同じ横向きの2.5D道路を描画する
+    DrawRoad(shooter, renderer, camera, backgroundHalfWidth, 0.0f);
     if (shooter.m_stageNumber == 4 && !shooter.m_bossBattle) {
         DrawTruck(shooter, renderer, camera, 0.0f);
     }
@@ -320,42 +313,8 @@ void SideScrollingShooter::CityBackgroundModule::DrawBackground3D(
         Math::Lerp(10.0f, 0.7f, railWeight),
         Math::Lerp(0.3f, 140.0f, railWeight), StreetColor);
 
-    // Stage 4は横視点の道路から連続変形し、Stage 5はレール専用道路を描画する
-    if (shooter.m_stageNumber == 4) {
-        DrawStage4Road(shooter, renderer, camera, sideBackgroundHalfWidth, railWeight);
-    } else if (railWeight > 0.01f) {
-        const float roadWidth = 24.0f * railWeight;
-        DrawModelPrimitive(renderer, camera, 1,
-            0.0f, -3.60f, 45.0f, roadWidth, 0.10f, 140.0f, RoadColor);
-        for (int lane = -1; lane <= 1; ++lane) {
-            for (int segment = 0; segment < 16; ++segment) {
-                const float z = 4.0f + WrapDistance(
-                    static_cast<float>(segment) * 10.0f - shooter.m_scroll * 150.0f, 160.0f);
-                DrawModelPrimitive(renderer, camera, 1,
-                    static_cast<float>(lane) * 6.0f, -3.55f + 0.025f * 0.5f, z,
-                    0.20f, 0.025f, 4.2f, LaneColor);
-            }
-        }
-        for (int i = 0; i < 10; ++i) {
-            const float laneX = -8.5f + static_cast<float>(i % 4) * 5.6f;
-            const float speed = i % 2 == 0 ? 175.0f : 105.0f;
-            const float z = 8.0f + WrapDistance(
-                static_cast<float>(i) * 19.0f - shooter.m_scroll * speed, 120.0f);
-            const float* bodyColor = i % 2 == 0 ? CarBodyColor : CarAccentColor;
-            DrawModelPrimitive(renderer, camera, 1,
-                laneX, -3.55f + 0.52f * 0.5f, z,
-                2.25f, 0.52f, 3.8f, bodyColor);
-            DrawModelPrimitive(renderer, camera, 1,
-                laneX, -3.55f + 0.52f + 0.38f * 0.5f, z - 0.15f,
-                1.42f, 0.38f, 1.85f, BuildingColor);
-            DrawModelPrimitive(renderer, camera, 1,
-                laneX - 0.67f, -3.55f + 0.14f * 0.5f, z - 1.94f,
-                0.24f, 0.14f, 0.10f, LaneColor);
-            DrawModelPrimitive(renderer, camera, 1,
-                laneX + 0.67f, -3.55f + 0.14f * 0.5f, z - 1.94f,
-                0.24f, 0.14f, 0.10f, LaneColor);
-        }
-    }
+    // 両都市ステージを同じ2D終点からレール道路へ連続変形する
+    DrawRoad(shooter, renderer, camera, sideBackgroundHalfWidth, railWeight);
     if (shooter.m_stageNumber == 4 && !shooter.m_bossBattle) {
         DrawTruck(shooter, renderer, camera, railWeight);
     }

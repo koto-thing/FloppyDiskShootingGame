@@ -77,8 +77,11 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     }
     const bool playerVisible = m_playerDestructionTimer == 0 &&
         (m_tutorialMode || m_invincible == 0 || (m_invincible / 5) % 2 == 0);
+    const bool verticalSide = m_stageNumber == 5 &&
+        ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase);
     DrawPlayerModel(renderer, camera, ToWorldX(m_playerX), ToWorldY(m_playerY),
-        SidePlaneZ, playerVisible, Math::HalfPi);
+        SidePlaneZ, playerVisible, Math::HalfPi, 0.0f,
+        verticalSide ? Math::HalfPi : 0.0f);
     if (m_slowMove && playerVisible) {
         // 2D判定の画面比率をワールド寸法へ変換して表示する
         DrawModelPrimitive(renderer, camera, 5, ToWorldX(m_playerX), ToWorldY(m_playerY), SidePlaneZ,
@@ -132,6 +135,10 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     const float railWeight = RailBlend();
     const float playerYaw = Math::Lerp(Math::HalfPi, 0.0f, railWeight);
     const float enemyYaw = Math::Lerp(Math::HalfPi, 0.0f, railWeight);
+    const bool verticalSide = m_stageNumber == 5 &&
+        ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase);
+    const float playerRoll = verticalSide ?
+        Math::Lerp(Math::HalfPi, 0.0f, railWeight) : 0.0f;
     renderer.SetPipeline(PipelineId::Model3D);
     renderer.SetCamera(camera);
 
@@ -197,18 +204,22 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
         if (!item.active) continue;
         DrawItemModel(renderer, camera, item, 0.0f);
     }
+    const bool cinematic = StageDispatch::IsCinematic(*this);
     const bool playerVisible = m_playerDestructionTimer == 0 &&
-        (m_tutorialMode || m_invincible == 0 || (m_invincible / 5) % 2 == 0);
-    if (railWeight > 0.01f && playerVisible) {
+        (cinematic || m_tutorialMode || m_invincible == 0 || (m_invincible / 5) % 2 == 0);
+    Vector3 playerPosition {ToWorldX(m_playerX), ToWorldY(m_playerY),
+        Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight)};
+    float playerPitch = 0.0f;
+    StageDispatch::ApplyPlayerRenderCorrection(*this, playerPosition, playerPitch);
+    if (!cinematic && railWeight > 0.01f && playerVisible) {
         const float groundTopY = StageDispatch::RailGroundY(*this);
-        DrawBlobShadow(renderer, camera, ToWorldX(m_playerX),
-            Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight), groundTopY,
+        DrawBlobShadow(renderer, camera, playerPosition.x,
+            playerPosition.z, groundTopY,
             1.05f, 0.82f, railWeight * 0.30f);
     }
-    DrawPlayerModel(renderer, camera, ToWorldX(m_playerX), ToWorldY(m_playerY),
-        Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight),
-        playerVisible, playerYaw);
-    if (m_slowMove && playerVisible) {
+    DrawPlayerModel(renderer, camera, playerPosition.x, playerPosition.y,
+        playerPosition.z, playerVisible, playerYaw, playerPitch, playerRoll);
+    if (!cinematic && m_slowMove && playerVisible) {
         // 視点遇移中も実際の2D/3D被弾半径に連続して追従する
         const float hitboxWidth = Math::Lerp(
             PlayerHitRadius2D * WorldXScale * 2.0f, PlayerHitRadius3D * 2.0f, railWeight);
@@ -221,6 +232,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     renderer.ResetCamera();
     DrawHudBackground(renderer);
     StageDispatch::DrawOverlay3D(*this, renderer);
+    if (StageDispatch::IsCinematic(*this)) return;
     const float playerZ = Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight);
     DrawPowerUp(renderer, camera, playerZ);
     DrawTutorialControlHint(renderer, camera, playerZ);

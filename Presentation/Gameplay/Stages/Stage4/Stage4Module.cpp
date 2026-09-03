@@ -679,6 +679,7 @@ void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
     if (boss.type != 2 || IsWeaponSwapActive(shooter)) return;
 
     // 生存中の主砲身と副砲6基から、現在の自機位置へ直接撃つ
+    bool fired = false;
     for (int partIndex = 0; partIndex < BossPartCount; ++partIndex) {
         const BossPart part = static_cast<BossPart>(partIndex);
         if (boss.bossPartHp[part] <= 0) continue;
@@ -724,8 +725,10 @@ void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
                     dx / length * speed, dy / length * speed, true, world.z,
                     boss.behavior != nullptr ? boss.behavior->RailAimedShotSpeed() : 0.62f);
             }
+            fired = true;
         }
     }
+    if (fired) shooter.PlayEnemyShotSound();
 }
 
 bool SideScrollingShooter::Stage4Module::HitsHazard(

@@ -18,8 +18,6 @@ using SideScrollingShooterShared::BossNameRevealFrames;
 
 constexpr float EnemyColor[4] = { 0.90f, 0.12f, 0.12f, 1.0f };
 constexpr float EnemyAccent[4] = { 1.00f, 0.55f, 0.08f, 1.0f };
-constexpr float PlayerShotColor[4] = { 0.15f, 1.00f, 0.25f, 1.0f };
-constexpr float EnemyShotColor[4] = { 1.00f, 0.25f, 0.25f, 1.0f };
 constexpr float PowerItemColor[4] = { 1.00f, 0.88f, 0.12f, 1.0f };
 constexpr float ScoreItemColor[4] = { 0.25f, 0.90f, 1.00f, 1.0f };
 constexpr float ItemInsetColor[4] = { 0.04f, 0.08f, 0.12f, 1.0f };
@@ -186,7 +184,8 @@ void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, Renderer& rende
     StageDispatch::ApplyCameraCorrection(*this, railPosition, railTarget);
     camera.SetViewport({0, 0, renderer.Width(), renderer.Height()});
     camera.SetProjectionMode(ProjectionMode::Perspective);
-    camera.SetFieldOfView(Math::ToRadians(38.0f + (8.0f * railWeight)));
+    camera.SetFieldOfView(Math::ToRadians(StageDispatch::CameraFieldOfView(
+        *this, 38.0f + (8.0f * railWeight))));
     camera.SetNearClip(0.1f);
     camera.SetFarClip(StageDispatch::CameraFarClip(*this));
     const Vector3 shakeOffset{shake.x, shake.y, 0.0f};
@@ -336,7 +335,7 @@ void SideScrollingShooter::DrawBlobShadow(Renderer& renderer, const Camera3D& ca
 }
 
 void SideScrollingShooter::DrawPlayerModel(Renderer& renderer, const Camera3D& camera,
-    float x, float y, float z, bool visible, float yaw) const {
+    float x, float y, float z, bool visible, float yaw, float pitch, float roll) const {
     if (!visible) return;
 
     const bool canToggleView = CanToggleView();
@@ -350,20 +349,44 @@ void SideScrollingShooter::DrawPlayerModel(Renderer& renderer, const Camera3D& c
 
     // ゲーム本編とギャラリーで同じ機体定義を共有する
     auto drawPart = [&](int shape, const Vector3& partPosition, const Vector3& partScale,
-        const float color[4], float partYaw, float pitch) {
+        const float color[4], float partYaw, float partPitch) {
         const bool isNose = shape == 3;
-        DrawModelPrimitive(renderer, camera, shape,
-            partPosition.x, partPosition.y, partPosition.z,
-            partScale.x, partScale.y, partScale.z,
-            canToggleView && isNose ? noseColor : color, partYaw, pitch);
+        const float* partColor = canToggleView && isNose ? noseColor : color;
+        const bool transformed = pitch != 0.0f || roll != 0.0f;
+        Vector3 transformedPosition = partPosition;
+        if (!transformed) {
+            DrawModelPrimitive(renderer, camera, shape,
+                partPosition.x, partPosition.y, partPosition.z,
+                partScale.x, partScale.y, partScale.z,
+                partColor, partYaw, partPitch);
+        } else {
+            // 機体中心を基準に全部位の位置と姿勢を同じPitchとRollへ乗せる
+            const Vector3 center {x, y, z};
+            const Vector3 offset = Matrix4x4::RotationZ(roll).TransformVector(
+                Matrix4x4::RotationX(pitch).TransformVector(partPosition - center));
+            transformedPosition = center + offset;
+            const Matrix4x4 world = Matrix4x4::Translation(transformedPosition) *
+                Matrix4x4::RotationZ(roll) * Matrix4x4::RotationY(partYaw) *
+                Matrix4x4::RotationX(pitch) *
+                Matrix4x4::RotationZ(partPitch) * Matrix4x4::Scale(partScale);
+            DrawModelPrimitive(renderer, camera, shape, world, partColor);
+        }
         if (!canToggleView || !isNose) return;
 
         // 青と白の高輝度な機首へ薄い拡大形状を重ね、ブルーム風の点滅にする
         const float glowScale = whiteGlow ? 1.18f : 1.10f;
-        DrawModelPrimitive(renderer, camera, shape,
-            partPosition.x, partPosition.y, partPosition.z,
-            partScale.x * glowScale, partScale.y * glowScale, partScale.z * glowScale,
-            glowColor, partYaw, pitch);
+        if (!transformed) {
+            DrawModelPrimitive(renderer, camera, shape,
+                partPosition.x, partPosition.y, partPosition.z,
+                partScale.x * glowScale, partScale.y * glowScale, partScale.z * glowScale,
+                glowColor, partYaw, partPitch);
+        } else {
+            const Matrix4x4 glowWorld = Matrix4x4::Translation(transformedPosition) *
+                Matrix4x4::RotationZ(roll) * Matrix4x4::RotationY(partYaw) *
+                Matrix4x4::RotationX(pitch) * Matrix4x4::RotationZ(partPitch) *
+                Matrix4x4::Scale(partScale * glowScale);
+            DrawModelPrimitive(renderer, camera, shape, glowWorld, glowColor);
+        }
     };
     AircraftModelView::DrawPlayer({x, y, z}, yaw, 1.0f, drawPart);
 }
@@ -380,8 +403,7 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
         renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * world,
             static_cast<float>(enemy.age) / 30.0f + static_cast<float>(part) * 0.37f, 1});
     };
-    if (enemy.type == 2 &&
-        StageDispatch::DrawBossModel(*this, renderer, camera, enemy, yaw)) return;
+    if (StageDispatch::DrawBossModel(*this, renderer, camera, enemy, yaw)) return;
     if (enemy.type == 2) {
         // 専用モデルを持たないボスは従来の大型戦闘機モデルを維持する
         constexpr float ModelScale = 0.14f;
@@ -454,14 +476,32 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
         return;
     }
 
-    // 通常敵もギャラリーと共有するステージ固有モデルで描画する
+    // 第2部は敵種ごとに過去4ステージの通常敵モデルを再登場させる
     const float scale = enemy.behavior != nullptr ? enemy.behavior->RenderScale() : 1.0f;
-    if (m_stageNumber >= 1 && m_stageNumber <= 4) {
+    const bool stage5Part2 = m_stageNumber == 5 &&
+        m_stage5.phase >= Stage5Phase::WallClimbLower &&
+        m_stage5.phase <= Stage5Phase::WallClimbUpper;
+    const float railWeight = RailBlend();
+    const bool groundwardEnemy = stage5Part2 && enemy.entersFromTop;
+    const float groundwardRoll = groundwardEnemy ?
+        Math::Lerp(Math::HalfPi, 0.0f, railWeight) : 0.0f;
+    const float groundwardPitch = groundwardEnemy ?
+        Math::Lerp(0.0f, Math::HalfPi, railWeight) : 0.0f;
+    const int enemyModelStage = stage5Part2 ? 1 + enemy.type % 4 : m_stageNumber;
+    if (enemyModelStage >= 1 && enemyModelStage <= 4) {
         const Matrix4x4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
+        const float modelYaw = yaw + Math::Pi;
+        const Matrix4x4 groundwardRotation = Matrix4x4::Translation({x, y, z}) *
+            Matrix4x4::RotationZ(groundwardRoll) *
+            Matrix4x4::RotationY(modelYaw) * Matrix4x4::RotationX(groundwardPitch) *
+            Matrix4x4::RotationY(-modelYaw) *
+            Matrix4x4::Translation({-x, -y, -z});
         auto drawPart = [&](PrimitiveShape shape, const Matrix4x4& world, const ColorF& color) {
-            renderer.Draw({shape, viewProjection * world, Vector3::One, color});
+            renderer.Draw({shape, viewProjection * groundwardRotation * world,
+                Vector3::One, color});
         };
-        StageEnemyModelView::Draw(m_stageNumber, {x, y, z}, yaw + Math::Pi, scale, drawPart);
+        StageEnemyModelView::Draw(enemyModelStage,
+            {x, y, z}, modelYaw, scale, drawPart);
         return;
     }
 
@@ -548,8 +588,8 @@ Vector2 SideScrollingShooter::ScreenShakeOffset() const {
 
 void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw) const {
     if (StageDispatch::DrawSpecialShot(*this, renderer, camera, shot, yaw)) return;
-    if (shot.enemy || shot.special) {
-        // 敵弾と特殊弾は画面座標と進行方向を埋め込みHLSLへ渡して描画する
+    {
+        // 全ショットは画面座標と進行方向を埋め込みHLSLへ渡して描画する
         const Vector3 worldPosition {ToWorldX(shot.x), ToWorldY(shot.y), shot.z};
         Vector2 screenPosition;
         if (!camera.TryWorldToScreen(worldPosition, screenPosition)) return;
@@ -566,7 +606,8 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
         const Vector2 direction {
             (nextScreenPosition.x - screenPosition.x) / static_cast<float>(viewport.width) * 2.0f,
             (screenPosition.y - nextScreenPosition.y) / static_cast<float>(viewport.height) * 2.0f};
-        Vector2 size = shot.enemy ? Vector2 {0.055f, 0.028f} : Vector2 {0.040f, 0.020f};
+        Vector2 size = shot.enemy || !shot.special ?
+            Vector2 {0.055f, 0.028f} : Vector2 {0.040f, 0.020f};
         if (!shot.enemy && RailBlend() > 0.0f) {
             // 3Dでは当たり判定球を画面へ投影し、遠方でも見た目と判定範囲を一致させる
             const float worldRadius = shot.hitRadius * WorldXScale;
@@ -581,7 +622,7 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
             }
         }
         Vector2 drawPosition = position;
-        int type = shot.enemy ? 4 : static_cast<int>(shot.playerType);
+        int type = shot.enemy ? 4 : shot.special ? static_cast<int>(shot.playerType) : 6;
 
         // 既存のグレイズ範囲へ入った通常敵弾を反転させ、弾ごとに位相をずらして小刻みに震わせる
         if (shot.enemy) {
@@ -601,8 +642,6 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
             static_cast<float>(m_frame), type});
         return;
     }
-    DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
-        0.16f, 0.16f, 1.15f, PlayerShotColor, yaw);
 }
 
 /**

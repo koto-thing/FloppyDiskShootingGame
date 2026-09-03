@@ -66,7 +66,7 @@ private:
     static float WrapDistance(float value, float length);
 
     /**
-     * @brief Stage 4の横視点道路をレール道路へ補間して描画する
+     * @brief 都市ステージの横視点道路をレール道路へ補間して描画する
      * @param shooter 現在のゲーム状態
      * @param renderer 描画先レンダラー
      * @param camera 現在の描画カメラ
@@ -74,7 +74,7 @@ private:
      * @param railWeight 横視点からレール視点への補間率
      * @return なし
      */
-    static void DrawStage4Road(const SideScrollingShooter& shooter,
+    static void DrawRoad(const SideScrollingShooter& shooter,
         Renderer& renderer, const Camera3D& camera,
         float sideHalfWidth, float railWeight);
 

@@ -28,8 +28,33 @@ constexpr float BombTravelCoordinate(float start, int age, int travelFrames) {
     return start * static_cast<float>(travelFrames - age) / static_cast<float>(travelFrames);
 }
 
+/**
+ * @brief 透視投影上で同じ位置になる奥行き平面への縮尺を取得する
+ * @param cameraZ カメラのZ座標
+ * @param sourceZ 投影元のZ座標
+ * @param targetZ 投影先平面のZ座標
+ * @return カメラを原点とした投影縮尺
+ */
+constexpr float PerspectiveDepthScale(float cameraZ, float sourceZ, float targetZ) {
+    return (targetZ - cameraZ) / (sourceZ - cameraZ);
+}
+
+/**
+ * @brief 2D縦スクロール用の敵弾を地面側へ向ける
+ * @param vx X方向速度
+ * @param vy Y方向速度
+ * @return なし
+ */
+void AimShotGroundward(float& vx, float& vy) {
+    const float speedSquared = vx * vx + vy * vy;
+    vx *= 0.25f;
+    vy = -std::sqrt((std::max)(0.0f, speedSquared - vx * vx));
+}
+
 static_assert(BombTravelCoordinate(-0.8f, 0, 24) == -0.8f);
 static_assert(BombTravelCoordinate(-0.8f, 24, 24) == 0.0f);
+static_assert(PerspectiveDepthScale(-13.5f, 35.0f, 10.0f) > 0.0f);
+static_assert(PerspectiveDepthScale(-13.5f, 35.0f, 10.0f) < 1.0f);
 }
 
 void SideScrollingShooter::TickPlayer() {
@@ -39,11 +64,15 @@ void SideScrollingShooter::TickPlayer() {
         dx *= 0.7071f;
         dy *= 0.7071f;
     }
-    /** @brief 2D画面ではHUDを除くプレイ領域全体を移動可能にする */
-    const Vector2 xRange = StageDispatch::PlayerXRange(*this);
+    // Stage 5第2部道中の3DだけはHUDを除くプレイ領域全体を移動可能にする
+    const bool fullScreenRailMovement = IsRailGameplayActive() &&
+        UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+    const Vector2 xRange = fullScreenRailMovement ?
+        Vector2 {Side2DPlayerMinX, Side2DPlayerMaxX} : StageDispatch::PlayerXRange(*this);
     const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
-    const float minY = IsRailGameplayActive() ? PlayerRailMinY() : sideYRange.x;
-    const float maxY = IsRailGameplayActive() ?
+    const float minY = IsRailGameplayActive() && !fullScreenRailMovement ?
+        PlayerRailMinY() : sideYRange.x;
+    const float maxY = IsRailGameplayActive() && !fullScreenRailMovement ?
         StageDispatch::RailPlayerMaxY(*this) : sideYRange.y;
     const float speedScale = m_slowMove ? 0.5f : 1.0f;
     m_playerX = (std::clamp)(m_playerX + dx * 0.023f * speedScale, xRange.x, xRange.y);
@@ -58,8 +87,11 @@ void SideScrollingShooter::TickPlayerWeapons() {
     // 通常弾と選択機体の特殊弾をそれぞれのクールダウンで発射する
     bool firedPlayerShot = false;
     if (m_fire && m_shotCooldown == 0) {
-        SpawnShot(m_playerX + (IsRailGameplayActive() ? 0.0f : 0.12f), m_playerY,
-            IsRailGameplayActive() ? 0.0f : 0.045f, 0.0f, false,
+        const bool verticalRoute = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+        SpawnShot(m_playerX + (IsRailGameplayActive() || verticalRoute ? 0.0f : 0.12f),
+            m_playerY + (verticalRoute ? 0.12f : 0.0f),
+            IsRailGameplayActive() || verticalRoute ? 0.0f : 0.045f,
+            verticalRoute ? 0.045f : 0.0f, false,
             -1.0f, -1.0f, 1 + PowerLevel());
         m_shotCooldown = (std::max)(3, 7 - PowerLevel());
         PlayShotSound();
@@ -134,6 +166,7 @@ void SideScrollingShooter::DetonateBomb() {
 }
 
 void SideScrollingShooter::TickEnemies() {
+    const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
     for (auto& enemy : m_enemies) {
         if (!enemy.active) continue;
         ++enemy.age;
@@ -151,6 +184,21 @@ void SideScrollingShooter::TickEnemies() {
             if (StageDispatch::HandleBossInteractionAfterTick(*this, enemy)) return;
         } else {
             enemy.behavior->Tick(*this, enemy);
+        }
+
+        // Stage 5第2部の従来敵は各視点の上端から画面下方へ通過する
+        if (enemy.type != Stage::BossEnemy && enemy.entersFromTop) {
+            if (IsRailGameplayActive()) {
+                enemy.baseY -= ShooterStages::Stage5::Part2RailEnemyFallSpeed;
+                enemy.x = enemy.railAnchorX;
+                enemy.y = enemy.baseY;
+                enemy.z = enemy.baseZ;
+            } else {
+                enemy.baseY -= 0.014f;
+                enemy.x = enemy.railAnchorX;
+                enemy.y = enemy.baseY;
+                enemy.z = ToRailZFromSideX(enemy.x);
+            }
         }
 
         // 巨大障害物へ接触した通常敵はスコアやアイテムを発生させず、その場で破壊する
@@ -184,7 +232,8 @@ void SideScrollingShooter::TickEnemies() {
                 const float shotSpeed = enemy.behavior->AimedShotSpeed();
                 SpawnShot(enemy.x - 0.06f, enemy.y, dxToPlayer / length * shotSpeed,
                     dyToPlayer / length * shotSpeed, true, enemy.z, enemy.behavior->RailAimedShotSpeed());
-                if (enemy.type != 2) PlayBossMachineGunSound();
+                if (enemy.type == 2) PlayEnemyShotSound();
+                else PlayBossMachineGunSound();
             }
         }
 
@@ -196,6 +245,14 @@ void SideScrollingShooter::TickEnemies() {
         }
 
         if (enemy.type != 2 && !IsRailGameplayActive() && enemy.x < -2.6f) enemy.active = false;
+        if (enemy.type != 2 && !IsRailGameplayActive() && enemy.entersFromTop &&
+            enemy.y < sideYRange.x - Side2DShotCullMargin) {
+            enemy.active = false;
+        }
+        if (enemy.type != 2 && IsRailGameplayActive() && enemy.entersFromTop &&
+            enemy.y < ShooterStages::Stage5::Part2RailEnemyExitY) {
+            enemy.active = false;
+        }
         if (enemy.type != 2 && IsRailGameplayActive() && enemy.z < 2.0f) enemy.active = false;
         if (enemy.type == 2 && !enemy.collisionEnabled) continue;
         const float enemyRadius = enemy.behavior->CollisionRadius(enemy);
@@ -285,11 +342,17 @@ void SideScrollingShooter::TickShots() {
             continue;
         }
         // 端から出る円形弾幕が生成直後に欠けないよう、弾のY消滅範囲だけ少し広げる
+        const bool verticalRouteShot = !shot.enemy &&
+            UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+        const float railShotMaxY = verticalRouteShot ?
+            ShooterStages::Stage5::Part2RailEnemyEntryY +
+                ShooterStages::Stage5::Part2RailEnemyEntryStep * 2.0f :
+            StageDispatch::RailPlayerMaxY(*this);
         if (!cullProtected && IsRailGameplayActive() &&
             (shot.z < 0.0f || shot.z > EnemyRailFarZ ||
             std::abs(shot.x) > 1.2f ||
             shot.y < PlayerRailMinY() - Side2DShotCullMargin ||
-            shot.y > StageDispatch::RailPlayerMaxY(*this) + Side2DShotCullMargin)) {
+            shot.y > railShotMaxY + Side2DShotCullMargin)) {
             DeactivateShot(shot);
             continue;
         }
@@ -366,10 +429,25 @@ void SideScrollingShooter::TickShots() {
             // 専用部位判定後に本体接触無効中のボスを共通形状判定から除外する
             if (enemy.type == 2 && !enemy.collisionEnabled) continue;
             const float enemyRadius = enemy.behavior->CollisionRadius(enemy);
+            Vector3 railTarget {ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z};
+            float railTargetRadius = enemy.behavior->ShotHitRadius3D(enemy);
+            if (verticalRouteShot && m_viewTransitionTimer > 0) continue;
+            if (verticalRouteShot) {
+                // 敵を自機弾の奥行き平面へ透視投影し、画面上で重なった場合だけ命中させる
+                const Vector3 cameraPosition {
+                    ToWorldX(m_playerX) * 0.18f,
+                    ToWorldY(m_playerY) * 0.12f + 1.72f,
+                    PlayerRailZ - 21.5f
+                };
+                const float projectionScale = PerspectiveDepthScale(
+                    cameraPosition.z, enemy.z, shot.z);
+                railTarget = cameraPosition + (railTarget - cameraPosition) * projectionScale;
+                railTargetRadius *= projectionScale;
+            }
             const bool enemyHit = IsRailGameplayActive() ?
                 Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
                     ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
-                    ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z, enemy.behavior->ShotHitRadius3D(enemy)) :
+                    railTarget.x, railTarget.y, railTarget.z, railTargetRadius) :
                 Hit(shot.x, shot.y, shot.hitRadius, enemy.x, enemy.y, enemyRadius);
             if (!enemyHit) continue;
             SpawnExplosion(shot.x, shot.y, shot.z);
@@ -402,14 +480,21 @@ void SideScrollingShooter::TickShots() {
  * @brief 取得アイテムを更新して自機との取得判定を行う
  */
 void SideScrollingShooter::TickItems() {
+    const bool part2Route = m_stageNumber == 5 &&
+        ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase);
     for (auto& item : m_items) {
         if (!item.active) continue;
 
-        // 2Dでは左、3Dでは手前へスクロールする
+        // 第2部は両視点で地面側へ落とし、3Dだけ取得可能な手前方向の移動も維持する
         if (IsRailGameplayActive()) {
-            item.z -= 0.28f;
+            item.z = part2Route ? (std::max)(item.z - 0.28f, PlayerRailZ) : item.z - 0.28f;
+            if (part2Route) item.y -= ShooterStages::Stage5::Part2RailItemFallSpeed;
         } else {
-            item.x -= 0.012f;
+            if (part2Route) {
+                item.y -= ShooterStages::Stage5::Part2SideItemFallSpeed;
+            } else {
+                item.x -= 0.012f;
+            }
             item.z = ToRailZFromSideX(item.x);
         }
 
@@ -418,7 +503,10 @@ void SideScrollingShooter::TickItems() {
                 (item.x < Side2DPlayerMinX || item.x > Side2DPlayerMaxX ||
                     item.y < Side2DPlayerMinY || item.y > Side2DPlayerMaxY)) ||
             (IsRailGameplayActive() &&
-                (item.z < 0.0f || item.z > 72.0f || std::abs(item.x) > 1.2f || std::abs(item.y) > 1.24f))) {
+                (item.z < 0.0f || item.z > 72.0f || std::abs(item.x) > 1.2f ||
+                    (part2Route ?
+                        item.y < ShooterStages::Stage5::Part2RailEnemyExitY :
+                        std::abs(item.y) > 1.24f)))) {
             item.active = false;
             continue;
         }
@@ -481,6 +569,7 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
         auto ConfigureLinked = [&](Enemy& enemy, int role, float fixedY, float linkRailX) {
             enemy.active = true;
             m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
+            enemy.entersFromTop = false;
             ApplyDifficultyToEnemyHp(enemy);
             enemy.railAnchorX = linkRailX;
             enemy.baseX = IsRailGameplayActive() ? linkRailX : (std::max)(sideX, SideEnemyEntryX);
@@ -501,6 +590,7 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
         if (enemy.active) continue;
         enemy.active = true;
         m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
+        enemy.entersFromTop = false;
         ApplyDifficultyToEnemyHp(enemy);
 
         // 初めて画面へ出現した通常敵を永続ギャラリーへ登録する
@@ -508,6 +598,7 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
         case 0: UnlockGallery(GalleryEntry::LightEnemy); break;
         case 1: UnlockGallery(GalleryEntry::HeavyEnemy); break;
         case 4: UnlockGallery(GalleryEntry::ArmoredEnemy); break;
+        case 10: UnlockGallery(GalleryEntry::WallSecurityDrone); break;
         default: break;
         }
         if (m_stageNumber >= 1 && m_stageNumber <= 4) {
@@ -528,7 +619,11 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
             enemy.baseY = MissileShooterEnemyBehavior::LowY();
             enemy.y = enemy.baseY;
         }
-        enemy.z = IsRailGameplayActive() ? (std::max)(railZ, EnemyRailFarZ) : ToRailZFromSideX(enemy.x);
+        enemy.z = IsRailGameplayActive() ?
+            (enemy.type == Stage::WallSecurityDroneEnemy ?
+                WallSecurityDroneEnemyBehavior::WallSurfaceZ() :
+                (std::max)(railZ, EnemyRailFarZ)) :
+            ToRailZFromSideX(enemy.x);
         ++m_chapterResult.enemySpawnCount;
         return;
     }
@@ -555,6 +650,7 @@ void SideScrollingShooter::FireBossPartBarrage(const Enemy& boss) {
     constexpr float PartY[] = { 3.0f, 2.0f, 2.0f, -6.0f, -6.0f };
     constexpr float PartZ[] = { -17.5f, 0.0f, 0.0f, 13.0f, 13.0f };
     const bool railMode = IsRailGameplayActive();
+    bool fired = false;
 
     // 未破壊部位ごとに、ステージ定義の通常または特殊弾幕を発射する
     for (int part = 0; part < BossPartCount; ++part) {
@@ -570,8 +666,10 @@ void SideScrollingShooter::FireBossPartBarrage(const Enemy& boss) {
             const float z = boss.z + PartZ[part] * ModelScale;
             SpawnShot(x + bullet.offsetX, y + bullet.offsetY, bullet.vx, bullet.vy, true,
                 z, boss.behavior->RailAimedShotSpeed());
+            fired = true;
         }
     }
+    if (fired) PlayEnemyShotSound();
 }
 
 bool SideScrollingShooter::DamageBoss(Enemy& boss, int damage) {
@@ -627,6 +725,8 @@ void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool 
         shot = {};
         shot.x = x;
         shot.y = y;
+        const bool verticalRoute = !enemy &&
+            UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
         shot.z = IsRailGameplayActive() ? (z >= 0.0f ? z : PlayerRailZ + 2.0f) :
             ToRailZFromSideX(x);
         shot.transitionSideX = x;
@@ -635,7 +735,7 @@ void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool 
         shot.vy = vy;
         shot.vz = 0.0f;
         shot.damage = damage;
-        if (IsRailGameplayActive()) {
+        if (IsRailGameplayActive() && !verticalRoute) {
             if (enemy) {
                 const float targetX = m_playerX + vx * 12.0f;
                 const float targetY = m_playerY + vy * 12.0f;
@@ -652,6 +752,10 @@ void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool 
                 shot.vy = 0.0f;
                 shot.vz = 1.45f;
             }
+        }
+        if (enemy && !IsRailGameplayActive() && m_stageNumber == 5 &&
+            ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase)) {
+            AimShotGroundward(shot.vx, shot.vy);
         }
         shot.enemy = enemy;
         shot.active = true;
@@ -745,6 +849,10 @@ void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, 
     shot.vx = vx;
     shot.vy = vy;
     shot.vz = vz;
+    if (enemy && !IsRailGameplayActive() && m_stageNumber == 5 &&
+        ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase)) {
+        AimShotGroundward(shot.vx, shot.vy);
+    }
     shot.barrageIndex = barrageIndex;
     shot.barrageCount = barrageCount;
     shot.enemy = enemy;
@@ -770,7 +878,10 @@ void SideScrollingShooter::FireSpecialShots() {
             : 0.0f;
         const float angle = centeredIndex * angleStep * DegreesToRadians;
         const bool railGameplay = IsRailGameplayActive();
-        const float spawnY = railGameplay ? m_playerY : m_playerY + centeredIndex * config.spawnOffsetY;
+        const bool verticalRoute = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+        const float spawnY = verticalRoute ? m_playerY + config.spawnOffsetX :
+            (railGameplay ? m_playerY :
+                m_playerY + centeredIndex * config.spawnOffsetY);
         const float railSpawnOffsetX = config.spawnOffsetY > 0.0f ? config.spawnOffsetY : 0.05f;
 
         /** @brief 空きスロットへ機体タイプ固有の属性を設定する */
@@ -778,19 +889,25 @@ void SideScrollingShooter::FireSpecialShots() {
             if (shot.active) continue;
             shot = {};
             // 3Dレールでは翼の左右から、2Dでは従来どおり機首の上下から発射する
-            shot.x = railGameplay ? m_playerX + centeredIndex * railSpawnOffsetX :
-                m_playerX + config.spawnOffsetX;
+            shot.x = verticalRoute ? m_playerX + centeredIndex * config.spawnOffsetY :
+                (railGameplay ? m_playerX + centeredIndex * railSpawnOffsetX :
+                    m_playerX + config.spawnOffsetX);
             shot.y = spawnY;
             shot.z = railGameplay ? PlayerRailZ + 2.0f : ToRailZFromSideX(shot.x);
             shot.transitionSideX = shot.x;
             shot.transitionSideY = shot.y;
-            if (railGameplay) {
+            if (verticalRoute) {
+                // Stage 5第2部は視点に関わらず画面上方向を基準に拡散する
+                shot.vx = std::sin(angle) * config.speed;
+                shot.vy = std::cos(angle) * config.speed;
+                shot.vz = 0.0f;
+            } else if (railGameplay) {
                 /** @brief 3Dレールでは特殊弾を奥行き方向へ進ませ、拡散角を横移動へ適用する */
                 shot.vx = std::sin(angle) * config.speed;
                 shot.vy = 0.0f;
                 shot.vz = 1.45f;
             } else {
-                /** @brief 2Dでは従来どおり画面右方向を基準に拡散する */
+                // 通常の2Dでは画面右方向を基準に拡散する
                 shot.vx = std::cos(angle) * config.speed;
                 shot.vy = std::sin(angle) * config.speed;
                 shot.vz = 0.0f;
@@ -808,7 +925,8 @@ void SideScrollingShooter::FireSpecialShots() {
 
 /** @brief 追尾弾の進行方向を最寄りの前方敵へ近づける */
 void SideScrollingShooter::UpdateHomingShot(Shot& shot) {
-    if (IsRailGameplayActive()) {
+    const bool verticalRoute = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+    if (IsRailGameplayActive() && !verticalRoute) {
         const Enemy* target = nullptr;
         float nearestDistanceSquared = 10000.0f;
 
@@ -848,9 +966,9 @@ void SideScrollingShooter::UpdateHomingShot(Shot& shot) {
     const Enemy* target = nullptr;
     float nearestDistanceSquared = 100.0f;
 
-    /** @brief 前方にいる最寄りの敵を追尾対象として検索する */
+    /** @brief 現在の2D進行方向にいる最寄りの敵を追尾対象として検索する */
     for (const auto& enemy : m_enemies) {
-        if (!enemy.active || enemy.x <= shot.x) continue;
+        if (!enemy.active || (verticalRoute ? enemy.y <= shot.y : enemy.x <= shot.x)) continue;
         const float dx = enemy.x - shot.x;
         const float dy = enemy.y - shot.y;
         const float distanceSquared = dx * dx + dy * dy;
@@ -923,6 +1041,14 @@ void SideScrollingShooter::PlayShotSound() {
 
 void SideScrollingShooter::PlayHitSound() {
     if (m_audio) m_audio->PlayMMLSE("t180 o4 l32 v10 g e c");
+}
+
+/**
+ * @brief 敵のエネルギー弾発射音を再生する
+ * @return なし
+ */
+void SideScrollingShooter::PlayEnemyShotSound() {
+    if (m_audio) m_audio->PlaySE(Audio::SfxrPreset::LaserShoot);
 }
 
 void SideScrollingShooter::PlayMissileLaunchSound() {

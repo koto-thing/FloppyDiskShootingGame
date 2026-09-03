@@ -198,8 +198,8 @@ const SideScrollingShooter::Stage& SideScrollingShooter::Stage5Module::Definitio
  */
 void SideScrollingShooter::Stage5Module::ProcessDebugInput(SideScrollingShooter& shooter) {
 #ifdef _DEBUG
-    // F6からF12は現行と同じStage 5後半の直接開始位置を維持する
-    if (Input::GetKeyDown(KeyCode::F6)) StartDebugPhase(shooter, Stage5Phase::WallClimbLower);
+    // F6はEASTSOURCE撃破後ムービー、F7以降は既存の後半確認位置を維持する
+    if (Input::GetKeyDown(KeyCode::F6)) StartDebugPhase(shooter, Stage5Phase::WallClimbTransition);
     if (Input::GetKeyDown(KeyCode::F7)) StartDebugPhase(shooter, Stage5Phase::WallClimbMiddle);
     if (Input::GetKeyDown(KeyCode::F8)) StartDebugPhase(shooter, Stage5Phase::WallClimbUpper);
     if (Input::GetKeyDown(KeyCode::F9)) StartDebugPhase(shooter, Stage5Phase::TayamaFireControl);
@@ -266,6 +266,12 @@ void SideScrollingShooter::Stage5Module::TickAfterFrame(SideScrollingShooter& sh
  * @return 専用遷移を完了して共通処理を中断する場合true、共通処理を続ける場合false
  */
 bool SideScrollingShooter::Stage5Module::HandleChapterResult(SideScrollingShooter& shooter) {
+    // 第2部Chapter 3完了後は屋上到達演出へ接続する
+    if (ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) {
+        StartPhase(shooter, Stage5Phase::RooftopArrival, false);
+        return true;
+    }
+
     // Chapter 3完了時だけ通常ボス待機を使わずEASTSOURCE登場へ直結する
     if (shooter.m_chapterNumber != 3) return false;
     StartPhase(shooter, Stage5Phase::EastsourceIntro);
@@ -278,6 +284,14 @@ bool SideScrollingShooter::Stage5Module::HandleChapterResult(SideScrollingShoote
  * @return なし
  */
 void SideScrollingShooter::Stage5Module::OnChapterStarted(SideScrollingShooter& shooter) {
+    // 第2部は共通の結果表示完了を次の壁面チャプター開始として扱う
+    if (ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) {
+        const Stage5Phase phase = shooter.m_chapterNumber == 2 ?
+            Stage5Phase::WallClimbMiddle : Stage5Phase::WallClimbUpper;
+        StartPhase(shooter, phase);
+        return;
+    }
+
     // 現行のChapter 2または3開始時スナップショットを保持する
     SaveCheckpoint(shooter, shooter.m_chapterNumber == 2 ?
         Stage5Checkpoint::Chapter2 : Stage5Checkpoint::Chapter3);
@@ -289,7 +303,34 @@ void SideScrollingShooter::Stage5Module::OnChapterStarted(SideScrollingShooter& 
  * @return 表示モードを固定する場合true、切り替えを許可する場合false
  */
 bool SideScrollingShooter::Stage5Module::IsViewLocked(const SideScrollingShooter& shooter) {
+    // 第2部道中では2Dと3Dの任意切り替えを再開する
+    if (ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) {
+        return shooter.m_stage5.phase == Stage5Phase::WallClimbLower &&
+            shooter.m_stage5.phaseTimer < ShooterStages::Stage5::WallClimbFadeFrames;
+    }
     return shooter.m_stage5.phase != Stage5Phase::Approach;
+}
+
+/**
+ * @brief NEO AIZU上空を進む第2部道中か判定する
+ * @param shooter 判定対象
+ * @return 第2部道中の場合true
+ */
+bool SideScrollingShooter::Stage5Module::IsPart2Route(
+    const SideScrollingShooter& shooter) {
+    return ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase);
+}
+
+/**
+ * @brief EASTSOURCE撃破後のムービー区間か判定する
+ * @param shooter 判定対象
+ * @return 操作とHUDを停止する場合true
+ */
+bool SideScrollingShooter::Stage5Module::IsCinematic(
+    const SideScrollingShooter& shooter) {
+    return ShooterStages::Stage5::IsCinematicPhase(shooter.m_stage5.phase) ||
+        (shooter.m_stage5.phase == Stage5Phase::WallClimbLower &&
+            shooter.m_stage5.phaseTimer < ShooterStages::Stage5::WallClimbFadeFrames);
 }
 
 /**
@@ -299,8 +340,8 @@ bool SideScrollingShooter::Stage5Module::IsViewLocked(const SideScrollingShooter
  */
 bool SideScrollingShooter::Stage5Module::ShouldAdvanceStageScroll(
     const SideScrollingShooter& shooter) {
-    return shooter.m_stage5.phase <= Stage5Phase::WallClimbUpper ||
-        shooter.m_stage5.phase == Stage5Phase::EastsourceFall;
+    return shooter.m_stage5.phase <= Stage5Phase::WallClimbUpper &&
+        !IsCinematic(shooter);
 }
 
 /**
@@ -320,7 +361,8 @@ bool SideScrollingShooter::Stage5Module::UsesChapterTimeline(
  */
 bool SideScrollingShooter::Stage5Module::IsPlayerDamageIgnored(
     const SideScrollingShooter& shooter) {
-    return shooter.m_stage5.phase == Stage5Phase::TayamaCollapse ||
+    return IsCinematic(shooter) ||
+        shooter.m_stage5.phase == Stage5Phase::TayamaCollapse ||
         shooter.m_stage5.phase == Stage5Phase::EndingReady;
 }
 
@@ -534,6 +576,8 @@ void SideScrollingShooter::Stage5Module::SaveCheckpoint(SideScrollingShooter& sh
  * @return なし
  */
 void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shooter, Stage5Phase phase, bool saveCheckpoint) {
+    const bool startsPart2 = phase == Stage5Phase::WallClimbLower &&
+        !ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase);
     shooter.m_stage5.phase = phase;
     shooter.m_stage5.phaseTimer = 0;
     shooter.m_stage5.attackTimer = 0;
@@ -541,7 +585,10 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
     shooter.m_stage5.coreTargetY = shooter.m_playerY;
     shooter.m_stage5.guardSpawnCooldown = 0;
 
-    if (phase != Stage5Phase::Approach) shooter.RequestViewMode(ViewMode::Rail3D);
+    if (phase != Stage5Phase::Approach &&
+        !ShooterStages::Stage5::IsPart2RoutePhase(phase)) {
+        shooter.RequestViewMode(ViewMode::Rail3D);
+    }
 
     // TAYAMA攻略は専用初期化へ委譲する
     if (phase == Stage5Phase::TayamaFireControl ||
@@ -577,9 +624,9 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
     }
     if (phase == Stage5Phase::EastsourceFall) {
         shooter.m_bossBattle = false;
-        for (auto& shot : shooter.m_shots) {
-            if (shot.enemy) shot.active = false;
-        }
+        shooter.m_shots = {};
+        shooter.m_items = {};
+        shooter.m_bomb = {};
         PlayCue(shooter, ShooterStages::Stage5::SignalLost);
         return;
     }
@@ -592,26 +639,43 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
             if (shot.enemy) shot.active = false;
         }
         int lightCount = 0;
+        bool wallCheckpoint = false;
         Stage5Checkpoint checkpoint = Stage5Checkpoint::WallClimbLower;
         if (phase == Stage5Phase::WallClimbLower) {
-            lightCount = 1;
-            shooter.m_stage5.tayamaTransformation = 0.10f;
+            wallCheckpoint = true;
+            shooter.m_stage5.tayamaTransformation = 0.0f;
         } else if (phase == Stage5Phase::WallClimbMiddle) {
-            lightCount = 2;
+            wallCheckpoint = true;
             checkpoint = Stage5Checkpoint::WallClimbMiddle;
-            shooter.m_stage5.tayamaTransformation = 0.34f;
+            shooter.m_stage5.tayamaTransformation = 0.0f;
         } else if (phase == Stage5Phase::WallClimbUpper) {
-            lightCount = 3;
+            wallCheckpoint = true;
             checkpoint = Stage5Checkpoint::WallClimbUpper;
-            shooter.m_stage5.tayamaTransformation = 0.64f;
+            shooter.m_stage5.tayamaTransformation = 0.0f;
         } else if (phase == Stage5Phase::RooftopArrival) {
-            shooter.m_stage5.tayamaTransformation = 0.90f;
+            shooter.m_stage5.tayamaTransformation = 0.0f;
+            shooter.m_playerX = 0.0f;
+            shooter.m_playerY = 0.0f;
         } else if (phase == Stage5Phase::CarrierTransformation) {
-            shooter.m_stage5.tayamaTransformation = 0.96f;
+            shooter.m_stage5.tayamaTransformation = 0.0f;
             PlayCue(shooter, ShooterStages::Stage5::Transformation);
         }
         ResetWallSearchlights(shooter, lightCount);
-        if (saveCheckpoint && lightCount > 0) SaveCheckpoint(shooter, checkpoint);
+        if (phase == Stage5Phase::WallClimbTransition) {
+            shooter.m_playerX = 0.0f;
+            shooter.m_playerY = 0.0f;
+            shooter.m_bomb = {};
+        }
+        if (startsPart2) {
+            // EASTSOURCE戦までの集計を切り離し、第2部を新しい3チャプターとして開始する
+            shooter.m_chapterNumber = ShooterStages::Stage5::Part2ChapterNumber(phase);
+            shooter.m_chapterRetryCounts = {};
+            shooter.m_chapterResult = {};
+            shooter.m_chapterStartPower = shooter.m_power;
+            shooter.m_chapterStartScore = shooter.m_score;
+            shooter.m_chapterStartKills = shooter.m_kills;
+        }
+        if (saveCheckpoint && wallCheckpoint) SaveCheckpoint(shooter, checkpoint);
         shooter.m_invincible = (std::max)(shooter.m_invincible, 60);
         return;
     }
@@ -631,7 +695,7 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
 
     if (phase == Stage5Phase::EndingReady) {
         shooter.m_clear = true;
-        shooter.m_clearTimer = 0;
+        shooter.m_clearTimer = ClearWaitFrames;
     }
 }
 
@@ -753,6 +817,7 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
                 SpawnEnemyShotAt(shooter, eastsource.x, eastsource.y, eastsource.z,
                     eastsource.attackWarningTargetX, eastsource.attackWarningTargetY,
                     PlayerRailZ, 0.72f);
+                shooter.PlayEnemyShotSound();
             }
         }
     }
@@ -765,6 +830,7 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
                 SpawnEnemyShotAt(shooter, eastsource.x - 0.42f, eastsource.y + 0.12f, eastsource.z,
                     shooter.m_playerX + 0.25f, static_cast<float>(lane) * 0.25f, PlayerRailZ, 0.64f);
             }
+            shooter.PlayEnemyShotSound();
         }
         if (cycle == 48 && eastsource.bossPartHp[BossRightWing] > 0) {
             for (int lane = -2; lane <= 2; ++lane) {
@@ -772,6 +838,7 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
                 SpawnEnemyShotAt(shooter, eastsource.x + 0.42f, eastsource.y - 0.12f, eastsource.z,
                     shooter.m_playerX - 0.25f, static_cast<float>(lane) * 0.25f, PlayerRailZ, 0.64f);
             }
+            shooter.PlayEnemyShotSound();
         }
     }
 
@@ -791,6 +858,7 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
                 SpawnEnemyShotAt(shooter, sourceX, eastsource.attackWarningTargetY, 18.0f,
                     eastsource.attackWarningTargetX, eastsource.attackWarningTargetY,
                     PlayerRailZ, engine ? 0.82f : 0.58f);
+                shooter.PlayEnemyShotSound();
             }
         }
     }
@@ -867,6 +935,7 @@ void SideScrollingShooter::Stage5Module::FireSearchlightVolley(SideScrollingShoo
             light.lockedX + spread, light.lockedY + std::abs(spread) * 0.35f,
             PlayerRailZ, 0.78f);
     }
+    shooter.PlayEnemyShotSound();
 }
 
 /**
@@ -1028,26 +1097,43 @@ Stage5ModelTransform SideScrollingShooter::Stage5Module::TayamaTransform(const S
         scale = 1.34f + static_cast<float>((std::max)(0, shooter.m_stage5.phaseTimer - 330)) * 0.0006f;
     }
     if (shooter.m_stage5.phase == Stage5Phase::RooftopArrival) {
-        const float arrival = SmoothStep(Math::Clamp01(
-            static_cast<float>(shooter.m_stage5.phaseTimer) / RooftopArrivalFrames));
-        pitch = Math::Lerp(0.0f, 0.58f, arrival);
-        y = Math::Lerp(2.1f, 0.0f, arrival);
-        z = Math::Lerp(59.0f, 57.0f, arrival);
-        scale = Math::Lerp(1.42f, 1.08f, arrival);
+        const float shakeWeight = SmoothStep(Math::Clamp01(
+            static_cast<float>(shooter.m_stage5.phaseTimer -
+                ShooterStages::Stage5::WallClimbFadeFrames) / 45.0f));
+        const float shake = std::sin(static_cast<float>(shooter.m_stage5.phaseTimer) * 0.72f) *
+            0.18f * shakeWeight;
+        y = TayamaModelView::GroundedRootY(
+            ShooterStages::Stage5::RooftopSurfaceY,
+            ShooterStages::Stage5::TayamaBossScale);
+        z = 57.0f;
+        scale = ShooterStages::Stage5::TayamaBossScale;
+        roll = shake * 0.035f;
     } else if (shooter.m_stage5.phase >= Stage5Phase::CarrierTransformation) {
-        pitch = 0.58f;
-        y = 0.0f;
+        pitch = 0.0f;
+        y = TayamaModelView::GroundedRootY(
+            ShooterStages::Stage5::RooftopSurfaceY,
+            ShooterStages::Stage5::TayamaBossScale);
         scale = shooter.m_stage5.phase == Stage5Phase::TayamaCollapse ?
-            1.08f + static_cast<float>((std::max)(0, shooter.m_stage5.phaseTimer - 330)) * 0.0006f : 1.08f;
+            ShooterStages::Stage5::TayamaBossScale +
+                static_cast<float>((std::max)(0, shooter.m_stage5.phaseTimer - 330)) * 0.0006f :
+            ShooterStages::Stage5::TayamaBossScale;
+    }
+    if (shooter.m_stage5.phase >= Stage5Phase::TayamaFireControl &&
+        shooter.m_stage5.phase <= Stage5Phase::TayamaCommandCore) {
+        y += std::sin(static_cast<float>(shooter.m_stage5.phaseTimer) * 0.026f) * 0.14f;
+        roll += std::sin(static_cast<float>(shooter.m_stage5.phaseTimer) * 0.017f) * 0.012f;
     }
     if (shooter.m_stage5.phase == Stage5Phase::TayamaCommandCore) {
-        y = Math::Lerp(0.0f, 1.8f, SmoothStep(Math::Clamp01(
+        const float rooftopY = TayamaModelView::GroundedRootY(
+            ShooterStages::Stage5::RooftopSurfaceY,
+            ShooterStages::Stage5::TayamaBossScale);
+        y = rooftopY + Math::Lerp(0.0f, 1.8f, SmoothStep(Math::Clamp01(
             static_cast<float>(shooter.m_stage5.phaseTimer) / 180.0f)));
     } else if (shooter.m_stage5.phase == Stage5Phase::TayamaCollapse) {
-        y = 1.8f - static_cast<float>((std::min)(shooter.m_stage5.phaseTimer, 450)) * 0.002f;
+        y += 1.8f - static_cast<float>((std::min)(shooter.m_stage5.phaseTimer, 450)) * 0.002f;
     }
 
-    // 揚力エンジンの片側破壊を艦体ロールへ反映するが入力軸は回転させない
+    // 脚部機関の片側破壊を機体ロールへ反映するが入力軸は回転させない
     if (shooter.m_stage5.phase >= Stage5Phase::TayamaLiftEngines) {
         const bool left = shooter.m_stage5.tayamaWeakpoints[
             static_cast<int>(TayamaWeakpoint::LeftLiftEngine)].destroyed;
@@ -1088,7 +1174,7 @@ TayamaModelState SideScrollingShooter::Stage5Module::TayamaState(const SideScrol
     }
     state.visible[static_cast<std::size_t>(TayamaPartGroup::CommandCore)] =
         shooter.m_stage5.phase >= Stage5Phase::TayamaCommandCore;
-    if (shooter.m_stage5.phase == Stage5Phase::TayamaCommandCore) {
+    if (shooter.m_stage5.phase >= Stage5Phase::TayamaCommandCore) {
         state.visible[static_cast<std::size_t>(TayamaPartGroup::ArmorPanel)] = false;
     }
 
@@ -1151,7 +1237,7 @@ bool SideScrollingShooter::Stage5Module::TryDamageWallSearchlight(SideScrollingS
         const float sourceY = 0.72f - static_cast<float>(index) * 0.22f;
         if (!Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
             ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
-            ToWorldX(sourceX), ToWorldY(sourceY), 46.0f, 0.72f)) continue;
+            ToWorldX(sourceX), ToWorldY(sourceY), shot.z, 0.72f)) continue;
 
         if (!shot.piercing) shot.active = false;
         light.hp -= shot.damage;
@@ -1315,6 +1401,7 @@ void SideScrollingShooter::Stage5Module::StartTayamaPhase(SideScrollingShooter& 
     UpdateTayamaBossHp(shooter);
     shooter.m_displayBossHp = static_cast<float>(shooter.m_bossHp);
     shooter.m_invincible = (std::max)(shooter.m_invincible, 75);
+    shooter.ShakeScreen(0.08f, 24);
 }
 
 /**
@@ -1329,15 +1416,31 @@ void SideScrollingShooter::Stage5Module::TickTayama(SideScrollingShooter& shoote
     ++shooter.m_stage5.attackTimer;
     shooter.m_stage5.guardSpawnCooldown = (std::max)(0, shooter.m_stage5.guardSpawnCooldown - 1);
 
+    // 戦闘開始時は正面構図と弱点表示を読む時間を確保する
+    if (shooter.m_stage5.phaseTimer <= 75) return;
+
+    // 弾の発射元を描画と当たり判定に使う実モデルの部位中心へ揃える
+    const Stage5ModelTransform transform = TayamaTransform(shooter);
+    const TayamaModelState modelState = TayamaState(shooter);
+    const auto PartSource = [&](TayamaPartGroup group, const Vector3& fallback) {
+        const Stage5GroupBounds bounds = TayamaModelView::GroupBounds(
+            transform, shooter.m_stage5.tayamaTransformation, modelState, group);
+        return bounds.valid ? Vector3 {FromWorldX(bounds.center.x),
+            FromWorldY(bounds.center.y), bounds.center.z} : fallback;
+    };
+
     if (shooter.m_stage5.phase == Stage5Phase::TayamaFireControl) {
+        const Vector3 radar = PartSource(TayamaPartGroup::FireControlRadar,
+            {0.0f, 0.62f, 56.0f});
         TickSearchlights(shooter, 2, true);
         if (shooter.m_stage5.attackTimer % 120 == 72) {
             for (int lane = -3; lane <= 3; ++lane) {
                 if (lane == 0) continue;
-                SpawnEnemyShotAt(shooter, static_cast<float>(lane) * 0.18f, 0.62f, 58.0f,
+                SpawnEnemyShotAt(shooter, radar.x, radar.y, radar.z,
                     shooter.m_playerX + static_cast<float>(lane) * 0.10f,
                     shooter.m_playerY + static_cast<float>(lane) * 0.09f, PlayerRailZ, 0.60f);
             }
+            shooter.PlayEnemyShotSound();
         }
         if (shooter.m_stage5.guardSpawnCooldown == 0 && shooter.m_stage5.phaseTimer > 120) {
             shooter.SpawnEnemy(Stage::ArmoredEnemy, 1.16f, (shooter.m_stage5.phaseTimer / 240) % 2 == 0 ? -0.72f : 0.72f,
@@ -1350,11 +1453,13 @@ void SideScrollingShooter::Stage5Module::TickTayama(SideScrollingShooter& shoote
             PlayCue(shooter, ShooterStages::Stage5::BarrageWarning);
         }
         if (sweepCycle == 36) {
+            shooter.ShakeScreen(0.055f, 12);
             for (int lane = -4; lane <= 4; ++lane) {
-                SpawnEnemyShotAt(shooter, static_cast<float>(lane) * 0.27f, 0.70f, 58.0f,
+                SpawnEnemyShotAt(shooter, radar.x, radar.y, radar.z,
                     static_cast<float>(lane) * 0.27f, shooter.m_stage5.coreTargetY,
                     PlayerRailZ, 0.76f);
             }
+            shooter.PlayEnemyShotSound();
         }
         return;
     }
@@ -1367,17 +1472,24 @@ void SideScrollingShooter::Stage5Module::TickTayama(SideScrollingShooter& shoote
             PlayCue(shooter, ShooterStages::Stage5::BarrageWarning);
         }
         if (cycle == 32) {
+            shooter.ShakeScreen(0.07f, 16);
+            bool fired = false;
             for (int engine = 0; engine < 2; ++engine) {
                 const TayamaWeakpoint type = engine == 0 ?
                     TayamaWeakpoint::LeftLiftEngine : TayamaWeakpoint::RightLiftEngine;
                 if (shooter.m_stage5.tayamaWeakpoints[static_cast<int>(type)].destroyed) continue;
                 const float side = engine == 0 ? -1.0f : 1.0f;
+                const TayamaPartGroup group = engine == 0 ?
+                    TayamaPartGroup::LeftLiftEngine : TayamaPartGroup::RightLiftEngine;
+                const Vector3 source = PartSource(group, {side * 0.72f, -0.42f, 55.0f});
                 for (int lane = -2; lane <= 2; ++lane) {
-                    SpawnEnemyShotAt(shooter, side * 0.72f, -0.42f, 55.0f,
+                    SpawnEnemyShotAt(shooter, source.x, source.y, source.z,
                         shooter.m_stage5.coreTargetX + static_cast<float>(lane) * 0.13f,
                         shooter.m_stage5.coreTargetY, PlayerRailZ, 0.72f);
+                    fired = true;
                 }
             }
+            if (fired) shooter.PlayEnemyShotSound();
         }
         if (shooter.m_stage5.guardSpawnCooldown == 0 && shooter.m_stage5.phaseTimer > 150) {
             shooter.SpawnEnemy(Stage::StraightShooterEnemy, 1.16f,
@@ -1388,6 +1500,8 @@ void SideScrollingShooter::Stage5Module::TickTayama(SideScrollingShooter& shoote
     }
 
     if (shooter.m_stage5.phase == Stage5Phase::TayamaCommandCore) {
+        const Vector3 core = PartSource(TayamaPartGroup::CommandCore,
+            {0.0f, 0.35f, 55.0f});
         const int cycle = shooter.m_stage5.attackTimer % 180;
         if (cycle == 0) {
             shooter.m_stage5.coreTargetX = shooter.m_playerX;
@@ -1395,16 +1509,19 @@ void SideScrollingShooter::Stage5Module::TickTayama(SideScrollingShooter& shoote
             PlayCue(shooter, ShooterStages::Stage5::CoreWarning);
         }
         if (cycle == 42 || cycle == 52 || cycle == 62) {
-            SpawnEnemyShotAt(shooter, 0.0f, 0.35f, 55.0f,
+            if (cycle == 42) shooter.ShakeScreen(0.10f, 24);
+            SpawnEnemyShotAt(shooter, core.x, core.y, core.z,
                 shooter.m_stage5.coreTargetX, shooter.m_stage5.coreTargetY, PlayerRailZ, 0.92f);
+            shooter.PlayEnemyShotSound();
         }
         if (cycle == 104) {
             for (int ray = 0; ray < 12; ++ray) {
                 const float angle = static_cast<float>(ray) * Math::TwoPi / 12.0f;
-                SpawnEnemyShotAt(shooter, 0.0f, 0.35f, 55.0f,
+                SpawnEnemyShotAt(shooter, core.x, core.y, core.z,
                     shooter.m_playerX + std::cos(angle) * 0.72f,
                     shooter.m_playerY + std::sin(angle) * 0.56f, PlayerRailZ, 0.66f);
             }
+            shooter.PlayEnemyShotSound();
         }
         if (cycle == 138) {
             for (int lane = -4; lane <= 4; ++lane) {
@@ -1413,8 +1530,86 @@ void SideScrollingShooter::Stage5Module::TickTayama(SideScrollingShooter& shoote
                     -0.52f + std::abs(static_cast<float>(lane)) * 0.10f,
                     PlayerRailZ, 0.58f);
             }
+            shooter.PlayEnemyShotSound();
         }
     }
+}
+
+/**
+ * @brief 第2部で頭上の従来敵と外壁警備ドローンを生成する
+ * @param shooter 更新対象
+ * @param overheadInterval 頭上ウェーブの生成間隔
+ * @param droneInterval 警備ドローンの生成間隔
+ * @return なし
+ */
+void SideScrollingShooter::Stage5Module::TickWallEnemyWave(
+    SideScrollingShooter& shooter, int overheadInterval, int droneInterval) {
+    const int elapsed = shooter.m_stage5.phaseTimer -
+        ShooterStages::Stage5::WallClimbFadeFrames;
+    if (elapsed < 0) return;
+
+    // 過去4ステージの通常敵モデルへ対応する行動を疑似乱数で選ぶ
+    constexpr int OverheadEnemyTypes[] = {
+        Stage::BasicEnemy,
+        Stage::HeavyEnemy,
+        Stage::StraightShooterEnemy,
+        Stage::ArmoredEnemy,
+        Stage::CircleShooterEnemy,
+        Stage::DiveRusherEnemy
+    };
+    if (elapsed % overheadInterval == 0) {
+        const int waveIndex = elapsed / overheadInterval;
+        const std::uint32_t wave = ShooterStages::Stage5::WallWaveHash(
+            waveIndex, static_cast<int>(shooter.m_stage5.phase));
+        constexpr int EnemyTypeCount = sizeof(OverheadEnemyTypes) /
+            sizeof(OverheadEnemyTypes[0]);
+        const int enemyType = OverheadEnemyTypes[wave % EnemyTypeCount];
+        const int lane = static_cast<int>((wave >> 8) % 7u) - 3;
+        const float sideY = ShooterStages::Stage5::Part2SideEnemyEntryY +
+            static_cast<float>((wave >> 16) % 3u) * 0.10f;
+        const float y = shooter.IsRailGameplayActive() ?
+            ShooterStages::Stage5::Part2RailEnemyEntryY +
+                static_cast<float>((wave >> 16) % 3u) *
+                ShooterStages::Stage5::Part2RailEnemyEntryStep : sideY;
+        const float z = shooter.IsRailGameplayActive() ?
+            ShooterStages::Stage5::Part2RailEnemyPlaneZ :
+            EnemyRailFarZ + static_cast<float>((wave >> 20) % 4u) * 2.5f;
+        Enemy* overheadEnemy = nullptr;
+        for (auto& enemy : shooter.m_enemies) {
+            if (enemy.active) continue;
+            overheadEnemy = &enemy;
+            break;
+        }
+        const float laneX = static_cast<float>(lane) * 0.27f;
+        shooter.SpawnEnemy(enemyType, laneX, laneX, y, z);
+        if (overheadEnemy != nullptr && overheadEnemy->active) {
+            // 各カメラの上端外側から降下を開始する
+            overheadEnemy->entersFromTop = true;
+            overheadEnemy->baseX = laneX;
+            overheadEnemy->x = laneX;
+            overheadEnemy->baseY = y;
+            overheadEnemy->y = y;
+            overheadEnemy->baseZ = ShooterStages::Stage5::Part2RailEnemyPlaneZ;
+            if (shooter.IsRailGameplayActive()) {
+                // PANDD会ビル前面の上空から外壁に沿って徐々に降下させる
+                overheadEnemy->z = overheadEnemy->baseZ;
+            } else {
+                overheadEnemy->z = ToRailZFromSideX(laneX);
+            }
+        }
+    }
+
+    // ドローンは外壁へ到着する時間を空け、左右の巡回基点へ交互に投入する
+    shooter.m_stage5.guardSpawnCooldown =
+        (std::max)(0, shooter.m_stage5.guardSpawnCooldown - 1);
+    if (elapsed < 90 || shooter.m_stage5.guardSpawnCooldown > 0) return;
+    const std::uint32_t droneWave = ShooterStages::Stage5::WallWaveHash(
+        elapsed / droneInterval, static_cast<int>(shooter.m_stage5.phase) + 17);
+    const float side = (droneWave & 1u) == 0u ? -1.0f : 1.0f;
+    shooter.SpawnEnemy(Stage::WallSecurityDroneEnemy, 1.16f,
+        side * 0.62f, 0.18f + static_cast<float>((droneWave >> 5) % 3u) * 0.18f,
+        EnemyRailFarZ);
+    shooter.m_stage5.guardSpawnCooldown = droneInterval;
 }
 
 /**
@@ -1436,7 +1631,13 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
                     1, 0.8f, 0.35f, 0.16f, PanelColor, 120, 90, false);
             }
         }
-        if (shooter.m_stage5.phaseTimer >= ShooterStages::Stage5::EastsourceIntroFrames) {
+        if (shooter.m_stage5.phaseTimer == ShooterStages::Stage5::EastsourceIntroFrames) {
+            // 専用登場演出の完了後は共通会話とボス名表示へ接続する
+            shooter.m_bossStoryLine = 0;
+            shooter.m_bossStoryActive = true;
+            shooter.m_bossIntroductionPhase = BossIntroductionPhase::Dialogue;
+            shooter.m_bossIntroductionTimer = 0;
+        } else if (shooter.m_stage5.phaseTimer > ShooterStages::Stage5::EastsourceIntroFrames) {
             StartPhase(shooter, Stage5Phase::EastsourceBattle);
         }
         return;
@@ -1459,60 +1660,50 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
         return;
     }
     if (shooter.m_stage5.phase == Stage5Phase::WallClimbTransition) {
-        shooter.m_stage5.tayamaTransformation = Math::Lerp(0.0f, 0.10f,
-            SmoothStep(static_cast<float>(shooter.m_stage5.phaseTimer) / WallClimbTransitionFrames));
+        // 道路をビル前まで進んでから外壁に沿って上昇し、屋上到達を暗転でつなぐ
+        const float approach = SmoothStep(Math::Clamp01(
+            static_cast<float>(shooter.m_stage5.phaseTimer) /
+            ShooterStages::Stage5::WallClimbApproachFrames));
+        shooter.m_playerX = Math::Lerp(-0.18f, 0.0f, approach);
+        shooter.m_playerY = 0.0f;
         if (shooter.m_stage5.phaseTimer >= WallClimbTransitionFrames) {
             StartPhase(shooter, Stage5Phase::WallClimbLower);
         }
         return;
     }
     if (shooter.m_stage5.phase == Stage5Phase::WallClimbLower) {
-        shooter.m_stage5.tayamaTransformation = Math::Lerp(0.10f, 0.34f,
-            SmoothStep(static_cast<float>(shooter.m_stage5.phaseTimer) / WallClimbLowerFrames));
-        TickSearchlights(shooter, 1, false);
+        shooter.m_stage5.tayamaTransformation = 0.0f;
+        TickWallEnemyWave(shooter, 96, 240);
         if (shooter.m_stage5.phaseTimer >= WallClimbLowerFrames) {
-            StartPhase(shooter, Stage5Phase::WallClimbMiddle);
+            shooter.FinishChapter();
         }
         return;
     }
     if (shooter.m_stage5.phase == Stage5Phase::WallClimbMiddle) {
-        shooter.m_stage5.tayamaTransformation = Math::Lerp(0.34f, 0.64f,
-            SmoothStep(static_cast<float>(shooter.m_stage5.phaseTimer) / WallClimbMiddleFrames));
-        TickSearchlights(shooter, 2, false);
-        if (shooter.m_stage5.guardSpawnCooldown-- <= 0) {
-            shooter.SpawnEnemy(Stage::ArmoredEnemy, 1.16f,
-                (shooter.m_stage5.phaseTimer / 180) % 2 == 0 ? -0.76f : 0.76f, 0.42f, 58.0f);
-            shooter.m_stage5.guardSpawnCooldown = 210;
-        }
+        shooter.m_stage5.tayamaTransformation = 0.0f;
+        TickWallEnemyWave(shooter, 78, 210);
         if (shooter.m_stage5.phaseTimer >= WallClimbMiddleFrames) {
-            StartPhase(shooter, Stage5Phase::WallClimbUpper);
+            shooter.FinishChapter();
         }
         return;
     }
     if (shooter.m_stage5.phase == Stage5Phase::WallClimbUpper) {
-        shooter.m_stage5.tayamaTransformation = Math::Lerp(0.64f, 0.90f,
-            SmoothStep(static_cast<float>(shooter.m_stage5.phaseTimer) / WallClimbUpperFrames));
-        TickSearchlights(shooter, 3, false);
-        if (shooter.m_stage5.guardSpawnCooldown-- <= 0) {
-            shooter.SpawnEnemy(Stage::StraightShooterEnemy, 1.16f,
-                (shooter.m_stage5.phaseTimer / 150) % 2 == 0 ? -0.82f : 0.82f, -0.34f, 60.0f);
-            shooter.m_stage5.guardSpawnCooldown = 180;
-        }
+        shooter.m_stage5.tayamaTransformation = 0.0f;
+        TickWallEnemyWave(shooter, 64, 180);
         if (shooter.m_stage5.phaseTimer >= WallClimbUpperFrames) {
-            StartPhase(shooter, Stage5Phase::RooftopArrival, false);
+            shooter.FinishChapter();
         }
         return;
     }
     if (shooter.m_stage5.phase == Stage5Phase::RooftopArrival) {
-        shooter.m_stage5.tayamaTransformation = Math::Lerp(0.90f, 0.96f,
-            SmoothStep(static_cast<float>(shooter.m_stage5.phaseTimer) / RooftopArrivalFrames));
+        shooter.m_stage5.tayamaTransformation = 0.0f;
         if (shooter.m_stage5.phaseTimer >= RooftopArrivalFrames) {
             StartPhase(shooter, Stage5Phase::CarrierTransformation, false);
         }
         return;
     }
     if (shooter.m_stage5.phase == Stage5Phase::CarrierTransformation) {
-        shooter.m_stage5.tayamaTransformation = Math::Lerp(0.96f, 1.0f,
+        shooter.m_stage5.tayamaTransformation = Math::Lerp(0.0f, 1.0f,
             SmoothStep(static_cast<float>(shooter.m_stage5.phaseTimer) / CarrierTransformationFrames));
         if (shooter.m_stage5.phaseTimer >= CarrierTransformationFrames) {
             StartTayamaPhase(shooter, Stage5Phase::TayamaFireControl);
@@ -1526,7 +1717,7 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
         return;
     }
     if (shooter.m_stage5.phase == Stage5Phase::TayamaCollapse) {
-        // 艦尾から艦首へ連鎖させ、最終フレームまで画面内で輪郭を崩す
+        // 背部から頭部へ連鎖させ、最終フレームまで画面内で輪郭を崩す
         if (shooter.m_stage5.phaseTimer < TayamaCollapseFrames && shooter.m_stage5.phaseTimer % 36 == 0) {
             const int burst = shooter.m_stage5.phaseTimer / 36;
             shooter.SpawnExplosion(-0.85f + static_cast<float>((burst * 7) % 17) * 0.10f,
@@ -1546,7 +1737,7 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
  * @return なし
  */
 void SideScrollingShooter::Stage5Module::RestartCheckpoint(SideScrollingShooter& shooter) {
-    ++shooter.m_chapterRetryCounts[2];
+    ++shooter.m_chapterRetryCounts[shooter.m_chapterNumber - 1];
     shooter.m_shots = {};
     shooter.m_enemies = {};
     shooter.m_items = {};
@@ -1554,6 +1745,9 @@ void SideScrollingShooter::Stage5Module::RestartCheckpoint(SideScrollingShooter&
     shooter.m_debris = {};
     shooter.m_score = shooter.m_stage5.checkpointScore;
     shooter.m_kills = shooter.m_stage5.checkpointKills;
+    shooter.m_chapterResult = {};
+    shooter.m_chapterStartScore = shooter.m_score;
+    shooter.m_chapterStartKills = shooter.m_kills;
     shooter.m_playerX = -0.72f;
     shooter.m_playerY = 0.0f;
     shooter.m_viewMode = ViewMode::Rail3D;

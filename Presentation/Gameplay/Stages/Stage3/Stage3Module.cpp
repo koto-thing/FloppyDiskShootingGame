@@ -47,11 +47,13 @@ constexpr int BossIntroductionFrameCount =
 constexpr int BossSectionTransitionFrames = 150;
 constexpr int BossPhase2TravelFrames = 4 * 60;
 constexpr int BossPhase2DeployFrames = 4 * 60;
+constexpr int BossBalloonExplosionFrames = 72;
 constexpr int BossLaserChargeFrames = 2 * 60;
 constexpr int BossLaserFireFrames = 3 * 60;
 constexpr int BossLaserCooldownFrames = 5 * 60;
 constexpr int BossLaserCycleFrames =
     BossLaserChargeFrames + BossLaserFireFrames + BossLaserCooldownFrames;
+constexpr int BossSoundSampleRate = 44100;
 constexpr float BossLaserTrackingRate = 0.005f;
 constexpr float BossLaserRadius = 0.42f;
 constexpr float BossLaserExtraLength = 24.0f;
@@ -187,6 +189,104 @@ static_assert(ReflectFunnelSpinYaw(1) > Math::TwoPi * 2.0f - 0.0001f &&
     ReflectFunnelSpinYaw(1) < Math::TwoPi * 2.0f + 0.0001f);
 static_assert(BossLaserCycleFrames == 10 * 60);
 static_assert(BossLaserChargeFrames + BossLaserFireFrames == 5 * 60);
+
+enum class BossLaserSoundCue {
+    None,
+    Charge,
+    Fire
+};
+
+/**
+ * @brief レーザー周期フレームから再生する効果音を取得する
+ * @param cycle 現在のレーザー周期フレーム
+ * @return 周期境界で再生する効果音
+ */
+constexpr BossLaserSoundCue BossLaserSoundCueAt(int cycle) {
+    if (cycle == 0) return BossLaserSoundCue::Charge;
+    if (cycle == BossLaserChargeFrames) return BossLaserSoundCue::Fire;
+    return BossLaserSoundCue::None;
+}
+static_assert(BossLaserSoundCueAt(0) == BossLaserSoundCue::Charge);
+static_assert(BossLaserSoundCueAt(BossLaserChargeFrames) == BossLaserSoundCue::Fire);
+static_assert(BossLaserSoundCueAt(BossLaserChargeFrames + 1) == BossLaserSoundCue::None);
+
+/**
+ * @brief Stage3ボスレーザーの上昇チャージ音を生成する
+ * @return 2秒間の44.1kHzモノラルPCM
+ */
+const std::vector<int16_t>& BossLaserChargeSound() {
+    static const std::vector<int16_t> pcm = [] {
+        // 2秒かけて上昇する矩形波で砲身へエネルギーが集まる音を作る
+        Audio::SfxrParams sound;
+        sound.waveType = Audio::SfxrWaveType::Square;
+        sound.attackTime = 0.10f;
+        sound.sustainTime = std::sqrt(
+            (BossSoundSampleRate * 2.0f - 2000.0f) / 100000.0f);
+        sound.decayTime = 0.10f;
+        sound.startFrequency = 0.36f;
+        sound.minFrequency = 0.0f;
+        sound.slide = 0.10f;
+        sound.squareDuty = 0.32f;
+        sound.masterVolume = 0.42f;
+        return Audio::SfxrGenerator::GeneratePCM(sound, BossSoundSampleRate);
+    }();
+    return pcm;
+}
+
+/**
+ * @brief Stage3ボスレーザーの持続照射音を生成する
+ * @return 3秒間の44.1kHzモノラルPCM
+ */
+const std::vector<int16_t>& BossLaserFireSound() {
+    static const std::vector<int16_t> pcm = [] {
+        // 3秒間ほぼ一定の鋸波を保ち、照射終了だけ短く減衰させる
+        Audio::SfxrParams sound;
+        sound.waveType = Audio::SfxrWaveType::Sawtooth;
+        sound.attackTime = 0.08f;
+        sound.sustainTime = std::sqrt(
+            (BossSoundSampleRate * 3.0f - 3200.0f) / 100000.0f);
+        sound.decayTime = 0.16f;
+        sound.startFrequency = 0.48f;
+        sound.minFrequency = 0.48f;
+        sound.slide = 0.0f;
+        sound.masterVolume = 0.34f;
+        return Audio::SfxrGenerator::GeneratePCM(sound, BossSoundSampleRate);
+    }();
+    return pcm;
+}
+
+/**
+ * @brief Stage3ボスPhase2機関砲の専用斉射音を生成する
+ * @return 0.14秒間の44.1kHzモノラルPCM
+ */
+const std::vector<int16_t>& BossPhase2MachineGunSound() {
+    static const std::vector<int16_t> pcm = [] {
+        // Phase1の高域ノイズを使わず、下降する鋸波で重い6門斉射を作る
+        Audio::SfxrParams sound;
+        sound.waveType = Audio::SfxrWaveType::Sawtooth;
+        sound.attackTime = 0.008f;
+        sound.sustainTime = 0.13f;
+        sound.decayTime = 0.212f;
+        sound.startFrequency = 0.68f;
+        sound.minFrequency = 0.17f;
+        sound.slide = -0.42f;
+        sound.masterVolume = 0.54f;
+        return Audio::SfxrGenerator::GeneratePCM(sound, BossSoundSampleRate);
+    }();
+    return pcm;
+}
+
+/**
+ * @brief Stage3ボスレーザーの周期境界効果音を再生する
+ * @param audio 使用するオーディオサービス
+ * @param cue 再生する効果音
+ * @return なし
+ */
+void PlayBossLaserSound(AudioService* audio, BossLaserSoundCue cue) {
+    if (!audio || cue == BossLaserSoundCue::None) return;
+    audio->PlaySE(cue == BossLaserSoundCue::Charge ?
+        BossLaserChargeSound() : BossLaserFireSound());
+}
 
 /**
  * @brief レーザー周期中に主砲照準を追尾させるか判定する
@@ -690,6 +790,7 @@ void SideScrollingShooter::Stage3Module::TickBoss(
         }
 
         // 配置完了した各ファンネルが一発ずつ次のファンネルへ渡す
+        bool firedReflectPass = false;
         for (int owner = 0; owner < ShooterStages::Stage3::ReflectFunnelCount; ++owner) {
             const auto& source = shooter.m_stage3.reflectFunnels[owner];
             if (!source.active || source.age < ReflectFunnelLaunchFrames) continue;
@@ -724,9 +825,11 @@ void SideScrollingShooter::Stage3Module::TickBoss(
                 shot.barrageIndex = owner; shot.barrageCount = target;
                 shot.stage2.kind = ShooterStages::Stage2::ShotKind::ReflectPass;
                 shot.active = true;
+                firedReflectPass = true;
                 break;
             }
         }
+        if (firedReflectPass) shooter.PlayEnemyShotSound();
 
         // 各ファンネル砲塔から10秒ごとに小型追尾ミサイルを1発ずつ放つ
         for (int owner = 0; owner < ShooterStages::Stage3::ReflectFunnelCount; ++owner) {
@@ -1082,8 +1185,9 @@ void SideScrollingShooter::Stage3Module::FireBossPartBarrage(
                 if (kind != ShooterStages::Stage2::ShotKind::None) {
                     shooter.PlayMissileLaunchSound();
                 }
-                break;
+                return true;
             }
+            return false;
         };
 
         // チャージとクールダウン中は遅れて追尾し、照射中だけ照準を固定する
@@ -1098,6 +1202,9 @@ void SideScrollingShooter::Stage3Module::FireBossPartBarrage(
             state.laserTargetY += (target.y - state.laserTargetY) * BossLaserTrackingRate;
             state.laserTargetZ += (target.z - state.laserTargetZ) * BossLaserTrackingRate;
         }
+
+        // チャージ開始と照射開始で周期長に一致する専用音を一度だけ再生する
+        PlayBossLaserSound(shooter.m_audio, BossLaserSoundCueAt(cycle));
         if (cycle >= BossLaserChargeFrames &&
             cycle < BossLaserChargeFrames + BossLaserFireFrames &&
             shooter.m_invincible == 0) {
@@ -1131,10 +1238,14 @@ void SideScrollingShooter::Stage3Module::FireBossPartBarrage(
 
         // レーザー周期中も既存の機銃と追尾ミサイルを使用する
         if (machineGunFrame) {
+            bool fired = false;
             for (int i = 0; i < Stage3BossModelView::GondolaMachineGunCount; ++i) {
-                SpawnAimed(Stage3BossModelView::GondolaMachineGunMount(i).localPosition,
+                fired |= SpawnAimed(Stage3BossModelView::GondolaMachineGunMount(i).localPosition,
                     0.50f * BossLaterPhaseSpeedScale, 1,
                     ShooterStages::Stage2::ShotKind::None, 0.025f);
+            }
+            if (fired && shooter.m_audio) {
+                shooter.m_audio->PlaySE(BossPhase2MachineGunSound());
             }
         } else {
             for (int i = 0; i < Stage3BossModelView::MissilePodCount; ++i) {
@@ -1311,6 +1422,29 @@ void SideScrollingShooter::Stage3Module::TickSpecialShotBeforeMove(
         shot.vz = playerDz / playerLength * ReflectShotSpeed;
         shot.stage2.kind = ShooterStages::Stage2::ShotKind::ReflectAttack;
         funnel.spinFrames = ReflectFunnelSpinFrames;
+
+        // 短い破裂音と高い余韻を重ねてバットの打球音を作る
+        if (shooter.m_audio) {
+            Audio::SfxrParams crack;
+            crack.waveType = Audio::SfxrWaveType::Noise;
+            crack.startFrequency = 0.85f;
+            crack.minFrequency = 0.20f;
+            crack.slide = -0.45f;
+            crack.sustainTime = 0.012f;
+            crack.decayTime = 0.055f;
+            crack.masterVolume = 0.72f;
+            shooter.m_audio->PlaySE(crack);
+
+            Audio::SfxrParams ring;
+            ring.waveType = Audio::SfxrWaveType::Sine;
+            ring.startFrequency = 1.15f;
+            ring.minFrequency = 0.82f;
+            ring.slide = -0.18f;
+            ring.sustainTime = 0.045f;
+            ring.decayTime = 0.20f;
+            ring.masterVolume = 0.58f;
+            shooter.m_audio->PlaySE(ring);
+        }
         return;
     }
     if (shot.stage2.kind == ShooterStages::Stage2::ShotKind::ReflectAttack) {
@@ -1480,6 +1614,7 @@ bool SideScrollingShooter::Stage3Module::DrawBossModel(
 
     const BossModelTransform transform = BossTransform(shooter, boss);
     const float railWeight = shooter.RailBlend();
+    const Matrix4x4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
     auto DrawPart = [&](int shape, const Vector3& position, const Vector3& scale,
         const float color[4], float partYaw, float partPitch) {
         // 2Dでは巨大船体の奥行きを固定Zへ畳み、プレイヤー描画面への突き抜けを防ぐ
@@ -1496,6 +1631,63 @@ bool SideScrollingShooter::Stage3Module::DrawBossModel(
         DrawModelPrimitive(renderer, camera, shape,
             drawPosition.x, drawPosition.y, drawPosition.z,
             drawScale.x, drawScale.y, drawScale.z, color, partYaw, partPitch);
+    };
+
+    auto DrawBalloonDamage = [&]() {
+        auto DamagePosition = [&](int index) {
+            Vector3 position = Stage3BossModelView::BalloonDamageWorldPosition(index, transform);
+            position.z = Math::Lerp(transform.position.z, position.z, railWeight);
+            return position;
+        };
+
+        // Phase1終了直後は気球中央の大火球から表面全体へ爆発を連鎖させる
+        if (boss.phase == BossPhase2Travel) {
+            const int explosionAge = BossPhase2TravelFrames - boss.motionAge;
+            if (explosionAge < BossBalloonExplosionFrames) {
+                const float progress = Math::Clamp01(
+                    static_cast<float>(explosionAge) / BossBalloonExplosionFrames);
+                const Vector3 center = DamagePosition(2);
+                const float mainSize = transform.scale * (2.2f + progress * 2.8f);
+                const Matrix4x4 mainWorld = Matrix4x4::Translation(center) *
+                    Matrix4x4::Scale({mainSize, mainSize * 1.08f, 1.0f});
+                renderer.DrawExplosion({viewProjection * mainWorld, progress});
+
+                const Matrix4x4 shockWorld = Matrix4x4::Translation(center) *
+                    Matrix4x4::Scale({mainSize * 1.45f, mainSize * 0.52f, 1.0f});
+                renderer.DrawExplosion({viewProjection * shockWorld, progress, 4});
+                for (int i = 0; i < Stage3BossModelView::BalloonDamagePointCount; ++i) {
+                    const float delayedProgress =
+                        progress * 1.55f - static_cast<float>(i) * 0.11f;
+                    if (delayedProgress <= 0.0f) continue;
+                    const float delayed = Math::Clamp01(delayedProgress);
+                    const float size = transform.scale * (0.72f + delayed * 1.15f);
+                    const Matrix4x4 lobeWorld = Matrix4x4::Translation(DamagePosition(i)) *
+                        Matrix4x4::Scale({size, size, 1.0f});
+                    renderer.DrawExplosion({viewProjection * lobeWorld, delayed});
+                }
+            }
+        }
+
+        // 気球上面の破損箇所へ上向きの炎と立ち上る黒煙を残す
+        constexpr int BurningPointIndices[] = {1, 2, 3};
+        for (int i = 0; i < static_cast<int>(std::size(BurningPointIndices)); ++i) {
+            const Vector3 surface = DamagePosition(BurningPointIndices[i]);
+            const float phaseOffset = static_cast<float>(i) * 0.71f;
+            const float flameWidth = transform.scale * (0.42f + 0.08f * static_cast<float>(i));
+            const float flameHeight = transform.scale * (0.72f + 0.10f * static_cast<float>(i));
+            const Matrix4x4 flameWorld = Matrix4x4::Translation(
+                surface + Vector3 {0.0f, flameHeight, 0.0f}) *
+                Matrix4x4::Scale({flameWidth, -flameHeight, 1.0f});
+            renderer.DrawExplosion({viewProjection * flameWorld,
+                static_cast<float>(boss.age) / 13.0f + phaseOffset, 3});
+
+            const float smokeSize = transform.scale * (0.72f + 0.12f * static_cast<float>(i));
+            const Matrix4x4 smokeWorld = Matrix4x4::Translation(
+                surface + Vector3 {0.0f, smokeSize * 0.55f, 0.0f}) *
+                Matrix4x4::Scale({smokeSize, smokeSize * 1.65f, 1.0f});
+            renderer.DrawExplosion({viewProjection * smokeWorld,
+                static_cast<float>(boss.age) / 30.0f + phaseOffset, 1});
+        }
     };
 
     // 撃破演出では一回目に中央を穿ち、二回目に上部船体全体を消失させる
@@ -1523,6 +1715,7 @@ bool SideScrollingShooter::Stage3Module::DrawBossModel(
             DrawPart(shape, position, scale, color, partYaw, partPitch);
         };
         Stage3BossModelView::DrawGondolaBody(gondolaTransform, DrawGondolaPart);
+        if (damageStage < 2) DrawBalloonDamage();
 
         // 突進時刻に合わせて破孔と飲み込み位置へ爆炎を重ねる
         auto DrawImpact = [&](int impactFrame, float width, float y) {
@@ -1543,6 +1736,7 @@ bool SideScrollingShooter::Stage3Module::DrawBossModel(
     // 巨大船体と未破壊の全砲台を常時描画し、現在区画だけを発光させる
     Stage3BossModelView::DrawStaticBody(transform, DrawPart);
     Stage3BossModelView::DrawGondolaBody(transform, DrawPart);
+    if (boss.phase >= BossPhase2Travel) DrawBalloonDamage();
     const int section = (std::clamp)(static_cast<int>(boss.phase), 0,
         Stage3BossModelView::Phase1SectionCount - 1);
     const Vector3 target {

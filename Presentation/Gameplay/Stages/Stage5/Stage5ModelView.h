@@ -297,19 +297,22 @@ struct TayamaModelState {
     }
 };
 
-/** @brief ビル形態と空母形態を共有するTAYAMAの一つのプリミティブ */
+/** @brief ビル形態と巨大メカ形態を共有するTAYAMAの一つのプリミティブ */
 struct TayamaPart {
     PrimitiveShape shape = PrimitiveShape::Box;
     Stage5PartTransform tower {};
-    Stage5PartTransform carrier {};
+    Stage5PartTransform mecha {};
     TayamaPartGroup group = TayamaPartGroup::CentralHull;
     ColorF color {};
 };
 
-/** @brief 同じパーツ群を補間してビルから空中航空母艦へ変形するTAYAMAモデル */
+/** @brief 同じパーツ群を補間してビルから巨大メカへ変形するTAYAMAモデル */
 class TayamaModelView {
 public:
     static constexpr std::size_t PrimitiveCount = 46;
+    inline static constexpr Vector3 TowerBoundsMin {-4.8f, -11.0f, -3.7f};
+    inline static constexpr Vector3 TowerBoundsMax {4.8f, 23.2f, 3.5f};
+    inline static constexpr Vector3 TowerSize {9.6f, 34.2f, 7.2f};
     inline static constexpr ColorF Hull {0.15f, 0.17f, 0.21f, 1.0f};
     inline static constexpr ColorF Armor {0.24f, 0.27f, 0.32f, 1.0f};
     inline static constexpr ColorF LightArmor {0.36f, 0.40f, 0.46f, 1.0f};
@@ -320,100 +323,131 @@ public:
     inline static constexpr ColorF Core {1.0f, 0.08f, 0.025f, 1.0f};
     inline static constexpr ColorF Hit {1.0f, 0.04f, 0.03f, 1.0f};
 
-    // 各要素はビルと空母で同じパーツを表し、単純なモデル差し替えを行わない
+    /**
+     * @brief ビル形態の下端を指定面へ接地する親Y座標を取得する
+     * @param surfaceY 接地面のY座標
+     * @param scale モデル全体の均一倍率
+     * @return 接地済み親Y座標
+     */
+    static constexpr float GroundedRootY(float surfaceY, float scale) {
+        return surfaceY - TowerBoundsMin.y * scale;
+    }
+
+    // 各要素はビルと巨大メカで同じパーツを表し、単純なモデル差し替えを行わない
     inline static constexpr std::array<TayamaPart, PrimitiveCount> Parts {{
-        // 中央ビルを前後へ展開して航空母艦の主船体へ変形する
-        {PrimitiveShape::Box, {{0.0f, 2.0f, 0.0f}, {}, {6.0f, 8.0f, 6.0f}}, {{0.0f, 0.0f, 0.0f}, {}, {7.0f, 2.5f, 14.0f}}, TayamaPartGroup::CentralHull, Hull},
-        {PrimitiveShape::Box, {{0.0f, -3.0f, 0.0f}, {}, {7.0f, 3.0f, 7.0f}}, {{0.0f, -1.2f, 5.0f}, {}, {7.5f, 2.4f, 7.0f}}, TayamaPartGroup::CentralHull, Armor},
-        {PrimitiveShape::Prism, {{0.0f, 7.0f, 0.0f}, {}, {5.0f, 3.0f, 5.0f}}, {{0.0f, 0.0f, -8.5f}, {}, {5.5f, 2.0f, 5.0f}}, TayamaPartGroup::CentralHull, LightArmor},
-        {PrimitiveShape::Prism, {{0.0f, -5.0f, 0.0f}, {0.0f, Math::Pi, 0.0f}, {6.0f, 2.0f, 6.0f}}, {{0.0f, -0.4f, 8.5f}, {0.0f, Math::Pi, 0.0f}, {5.0f, 2.0f, 4.0f}}, TayamaPartGroup::CentralHull, Armor},
-        {PrimitiveShape::Cylinder, {{0.0f, -7.0f, 0.0f}, {}, {4.0f, 3.0f, 4.0f}}, {{0.0f, -1.0f, 11.0f}, {Math::HalfPi, 0.0f, 0.0f}, {3.8f, 5.0f, 3.8f}}, TayamaPartGroup::CentralHull, Dark},
-        {PrimitiveShape::Box, {{0.0f, 11.0f, 0.0f}, {}, {2.0f, 5.0f, 2.0f}}, {{0.0f, 1.0f, -1.0f}, {}, {2.0f, 1.0f, 18.0f}}, TayamaPartGroup::CentralHull, LightArmor},
+        // 中央ビルを胸部、腰部、背部フレームへ畳み直す
+        {PrimitiveShape::Box, {{0.0f, 2.0f, 0.0f}, {}, {6.0f, 8.0f, 6.0f}}, {{0.0f, 2.4f, 0.0f}, {}, {7.0f, 6.8f, 4.0f}}, TayamaPartGroup::CentralHull, Hull},
+        {PrimitiveShape::Box, {{0.0f, -3.0f, 0.0f}, {}, {7.0f, 3.0f, 7.0f}}, {{0.0f, -1.7f, 0.2f}, {}, {5.2f, 2.4f, 3.4f}}, TayamaPartGroup::CentralHull, Armor},
+        {PrimitiveShape::Prism, {{0.0f, 7.0f, 0.0f}, {}, {5.0f, 3.0f, 5.0f}}, {{0.0f, 3.6f, -2.15f}, {}, {5.6f, 3.0f, 1.3f}}, TayamaPartGroup::CentralHull, LightArmor},
+        {PrimitiveShape::Prism, {{0.0f, -5.0f, 0.0f}, {0.0f, Math::Pi, 0.0f}, {6.0f, 2.0f, 6.0f}}, {{0.0f, -0.2f, -1.75f}, {0.0f, Math::Pi, 0.0f}, {4.4f, 2.5f, 1.2f}}, TayamaPartGroup::CentralHull, Armor},
+        {PrimitiveShape::Cylinder, {{0.0f, -7.0f, 0.0f}, {}, {4.0f, 3.0f, 4.0f}}, {{0.0f, 6.0f, 0.0f}, {}, {2.2f, 1.3f, 2.2f}}, TayamaPartGroup::CentralHull, Dark},
+        {PrimitiveShape::Box, {{0.0f, 11.0f, 0.0f}, {}, {2.0f, 5.0f, 2.0f}}, {{0.0f, 2.0f, 2.2f}, {}, {3.0f, 7.0f, 1.2f}}, TayamaPartGroup::CentralHull, LightArmor},
 
-        // 左右外壁を同じ側の飛行甲板へ開く
-        {PrimitiveShape::Box, {{3.6f, 2.0f, 0.0f}, {}, {0.8f, 10.0f, 6.0f}}, {{6.5f, 0.6f, -1.0f}, {}, {7.0f, 0.45f, 17.0f}}, TayamaPartGroup::LeftFlightDeck, Armor},
-        {PrimitiveShape::Box, {{4.4f, 7.0f, 0.0f}, {}, {0.8f, 4.0f, 5.0f}}, {{9.6f, 0.5f, -1.0f}, {}, {2.8f, 0.35f, 13.0f}}, TayamaPartGroup::LeftFlightDeck, LightArmor},
-        {PrimitiveShape::Prism, {{3.8f, -3.0f, 0.0f}, {}, {1.2f, 3.0f, 6.0f}}, {{5.0f, -0.2f, 2.0f}, {0.0f, 0.0f, -0.12f}, {3.0f, 1.0f, 10.0f}}, TayamaPartGroup::LeftFlightDeck, Hull},
-        {PrimitiveShape::Box, {{-3.6f, 2.0f, 0.0f}, {}, {0.8f, 10.0f, 6.0f}}, {{-6.5f, 0.6f, -1.0f}, {}, {7.0f, 0.45f, 17.0f}}, TayamaPartGroup::RightFlightDeck, Armor},
-        {PrimitiveShape::Box, {{-4.4f, 7.0f, 0.0f}, {}, {0.8f, 4.0f, 5.0f}}, {{-9.6f, 0.5f, -1.0f}, {}, {2.8f, 0.35f, 13.0f}}, TayamaPartGroup::RightFlightDeck, LightArmor},
-        {PrimitiveShape::Prism, {{-3.8f, -3.0f, 0.0f}, {}, {1.2f, 3.0f, 6.0f}}, {{-5.0f, -0.2f, 2.0f}, {0.0f, 0.0f, 0.12f}, {3.0f, 1.0f, 10.0f}}, TayamaPartGroup::RightFlightDeck, Hull},
+        // 左右外壁を肩、上腕、前腕へ分割する
+        {PrimitiveShape::Box, {{3.6f, 2.0f, 0.0f}, {}, {0.8f, 10.0f, 6.0f}}, {{5.0f, 3.8f, 0.0f}, {}, {3.2f, 2.8f, 3.2f}}, TayamaPartGroup::LeftFlightDeck, Armor},
+        {PrimitiveShape::Box, {{4.4f, 7.0f, 0.0f}, {}, {0.8f, 4.0f, 5.0f}}, {{6.4f, 0.8f, 0.0f}, {0.0f, 0.0f, -0.08f}, {2.2f, 4.2f, 2.2f}}, TayamaPartGroup::LeftFlightDeck, LightArmor},
+        {PrimitiveShape::Prism, {{3.8f, -3.0f, 0.0f}, {}, {1.2f, 3.0f, 6.0f}}, {{6.8f, -2.4f, -0.5f}, {0.0f, 0.0f, -0.10f}, {2.8f, 3.2f, 3.0f}}, TayamaPartGroup::LeftFlightDeck, Hull},
+        {PrimitiveShape::Box, {{-3.6f, 2.0f, 0.0f}, {}, {0.8f, 10.0f, 6.0f}}, {{-5.0f, 3.8f, 0.0f}, {}, {3.2f, 2.8f, 3.2f}}, TayamaPartGroup::RightFlightDeck, Armor},
+        {PrimitiveShape::Box, {{-4.4f, 7.0f, 0.0f}, {}, {0.8f, 4.0f, 5.0f}}, {{-6.4f, 0.8f, 0.0f}, {0.0f, 0.0f, 0.08f}, {2.2f, 4.2f, 2.2f}}, TayamaPartGroup::RightFlightDeck, LightArmor},
+        {PrimitiveShape::Prism, {{-3.8f, -3.0f, 0.0f}, {}, {1.2f, 3.0f, 6.0f}}, {{-6.8f, -2.4f, -0.5f}, {0.0f, 0.0f, 0.10f}, {2.8f, 3.2f, 3.0f}}, TayamaPartGroup::RightFlightDeck, Hull},
 
-        // 上層塔を右舷寄りの艦橋へ縮めながら移動する
-        {PrimitiveShape::Box, {{0.0f, 14.0f, 0.0f}, {}, {4.0f, 3.0f, 4.0f}}, {{2.5f, 2.0f, 1.0f}, {}, {3.0f, 2.0f, 4.0f}}, TayamaPartGroup::Bridge, Armor},
-        {PrimitiveShape::Box, {{0.0f, 16.2f, 0.0f}, {}, {3.0f, 1.5f, 3.0f}}, {{2.5f, 3.3f, 1.0f}, {}, {2.5f, 1.0f, 3.0f}}, TayamaPartGroup::Bridge, LightArmor},
-        {PrimitiveShape::Cylinder, {{0.0f, 18.0f, 0.0f}, {}, {1.0f, 2.0f, 1.0f}}, {{2.5f, 4.5f, 1.0f}, {}, {0.8f, 2.0f, 0.8f}}, TayamaPartGroup::Bridge, Dark},
-        {PrimitiveShape::Box, {{0.0f, 19.3f, 0.0f}, {}, {2.5f, 0.4f, 2.5f}}, {{2.5f, 5.5f, 1.0f}, {}, {2.0f, 0.3f, 2.0f}}, TayamaPartGroup::Bridge, Window},
+        // 上層塔を頭部と発光バイザーへ圧縮する
+        {PrimitiveShape::Box, {{0.0f, 14.0f, 0.0f}, {}, {4.0f, 3.0f, 4.0f}}, {{0.0f, 7.4f, 0.0f}, {}, {4.0f, 2.4f, 3.4f}}, TayamaPartGroup::Bridge, Armor},
+        {PrimitiveShape::Box, {{0.0f, 16.2f, 0.0f}, {}, {3.0f, 1.5f, 3.0f}}, {{0.0f, 8.7f, 0.0f}, {}, {3.2f, 1.2f, 2.8f}}, TayamaPartGroup::Bridge, LightArmor},
+        {PrimitiveShape::Cylinder, {{0.0f, 18.0f, 0.0f}, {}, {1.0f, 2.0f, 1.0f}}, {{0.0f, 9.8f, 0.0f}, {}, {0.8f, 1.6f, 0.8f}}, TayamaPartGroup::Bridge, Dark},
+        {PrimitiveShape::Box, {{0.0f, 19.3f, 0.0f}, {}, {2.5f, 0.4f, 2.5f}}, {{0.0f, 7.8f, -1.8f}, {}, {3.0f, 0.45f, 0.25f}}, TayamaPartGroup::Bridge, Window},
 
         // 左右サーチライトは基部と前方へ向く発光部を一緒に移動する
-        {PrimitiveShape::Cylinder, {{2.3f, 18.0f, 0.8f}, {}, {1.0f, 0.6f, 1.0f}}, {{7.2f, 1.4f, -5.0f}, {}, {1.0f, 0.6f, 1.0f}}, TayamaPartGroup::LeftSearchlight, Dark},
-        {PrimitiveShape::Cone, {{2.3f, 18.6f, -0.2f}, {-Math::HalfPi, 0.0f, 0.0f}, {0.9f, 1.4f, 0.9f}}, {{7.2f, 1.8f, -5.8f}, {-Math::HalfPi, 0.0f, 0.0f}, {0.9f, 1.4f, 0.9f}}, TayamaPartGroup::LeftSearchlight, Warning},
-        {PrimitiveShape::Cylinder, {{-2.3f, 18.0f, 0.8f}, {}, {1.0f, 0.6f, 1.0f}}, {{-7.2f, 1.4f, -5.0f}, {}, {1.0f, 0.6f, 1.0f}}, TayamaPartGroup::RightSearchlight, Dark},
-        {PrimitiveShape::Cone, {{-2.3f, 18.6f, -0.2f}, {-Math::HalfPi, 0.0f, 0.0f}, {0.9f, 1.4f, 0.9f}}, {{-7.2f, 1.8f, -5.8f}, {-Math::HalfPi, 0.0f, 0.0f}, {0.9f, 1.4f, 0.9f}}, TayamaPartGroup::RightSearchlight, Warning},
+        {PrimitiveShape::Cylinder, {{2.3f, 18.0f, 0.8f}, {}, {1.0f, 0.6f, 1.0f}}, {{4.8f, 3.8f, -1.8f}, {Math::HalfPi, 0.0f, 0.0f}, {1.0f, 1.2f, 1.0f}}, TayamaPartGroup::LeftSearchlight, Dark},
+        {PrimitiveShape::Cone, {{2.3f, 18.6f, -0.2f}, {-Math::HalfPi, 0.0f, 0.0f}, {0.9f, 1.4f, 0.9f}}, {{4.8f, 3.8f, -3.0f}, {-Math::HalfPi, 0.0f, 0.0f}, {1.0f, 1.8f, 1.0f}}, TayamaPartGroup::LeftSearchlight, Warning},
+        {PrimitiveShape::Cylinder, {{-2.3f, 18.0f, 0.8f}, {}, {1.0f, 0.6f, 1.0f}}, {{-4.8f, 3.8f, -1.8f}, {Math::HalfPi, 0.0f, 0.0f}, {1.0f, 1.2f, 1.0f}}, TayamaPartGroup::RightSearchlight, Dark},
+        {PrimitiveShape::Cone, {{-2.3f, 18.6f, -0.2f}, {-Math::HalfPi, 0.0f, 0.0f}, {0.9f, 1.4f, 0.9f}}, {{-4.8f, 3.8f, -3.0f}, {-Math::HalfPi, 0.0f, 0.0f}, {1.0f, 1.8f, 1.0f}}, TayamaPartGroup::RightSearchlight, Warning},
 
-        // 火器管制レーダーは艦橋上へ残して攻略対象を明示する
-        {PrimitiveShape::Cylinder, {{0.0f, 20.5f, 0.0f}, {}, {0.5f, 3.0f, 0.5f}}, {{2.5f, 6.6f, 1.0f}, {}, {0.45f, 2.5f, 0.45f}}, TayamaPartGroup::FireControlRadar, Dark},
-        {PrimitiveShape::Prism, {{0.0f, 22.2f, 0.0f}, {Math::HalfPi, 0.0f, 0.0f}, {3.0f, 0.4f, 2.0f}}, {{2.5f, 7.8f, 1.0f}, {Math::HalfPi, 0.0f, 0.0f}, {2.8f, 0.35f, 1.8f}}, TayamaPartGroup::FireControlRadar, LightArmor},
-        {PrimitiveShape::Sphere, {{0.0f, 22.5f, 0.0f}, {}, {0.65f, 0.65f, 0.65f}}, {{2.5f, 8.0f, 1.0f}, {}, {0.6f, 0.6f, 0.6f}}, TayamaPartGroup::FireControlRadar, Warning},
+        // 火器管制レーダーを胸部中央へ露出させる
+        {PrimitiveShape::Cylinder, {{0.0f, 20.5f, 0.0f}, {}, {0.5f, 3.0f, 0.5f}}, {{0.0f, 4.2f, -2.35f}, {Math::HalfPi, 0.0f, 0.0f}, {0.55f, 1.4f, 0.55f}}, TayamaPartGroup::FireControlRadar, Dark},
+        {PrimitiveShape::Prism, {{0.0f, 22.2f, 0.0f}, {Math::HalfPi, 0.0f, 0.0f}, {3.0f, 0.4f, 2.0f}}, {{0.0f, 5.0f, -2.45f}, {Math::HalfPi, 0.0f, 0.0f}, {2.8f, 0.35f, 1.8f}}, TayamaPartGroup::FireControlRadar, LightArmor},
+        {PrimitiveShape::Sphere, {{0.0f, 22.5f, 0.0f}, {}, {0.65f, 0.65f, 0.65f}}, {{0.0f, 4.2f, -3.1f}, {}, {0.75f, 0.75f, 0.75f}}, TayamaPartGroup::FireControlRadar, Warning},
 
-        // 下部機関を空母下面の左右揚力エンジンへ展開する
-        {PrimitiveShape::Cylinder, {{2.8f, -6.0f, 0.0f}, {}, {2.0f, 3.0f, 2.0f}}, {{5.0f, -2.0f, 3.0f}, {}, {2.5f, 2.0f, 2.5f}}, TayamaPartGroup::LeftLiftEngine, Dark},
-        {PrimitiveShape::Cone, {{2.8f, -8.0f, 0.0f}, {0.0f, 0.0f, Math::Pi}, {1.4f, 2.0f, 1.4f}}, {{5.0f, -3.8f, 3.0f}, {0.0f, 0.0f, Math::Pi}, {2.0f, 3.0f, 2.0f}}, TayamaPartGroup::LeftLiftEngine, Warning},
-        {PrimitiveShape::Cylinder, {{-2.8f, -6.0f, 0.0f}, {}, {2.0f, 3.0f, 2.0f}}, {{-5.0f, -2.0f, 3.0f}, {}, {2.5f, 2.0f, 2.5f}}, TayamaPartGroup::RightLiftEngine, Dark},
-        {PrimitiveShape::Cone, {{-2.8f, -8.0f, 0.0f}, {0.0f, 0.0f, Math::Pi}, {1.4f, 2.0f, 1.4f}}, {{-5.0f, -3.8f, 3.0f}, {0.0f, 0.0f, Math::Pi}, {2.0f, 3.0f, 2.0f}}, TayamaPartGroup::RightLiftEngine, Warning},
+        // 下部機関を左右の脚部と足部へ展開する
+        {PrimitiveShape::Cylinder, {{2.8f, -6.0f, 0.0f}, {}, {2.0f, 3.0f, 2.0f}}, {{2.5f, -5.0f, 0.2f}, {}, {2.8f, 6.0f, 2.8f}}, TayamaPartGroup::LeftLiftEngine, Dark},
+        {PrimitiveShape::Cone, {{2.8f, -8.0f, 0.0f}, {0.0f, 0.0f, Math::Pi}, {1.4f, 2.0f, 1.4f}}, {{2.5f, -8.8f, -1.0f}, {0.0f, 0.0f, Math::Pi}, {3.4f, 2.0f, 4.8f}}, TayamaPartGroup::LeftLiftEngine, Warning},
+        {PrimitiveShape::Cylinder, {{-2.8f, -6.0f, 0.0f}, {}, {2.0f, 3.0f, 2.0f}}, {{-2.5f, -5.0f, 0.2f}, {}, {2.8f, 6.0f, 2.8f}}, TayamaPartGroup::RightLiftEngine, Dark},
+        {PrimitiveShape::Cone, {{-2.8f, -8.0f, 0.0f}, {0.0f, 0.0f, Math::Pi}, {1.4f, 2.0f, 1.4f}}, {{-2.5f, -8.8f, -1.0f}, {0.0f, 0.0f, Math::Pi}, {3.4f, 2.0f, 4.8f}}, TayamaPartGroup::RightLiftEngine, Warning},
 
-        // コアと外枠は一つの弱点グループとして艦橋中央へ移動する
-        {PrimitiveShape::Sphere, {{0.0f, 12.0f, -3.2f}, {}, {2.0f, 2.0f, 1.0f}}, {{2.5f, 3.0f, -0.9f}, {}, {1.8f, 1.8f, 1.0f}}, TayamaPartGroup::CommandCore, Core},
-        {PrimitiveShape::Box, {{0.0f, 12.0f, -3.0f}, {}, {3.0f, 3.0f, 0.35f}}, {{2.5f, 3.0f, -0.4f}, {}, {2.8f, 2.8f, 0.35f}}, TayamaPartGroup::CommandCore, Dark},
+        // コアと外枠を胸部正面へ移動する
+        {PrimitiveShape::Sphere, {{0.0f, 12.0f, -3.2f}, {}, {2.0f, 2.0f, 1.0f}}, {{0.0f, 1.8f, -2.45f}, {}, {2.0f, 2.0f, 1.0f}}, TayamaPartGroup::CommandCore, Core},
+        {PrimitiveShape::Box, {{0.0f, 12.0f, -3.0f}, {}, {3.0f, 3.0f, 0.35f}}, {{0.0f, 1.8f, -2.10f}, {}, {3.2f, 3.2f, 0.35f}}, TayamaPartGroup::CommandCore, Dark},
 
-        // 外壁パネルを船体装甲とコア開閉シャッターへ再配置する
-        {PrimitiveShape::Box, {{1.2f, 12.0f, -3.15f}, {}, {1.1f, 3.2f, 0.3f}}, {{3.6f, 3.0f, -0.65f}, {}, {1.0f, 3.0f, 0.3f}}, TayamaPartGroup::ArmorPanel, Armor},
-        {PrimitiveShape::Box, {{-1.2f, 12.0f, -3.15f}, {}, {1.1f, 3.2f, 0.3f}}, {{1.4f, 3.0f, -0.65f}, {}, {1.0f, 3.0f, 0.3f}}, TayamaPartGroup::ArmorPanel, Armor},
-        {PrimitiveShape::Prism, {{0.0f, 4.0f, -3.2f}, {}, {5.0f, 4.0f, 0.5f}}, {{0.0f, 0.9f, -9.0f}, {}, {5.0f, 1.2f, 2.5f}}, TayamaPartGroup::ArmorPanel, LightArmor},
-        {PrimitiveShape::Box, {{3.15f, 0.0f, 0.0f}, {}, {0.4f, 4.0f, 5.0f}}, {{3.6f, 1.0f, 3.0f}, {}, {0.35f, 1.4f, 6.0f}}, TayamaPartGroup::ArmorPanel, Armor},
-        {PrimitiveShape::Box, {{-3.15f, 0.0f, 0.0f}, {}, {0.4f, 4.0f, 5.0f}}, {{-3.6f, 1.0f, 3.0f}, {}, {0.35f, 1.4f, 6.0f}}, TayamaPartGroup::ArmorPanel, Armor},
+        // 外壁パネルを胸部シャッターと肩装甲へ再配置する
+        {PrimitiveShape::Box, {{1.2f, 12.0f, -3.15f}, {}, {1.1f, 3.2f, 0.3f}}, {{1.35f, 1.8f, -2.65f}, {}, {1.2f, 3.2f, 0.3f}}, TayamaPartGroup::ArmorPanel, Armor},
+        {PrimitiveShape::Box, {{-1.2f, 12.0f, -3.15f}, {}, {1.1f, 3.2f, 0.3f}}, {{-1.35f, 1.8f, -2.65f}, {}, {1.2f, 3.2f, 0.3f}}, TayamaPartGroup::ArmorPanel, Armor},
+        {PrimitiveShape::Prism, {{0.0f, 4.0f, -3.2f}, {}, {5.0f, 4.0f, 0.5f}}, {{0.0f, -2.7f, -1.2f}, {}, {5.0f, 1.5f, 2.5f}}, TayamaPartGroup::ArmorPanel, LightArmor},
+        {PrimitiveShape::Box, {{3.15f, 0.0f, 0.0f}, {}, {0.4f, 4.0f, 5.0f}}, {{4.0f, 4.1f, 0.2f}, {0.0f, 0.0f, -0.25f}, {0.5f, 2.2f, 4.5f}}, TayamaPartGroup::ArmorPanel, Armor},
+        {PrimitiveShape::Box, {{-3.15f, 0.0f, 0.0f}, {}, {0.4f, 4.0f, 5.0f}}, {{-4.0f, 4.1f, 0.2f}, {0.0f, 0.0f, 0.25f}, {0.5f, 2.2f, 4.5f}}, TayamaPartGroup::ArmorPanel, Armor},
 
-        // 窓列を個別描画せず三枚の格納庫シャッターへ集約する
-        {PrimitiveShape::Box, {{0.0f, 0.0f, -3.15f}, {}, {3.2f, 2.0f, 0.25f}}, {{0.0f, -0.2f, 3.5f}, {}, {3.0f, 1.2f, 0.3f}}, TayamaPartGroup::Hangar, Window},
-        {PrimitiveShape::Box, {{2.0f, -1.5f, -3.15f}, {}, {1.5f, 1.2f, 0.25f}}, {{3.8f, -0.2f, 3.5f}, {0.0f, Math::HalfPi, 0.0f}, {3.0f, 1.2f, 0.3f}}, TayamaPartGroup::Hangar, Dark},
-        {PrimitiveShape::Box, {{-2.0f, -1.5f, -3.15f}, {}, {1.5f, 1.2f, 0.25f}}, {{-3.8f, -0.2f, 3.5f}, {0.0f, Math::HalfPi, 0.0f}, {3.0f, 1.2f, 0.3f}}, TayamaPartGroup::Hangar, Dark},
+        // 窓列を腰部の発光ベルトと側面装甲へ集約する
+        {PrimitiveShape::Box, {{0.0f, 0.0f, -3.15f}, {}, {3.2f, 2.0f, 0.25f}}, {{0.0f, -1.5f, -1.7f}, {}, {3.2f, 0.6f, 0.3f}}, TayamaPartGroup::Hangar, Window},
+        {PrimitiveShape::Box, {{2.0f, -1.5f, -3.15f}, {}, {1.5f, 1.2f, 0.25f}}, {{3.2f, -1.7f, 0.0f}, {}, {1.6f, 1.4f, 3.0f}}, TayamaPartGroup::Hangar, Dark},
+        {PrimitiveShape::Box, {{-2.0f, -1.5f, -3.15f}, {}, {1.5f, 1.2f, 0.25f}}, {{-3.2f, -1.7f, 0.0f}, {}, {1.6f, 1.4f, 3.0f}}, TayamaPartGroup::Hangar, Dark},
 
-        // 地下推進設備を艦尾の三連主推進機へ回転する
-        {PrimitiveShape::Cylinder, {{0.0f, -9.0f, 0.0f}, {}, {3.0f, 4.0f, 3.0f}}, {{0.0f, 0.0f, 12.0f}, {Math::HalfPi, 0.0f, 0.0f}, {3.0f, 5.0f, 3.0f}}, TayamaPartGroup::MainThruster, Dark},
-        {PrimitiveShape::Cylinder, {{2.4f, -7.8f, 0.0f}, {}, {1.4f, 3.0f, 1.4f}}, {{3.0f, 0.0f, 11.5f}, {Math::HalfPi, 0.0f, 0.0f}, {1.8f, 4.0f, 1.8f}}, TayamaPartGroup::MainThruster, Warning},
-        {PrimitiveShape::Cylinder, {{-2.4f, -7.8f, 0.0f}, {}, {1.4f, 3.0f, 1.4f}}, {{-3.0f, 0.0f, 11.5f}, {Math::HalfPi, 0.0f, 0.0f}, {1.8f, 4.0f, 1.8f}}, TayamaPartGroup::MainThruster, Warning},
+        // 地下推進設備を背部の三連スラスターへ回転する
+        {PrimitiveShape::Cylinder, {{0.0f, -9.0f, 0.0f}, {}, {3.0f, 4.0f, 3.0f}}, {{0.0f, 1.0f, 3.0f}, {Math::HalfPi, 0.0f, 0.0f}, {2.6f, 3.6f, 2.6f}}, TayamaPartGroup::MainThruster, Dark},
+        {PrimitiveShape::Cylinder, {{2.4f, -7.8f, 0.0f}, {}, {1.4f, 3.0f, 1.4f}}, {{2.8f, 0.2f, 2.7f}, {Math::HalfPi, 0.0f, 0.0f}, {1.6f, 3.0f, 1.6f}}, TayamaPartGroup::MainThruster, Warning},
+        {PrimitiveShape::Cylinder, {{-2.4f, -7.8f, 0.0f}, {}, {1.4f, 3.0f, 1.4f}}, {{-2.8f, 0.2f, 2.7f}, {Math::HalfPi, 0.0f, 0.0f}, {1.6f, 3.0f, 1.6f}}, TayamaPartGroup::MainThruster, Warning},
 
-        // ビルのネオン列を左右甲板の滑走路誘導灯へ寝かせる
-        {PrimitiveShape::Box, {{3.2f, 2.0f, -3.15f}, {}, {0.16f, 4.0f, 0.16f}}, {{6.5f, 0.88f, -6.0f}, {}, {0.18f, 0.12f, 3.8f}}, TayamaPartGroup::RunwayLight, Runway},
-        {PrimitiveShape::Box, {{3.2f, 7.0f, -3.15f}, {}, {0.16f, 4.0f, 0.16f}}, {{6.5f, 0.88f, 0.0f}, {}, {0.18f, 0.12f, 3.8f}}, TayamaPartGroup::RunwayLight, Runway},
-        {PrimitiveShape::Box, {{3.2f, 12.0f, -3.15f}, {}, {0.16f, 4.0f, 0.16f}}, {{6.5f, 0.88f, 6.0f}, {}, {0.18f, 0.12f, 3.8f}}, TayamaPartGroup::RunwayLight, Runway},
-        {PrimitiveShape::Box, {{-3.2f, 2.0f, -3.15f}, {}, {0.16f, 4.0f, 0.16f}}, {{-6.5f, 0.88f, -6.0f}, {}, {0.18f, 0.12f, 3.8f}}, TayamaPartGroup::RunwayLight, Runway},
-        {PrimitiveShape::Box, {{-3.2f, 7.0f, -3.15f}, {}, {0.16f, 4.0f, 0.16f}}, {{-6.5f, 0.88f, 0.0f}, {}, {0.18f, 0.12f, 3.8f}}, TayamaPartGroup::RunwayLight, Runway},
-        {PrimitiveShape::Box, {{-3.2f, 12.0f, -3.15f}, {}, {0.16f, 4.0f, 0.16f}}, {{-6.5f, 0.88f, 6.0f}, {}, {0.18f, 0.12f, 3.8f}}, TayamaPartGroup::RunwayLight, Runway}
+        // ビルのネオン列を腕部と脚部の発光ラインへ変形する
+        {PrimitiveShape::Box, {{3.2f, 2.0f, -3.15f}, {}, {0.16f, 4.0f, 0.16f}}, {{5.2f, 3.8f, -1.75f}, {}, {0.18f, 2.2f, 0.18f}}, TayamaPartGroup::RunwayLight, Runway},
+        {PrimitiveShape::Box, {{3.2f, 7.0f, -3.15f}, {}, {0.16f, 4.0f, 0.16f}}, {{6.6f, 0.6f, -1.25f}, {}, {0.18f, 3.2f, 0.18f}}, TayamaPartGroup::RunwayLight, Runway},
+        {PrimitiveShape::Box, {{3.2f, 12.0f, -3.15f}, {}, {0.16f, 4.0f, 0.16f}}, {{2.5f, -5.0f, -1.25f}, {}, {0.18f, 4.2f, 0.18f}}, TayamaPartGroup::RunwayLight, Runway},
+        {PrimitiveShape::Box, {{-3.2f, 2.0f, -3.15f}, {}, {0.16f, 4.0f, 0.16f}}, {{-5.2f, 3.8f, -1.75f}, {}, {0.18f, 2.2f, 0.18f}}, TayamaPartGroup::RunwayLight, Runway},
+        {PrimitiveShape::Box, {{-3.2f, 7.0f, -3.15f}, {}, {0.16f, 4.0f, 0.16f}}, {{-6.6f, 0.6f, -1.25f}, {}, {0.18f, 3.2f, 0.18f}}, TayamaPartGroup::RunwayLight, Runway},
+        {PrimitiveShape::Box, {{-3.2f, 12.0f, -3.15f}, {}, {0.16f, 4.0f, 0.16f}}, {{-2.5f, -5.0f, -1.25f}, {}, {0.18f, 4.2f, 0.18f}}, TayamaPartGroup::RunwayLight, Runway}
     }};
 
     /**
-     * @brief 一つのTAYAMAパーツをビル形態から空母形態へ補間する
+     * @brief 一つのTAYAMAパーツをビル形態から巨大メカ形態へ補間する
      * @param part 補間する同一パーツ
-     * @param progress 0がビル、1が空母となる変形率
+     * @param progress 0がビル、1が巨大メカとなる変形率
      * @return 補間済みローカルTransform
      */
     static constexpr Stage5PartTransform InterpolatePart(const TayamaPart& part, float progress) {
-        return Stage5ModelDetail::Lerp(part.tower, part.carrier, progress);
+        return Stage5ModelDetail::Lerp(part.tower, part.mecha, progress);
     }
 
     /**
-     * @brief 表示中の全パーツを補間して共通ワールド行列へ解決する
-     * @param transform モデル全体のTransform
-     * @param progress 0がビル、1が空母となる変形率
+     * @brief ビル形態を指定した外形と接地位置へ合わせるルート行列を生成する
+     * @param centerX 配置する外形中央のX座標
+     * @param bottomY 配置する外形底面のY座標
+     * @param centerZ 配置する外形中央のZ座標
+     * @param size 配置する外形の幅、高さ、奥行き
+     * @return 非均一拡縮と位置補正を含むルート行列
+     */
+    static Matrix4x4 BuildingRoot(float centerX, float bottomY, float centerZ,
+        const Vector3& size) {
+        const Vector3 scale {
+            size.x / TowerSize.x,
+            size.y / TowerSize.y,
+            size.z / TowerSize.z
+        };
+        const Vector3 localCenter = (TowerBoundsMin + TowerBoundsMax) * 0.5f;
+        return Matrix4x4::Translation({
+            centerX - localCenter.x * scale.x,
+            bottomY - TowerBoundsMin.y * scale.y,
+            centerZ - localCenter.z * scale.z
+        }) * Matrix4x4::Scale(scale);
+    }
+
+    /**
+     * @brief 表示中の全パーツを任意のルート行列からワールド行列へ解決する
+     * @param root モデル全体のルート行列
+     * @param progress 0がビル、1が巨大メカとなる変形率
      * @param state グループの表示、破壊、崩壊状態
      * @param drawPart 形状、ワールド行列、色、グループを受け取る関数
      * @return なし
      */
     template<class DrawPart>
-    static void VisitParts(const Stage5ModelTransform& transform, float progress,
+    static void VisitParts(const Matrix4x4& root, float progress,
         const TayamaModelState& state, DrawPart&& drawPart) {
-        const Matrix4x4 root = Stage5ModelDetail::Matrix(transform);
-
         // 各グループの崩壊Transformを補間後の同一パーツへ追加する
         for (const TayamaPart& part : Parts) {
             if (!state.IsVisible(part.group)) continue;
@@ -427,9 +461,24 @@ public:
     }
 
     /**
+     * @brief 表示中の全パーツをモデルTransformからワールド行列へ解決する
+     * @param transform モデル全体のTransform
+     * @param progress 0がビル、1が巨大メカとなる変形率
+     * @param state グループの表示、破壊、崩壊状態
+     * @param drawPart 形状、ワールド行列、色、グループを受け取る関数
+     * @return なし
+     */
+    template<class DrawPart>
+    static void VisitParts(const Stage5ModelTransform& transform, float progress,
+        const TayamaModelState& state, DrawPart&& drawPart) {
+        VisitParts(Stage5ModelDetail::Matrix(transform), progress, state,
+            drawPart);
+    }
+
+    /**
      * @brief 描画パーツと同じ補間済みワールド行列からグループ境界を求める
      * @param transform モデル全体のTransform
-     * @param progress 0がビル、1が空母となる変形率
+     * @param progress 0がビル、1が巨大メカとなる変形率
      * @param state グループの表示、破壊、崩壊状態
      * @param group 境界を求めるグループ
      * @return 表示パーツがない場合はvalidがfalseの球形境界
@@ -491,5 +540,5 @@ static_assert(Stage5ModelChecks::TayamaHasEveryGroup());
 static_assert(TayamaModelView::InterpolatePart(TayamaModelView::Parts.front(), 0.0f).position ==
     TayamaModelView::Parts.front().tower.position);
 static_assert(TayamaModelView::InterpolatePart(TayamaModelView::Parts.front(), 1.0f).position ==
-    TayamaModelView::Parts.front().carrier.position);
+    TayamaModelView::Parts.front().mecha.position);
 static_assert(EastsourceModelView::PrimitiveCount + TayamaModelView::PrimitiveCount < 100);
