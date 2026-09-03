@@ -150,6 +150,10 @@ protected:
  */
 class SideScrollingShooter::BasicEnemyBehavior final : public SideScrollingShooter::EnemyBehavior {
 public:
+    /** @brief 3Dモード時の自機狙い弾速度 */
+    static constexpr float RailAimedShotSpeed3D = 0.22f;
+    static_assert(RailAimedShotSpeed3D > 0.0f);
+
     int Type() const override {
         return 0;
     }
@@ -178,7 +182,7 @@ public:
     }
 
     float RailAimedShotSpeed() const override {
-        return 0.42f;
+        return RailAimedShotSpeed3D;
     }
 
     int AimedShotIntervalForStage(int stageIndex) const override {
@@ -195,6 +199,10 @@ public:
  */
 class SideScrollingShooter::HeavyEnemyBehavior final : public SideScrollingShooter::EnemyBehavior {
 public:
+    /** @brief 3Dモード時の自機狙い弾速度 */
+    static constexpr float RailAimedShotSpeed3D = 0.28f;
+    static_assert(RailAimedShotSpeed3D > 0.0f);
+
     int Type() const override {
         return 1;
     }
@@ -223,7 +231,7 @@ public:
     }
 
     float RailAimedShotSpeed() const override {
-        return 0.58f;
+        return RailAimedShotSpeed3D;
     }
 
     int AimedShotIntervalForStage(int stageIndex) const override {
@@ -244,6 +252,10 @@ public:
  */
 class SideScrollingShooter::ArmoredEnemyBehavior final : public SideScrollingShooter::EnemyBehavior {
 public:
+    /** @brief 3Dモード時の自機狙い弾速度 */
+    static constexpr float RailAimedShotSpeed3D = 0.24f;
+    static_assert(RailAimedShotSpeed3D > 0.0f);
+
     int Type() const override {
         return 4;
     }
@@ -272,7 +284,7 @@ public:
     }
 
     float RailAimedShotSpeed() const override {
-        return 0.54f;
+        return RailAimedShotSpeed3D;
     }
 
     int Score(const Enemy&) const override {
@@ -331,7 +343,7 @@ public:
     }
 
     float RailAimedShotSpeed() const override {
-        return 0.58f;
+        return 0.38f;
     }
 
     int AimedShotIntervalForStage(int stageIndex) const override {
@@ -660,7 +672,7 @@ public:
     }
 
 	int MaxHp() const override {
-		return 50;
+		return 30;
 	}
 
     int Score(const Enemy&) const override {
