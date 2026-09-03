@@ -138,9 +138,6 @@ public:
         if (Stage4Module::TickWeaponSwap(shooter, boss)) {
             boss.motionAge = 0;
             boss.phase = 0.0f;
-            boss.x = boss.baseX;
-            boss.y = boss.baseY;
-            boss.z = shooter.IsRailGameplayActive() ? boss.baseZ : ToRailZFromSideX(boss.x);
             return;
         }
 

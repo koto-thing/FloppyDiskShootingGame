@@ -61,6 +61,7 @@ constexpr Vector3 Stage4SecondaryGunLocal[] = {
 };
 constexpr float Stage4MainCannonHitRadius = 1.45f;
 constexpr float Stage4SecondaryGunHitRadius = 0.82f;
+constexpr int Stage4WeaponSwapReturnFrames = 42;
 
 /** @brief 表示モード別の迫撃砲攻撃設定 */
 struct Stage4SiegeMortarConfig {
@@ -232,6 +233,34 @@ bool SideScrollingShooter::Stage4Module::TickWeaponSwap(
     }
     if (state.swapState == Stage4SwapState::None) return false;
 
+    // 交換前に車体と主砲姿勢を基準へ戻してから既存交換演出へ進める
+    if (state.swapState == Stage4SwapState::ReturnToAnchor) {
+        const float progress = SmoothStep(Math::Clamp01(
+            static_cast<float>(++state.timer) / static_cast<float>(Stage4WeaponSwapReturnFrames)));
+        boss.x = Math::Lerp(state.returnStartX, boss.baseX, progress);
+        boss.y = Math::Lerp(state.returnStartY, boss.baseY, progress);
+        boss.z = shooter.IsRailGameplayActive() ?
+            Math::Lerp(state.returnStartZ, boss.baseZ, progress) : ToRailZFromSideX(boss.x);
+        boss.turretAimX = Math::Lerp(state.returnStartAimX, state.returnTargetAimX, progress);
+        boss.turretAimY = Math::Lerp(state.returnStartAimY, state.returnTargetAimY, progress);
+        boss.turretAimZ = Math::Lerp(state.returnStartAimZ, state.returnTargetAimZ, progress);
+        state.siegeMortarPitch = Math::Lerp(state.returnStartSiegeMortarPitch,
+            Stage4BossModelView::SiegeMortarDefaultPitch, progress);
+        state.siegeMortarTargetPitch = state.siegeMortarPitch;
+        state.siegeMortarYaw = Math::Lerp(state.returnStartSiegeMortarYaw, 0.0f, progress);
+        state.siegeMortarTargetYaw = state.siegeMortarYaw;
+        if (state.timer >= Stage4WeaponSwapReturnFrames) {
+            boss.x = boss.baseX;
+            boss.y = boss.baseY;
+            boss.z = shooter.IsRailGameplayActive() ? boss.baseZ : ToRailZFromSideX(boss.x);
+            boss.turretAimX = state.returnTargetAimX;
+            boss.turretAimY = state.returnTargetAimY;
+            boss.turretAimZ = state.returnTargetAimZ;
+            ShooterStages::Stage4::AdvanceWeaponSwap(state);
+        }
+        return true;
+    }
+
     // 工程ごとの設定時間が過ぎたらタイマーをリセットして次へ進む
     const Stage4SwapConfig config = ShooterStages::Stage4::SwapConfig(state.incomingWeapon);
     if (++state.timer >= SwapStateFrames(state.swapState, config)) {
@@ -317,11 +346,39 @@ void SideScrollingShooter::Stage4Module::BeginWeaponSwap(
     state.incomingVisual = Stage4WeaponVisual::Hidden;
     state.phase = incomingWeapon == Stage4Weapon::SiegeMortar ?
         Stage4BossPhase::TransitionToPhase2 : Stage4BossPhase::TransitionToPhase3;
-    state.swapState = Stage4SwapState::Prepare;
+    state.swapState = Stage4SwapState::ReturnToAnchor;
     state.timer = 0;
     boss.phase = 0.0f;
     boss.recoilAge = 0;
     boss.recoilType = 0;
+    state.returnStartX = boss.x;
+    state.returnStartY = boss.y;
+    state.returnStartZ = boss.z;
+    state.returnStartAimX = boss.turretAimX;
+    state.returnStartAimY = boss.turretAimY;
+    state.returnStartAimZ = boss.turretAimZ;
+    state.returnStartSiegeMortarPitch = state.siegeMortarPitch;
+    state.returnStartSiegeMortarYaw = state.siegeMortarYaw;
+    state.returnTargetAimX = boss.baseX;
+    state.returnTargetAimY = boss.baseY;
+    state.returnTargetAimZ = shooter.IsRailGameplayActive() ?
+        boss.baseZ : ToRailZFromSideX(boss.baseX);
+    if (state.outgoingWeapon == Stage4Weapon::Phase1Cannon) {
+        BossModelTransform transform;
+        transform.position = {
+            ToWorldX(boss.baseX), ToWorldY(boss.baseY),
+            shooter.IsRailGameplayActive() ? boss.baseZ : ToRailZFromSideX(boss.baseX)
+        };
+        transform.yaw = ModelYaw(shooter);
+        transform.scale = Stage4BossScale;
+        const Vector3 pivot = OffsetTransform(transform, Stage4MainCannonPivotLocal).position;
+        const Vector3 aim = pivot + Vector3 {
+            -std::cos(transform.yaw), 0.0f, std::sin(transform.yaw)
+        } * Stage4CannonMuzzleDistance;
+        state.returnTargetAimX = FromWorldX(aim.x);
+        state.returnTargetAimY = FromWorldY(aim.y);
+        state.returnTargetAimZ = aim.z;
+    }
 
     // 交換開始時に敵弾を消して演出と主砲なし状態を読みやすくする
     for (auto& shot : shooter.m_shots) {
@@ -418,7 +475,8 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
             (enemy.bossPartHitFlashFrames[part] / 2) % 2 != 0;
     }
     const bool phase1MainCannonActive = swap.currentWeapon == Stage4Weapon::Phase1Cannon &&
-        swap.swapState == Stage4SwapState::None;
+        (swap.swapState == Stage4SwapState::None ||
+            swap.swapState == Stage4SwapState::ReturnToAnchor);
     const Vector3 rushAimTarget {
             ToWorldX(swap.rushAimX),
             ToWorldY(swap.rushAimY),
