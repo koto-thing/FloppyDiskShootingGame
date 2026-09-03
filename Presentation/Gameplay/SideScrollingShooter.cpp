@@ -75,6 +75,11 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::SquareShooterEn
     return behavior;
 }
 
+const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::MissileShooterEnemyBehaviorInstance() {
+    static const MissileShooterEnemyBehavior behavior;
+    return behavior;
+}
+
 const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorForType(int type) {
     switch (type) {
     case 1:
@@ -91,6 +96,8 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorFo
         return SquareShooterEnemyBehaviorInstance();
     case 7:
         return DiveRusherEnemyBehaviorInstance();
+    case 8:
+        return MissileShooterEnemyBehaviorInstance();
     default:
         return BasicEnemyBehaviorInstance();
     }

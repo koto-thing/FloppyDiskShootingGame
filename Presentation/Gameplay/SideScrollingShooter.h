@@ -110,6 +110,7 @@ private:
     class DiveRusherEnemyBehavior;
     class CircleShooterEnemyBehavior;
     class SquareShooterEnemyBehavior;
+    class MissileShooterEnemyBehavior;
     class StageDispatch;
     class Stage1Module;
     class Stage2Module;
@@ -424,6 +425,7 @@ private:
     static const EnemyBehavior& DiveRusherEnemyBehaviorInstance();
     static const EnemyBehavior& CircleShooterEnemyBehaviorInstance();
     static const EnemyBehavior& SquareShooterEnemyBehaviorInstance();
+    static const EnemyBehavior& MissileShooterEnemyBehaviorInstance();
     static const EnemyBehavior& EnemyBehaviorForType(int type);
     void TickViewTransition();
     /**

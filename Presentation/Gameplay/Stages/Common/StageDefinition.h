@@ -18,7 +18,8 @@ public:
         ArmoredEnemy = 4,
         CircleShooterEnemy = 5,
         SquareShooterEnemy = 6,
-        DiveRusherEnemy = 7
+        DiveRusherEnemy = 7,
+        MissileShooterEnemy = 8
     };
 
     struct BossBullet {

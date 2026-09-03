@@ -703,6 +703,106 @@ public:
 };
 
 /**
+ * @brief 下側で停止してからミサイルを定期発射する敵を制御する
+ */
+class SideScrollingShooter::MissileShooterEnemyBehavior final : public SideScrollingShooter::CircleShooterEnemyBehavior {
+public:
+    int Type() const override {
+        return 8;
+    }
+
+    int MaxHp() const override {
+        return 25;
+    }
+
+    int Score(const Enemy&) const override {
+        return 300;
+    }
+
+    float RenderScale() const override {
+        return 1.24f;
+    }
+
+    void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
+        if (shooter.IsRailGameplayActive()) {
+            // 3DではZ方向へ侵入して指定位置で停止する
+            enemy.x = enemy.baseX;
+            enemy.z = (std::max)(enemy.z - ApproachRailSpeed, StopRailZ);
+            enemy.y = enemy.baseY;
+            FireSpecial(shooter, enemy);
+            return;
+        }
+
+        // 2Dでは右端から侵入して指定Xで停止する
+        if (enemy.x > StopSideX) {
+            enemy.x -= ApproachSideSpeed;
+        } else {
+            enemy.x = StopSideX;
+        }
+        enemy.z = ToRailZFromSideX(enemy.x);
+        enemy.y = enemy.baseY;
+        FireSpecial(shooter, enemy);
+    }
+
+    void FireSpecial(SideScrollingShooter& shooter, Enemy& enemy) const override {
+        if (enemy.age < FirstMissileFrame || enemy.age % MissileIntervalFrames != 0) {
+            return;
+        }
+        const float side = (enemy.age / MissileIntervalFrames) % 2 == 0 ? -1.0f : 1.0f;
+        SpawnStage2DelayedMissile(shooter, enemy.x, enemy.y, enemy.z + side * MissileSideOffsetZ);
+    }
+
+    static constexpr float LowY() {
+        return -0.92f;
+    }
+
+private:
+    static constexpr float StopSideX = 1.75f;
+    static constexpr float StopRailZ = SideScrollingShooter::PlayerRailZ + 24.0f;
+    static constexpr float ApproachSideSpeed = 0.012f;
+    static constexpr float ApproachRailSpeed = 0.30f;
+    static constexpr int FirstMissileFrame = 72;
+    static constexpr int MissileIntervalFrames = 96;
+    static constexpr float MissileLaunchVelocity = 0.09f;
+    static constexpr float MissileSideOffsetZ = 0.35f;
+    static_assert(StopRailZ < SideScrollingShooter::EnemyRailFarZ);
+    static_assert(FirstMissileFrame > 0);
+    static_assert(MissileIntervalFrames > 0);
+
+    /**
+     * @brief Stage2ボスの遅延点火と同じ形式のミサイルを生成する
+     * @param shooter 弾を生成するゲーム本体
+     * @param x 発射X座標
+     * @param y 発射Y座標
+     * @param z 発射Z座標
+     * @return なし
+     */
+    static void SpawnStage2DelayedMissile(
+        SideScrollingShooter& shooter, float x, float y, float z) {
+        for (auto& shot : shooter.m_shots) {
+            if (shot.active) continue;
+            shot = {};
+            shot.x = x;
+            shot.y = y;
+            shot.z = z;
+            shot.transitionSideX = x;
+            shot.transitionSideY = y;
+            shot.vx = 0.0f;
+            shot.vy = MissileLaunchVelocity;
+            shot.vz = 0.0f;
+            shot.hitRadius = 0.055f;
+            shot.damage = 2;
+            shot.enemy = true;
+            shot.stage2.kind = ShooterStages::Stage2::ShotKind::Funnel;
+            shot.stage2.delayedEngine = true;
+            shot.active = true;
+            shooter.PlayMissileLaunchSound();
+            return;
+        }
+    }
+};
+
+/**
  * @brief ボスの移動と通常狙い弾間隔を制御する
  */
 class SideScrollingShooter::BossEnemyBehavior final : public SideScrollingShooter::EnemyBehavior {

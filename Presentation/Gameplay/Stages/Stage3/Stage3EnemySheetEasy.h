@@ -37,11 +37,13 @@ public:
         static constexpr EnemySpawnRule Chapter2[] = {
             {StraightShooterEnemy, 30, 82, 1.10f, 0.28f, -0.88f, 40.0f},
             {CircleShooterEnemy, 140, 300, 1.14f, 0.82f, 0.32f, 56.0f},
+            {MissileShooterEnemy, 180, 340, 1.14f, -0.40f, -0.92f, 60.0f},
             {DiveRusherEnemy, 220, 300, 1.12f, -0.58f, 0.96f, 60.0f}
         };
         static constexpr EnemySpawnRule Chapter3[] = {
             {ArmoredEnemy, 40, 240, 1.12f, -0.85f, -0.18f, 60.0f},
             {CircleShooterEnemy, 120, 280, 1.14f, -0.28f, 0.86f, 50.0f},
+            {MissileShooterEnemy, 150, 320, 1.14f, 0.20f, -0.92f, 60.0f},
             {DiveRusherEnemy, 190, 260, 1.12f, 0.48f, 0.96f, 60.0f}
         };
         constexpr Chapter Chapters[] = {
