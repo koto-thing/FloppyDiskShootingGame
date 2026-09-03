@@ -27,25 +27,26 @@ public:
     bool TrySelectEnemySpawn(int frame, int spawnIndex,
         EnemySpawnRule& spawn, int& chapterNumber) const override {
         static constexpr EnemySpawnRule Chapter1[] = {
-            {StraightShooterEnemy, 24, 54, 1.10f, -0.82f, 0.88f, 50.0f},
-            {DiveRusherEnemy, 72, 166, 1.12f, -0.28f, 1.5f, 60.0f},
-            {ArmoredEnemy, 110, 250, 1.12f, -0.40f, -0.42f, 60.0f}
+            {BasicEnemy, 25, 100, 2.6f, -0.72f, -0.54f, 60.0f},
+            {StraightShooterEnemy, 50, 200, 1.10f, 0.0f, -0.88f, 50.0f},
+            {DiveRusherEnemy, 100, 200, 1.12f, -0.28f, 1.5f, 60.0f},
+            {HeavyEnemy, 100, 300, 2.6f, 0.00f, 0.0f, 60.0f}
         };
         static constexpr EnemySpawnRule Chapter2[] = {
-            {StraightShooterEnemy, 10, 52, 1.10f, 0.28f, -0.88f, 40.0f},
-            {LinkedLaserEnemy, 46, 260, 1.12f, -0.45f, 0.0f, 60.0f},
-            {CircleShooterEnemy, 70, 165, 1.14f, 0.82f, 0.32f, 56.0f},
-            {MissileShooterEnemy, 96, 220, 1.14f, -0.40f, -0.92f, 60.0f},
-            {DiveRusherEnemy, 112, 188, 1.12f, -0.58f, 0.96f, 60.0f},
-            {HeavyEnemy, 150, 230, 1.16f, 0.05f, 0.54f, 60.0f}
+            {BasicEnemy, 25, 100, 2.6f, -0.72f, -0.54f, 60.0f},
+            {DiveRusherEnemy, 100, 150, 1.12f, -0.28f, 1.5f, 60.0f},
+            {ArmoredEnemy, 250, 200, 2.6f, 0.00f, -0.70f, 60.0f},
+            {MissileShooterEnemy, 25, 350, 1.14f, 0.00f, -0.92f, 60.0f},
         };
         static constexpr EnemySpawnRule Chapter3[] = {
-            {ArmoredEnemy, 10, 140, 1.12f, -0.85f, -0.18f, 60.0f},
-            {LinkedLaserEnemy, 42, 230, 1.12f, 0.45f, 0.0f, 60.0f},
-            {CircleShooterEnemy, 60, 145, 1.14f, -0.28f, 0.86f, 50.0f},
-            {MissileShooterEnemy, 76, 190, 1.14f, 0.20f, -0.92f, 60.0f},
-            {DiveRusherEnemy, 92, 180, 1.12f, 0.48f, 0.96f, 60.0f},
-            {HeavyEnemy, 120, 180, 1.16f, 0.82f, -0.68f, 60.0f}
+            {BasicEnemy, 25, 100, 2.6f, -0.72f, -0.54f, 60.0f},
+            {DiveRusherEnemy, 100, 150, 1.12f, -0.28f, 1.5f, 60.0f},
+            {ArmoredEnemy, 250, 200, 2.6f, 0.00f, -0.70f, 60.0f},
+            {SquareShooterEnemy, 700, 1200, 2.6f, 0.0f, 0.0f, 54.0f},
+            {CircleShooterEnemy, 600, 300, 2.6f, 0.0f, 0.6f, 54.0f},
+            {MissileShooterEnemy, 25, 300, 1.14f, 0.40f, -0.92f, 60.0f},
+            {MissileShooterEnemy, 25, 300, 1.14f, -0.40f, -0.92f, 60.0f},
+            {StraightShooterEnemy, 100, 300, 1.10f, 0.0f, -0.88f, 50.0f},
         };
         constexpr Chapter Chapters[] = {
             MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)
@@ -53,7 +54,7 @@ public:
         const bool selected = TrySelectByChapters(Chapters, 3, ChapterFrameLength(), frame, spawnIndex, spawn, chapterNumber);
         // YとZの生成範囲をランダム化
         if (selected) {
-            if (spawn.enemyType != DiveRusherEnemy && spawn.enemyType != LinkedLaserEnemy) {
+            if (spawn.enemyType == BasicEnemy) {
                 spawn.y = GameplayRandom::Range(-0.86f, 0.86f);
                 spawn.railX = GameplayRandom::Range(-1.0f, 1.0f);
             }

@@ -99,7 +99,7 @@ constexpr float BossMissileLaunchVelocity = 0.09f;
 constexpr float BossMissileGravity = 0.0035f;
 constexpr float BossMissileEngineAcceleration = 0.085f;
 constexpr float BossDirectMissileTurnRate = 0.055f;
-constexpr float BossMachineGunSpeed = 0.29f;
+constexpr float BossMachineGunSpeed = 0.19f;
 constexpr float BossLaterPhaseSpeedScale = 0.25f;
 constexpr int BossLaterPhaseCullGraceFrames =
     static_cast<int>(90.0f / BossLaterPhaseSpeedScale);
