@@ -606,6 +606,41 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
 }
 
 /**
+ * @brief 移動中または発光中の小型ボムを描画する
+ * @param renderer 描画先レンダラー
+ * @param camera 描画に使用するカメラ
+ * @param bomb 描画対象のボム
+ * @return なし
+ */
+void SideScrollingShooter::DrawBomb(
+    Renderer& renderer, const Camera3D& camera, const Bomb& bomb) const {
+    constexpr float BombBodyColor[4] = {0.03f, 0.10f, 0.24f, 1.0f};
+    constexpr float BombBlueColor[4] = {0.08f, 0.65f, 3.20f, 1.0f};
+    constexpr float BombFuseColor[4] = {0.65f, 0.78f, 0.92f, 1.0f};
+    const bool charging = bomb.age >= BombTravelFrames;
+    const Vector3 center {ToWorldX(bomb.x), ToWorldY(bomb.y), bomb.z};
+    const float pulse = charging ? 1.0f + std::sin(static_cast<float>(bomb.age) * 1.1f) * 0.12f : 1.0f;
+
+    // 球形本体と短い信管で小型爆弾を構成する
+    DrawModelPrimitive(renderer, camera, 5, center.x, center.y, center.z,
+        0.48f * pulse, 0.48f * pulse, 0.48f * pulse,
+        charging ? BombBlueColor : BombBodyColor);
+    DrawModelPrimitive(renderer, camera, 2, center.x, center.y + 0.30f, center.z,
+        0.12f, 0.22f, 0.12f, BombFuseColor);
+
+    // 中央到達後は青い光輪を重ねて爆発直前を知らせる
+    if (charging) {
+        const float chargeProgress = static_cast<float>(bomb.age - BombTravelFrames) /
+            static_cast<float>(BombChargeFrames);
+        const float glowSize = 0.82f + chargeProgress * 0.72f;
+        const Matrix4x4 glowWorld = Matrix4x4::Translation(center) *
+            Matrix4x4::Scale({glowSize, glowSize, 1.0f});
+        renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * glowWorld,
+            chargeProgress * 0.32f, BombExplosionEffectType});
+    }
+}
+
+/**
  * @brief 爆発エフェクトをHLSLへ渡す描画コマンドとして記録する
  * @param renderer 描画先レンダラー
  * @param camera 描画に使用するカメラ
@@ -613,6 +648,17 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
  * @return なし
  */
 void SideScrollingShooter::DrawExplosion(Renderer& renderer, const Camera3D& camera, const Explosion& explosion) {
+    if (explosion.effectType == BombExplosionEffectType) {
+        const float progress = static_cast<float>(explosion.age) / BombExplosionLifetimeFrames;
+        const float size = 1.10f + progress * 8.50f;
+        const Matrix4x4 world = Matrix4x4::Translation(
+            {ToWorldX(explosion.x), ToWorldY(explosion.y), explosion.z}) *
+            Matrix4x4::Scale({size, size, 1.0f});
+        renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * world,
+            progress, BombExplosionEffectType});
+        return;
+    }
+
     if (explosion.effectType == 1) {
         const float progress = static_cast<float>(explosion.age) / MortarExplosionLifetimeFrames;
         const float fireProgress = Math::Clamp01(progress * 2.20f);
@@ -825,7 +871,9 @@ void SideScrollingShooter::DrawMissionBanner(Renderer& renderer) const {
 
     char startText[24];
     std::snprintf(startText, sizeof(startText), "MISSION %d START", m_stageNumber);
-    const std::string_view text = m_clear ? "ARRESTED" : startText;
+    const std::string_view text = m_tutorialMode ?
+        (m_clear ? "TUTORIAL COMPLETE" : "TUTORIAL START") :
+        (m_clear ? "ARRESTED" : startText);
     const int remainingFrames = m_clear ? (std::max)(0, m_clearTimer) : m_missionStartTimer;
     const int elapsedFrames = (m_clear ? ClearWaitFrames : MissionBannerDisplayFrames) - remainingFrames;
     const float fade = remainingFrames < 20 ? static_cast<float>(remainingFrames) / 20.0f : 1.0f;
@@ -869,6 +917,64 @@ void SideScrollingShooter::DrawBossPhaseDividers(Renderer& renderer, float y,
             y, 0.008f, 0.035f, color);
         previousPhase = phase;
     }
+/** @brief チュートリアル案内を描画する @param renderer 描画先 */
+void SideScrollingShooter::DrawTutorialHud(Renderer& renderer) const {
+    constexpr float CharacterSpacing = 0.0025f;
+    if (m_tutorialStep >= TutorialStepCount) return;
+    constexpr const char* Titles[] = {
+        "MOVE", "FOCUS MOVE", "SHOT", "BOMB", "2D <-> 3D"
+    };
+    constexpr const char* Instructions[] = {
+        "DODGE THE METEORS",
+        "PASS THROUGH THE NARROW GAPS",
+        "DESTROY ALL TARGETS",
+        "CLEAR THE UNAVOIDABLE BARRAGE",
+        "ESCAPE THE 2D BARRAGE"
+    };
+    char progress[24];
+    std::snprintf(progress, sizeof(progress), "LESSON %d / %d", m_tutorialStep + 1, TutorialStepCount);
+    renderer.DrawText(progress, TextAlign::TopCenter, 0.014f,
+        {0.65f, 0.90f, 0.95f, 1.0f}, {0.0f, -0.04f}, CharacterSpacing);
+    renderer.DrawText(Titles[m_tutorialStep], TextAlign::Center, 0.030f,
+        {1.0f, 0.78f, 0.12f, 1.0f}, {0.0f, 0.74f}, CharacterSpacing);
+    renderer.DrawText(Instructions[m_tutorialStep], TextAlign::Center, 0.015f,
+        {0.85f, 0.95f, 0.90f, 1.0f}, {0.0f, 0.60f}, CharacterSpacing);
+}
+
+/** @brief 文字表示領域へ共通の黒いHUD背景を描画する @param renderer 描画先 @return なし */
+void SideScrollingShooter::DrawHudBackground(Renderer& renderer) const {
+    constexpr ColorF HudBackground {0.0f, 0.0f, 0.0f, 0.82f};
+    // ステータスと操作文字の背面だけを覆い、残りはプレイ領域として開放する
+    renderer.Draw(Rect {{0.0f, 0.92f}, {2.0f, 0.08f}}, HudBackground);
+    renderer.Draw(Rect {{0.0f, -0.92f}, {2.0f, 0.08f}}, HudBackground);
+}
+
+/**
+ * @brief チュートリアルの操作キーを自機上部へ表示する
+ * @param renderer 描画先レンダラー
+ * @param camera 自機位置の投影に使うカメラ
+ * @param playerZ 描画中の自機Z座標
+ * @return なし
+ */
+void SideScrollingShooter::DrawTutorialControlHint(
+    Renderer& renderer, const Camera3D& camera, float playerZ) const {
+    if (!m_tutorialMode || m_missionStartTimer > 0 ||
+        m_tutorialStep >= TutorialStepCount) return;
+
+    constexpr const char* Hints[] = {
+        "MOVE WASD", "SLOW SHIFT", "Z ATTACK", "C BOMB", "X SHIFT"
+    };
+    Vector2 screenPosition;
+    if (!camera.TryWorldToScreen(
+            {ToWorldX(m_playerX), ToWorldY(m_playerY) + 0.95f, playerZ}, screenPosition)) return;
+    const Viewport& viewport = camera.GetViewport();
+    const Vector2 position {
+        (screenPosition.x - static_cast<float>(viewport.x)) /
+                static_cast<float>(viewport.width) * 2.0f - 1.0f,
+        1.0f - (screenPosition.y - static_cast<float>(viewport.y)) /
+                static_cast<float>(viewport.height) * 2.0f};
+    renderer.DrawText(Hints[m_tutorialStep], TextAlign::Center, 0.015f,
+        {0.35f, 1.0f, 0.85f, 1.0f}, position, 0.0025f);
 }
 
 void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
@@ -961,23 +1067,15 @@ void SideScrollingShooter::DrawBossWarning(Renderer& renderer) const {
 void SideScrollingShooter::DrawViewToggleCooldownHud(
     Renderer& renderer, const Camera3D& camera, float playerZ) const {
     constexpr int FadeFrames = 12;
-    constexpr float BarWidth = 0.30f;
-    constexpr float PlayerBarWidth = 0.11f;
+    constexpr float BarWidth = 0.11f;
     const float readyRate = ViewToggleReadyRate(m_viewToggleCooldown, ViewToggleCooldownFrames);
     const float opacity = ViewToggleHudOpacity(
         m_viewToggleCooldown, ViewToggleCooldownFrames, FadeFrames);
     if (opacity <= 0.0f) return;
     const float trackColor[4] = {0.10f, 0.18f, 0.20f, 0.92f * opacity};
     const float fillColor[4] = {0.20f, 0.82f, 1.00f, opacity};
-    const ColorF textColor {0.65f, 0.90f, 0.95f, opacity};
 
-    // 上部中央のトラックとFillを同じ中心座標へ配置する
-    renderer.DrawText("2D <-> 3D", TextAlign::TopCenter, 0.011f,
-        textColor, {0.0f, -0.018f});
-    DrawShape(renderer, 0.0f, 0.905f, BarWidth, 0.018f, trackColor);
-    DrawShape(renderer, 0.0f, 0.905f, BarWidth * readyRate, 0.012f, fillColor);
-
-    // 自機下方のワールド座標を画面座標へ投影して小型メーターを追従させる
+    // 自機下方のワールド座標を画面座標へ投影してメーターを追従させる
     Vector2 screenPosition;
     if (!camera.TryWorldToScreen(
             {ToWorldX(m_playerX), ToWorldY(m_playerY) - 0.70f, playerZ}, screenPosition)) return;
@@ -987,10 +1085,10 @@ void SideScrollingShooter::DrawViewToggleCooldownHud(
                 static_cast<float>(viewport.width) * 2.0f - 1.0f,
         1.0f - (screenPosition.y - static_cast<float>(viewport.y)) /
                 static_cast<float>(viewport.height) * 2.0f};
-    DrawShape(renderer, position.x, position.y, PlayerBarWidth, 0.013f, trackColor);
-    DrawShape(renderer,
-        position.x, position.y,
-        PlayerBarWidth * readyRate, 0.008f, fillColor);
+
+    // 暗いトラック上へ切り替え可能率を水色で表示する
+    DrawShape(renderer, position.x, position.y, BarWidth, 0.013f, trackColor);
+    DrawShape(renderer, position.x, position.y, BarWidth * readyRate, 0.008f, fillColor);
 }
 
 /**

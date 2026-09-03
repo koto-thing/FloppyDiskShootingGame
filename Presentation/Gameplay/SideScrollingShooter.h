@@ -58,6 +58,8 @@ public:
      * @param difficulty 使用する敵出現難易度
      */
     void Initialize(AudioService* audio, PlayerType playerType, DifficultyType difficulty);
+    /** @brief チュートリアル用のゲーム状態を初期化する @param audio 効果音サービス @param playerType 使用機体 @param difficulty 難易度 @return なし */
+    void InitializeTutorial(AudioService* audio, PlayerType playerType, DifficultyType difficulty);
     void ProcessInput();
     void Tick();
     void Render(Renderer& renderer) const;
@@ -78,8 +80,20 @@ public:
      * @return 現在の合計スコア
      */
     int Score() const;
+    /** @brief 全チュートリアル課題を達成したか取得する @return 達成済みの場合true */
+    bool IsTutorialComplete() const {
+        return m_tutorialStep >= TutorialStepCount && m_clearTimer <= 0;
+    }
+    /** @brief 現在のチュートリアル課題を飛ばして次へ進む @return なし */
+    void NextTutorialStep();
 
 private:
+    /** @brief チュートリアル専用進行を更新する */
+    void TickTutorial();
+    /** @brief 現在のチュートリアル課題を準備する */
+    void BeginTutorialStep();
+    /** @brief チュートリアル案内を描画する @param renderer 描画先 */
+    void DrawTutorialHud(Renderer& renderer) const;
     class Stage;
     class Stage1EnemySheet;
     class Stage1EnemySheetEasy;
@@ -249,6 +263,17 @@ private:
         bool damagedPlayer = false;
     };
 
+    /** @brief 自機から画面中央へ投げるボム */
+    struct Bomb {
+        float startX = 0.0f;
+        float startY = 0.0f;
+        float x = 0.0f;
+        float y = 0.0f;
+        float z = 0.0f;
+        int age = 0;
+        bool active = false;
+    };
+
     /** @brief 撃破された機体モデルから分離して飛散する部品 */
     struct Debris {
         float x = 0.0f;
@@ -306,6 +331,10 @@ private:
     static constexpr int ExplosionLifetimeFrames = 18;
     static constexpr int DestructionExplosionLifetimeFrames = 48;
     static constexpr int MortarExplosionLifetimeFrames = 64;
+    static constexpr int BombTravelFrames = 24;
+    static constexpr int BombChargeFrames = 12;
+    static constexpr int BombExplosionLifetimeFrames = 42;
+    static constexpr int BombExplosionEffectType = 5;
     static constexpr int AttackWarningFrames = 12;
     static constexpr int BossPartHitFlashFrames = 12;
     static constexpr int DebrisCapacity = 96;
@@ -333,9 +362,9 @@ private:
     /** @brief 2D画面のプレイ領域右端に対応する自機中心のX座標 */
     static constexpr float Side2DPlayerMaxX = 2.00f;
     /** @brief フッター直上のプレイ領域下端に対応する自機中心のY座標 */
-    static constexpr float Side2DPlayerMinY = -1.38f;
+    static constexpr float Side2DPlayerMinY = -1.62f;
     /** @brief ヘッダー直下のプレイ領域上端に対応する自機中心のY座標 */
-    static constexpr float Side2DPlayerMaxY = 1.20f;
+    static constexpr float Side2DPlayerMaxY = 1.53f;
     /** @brief 自機弾が画面外へ抜けるまで保持する余白 */
     static constexpr float Side2DShotCullMargin = 0.25f;
     static constexpr float PlayerRailZ = 8.0f;
@@ -451,6 +480,16 @@ private:
     /** @brief 接続レーザー敵のレーザー接触判定を更新する */
     void TickLinkedEnemyLasers();
     void TickShots();
+    /**
+     * @brief ボムの移動、発光待機、爆発を更新する
+     * @return なし
+     */
+    void TickBomb();
+    /**
+     * @brief ボムを爆発させ、画面内の通常敵と敵弾を消去する
+     * @return なし
+     */
+    void DetonateBomb();
     /** @brief 生存中の爆発エフェクトを更新する */
     void TickExplosions();
     /** @brief 飛散中の機体部品を更新する */
@@ -788,6 +827,14 @@ private:
     void DrawShotModel(Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw = 0.0f) const;
     /** @brief 爆発エフェクトをHLSLへ渡す描画コマンドとして記録する */
     static void DrawExplosion(Renderer& renderer, const Camera3D& camera, const Explosion& explosion);
+    /**
+     * @brief 移動中または発光中の小型ボムを描画する
+     * @param renderer 描画先レンダラー
+     * @param camera 描画に使用するカメラ
+     * @param bomb 描画対象のボム
+     * @return なし
+     */
+    void DrawBomb(Renderer& renderer, const Camera3D& camera, const Bomb& bomb) const;
     /** @brief 飛散中の機体部品を描画する */
     void DrawDebris(Renderer& renderer, const Camera3D& camera,
         const Debris& debris, float railWeight) const;
@@ -806,14 +853,26 @@ private:
      * @return なし
      */
     void DrawPowerUp(Renderer& renderer, const Camera3D& camera, float playerZ) const;
+    /**
+     * @brief チュートリアルの操作キーを自機上部へ表示する
+     * @param renderer 描画先レンダラー
+     * @param camera 自機位置の投影に使うカメラ
+     * @param playerZ 描画中の自機Z座標
+     * @return なし
+     */
+    void DrawTutorialControlHint(
+        Renderer& renderer, const Camera3D& camera, float playerZ) const;
     /** @brief ミッション開始または終了の文字アニメーションを描画する */
     void DrawMissionBanner(Renderer& renderer) const;
+    /** @brief 文字表示領域へ共通の黒いHUD背景を描画する @param renderer 描画先 @return なし */
+    void DrawHudBackground(Renderer& renderer) const;
 
     std::array<Shot, ShotCapacity> m_shots {};
     std::array<Enemy, EnemyCapacity> m_enemies {};
     std::array<Item, ItemCapacity> m_items {};
     std::array<Explosion, ExplosionCapacity> m_explosions {};
     std::array<Debris, DebrisCapacity> m_debris {};
+    Bomb m_bomb {};
     ShooterStages::Stage1::State m_stage1 {};
     ShooterStages::Stage2::State m_stage2 {};
     ShooterStages::Stage3::State m_stage3 {};
@@ -854,12 +913,18 @@ private:
     int m_missionStartTimer = 0;
     float m_power = 0.0f;
     int m_clearTimer = 0;
+    bool m_tutorialMode = false;
+    int m_tutorialStep = 0;
+    int m_tutorialStepFrame = 0;
+    bool m_tutorialSlowUsed = false;
+    static constexpr int TutorialStepCount = 5;
     bool m_moveLeft = false;
     bool m_moveRight = false;
     bool m_moveUp = false;
     bool m_moveDown = false;
     bool m_slowMove = false;
     bool m_fire = false;
+    bool m_bombRequested = false;
     bool m_clear = false;
     bool m_bossBattle = false;
     bool m_bossBattlePending = false;

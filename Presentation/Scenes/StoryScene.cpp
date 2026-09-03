@@ -6,6 +6,7 @@
 
 #include "../../Engine/Graphics/Renderer.h"
 #include "../../Engine/Time/Time.h"
+#include "../../Infrastructure/Repositories/SettingsRepository.h"
 
 namespace {
 constexpr float CrawlSpeed = 0.115f;
@@ -77,7 +78,8 @@ void StoryScene::Tick() {
  * @return ゲームプレイシーン
  */
 SceneType StoryScene::NextScene() const {
-    return SceneType::TestStage;
+    return SettingsRepository {}.Load().tutorialCompleted ?
+        SceneType::TestStage : SceneType::TutorialStage;
 }
 
 /**

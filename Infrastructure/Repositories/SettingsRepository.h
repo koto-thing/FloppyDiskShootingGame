@@ -11,6 +11,7 @@ struct GameSettings {
     float seVolume = 1.0f;
     bool retroEffectEnabled = true;
     std::uint32_t galleryUnlocks = DefaultGalleryUnlocks;
+    bool tutorialCompleted = false;
 };
 
 /** @brief ゲーム設定をユーザーの永続データ領域へ保存するリポジトリ */

@@ -11,6 +11,8 @@
 #include "../../Infrastructure/Repositories/SettingsRepository.h"
 #include "SideScrollingShooterShared.h"
 #include "Stages/Common/StageDispatch.h"
+#include "Stages/Stage1/Stage1Module.h"
+#include "Voices/VoiceDpcmDecoder.h"
 
 namespace {
 using SideScrollingShooterShared::BossNameRevealFrames;
@@ -22,6 +24,12 @@ constexpr float PowerAfterRestart(float power) {
 
 static_assert(PowerAfterRestart(3.25f) == 2.25f);
 static_assert(PowerAfterRestart(0.75f) == 0.0f);
+
+/** @brief 先頭無音を除去した無線風の自機撃破音声を取得する @return 44100Hz PCMデータ */
+const std::vector<std::int16_t>& MomijiDeathVoice() {
+    static const auto voice = VoiceCodec::DecodeRadioForAudioService(VoiceSamples::momijiDeath);
+    return voice;
+}
 }
 
 #include "SideScrollingShooterEnemies.h"
@@ -119,11 +127,24 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorFo
  * @return なし
  */
 void SideScrollingShooter::Initialize(AudioService* audio, PlayerType playerType, DifficultyType difficulty) {
+    // プレイ開始前に音声をデコードして初回撃破時の処理待ちをなくす
+    (void)MomijiDeathVoice();
     m_audio = audio;
     m_playerType = playerType;
     m_difficulty = difficulty;
     m_galleryUnlocks = SettingsRepository {}.Load().galleryUnlocks;
     Reset(true);
+}
+
+/** @brief チュートリアル用のゲーム状態を初期化する @param audio 効果音サービス @param playerType 使用機体 @param difficulty 難易度 @return なし */
+void SideScrollingShooter::InitializeTutorial(
+    AudioService* audio, PlayerType playerType, DifficultyType difficulty) {
+    Initialize(audio, playerType, difficulty);
+    m_tutorialMode = true;
+    m_missionStartTimer = MissionBannerDisplayFrames;
+    m_invincible = 999999;
+    m_tutorialStep = 0;
+    BeginTutorialStep();
 }
 
 void SideScrollingShooter::Reset(bool resetRetryCounts) {
@@ -132,6 +153,7 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
     m_items = {};
     m_explosions = {};
     m_debris = {};
+    m_bomb = {};
     StageDispatch::ResetGimmicks(*this);
     m_stageNumber = 1;
     m_chapterNumber = 1;
@@ -171,6 +193,7 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
     m_playerDestructionTimer = 0;
     m_powerUpTimer = 0;
     m_viewToggleRequested = false;
+    m_bombRequested = false;
     m_viewMode = ViewMode::Side2D;
     m_nextViewMode = ViewMode::Side2D;
     m_viewTransitionTimer = 0;
@@ -197,6 +220,7 @@ void SideScrollingShooter::StartDebugCheckpoint(
     m_items = {};
     m_explosions = {};
     m_debris = {};
+    m_bomb = {};
     StageDispatch::ResetGimmicks(*this);
 
     // 指定範囲をゲーム内の進行範囲へ収める
@@ -230,6 +254,7 @@ void SideScrollingShooter::StartDebugCheckpoint(
     m_playerDestructionTimer = 0;
     m_restartTimer = 0;
     m_viewToggleRequested = false;
+    m_bombRequested = false;
     m_viewMode = ViewMode::Side2D;
     m_nextViewMode = ViewMode::Side2D;
     m_viewTransitionTimer = 0;
@@ -258,6 +283,7 @@ void SideScrollingShooter::ProcessInput() {
     m_moveDown = Input::GetKey(KeyCode::DownArrow) || Input::GetKey(KeyCode::S);
     m_slowMove = InputService::IsKeyPressed(VK_SHIFT);
     m_fire = Input::GetKey(KeyCode::Z) || Input::GetKey(KeyCode::Space);
+    m_bombRequested = Input::GetKeyDown(KeyCode::C);
     m_viewToggleRequested = Input::GetKeyDown(KeyCode::X) && CanToggleView();
 
     // デバッグ用に任意の進行地点へ移動する
@@ -283,6 +309,11 @@ void SideScrollingShooter::Tick() {
     // 進行停止中も画面演出を終了へ進める
     m_screenShakeFrames = (std::max)(0, m_screenShakeFrames - 1);
     m_powerUpTimer = (std::max)(0, m_powerUpTimer - 1);
+
+    if (m_tutorialMode) {
+        TickTutorial();
+        return;
+    }
 
     // ミッション開始表示中は背景を維持したまま戦闘進行と操作を止める
     if (m_missionStartTimer > 0) {
@@ -391,6 +422,7 @@ void SideScrollingShooter::Tick() {
         }
     }
 
+    TickBomb();
     TickEnemies();
     TickShots();
     TickExplosions();
@@ -787,6 +819,7 @@ void SideScrollingShooter::StartNextStage() {
     m_enemies = {};
     m_explosions = {};
     m_debris = {};
+    m_bomb = {};
     StageDispatch::ResetGimmicks(*this);
     m_stage = &StageForNumber(m_stageNumber, m_difficulty);
     m_chapterNumber = 1;
@@ -828,7 +861,157 @@ void SideScrollingShooter::DamagePlayer() {
     // 敵撃破と同じ破壊爆発を自機位置へ生成してから復帰を待つ
     SpawnExplosion(m_playerX, m_playerY, PlayerRailZ, true);
     PlayHitSound();
+    if (m_audio) m_audio->PlaySE(MomijiDeathVoice());
     m_playerDestructionTimer = PlayerDestructionWaitFrames;
+}
+
+/** @brief 現在のチュートリアル課題を準備する */
+void SideScrollingShooter::BeginTutorialStep() {
+    m_shots = {};
+    m_enemies = {};
+    m_bomb = {};
+    for (auto& meteor : m_stage1.meteors) meteor.destroyed = true;
+    m_tutorialStepFrame = 0;
+    m_tutorialSlowUsed = false;
+    m_invincible = m_tutorialStep == 0 ? 0 : 999999;
+
+    // 移動課題には正面を横切る隕石、低速移動課題には狭い上下の隕石を置く
+    if (m_tutorialStep == 0) {
+        m_playerX = -0.72f;
+        m_playerY = 0.0f;
+        m_stage1.meteors[0] = {-85.0f, 1.65f, 0.0f, 0.018f, 0.0f, 99, false, 0.85f, true};
+        m_stage1.meteors[1] = {-45.0f, 1.65f, 0.7f, -0.018f, 0.0f, 99, false, 0.00f, true};
+        m_stage1.meteors[2] = {-85.0f, 1.65f, 1.4f, 0.018f, 0.0f, 99, false, -0.85f, true};
+    } else if (m_tutorialStep == 1) {
+        m_playerX = -0.72f;
+        m_playerY = 0.0f;
+        constexpr float SlowMeteorSpeed = 0.85f;
+        // 上下3組の隙間を交互にずらし、低速移動で抜ける蛇行通路を作る
+        m_stage1.meteors[0] = {-20.0f, 1.65f, 0.0f, 0.018f, 0.0f, 99, false, 0.90f, true, SlowMeteorSpeed};
+        m_stage1.meteors[1] = {-20.0f, 1.65f, 0.6f, -0.018f, 0.0f, 99, false, -0.75f, true, SlowMeteorSpeed};
+        m_stage1.meteors[2] = {-45.0f, 1.65f, 1.2f, -0.018f, 0.0f, 99, false, 0.75f, true, SlowMeteorSpeed};
+        m_stage1.meteors[3] = {-45.0f, 1.65f, 1.8f, 0.018f, 0.0f, 99, false, -0.90f, true, SlowMeteorSpeed};
+        m_stage1.meteors[4] = {-70.0f, 1.65f, 2.4f, 0.018f, 0.0f, 99, false, 0.90f, true, SlowMeteorSpeed};
+        m_stage1.meteors[5] = {-70.0f, 1.65f, 3.0f, -0.018f, 0.0f, 99, false, -0.75f, true, SlowMeteorSpeed};
+    } else if (m_tutorialStep == 2) {
+        // ショット課題開始時に攻撃しない標的機を上下中央へ3体同時配置する
+        SpawnEnemy(0, 0.62f, 0.0f, 0.58f, 42.0f);
+        SpawnEnemy(0, 0.78f, 0.0f, 0.00f, 42.0f);
+        SpawnEnemy(0, 0.62f, 0.0f, -0.58f, 42.0f);
+        constexpr float TargetX[] = {0.62f, 0.78f, 0.62f};
+        int targetIndex = 0;
+        for (auto& enemy : m_enemies) {
+            if (!enemy.active) continue;
+            enemy.hp = enemy.maxHp = 5;
+            enemy.actionX = TargetX[targetIndex++];
+            enemy.baseX = enemy.actionX;
+        }
+    }
+}
+
+/** @brief 現在のチュートリアル課題を飛ばして次へ進む @return なし */
+void SideScrollingShooter::NextTutorialStep() {
+    if (!m_tutorialMode || m_missionStartTimer > 0 || m_tutorialStep >= TutorialStepCount) return;
+    ++m_tutorialStep;
+    if (m_tutorialStep < TutorialStepCount) {
+        BeginTutorialStep();
+    } else {
+        m_clear = true;
+        m_clearTimer = ClearWaitFrames;
+    }
+}
+
+/** @brief チュートリアル専用進行を更新する */
+void SideScrollingShooter::TickTutorial() {
+    if (IsTutorialComplete()) return;
+
+    // 通常ステージと同じ開始・終了演出中は課題の進行と操作を止める
+    if (m_missionStartTimer > 0) {
+        --m_missionStartTimer;
+        return;
+    }
+    if (m_tutorialStep >= TutorialStepCount) {
+        --m_clearTimer;
+        return;
+    }
+
+    // 隕石へ接触した場合は撃破演出後に同じ課題を最初からやり直す
+    if (m_playerDestructionTimer > 0) {
+        TickExplosions();
+        TickDebris();
+        if (--m_playerDestructionTimer == 0) BeginTutorialStep();
+        return;
+    }
+    ++m_tutorialStepFrame;
+    m_scroll += 0.008f;
+    m_shotCooldown = (std::max)(0, m_shotCooldown - 1);
+    m_specialShotCooldown = (std::max)(0, m_specialShotCooldown - 1);
+    m_viewToggleCooldown = (std::max)(0, m_viewToggleCooldown - 1);
+    TickViewTransition();
+    TickPlayer();
+    if (m_tutorialStep == 1 && m_slowMove &&
+        (m_moveLeft || m_moveRight || m_moveUp || m_moveDown)) m_tutorialSlowUsed = true;
+    TickPlayerWeapons();
+
+    // ショット課題の標的機は右画面外から指定位置まで進入して停止する
+    if (m_tutorialStep == 2) {
+        for (auto& enemy : m_enemies) {
+            if (!enemy.active || enemy.x <= enemy.actionX) continue;
+            enemy.x = (std::max)(enemy.actionX, enemy.x - 0.025f);
+            enemy.z = ToRailZFromSideX(enemy.x);
+        }
+    }
+
+    // ボム課題と視点切り替え課題では、回避不能な縦一列の弾幕を一度だけ生成する
+    if ((m_tutorialStep == 3 || m_tutorialStep == 4) && m_tutorialStepFrame == 45) {
+        constexpr int BarrageShotCount = 29;
+        constexpr float BarrageMinY = Side2DPlayerMinY - 0.10f;
+        constexpr float BarrageMaxY = Side2DPlayerMaxY + 0.10f;
+        constexpr float BarrageSpeed2D = -0.009f;
+        constexpr float BarrageSpeed3D = 0.31f;
+        for (int i = 0; i < BarrageShotCount; ++i) {
+            const float y = Math::Lerp(BarrageMinY, BarrageMaxY,
+                static_cast<float>(i) / static_cast<float>(BarrageShotCount - 1));
+            SpawnShot(1.05f, y, BarrageSpeed2D, 0.0f, true,
+                EnemyRailFarZ, BarrageSpeed3D);
+        }
+    }
+
+    if (m_tutorialStep <= 1) {
+        Stage1Module::TickWorld(*this);
+        if (Stage1Module::HitsHazard(*this, m_playerX, m_playerY, PlayerRailZ, 0.055f)) {
+            DamagePlayer();
+            return;
+        }
+    }
+    TickBomb();
+    TickShots();
+    TickExplosions();
+    TickDebris();
+
+    bool completed = false;
+    if (m_tutorialStep == 0) {
+        completed = true;
+        for (int i = 0; i < 3; ++i) if (!m_stage1.meteors[i].destroyed) completed = false;
+    }
+    if (m_tutorialStep == 1) {
+        completed = m_tutorialSlowUsed;
+        for (const auto& meteor : m_stage1.meteors) if (!meteor.destroyed) completed = false;
+    }
+    if (m_tutorialStep == 2) {
+        completed = true;
+        for (const auto& enemy : m_enemies) if (enemy.active) completed = false;
+    }
+    if (m_tutorialStep == 3 && m_tutorialStepFrame > 70) {
+        completed = true;
+        for (const auto& shot : m_shots) if (shot.active && shot.enemy) completed = false;
+    }
+    if (m_tutorialStep == 4 && m_tutorialStepFrame > 45) {
+        completed = m_viewMode == ViewMode::Rail3D && m_viewTransitionTimer == 0;
+        for (const auto& shot : m_shots) if (shot.active && shot.enemy) completed = false;
+    }
+    if (!completed) return;
+    NextTutorialStep();
 }
 
 /**
@@ -856,6 +1039,7 @@ void SideScrollingShooter::RestartCurrentChapter() {
     m_items = {};
     m_explosions = {};
     m_debris = {};
+    m_bomb = {};
     StageDispatch::ResetGimmicks(*this);
     m_chapterResult = {};
     m_score = m_chapterStartScore;
