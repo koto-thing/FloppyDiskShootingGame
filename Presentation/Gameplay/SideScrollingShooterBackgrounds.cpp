@@ -25,6 +25,7 @@ void SideScrollingShooter::Render(Renderer& renderer) const {
     }
     DrawBossNameReveal(renderer);
     DrawMissionBanner(renderer);
+    DrawBossWarning(renderer);
 }
 
 void SideScrollingShooter::Render2D(Renderer& renderer) const {

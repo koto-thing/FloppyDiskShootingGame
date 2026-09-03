@@ -27,6 +27,40 @@ constexpr float ItemGlyphColor[4] = { 1.00f, 1.00f, 0.92f, 1.0f };
 
 constexpr int MissionBannerGlyphDelayFrames = 4;
 constexpr int MissionBannerGlyphPopFrames = 8;
+constexpr int BossWarningFadeFrames = 24;
+
+/**
+ * @brief ボス警告帯の表示フレームからフェード率を取得する
+ * @param age 登場演出の経過フレーム数
+ * @param duration 登場演出の総フレーム数
+ * @return 0から1のフェード率
+ */
+constexpr float BossWarningFade(int age, int duration) {
+    if (duration <= 1) return 1.0f;
+    const float fadeIn = (std::clamp)(
+        static_cast<float>(age) / BossWarningFadeFrames, 0.0f, 1.0f);
+    const float fadeOut = (std::clamp)(
+        static_cast<float>(duration - 1 - age) / BossWarningFadeFrames, 0.0f, 1.0f);
+    return (std::min)(fadeIn, fadeOut);
+}
+
+static_assert(BossWarningFade(0, 180) == 0.0f);
+static_assert(BossWarningFade(BossWarningFadeFrames, 180) == 1.0f);
+static_assert(BossWarningFade(179, 180) == 0.0f);
+
+/**
+ * @brief 残HPをHPバー上のX座標へ変換する
+ * @param halfWidth HPバーの半幅
+ * @param hp フェーズが切り替わる残HP
+ * @param maxHp ボスの最大HP
+ * @return HPバー上のX座標
+ */
+constexpr float BossPhaseDividerX(float halfWidth, int hp, int maxHp) {
+    return -halfWidth + halfWidth * 2.0f * static_cast<float>(hp) /
+        static_cast<float>(maxHp);
+}
+
+static_assert(BossPhaseDividerX(0.5f, 75, 100) == 0.25f);
 
 /**
  * @brief 画面揺れの残りフレームから減衰率を取得する
@@ -813,6 +847,30 @@ void SideScrollingShooter::DrawMissionBanner(Renderer& renderer) const {
     }
 }
 
+/**
+ * @brief 実際のHPフェーズ境界へボスHPバーの区切りを描画する
+ * @param renderer 描画先レンダラー
+ * @param y HPバーの中心Y座標
+ * @param halfWidth HPバーの半幅
+ * @param maxHp ボスの最大HP
+ * @param color 区切り線のRGBA色
+ * @return なし
+ */
+void SideScrollingShooter::DrawBossPhaseDividers(Renderer& renderer, float y,
+    float halfWidth, int maxHp, const float color[4]) const {
+    if (maxHp <= 1) return;
+
+    // ponytail: HPが数千程度の間は定義済みフェーズ判定の線形走査で十分、上限増加時はStageへ境界列を持たせる
+    int previousPhase = m_stage->BossPhaseForHp(maxHp, maxHp);
+    for (int hp = maxHp - 1; hp > 0; --hp) {
+        const int phase = m_stage->BossPhaseForHp(hp, maxHp);
+        if (phase == previousPhase) continue;
+        DrawShape(renderer, BossPhaseDividerX(halfWidth, hp, maxHp),
+            y, 0.008f, 0.035f, color);
+        previousPhase = phase;
+    }
+}
+
 void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
     if (StageDispatch::DrawHud(*this, renderer)) return;
     if (!m_bossBattle || m_clear || m_bossIntroductionPhase != BossIntroductionPhase::None) {
@@ -829,11 +887,8 @@ void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
     DrawShape(renderer, 0.0f, 0.76f, BossBarWidth, 0.025f, BossBarBack);
     DrawShape(renderer, BossBarWidth * (1.0f - hpRate), 0.76f,
         BossBarWidth * hpRate, 0.018f, BossBarFill);
-    // 4フェーズの境界をHPバー上に常時表示する
-    for (int phase = 1; phase < BossPhaseCount; ++phase) {
-        DrawShape(renderer, -BossBarWidth + BossBarWidth * 2.0f * static_cast<float>(phase) / static_cast<float>(BossPhaseCount),
-            0.755f, 0.008f, 0.035f, BossBarDivider);
-    }
+    // 実際のフェーズ判定が切り替わるHPへ黄色い区切り線を重ねる
+    DrawBossPhaseDividers(renderer, 0.755f, BossBarWidth, bossMaxHp, BossBarDivider);
     const BossStory story = StageDispatch::Story(m_stageNumber);
     renderer.DrawText(story.bossName, TextAlign::Center, 0.014f,
         { 1.0f, 0.45f, 0.65f, 1.0f }, { 0.0f, 0.86f });
@@ -848,6 +903,52 @@ void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
     }
     renderer.DrawText(phaseLabel, { -BossBarWidth, 0.81f }, 0.012f,
         { 1.0f, 0.82f, 0.30f, 1.0f });
+}
+
+/**
+ * @brief ボス登場中に上下の警告帯を描画する
+ * @param renderer 描画先レンダラー
+ * @return なし
+ */
+void SideScrollingShooter::DrawBossWarning(Renderer& renderer) const {
+    // 共通登場フェーズと独自進行のStage 5登場フェーズを同じ警告帯へまとめる
+    const bool standardEntrance =
+        m_bossIntroductionPhase == BossIntroductionPhase::Entrance;
+    const bool stage5Entrance = m_stageNumber == 5 &&
+        m_stage5.phase == ShooterStages::Stage5::Phase::EastsourceIntro;
+    if (!standardEntrance && !stage5Entrance) return;
+
+    constexpr std::string_view WarningText =
+        "/// WARNING /// WARNING /// WARNING /// WARNING /// WARNING /// WARNING /// WARNING ///";
+    constexpr float TextSize = 0.035f;
+    constexpr float CharacterSpacing = 0.006f;
+    constexpr float PhraseAdvance = 0.72f;
+    constexpr float ScrollPerFrame = 0.008f;
+    const int age = stage5Entrance ? m_stage5.phaseTimer : m_bossIntroductionTimer;
+    const int duration = stage5Entrance ? ShooterStages::Stage5::EastsourceIntroFrames :
+        StageDispatch::BossIntroductionFrames(*this);
+    const float alpha = SmoothStep(BossWarningFade(age, duration));
+    const float scroll = std::fmod(
+        static_cast<float>(age) * ScrollPerFrame, PhraseAdvance);
+    const float firstGlyphX = -1.0f + TextSize * renderer.AspectRatio();
+
+    // 既存HUDを半透明の黒帯で上書きして内側の赤線でプレイ領域と分ける
+    renderer.Draw(Rect {{0.0f, 0.90f}, {1.0f, 0.10f}},
+        {0.015f, 0.005f, 0.008f, 0.92f * alpha});
+    renderer.Draw(Rect {{0.0f, -0.90f}, {1.0f, 0.10f}},
+        {0.015f, 0.005f, 0.008f, 0.92f * alpha});
+    renderer.Draw(Rect {{0.0f, 0.80f}, {1.0f, 0.004f}},
+        {1.0f, 0.04f, 0.04f, alpha});
+    renderer.Draw(Rect {{0.0f, -0.80f}, {1.0f, 0.004f}},
+        {1.0f, 0.04f, 0.04f, alpha});
+
+    // 上段は左、下段は右へ同じ速度で流して警告文字を途切れさせない
+    const ColorF warningColor {1.0f, 0.045f, 0.035f, alpha};
+    renderer.DrawText(WarningText, {firstGlyphX - scroll, 0.90f},
+        TextSize, warningColor, CharacterSpacing);
+    renderer.DrawText(WarningText,
+        {firstGlyphX - PhraseAdvance + scroll, -0.90f},
+        TextSize, warningColor, CharacterSpacing);
 }
 
 /**

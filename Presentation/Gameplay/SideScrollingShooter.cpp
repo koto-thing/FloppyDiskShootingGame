@@ -14,6 +14,7 @@
 
 namespace {
 using SideScrollingShooterShared::BossNameRevealFrames;
+using SideScrollingShooterShared::BossWarningSirenMml;
 
 constexpr float PowerAfterRestart(float power) {
     return power > 1.0f ? power - 1.0f : 0.0f;
@@ -183,9 +184,14 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
  * @param stageNumber 開始するステージ番号
  * @param chapterNumber 開始するチャプター番号
  * @param bossBattle ボス戦から開始する場合true
+ * @param playBossWarningSound ボス登場警報を再生する場合true
  * @return なし
  */
-void SideScrollingShooter::StartDebugCheckpoint(int stageNumber, int chapterNumber, bool bossBattle) {
+void SideScrollingShooter::StartDebugCheckpoint(
+    int stageNumber,
+    int chapterNumber,
+    bool bossBattle,
+    bool playBossWarningSound) {
     m_shots = {};
     m_enemies = {};
     m_items = {};
@@ -237,7 +243,7 @@ void SideScrollingShooter::StartDebugCheckpoint(int stageNumber, int chapterNumb
     if (bossBattle) {
         m_chapterNumber = 3;
         if (!StageDispatch::StartDebugBoss(*this)) {
-            StartBossBattle();
+            StartBossBattle(playBossWarningSound);
         }
         m_bossStoryActive = false;
         m_bossIntroductionPhase = BossIntroductionPhase::None;
@@ -681,7 +687,7 @@ void SideScrollingShooter::InitializeSideObjects() {
     }
 }
 
-void SideScrollingShooter::StartBossBattle() {
+void SideScrollingShooter::StartBossBattle(bool playWarningSound) {
     m_bossBattle = true;
     m_bossStoryLine = 0;
     m_bossStoryActive = false;
@@ -703,8 +709,8 @@ void SideScrollingShooter::StartBossBattle() {
     boss.bossPhase = BossNormalPhase1;
     m_invincible = (std::max)(m_invincible, 60);
 
-    if (m_audio) {
-        m_audio->PlayMMLSE("t180 o4 l16 v12 c g > c");
+    if (m_audio && playWarningSound) {
+        m_audio->PlayMMLSE(BossWarningSirenMml);
     }
 }
 
@@ -830,12 +836,12 @@ void SideScrollingShooter::DamagePlayer() {
  * @return なし
  */
 void SideScrollingShooter::RestartCurrentChapter() {
-    // ボス戦中はBキーと同じ戦闘開始状態へ戻す
+    // ボス戦中は警報を再生せずBキーと同じ戦闘開始状態へ戻す
     const bool restartBossBattle = m_bossBattle;
     m_power = PowerAfterRestart(m_power);
     if (restartBossBattle) {
         if (!StageDispatch::HandleDebugBossInput(*this)) {
-            StartDebugCheckpoint(m_stageNumber, 3, true);
+            StartDebugCheckpoint(m_stageNumber, 3, true, false);
         }
         ++m_chapterRetryCounts[m_chapterNumber - 1];
         m_restartTimer = RestartDisplayFrames;

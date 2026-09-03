@@ -7,6 +7,7 @@
 #include "../../../../Engine/Input/Input.h"
 #include "../../../../Engine/Input/KeyCode.h"
 #include "../../../../Infrastructure/ExternalServices/AudioService.h"
+#include "../../SideScrollingShooterShared.h"
 
 /**
  * @brief 値を一フレームの最大移動量以内で目標へ近づける
@@ -1617,7 +1618,7 @@ void SideScrollingShooter::Stage5Module::PlayCue(SideScrollingShooter& shooter, 
         shooter.m_stage5.soundCooldown = 18;
         break;
     case ShooterStages::Stage5::EastsourceEntrance:
-        shooter.m_audio->PlayMMLSE("t200 o3 l16 v13 c g > c g");
+        shooter.m_audio->PlayMMLSE(SideScrollingShooterShared::BossWarningSirenMml);
         shooter.m_stage5.soundCooldown = 60;
         break;
     case ShooterStages::Stage5::SignalLost:
