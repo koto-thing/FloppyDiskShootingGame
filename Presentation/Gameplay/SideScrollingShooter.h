@@ -89,6 +89,10 @@ private:
     class Stage2EnemySheetEasy;
     class Stage2EnemySheetNormal;
     class Stage2EnemySheetHard;
+    class Stage3EnemySheet;
+    class Stage3EnemySheetEasy;
+    class Stage3EnemySheetNormal;
+    class Stage3EnemySheetHard;
     class Stage4EnemySheet;
     class EnemyBehavior;
     class BasicEnemyBehavior;
@@ -96,6 +100,7 @@ private:
     class ArmoredEnemyBehavior;
     class BossEnemyBehavior;
     class StraightShooterEnemyBehavior;
+    class DiveRusherEnemyBehavior;
     class CircleShooterEnemyBehavior;
     class SquareShooterEnemyBehavior;
     class StageDispatch;
@@ -409,6 +414,7 @@ private:
     static const EnemyBehavior& ArmoredEnemyBehaviorInstance();
     static const EnemyBehavior& BossEnemyBehaviorInstance();
     static const EnemyBehavior& StraightShooterEnemyBehaviorInstance();
+    static const EnemyBehavior& DiveRusherEnemyBehaviorInstance();
     static const EnemyBehavior& CircleShooterEnemyBehaviorInstance();
     static const EnemyBehavior& SquareShooterEnemyBehaviorInstance();
     static const EnemyBehavior& EnemyBehaviorForType(int type);

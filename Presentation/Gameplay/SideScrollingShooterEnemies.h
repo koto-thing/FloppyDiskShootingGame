@@ -357,6 +357,149 @@ protected:
 };
 
 /**
+ * @brief 高所で停止してから自機位置へ降下突撃する敵を制御する
+ */
+class SideScrollingShooter::DiveRusherEnemyBehavior final : public SideScrollingShooter::EnemyBehavior {
+public:
+    int Type() const override {
+        return 7;
+    }
+
+    int MaxHp() const override {
+        return 30;
+    }
+
+    void ConfigureSpawn(SideScrollingShooter& shooter, Enemy& enemy,
+        int frame, int kills, bool railMode, int stageIndex) const override {
+        (void)shooter;
+        ConfigureStats(enemy, stageIndex);
+        const EntryCandidate candidate = EntryCandidateAt(
+            SelectEntryCandidateIndex(frame, kills, stageIndex), stageIndex);
+        enemy.baseX = railMode ? candidate.railX : candidate.sideX;
+        enemy.x = enemy.baseX;
+        enemy.z = railMode ? candidate.railZ : ToRailZFromSideX(enemy.x);
+        enemy.baseY = HighY();
+        enemy.y = enemy.baseY;
+        enemy.phase = 0.0f;
+    }
+
+    void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
+        if (enemy.phase < 1.0f) {
+            TickApproach(shooter, enemy);
+            return;
+        }
+        if (enemy.phase < 2.0f) {
+            TickStop(enemy);
+            return;
+        }
+        if (enemy.phase < 3.0f) {
+            TickDiveCurve(shooter, enemy);
+            return;
+        }
+        TickRush(shooter, enemy);
+    }
+
+    int AimedShotInterval() const override {
+        return 0;
+    }
+
+    int Score(const Enemy&) const override {
+        return 220;
+    }
+
+    float RenderScale() const override {
+        return 1.16f;
+    }
+
+    static constexpr float HighY() {
+        return 0.96f;
+    }
+
+private:
+    static constexpr float SideTriggerLeadX = 0.62f;
+    static constexpr float RailTriggerLeadZ = 18.0f;
+    static constexpr int StopFrames = 24;
+    static constexpr int DiveCurveFrames = 42;
+    static constexpr float SideApproachSpeed = 0.020f;
+    static constexpr float RailApproachSpeed = 0.36f;
+    static constexpr float SideRushSpeed = 0.034f;
+    static constexpr float RailRushSpeed = 0.72f;
+    static_assert(SideTriggerLeadX > 0.0f);
+    static_assert(RailTriggerLeadZ > 0.0f);
+    static_assert(StopFrames > 0);
+    static_assert(DiveCurveFrames > 1);
+
+    void TickApproach(SideScrollingShooter& shooter, Enemy& enemy) const {
+        if (shooter.IsRailGameplayActive()) {
+            enemy.z -= RailApproachSpeed;
+            enemy.x = enemy.baseX;
+            enemy.y = enemy.baseY;
+            if (enemy.z <= SideScrollingShooter::PlayerRailZ + RailTriggerLeadZ) {
+                BeginStop(shooter, enemy);
+            }
+            return;
+        }
+
+        enemy.x -= SideApproachSpeed;
+        enemy.z = ToRailZFromSideX(enemy.x);
+        enemy.y = enemy.baseY;
+        if (enemy.x <= shooter.m_playerX + SideTriggerLeadX) {
+            BeginStop(shooter, enemy);
+        }
+    }
+
+    void BeginStop(const SideScrollingShooter& shooter, Enemy& enemy) const {
+        enemy.phase = 1.0f;
+        enemy.motionAge = 0;
+        enemy.actionX = shooter.m_playerX;
+        enemy.actionY = shooter.m_playerY;
+        enemy.actionZ = shooter.IsRailGameplayActive() ?
+            SideScrollingShooter::PlayerRailZ : ToRailZFromSideX(shooter.m_playerX);
+    }
+
+    void TickStop(Enemy& enemy) const {
+        ++enemy.motionAge;
+        if (enemy.motionAge < StopFrames) return;
+
+        enemy.phase = 2.0f;
+        enemy.motionAge = 0;
+        enemy.turretAimX = enemy.x;
+        enemy.turretAimY = enemy.y;
+        enemy.turretAimZ = enemy.z;
+    }
+
+    void TickDiveCurve(SideScrollingShooter& shooter, Enemy& enemy) const {
+        ++enemy.motionAge;
+        const float progress = Math::Clamp01(
+            static_cast<float>(enemy.motionAge) / static_cast<float>(DiveCurveFrames));
+        const float horizontal = 1.0f - std::cos(progress * Math::HalfPi);
+        const float vertical = std::sin(progress * Math::HalfPi);
+        enemy.x = Math::Lerp(enemy.turretAimX, enemy.actionX, horizontal);
+        enemy.y = Math::Lerp(enemy.turretAimY, enemy.actionY, vertical);
+        enemy.z = Math::Lerp(enemy.turretAimZ, enemy.actionZ, horizontal);
+        if (!shooter.IsRailGameplayActive()) {
+            enemy.z = ToRailZFromSideX(enemy.x);
+        }
+        if (enemy.motionAge < DiveCurveFrames) return;
+
+        enemy.phase = 3.0f;
+        enemy.x = enemy.actionX;
+        enemy.y = enemy.actionY;
+        enemy.z = enemy.actionZ;
+    }
+
+    void TickRush(SideScrollingShooter& shooter, Enemy& enemy) const {
+        if (shooter.IsRailGameplayActive()) {
+            enemy.z -= RailRushSpeed;
+            return;
+        }
+
+        enemy.x -= SideRushSpeed;
+        enemy.z = ToRailZFromSideX(enemy.x);
+    }
+};
+
+/**
  * @brief 停止後に円形弾幕を撃つ砲台機を制御する
  */
 class SideScrollingShooter::CircleShooterEnemyBehavior : public SideScrollingShooter::EnemyBehavior {

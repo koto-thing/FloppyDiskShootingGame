@@ -49,7 +49,7 @@ public:
      * @brief Stage 3の敵出現とボス弾幕定義を取得する
      * @return Stage 3の不変定義
      */
-    static const Stage& Definition();
+    static const Stage& Definition(DifficultyType difficulty);
 
     /**
      * @brief カメラ設定前に夜明けで変化する空を描画する

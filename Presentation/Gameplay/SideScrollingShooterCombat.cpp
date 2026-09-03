@@ -375,6 +375,10 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
         enemy.x = enemy.baseX;
         enemy.baseY = y;
         enemy.y = y;
+        if (enemy.type == 7) {
+            enemy.baseY = DiveRusherEnemyBehavior::HighY();
+            enemy.y = enemy.baseY;
+        }
         enemy.z = IsRailGameplayActive() ? (std::max)(railZ, EnemyRailFarZ) : ToRailZFromSideX(enemy.x);
         ++m_chapterResult.enemySpawnCount;
         return;

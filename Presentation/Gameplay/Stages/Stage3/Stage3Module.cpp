@@ -12,6 +12,9 @@
 #include "../Common/StageDefinition.h"
 #include "Stage3BossModelView.h"
 #include "Stage3BarrierCageView.h"
+#include "Stage3EnemySheetEasy.h"
+#include "Stage3EnemySheetHard.h"
+#include "Stage3EnemySheetNormal.h"
 #include "Stage3FunnelModelView.h"
 
 namespace {
@@ -296,6 +299,10 @@ struct SideScrollingShooter::Stage3Module::SeaSerpentSegment {
 /** @brief Stage 3の敵出現とボス弾幕を定義する */
 class SideScrollingShooter::Stage3Module::StageDefinitionImpl final : public SideScrollingShooter::Stage {
 public:
+    explicit StageDefinitionImpl(const Stage3EnemySheet& enemySheet)
+        : m_enemySheet(enemySheet) {
+    }
+
     /**
      * @brief ステージ番号を取得する
      * @return Stage 3を表す番号
@@ -310,6 +317,14 @@ public:
      */
     int BossMaxHp() const override {
         return BossPhase1StartHp;
+    }
+
+    /**
+     * @brief Stage3の1チャプターの長さを取得する
+     * @return 難易度別シートのチャプターフレーム数
+     */
+    int ChapterFrameLength() const override {
+        return m_enemySheet.ChapterFrameLength();
     }
 
     /**
@@ -411,24 +426,7 @@ public:
      */
     bool TrySelectEnemySpawn(int frame, int spawnIndex,
         EnemySpawnRule& spawn, int& chapterNumber) const override {
-        static constexpr EnemySpawnRule Chapter1[] = {
-            {3, 24, 54, 1.10f, -0.82f, 0.88f, 50.0f},
-            {4, 110, 250, 1.12f, -0.40f, -0.42f, 60.0f}
-        };
-        static constexpr EnemySpawnRule Chapter2[] = {
-            {3, 10, 52, 1.10f, 0.28f, -0.88f, 40.0f},
-            {5, 70, 165, 1.14f, 0.82f, 0.32f, 56.0f},
-            {1, 150, 230, 1.16f, 0.05f, 0.54f, 60.0f}
-        };
-        static constexpr EnemySpawnRule Chapter3[] = {
-            {4, 10, 140, 1.12f, -0.85f, -0.18f, 60.0f},
-            {5, 60, 145, 1.14f, -0.28f, 0.86f, 50.0f},
-            {1, 120, 180, 1.16f, 0.82f, -0.68f, 60.0f}
-        };
-        constexpr Chapter Chapters[] = {
-            MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)
-        };
-        return TrySelectByChapters(Chapters, 3, frame, spawnIndex, spawn, chapterNumber);
+        return m_enemySheet.TrySelectEnemySpawn(frame, spawnIndex, spawn, chapterNumber);
     }
 
     /**
@@ -464,9 +462,13 @@ public:
         };
         return (railMode ? RailPattern : SidePattern)[index % 5];
     }
+
+private:
+    const Stage3EnemySheet& m_enemySheet;
 };
 
-const SideScrollingShooter::Stage& SideScrollingShooter::Stage3Module::Definition() {
+const SideScrollingShooter::Stage& SideScrollingShooter::Stage3Module::Definition(
+    DifficultyType difficulty) {
     static_assert(BossPhase2GroundY > -3.65f - BossSeaDropDistance);
     static_assert(BossPhase2GroundY - (-3.65f - BossSeaDropDistance) < 0.5f);
     static_assert(BossPhase2SideBottomY > -6.0f - BossSeaDropDistance);
@@ -481,8 +483,17 @@ const SideScrollingShooter::Stage& SideScrollingShooter::Stage3Module::Definitio
     static_assert(Phase3SurvivalFrames == 60 * 60);
     static_assert(Phase3HpForRemainingFrames(600, 1800) == 300);
     static_assert(Phase3HpForRemainingFrames(600, 0) == 0);
-    static const StageDefinitionImpl definition;
-    return definition;
+    static const Stage3EnemySheetEasy easySheet;
+    static const Stage3EnemySheetNormal normalSheet;
+    static const Stage3EnemySheetHard hardSheet;
+    static const StageDefinitionImpl easyDefinition(easySheet);
+    static const StageDefinitionImpl normalDefinition(normalSheet);
+    static const StageDefinitionImpl hardDefinition(hardSheet);
+    switch (difficulty) {
+    case Hard: return hardDefinition;
+    case Normal: return normalDefinition;
+    default: return easyDefinition;
+    }
 }
 
 void SideScrollingShooter::Stage3Module::Reset(SideScrollingShooter& shooter) {

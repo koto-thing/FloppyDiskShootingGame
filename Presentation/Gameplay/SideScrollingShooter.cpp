@@ -60,6 +60,11 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::StraightShooter
     return behavior;
 }
 
+const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::DiveRusherEnemyBehaviorInstance() {
+    static const DiveRusherEnemyBehavior behavior;
+    return behavior;
+}
+
 const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::CircleShooterEnemyBehaviorInstance() {
     static const CircleShooterEnemyBehavior behavior;
     return behavior;
@@ -84,6 +89,8 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorFo
         return CircleShooterEnemyBehaviorInstance();
     case 6:
         return SquareShooterEnemyBehaviorInstance();
+    case 7:
+        return DiveRusherEnemyBehaviorInstance();
     default:
         return BasicEnemyBehaviorInstance();
     }
