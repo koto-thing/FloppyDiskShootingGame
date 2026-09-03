@@ -441,6 +441,58 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
     AircraftModelView::DrawEnemy({x, y, z}, yaw + Math::Pi, scale, drawPart);
 }
 
+void SideScrollingShooter::DrawLinkedEnemyLasers(
+    Renderer& renderer, const Camera3D& camera, float railWeight) const {
+    for (const auto& upper : m_enemies) {
+        if (!upper.active || upper.type != Stage::LinkedLaserEnemy || upper.laserLinkRole <= 0) continue;
+        for (const auto& lower : m_enemies) {
+            if (!lower.active || lower.type != Stage::LinkedLaserEnemy ||
+                lower.laserLinkId != upper.laserLinkId || lower.laserLinkRole >= 0) continue;
+            auto LaserPoint = [&](const Enemy& enemy) {
+                if (railWeight <= 0.0f) {
+                    return Vector3 {
+                        ToWorldX(enemy.x), ToWorldY(enemy.y), SidePlaneZ + 1.48f};
+                }
+                const bool enteringRail = m_viewTransitionTimer > 0 && m_nextViewMode == ViewMode::Rail3D;
+                const bool exitingRail = m_viewTransitionTimer > 0 && m_viewMode == ViewMode::Rail3D;
+                const float sideX = enteringRail ? enemy.transitionSideX :
+                    (exitingRail ? enemy.x : ToSideXFromRailZ(enemy.z));
+                const float sideY = enteringRail ? enemy.transitionSideY : enemy.y;
+                const float drawX = Math::Lerp(sideX, exitingRail ? enemy.transitionSideX : enemy.x, railWeight);
+                float drawY = Math::Lerp(sideY, exitingRail ? enemy.transitionSideY : enemy.y, railWeight);
+                const float railZ = exitingRail ? enemy.transitionRailZ : enemy.z;
+                const float drawZ = Math::Lerp(SidePlaneZ + 1.48f, railZ, railWeight);
+                const float groundTopY = StageDispatch::RailGroundY(*this);
+                const float minimumRailY = FromWorldY(groundTopY + 0.32f);
+                drawY = Math::Lerp(drawY, (std::max)(drawY, minimumRailY), railWeight);
+                return Vector3 {ToWorldX(drawX), ToWorldY(drawY), drawZ};
+            };
+            const Vector3 start = LaserPoint(upper);
+            const Vector3 end = LaserPoint(lower);
+            const float pulse = static_cast<float>((m_frame + upper.laserLinkId) % 30) / 30.0f;
+            DrawRailgunBeamBetween(renderer, camera, start, end, 0.42f, pulse, 2);
+            DrawRailgunBeamBetween(renderer, camera, start, end, 0.20f, pulse, 0);
+            break;
+        }
+    }
+}
+
+void SideScrollingShooter::DrawRailgunBeamBetween(Renderer& renderer, const Camera3D& camera,
+    const Vector3& start, const Vector3& end, float width, float progress, int effectType) {
+    const Vector3 delta = end - start;
+    const float length = (std::max)(0.001f, delta.Length());
+    const Vector3 direction = delta / length;
+    const Vector3 center = start + direction * (length * 0.5f);
+    const float yaw = std::atan2(direction.z, -direction.x);
+    const float pitch = -std::asin(direction.y);
+    const Matrix4x4 world = Matrix4x4::Translation(center) *
+        Matrix4x4::RotationY(yaw) * Matrix4x4::RotationZ(pitch) *
+        Matrix4x4::Scale({length * 0.5f, width, 1.0f});
+    renderer.DrawRailgun({
+        camera.ProjectionMatrix() * camera.ViewMatrix() * world,
+        progress, effectType});
+}
+
 /**
  * @brief 現在フレームの画面揺れオフセットを取得する
  * @return カメラへ加算するXYオフセット

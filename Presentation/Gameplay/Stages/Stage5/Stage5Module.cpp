@@ -23,12 +23,19 @@ float SideScrollingShooter::Stage5Module::MoveTowards(
 
 #include "../../SideScrollingShooterEnemies.h"
 #include "../Common/StageDefinition.h"
+#include "Stage5EnemySheetEasy.h"
+#include "Stage5EnemySheetHard.h"
+#include "Stage5EnemySheetNormal.h"
 #include "Stage5ModelView.h"
 
 /** @brief Stage 5の敵出現、弾幕、ボス設定を保持する不変定義 */
 class SideScrollingShooter::Stage5Module::StageDefinitionImpl final
     : public SideScrollingShooter::Stage {
 public:
+    explicit StageDefinitionImpl(const Stage5EnemySheet& enemySheet)
+        : m_enemySheet(enemySheet) {
+    }
+
     /**
      * @brief ステージ番号を取得する
      * @return Stage 5を表す番号
@@ -51,26 +58,7 @@ public:
      */
     bool TrySelectEnemySpawn(int frame, int spawnIndex,
         EnemySpawnRule& spawn, int& chapterNumber) const override {
-        static constexpr EnemySpawnRule Chapter1[] = {
-            {5, 18, 42, 1.14f, -0.82f, 0.86f, 50.0f},
-            {4, 75, 180, 1.12f, -0.28f, -0.42f, 60.0f}
-        };
-        static constexpr EnemySpawnRule Chapter2[] = {
-            {5, 10, 95, 1.14f, 0.28f, -0.32f, 56.0f},
-            {3, 50, 105, 1.10f, 0.82f, 0.88f, 34.0f},
-            {1, 110, 145, 1.16f, -0.85f, 0.54f, 60.0f}
-        };
-        static constexpr EnemySpawnRule Chapter3[] = {
-            {4, 10, 82, 1.12f, -0.82f, -0.68f, 60.0f},
-            {5, 40, 80, 1.14f, 0.82f, 0.32f, 56.0f},
-            {3, 90, 95, 1.10f, -0.28f, -0.88f, 40.0f},
-            {1, 150, 120, 1.16f, 0.28f, 0.68f, 60.0f}
-        };
-        constexpr Chapter Chapters[] = {
-            MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)
-        };
-        return TrySelectByChapters(
-            Chapters, 3, frame, spawnIndex, spawn, chapterNumber);
+        return m_enemySheet.TrySelectEnemySpawn(frame, spawnIndex, spawn, chapterNumber);
     }
 
     /**
@@ -177,15 +165,28 @@ public:
         // EASTSOURCEは専用の予告付き4フェーズ攻撃だけを使用する
         return true;
     }
+
+private:
+    const Stage5EnemySheet& m_enemySheet;
 };
 
 /**
  * @brief Stage 5の不変ステージ定義を取得する
  * @return Stage 5定義
  */
-const SideScrollingShooter::Stage& SideScrollingShooter::Stage5Module::Definition() {
-    static const StageDefinitionImpl definition;
-    return definition;
+const SideScrollingShooter::Stage& SideScrollingShooter::Stage5Module::Definition(
+    DifficultyType difficulty) {
+    static const Stage5EnemySheetEasy easySheet;
+    static const Stage5EnemySheetNormal normalSheet;
+    static const Stage5EnemySheetHard hardSheet;
+    static const StageDefinitionImpl easyDefinition(easySheet);
+    static const StageDefinitionImpl normalDefinition(normalSheet);
+    static const StageDefinitionImpl hardDefinition(hardSheet);
+    switch (difficulty) {
+    case Hard: return hardDefinition;
+    case Normal: return normalDefinition;
+    default: return easyDefinition;
+    }
 }
 
 /**

@@ -1,0 +1,42 @@
+#pragma once
+
+#include "Stage4EnemySheet.h"
+
+/**
+ * @brief EASY用のStage4敵出現シートを定義する
+ *
+ * EnemySpawnRuleは { 敵構成種別, 開始フレーム, 出現間隔, 2D出現X,
+ * レール出現X, 出現Y, レール出現Z } の順で指定する
+ */
+class SideScrollingShooter::Stage4EnemySheetEasy final : public SideScrollingShooter::Stage4EnemySheet {
+public:
+    /**
+     * @brief 指定フレームで出現させるEASY用の敵を取得する
+     * @param frame 現在のステージフレーム
+     * @param spawnIndex 同一フレーム内で取得する出現候補の番号
+     * @param spawn 出現設定の格納先
+     * @param chapterNumber 現在チャプター番号の格納先
+     * @return 敵を出現させる場合true、出現させない場合false
+     */
+    bool TrySelectEnemySpawn(int frame, int spawnIndex,
+        EnemySpawnRule& spawn, int& chapterNumber) const override {
+        static constexpr EnemySpawnRule Chapter1[] = {
+            {ArmoredEnemy, 40, 76, 1.10f, -0.82f, -0.68f, 60.0f},
+            {CircleShooterEnemy, 160, 300, 1.14f, -0.28f, 0.86f, 50.0f}
+        };
+        static constexpr EnemySpawnRule Chapter2[] = {
+            {ArmoredEnemy, 30, 72, 1.12f, 0.28f, 0.18f, 60.0f},
+            {StraightShooterEnemy, 120, 220, 1.10f, 0.82f, -0.88f, 34.0f},
+            {HeavyEnemy, 240, 320, 1.16f, -0.40f, 0.54f, 60.0f}
+        };
+        static constexpr EnemySpawnRule Chapter3[] = {
+            {CircleShooterEnemy, 60, 190, 1.14f, -0.82f, 0.86f, 50.0f},
+            {ArmoredEnemy, 120, 180, 1.12f, 0.82f, -0.18f, 60.0f},
+            {StraightShooterEnemy, 220, 240, 1.10f, 0.28f, -0.88f, 40.0f}
+        };
+        constexpr Chapter Chapters[] = {
+            MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)
+        };
+        return TrySelectByChapters(Chapters, 3, frame, spawnIndex, spawn, chapterNumber);
+    }
+};

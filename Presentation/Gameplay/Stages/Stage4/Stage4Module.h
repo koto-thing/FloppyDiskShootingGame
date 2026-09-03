@@ -50,7 +50,7 @@ public:
      * @brief Stage 4の敵出現とボス弾幕定義を取得する
      * @return Stage 4の不変定義
      */
-    static const Stage& Definition();
+    static const Stage& Definition(DifficultyType difficulty);
 
     /**
      * @brief 自機弾とStage 4ボスの破壊可能砲部位との衝突を判定する

@@ -60,6 +60,11 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::StraightShooter
     return behavior;
 }
 
+const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::DiveRusherEnemyBehaviorInstance() {
+    static const DiveRusherEnemyBehavior behavior;
+    return behavior;
+}
+
 const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::CircleShooterEnemyBehaviorInstance() {
     static const CircleShooterEnemyBehavior behavior;
     return behavior;
@@ -67,6 +72,16 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::CircleShooterEn
 
 const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::SquareShooterEnemyBehaviorInstance() {
     static const SquareShooterEnemyBehavior behavior;
+    return behavior;
+}
+
+const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::MissileShooterEnemyBehaviorInstance() {
+    static const MissileShooterEnemyBehavior behavior;
+    return behavior;
+}
+
+const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::LinkedLaserEnemyBehaviorInstance() {
+    static const LinkedLaserEnemyBehavior behavior;
     return behavior;
 }
 
@@ -84,6 +99,12 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorFo
         return CircleShooterEnemyBehaviorInstance();
     case 6:
         return SquareShooterEnemyBehaviorInstance();
+    case 7:
+        return DiveRusherEnemyBehaviorInstance();
+    case 8:
+        return MissileShooterEnemyBehaviorInstance();
+    case 9:
+        return LinkedLaserEnemyBehaviorInstance();
     default:
         return BasicEnemyBehaviorInstance();
     }
@@ -531,6 +552,12 @@ void SideScrollingShooter::InitializeRailObjects() {
             enemy.x = enemy.railAnchorX;
             continue;
         }
+        if (enemy.type == Stage::LinkedLaserEnemy) {
+            enemy.z = ToRailZFromSideX(enemy.transitionSideX);
+            enemy.baseX = enemy.railAnchorX;
+            enemy.x = enemy.railAnchorX;
+            continue;
+        }
         enemy.baseX = enemy.type == 2 ? 0.0f : (std::clamp)(enemy.baseX, -0.76f, 0.76f);
         enemy.x = enemy.baseX;
     }
@@ -862,6 +889,24 @@ bool SideScrollingShooter::Hit3D(
     const float dz = az - bz;
     const float radius = ar + br;
     return dx * dx + dy * dy + dz * dz <= radius * radius;
+}
+
+float SideScrollingShooter::DistancePointToSegment2D(
+    const Vector2& point, const Vector2& start, const Vector2& end) {
+    const Vector2 segment = end - start;
+    const float lengthSquared = segment.LengthSquared();
+    if (lengthSquared <= Math::Epsilon) return Vector2::Distance(point, start);
+    const float t = Math::Clamp01(Vector2::Dot(point - start, segment) / lengthSquared);
+    return Vector2::Distance(point, start + segment * t);
+}
+
+float SideScrollingShooter::DistancePointToSegment3D(
+    const Vector3& point, const Vector3& start, const Vector3& end) {
+    const Vector3 segment = end - start;
+    const float lengthSquared = segment.LengthSquared();
+    if (lengthSquared <= Math::Epsilon) return Vector3::Distance(point, start);
+    const float t = Math::Clamp01(Vector3::Dot(point - start, segment) / lengthSquared);
+    return Vector3::Distance(point, start + segment * t);
 }
 
 bool SideScrollingShooter::Hit3DSegment(float startX, float startY, float startZ,

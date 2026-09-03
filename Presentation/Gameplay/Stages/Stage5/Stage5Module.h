@@ -15,7 +15,7 @@ public:
      * @brief Stage 5の不変ステージ定義を取得する
      * @return Stage 5定義
      */
-    static const Stage& Definition();
+    static const Stage& Definition(DifficultyType difficulty);
 
     /**
      * @brief Stage 5状態を初期値へ戻す

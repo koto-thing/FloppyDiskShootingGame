@@ -249,7 +249,40 @@
     <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2EnemySheetNormal.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3EnemySheet.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3EnemySheetEasy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3EnemySheetHard.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3EnemySheetNormal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4EnemySheet.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4EnemySheetEasy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4EnemySheetHard.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4EnemySheetNormal.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5EnemySheet.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5EnemySheetEasy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5EnemySheetHard.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5EnemySheetNormal.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2BossModelView.h">

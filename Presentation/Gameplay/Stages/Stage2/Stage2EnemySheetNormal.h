@@ -6,7 +6,7 @@
 /** @brief NORMAL用のステージ2敵出現シートを定義する */
 class SideScrollingShooter::Stage2EnemySheetNormal final : public SideScrollingShooter::Stage2EnemySheet {
 public:
-    static constexpr int ChapterLength = 1000;
+    static constexpr int ChapterLength = 1200;
 
     /**
      * @brief 1チャプターの長さを取得する
@@ -45,7 +45,10 @@ public:
             {StraightShooterEnemy, 20, 160, 2.6f, -0.78f, 0.86f, 48.0f},
             {CircleShooterEnemy, 100, 100, 2.6f, 0.78f, -0.86f, 36.0f},
             {HeavyEnemy, 50, 200, 2.6f, 0.22f, 0.30f, 60.0f},
-            {SquareShooterEnemy, 160, 180, 2.6f, -0.42f, -0.32f, 54.0f}
+            {SquareShooterEnemy, 300, 1000, 2.6f, -0.9f, 0.5f, 54.0f},
+            {SquareShooterEnemy, 300, 1000, 2.6f, 0.9f, -0.5f, 54.0f},
+            {SquareShooterEnemy, 700, 1000, 2.6f, 0.9f, 0.5f, 54.0f},
+            {SquareShooterEnemy, 700, 1000, 2.6f, -0.9f, -0.5f, 54.0f}
         };
         constexpr Chapter Chapters[] = {
             MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)

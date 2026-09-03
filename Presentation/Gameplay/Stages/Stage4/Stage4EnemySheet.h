@@ -4,9 +4,9 @@
 #include "Stage4Module.h"
 
 /**
- * @brief ステージ4の敵出現とボス弾幕を定義する
+ * @brief ステージ4の難易度共通設定を定義する
  */
-class SideScrollingShooter::Stage4EnemySheet final : public SideScrollingShooter::Stage {
+class SideScrollingShooter::Stage4EnemySheet : public SideScrollingShooter::Stage {
 public:
     /**
      * @brief ステージ番号を取得する
@@ -25,26 +25,7 @@ public:
      * @return 敵を出現させるフレームの場合true、出現させない場合false
      */
     bool TrySelectEnemySpawn(int frame, int spawnIndex,
-        EnemySpawnRule& spawn, int& chapterNumber) const override {
-        static constexpr EnemySpawnRule Chapter1[] = {
-            {4, 20, 48, 1.10f, -0.82f, -0.68f, 60.0f},
-            {5, 90, 210, 1.14f, -0.28f, 0.86f, 50.0f}
-        };
-        static constexpr EnemySpawnRule Chapter2[] = {
-            {4, 10, 46, 1.12f, 0.28f, 0.18f, 60.0f},
-            {3, 60, 125, 1.10f, 0.82f, -0.88f, 34.0f},
-            {1, 130, 190, 1.16f, -0.40f, 0.54f, 60.0f}
-        };
-        static constexpr EnemySpawnRule Chapter3[] = {
-            {5, 10, 110, 1.14f, -0.82f, 0.86f, 50.0f},
-            {4, 50, 105, 1.12f, 0.82f, -0.18f, 60.0f},
-            {3, 120, 135, 1.10f, 0.28f, -0.88f, 40.0f}
-        };
-        constexpr Chapter Chapters[] = {
-            MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)
-        };
-        return TrySelectByChapters(Chapters, 3, frame, spawnIndex, spawn, chapterNumber);
-    }
+        EnemySpawnRule& spawn, int& chapterNumber) const override = 0;
 
     /**
      * @brief Stage 4ボスをStage 2と同じ基準位置へ配置する
