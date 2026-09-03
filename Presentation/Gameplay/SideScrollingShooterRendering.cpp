@@ -821,6 +821,10 @@ void SideScrollingShooter::DrawChapterResult(Renderer& renderer) const {
     renderer.DrawText(line, TextAlign::Center, 0.016f, { 0.85f, 0.95f, 1.0f, alpha }, { 0.0f, -0.16f }, CharacterSpacing);
     std::snprintf(line, sizeof(line), "TOTAL SCORE    %06d", total);
     renderer.DrawText(line, TextAlign::Center, 0.020f, { 1.0f, 0.88f, 0.25f, alpha }, { 0.0f, -0.31f }, CharacterSpacing);
+    if (m_chapterResult.bombAwarded && (m_chapterResultTimer / 8) % 2 != 0) {
+        renderer.DrawText("BOMB GET", TextAlign::Center, 0.022f,
+            {0.35f, 0.85f, 1.0f, alpha}, {0.0f, -0.47f}, CharacterSpacing);
+    }
 }
 
 /**

@@ -345,8 +345,12 @@ void SideScrollingShooter::StageDispatch::DrawBackground2D(
         Stage3Module::DrawBackground2D(shooter, renderer, camera);
         break;
     case 4:
+        CityBackgroundModule::DrawBackground2D(shooter, renderer, camera);
+        break;
     case 5:
         CityBackgroundModule::DrawBackground2D(shooter, renderer, camera);
+        Stage5Module::DrawCityBuildings(shooter, renderer, camera, 0.0f);
+        Stage5Module::DrawRain3D(shooter, renderer, camera, 0.0f);
         break;
     }
 }
@@ -365,8 +369,12 @@ void SideScrollingShooter::StageDispatch::DrawBackground3D(
         Stage3Module::DrawBackground3D(shooter, renderer, camera, railWeight);
         break;
     case 4:
+        CityBackgroundModule::DrawBackground3D(shooter, renderer, camera, railWeight);
+        break;
     case 5:
         CityBackgroundModule::DrawBackground3D(shooter, renderer, camera, railWeight);
+        Stage5Module::DrawCityBuildings(shooter, renderer, camera, railWeight);
+        Stage5Module::DrawRain3D(shooter, renderer, camera, railWeight);
         break;
     }
 }
