@@ -130,12 +130,13 @@
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
+      <Optimization>MinSpace</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>NDEBUG;_CONSOLE;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
-      <AdditionalOptions>/FS /utf-8 %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions>/FS /utf-8 /Gw %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
@@ -290,9 +291,6 @@
     <None Include="Shaders\SpellCircleShader.hlsl">
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </None>
-    <None Include="Shaders\TextShader.hlsl">
-      <ExcludedFromBuild>true</ExcludedFromBuild>
-    </None>
     <None Include="Shaders\PixelUpscaleShader.hlsl">
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </None>
@@ -305,7 +303,7 @@
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
   <Target Name="CopyShaders" AfterTargets="AfterBuild">
-    <Copy SourceFiles="Shaders\ObjectShader.hlsl;Shaders\BackgroundShader.hlsl;Shaders\SpellCircleShader.hlsl;Shaders\TextShader.hlsl;Shaders\PixelUpscaleShader.hlsl" DestinationFolder="$(OutDir)Shaders" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="Shaders\ObjectShader.hlsl;Shaders\BackgroundShader.hlsl;Shaders\SpellCircleShader.hlsl;Shaders\PixelUpscaleShader.hlsl" DestinationFolder="$(OutDir)Shaders" SkipUnchangedFiles="true" />
   </Target>
   <Target Name="CopyMML" AfterTargets="AfterBuild">
     <Copy SourceFiles="mml\test.mml" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('mml\test.mml')" />
