@@ -4,8 +4,10 @@
 #include <windows.h>
 
 #include "../../Engine/Graphics/Renderer.h"
+#include "../../Engine/Time/Time.h"
 #include "../../Infrastructure/ExternalServices/AudioService.h"
 #include "../../Infrastructure/Repositories/SettingsRepository.h"
+#include "../Common/SpaceBackground.h"
 
 void OptionScene::Initialize() {
     // タイトルに戻るボタン
@@ -119,6 +121,10 @@ void OptionScene::Dispose() {
 void OptionScene::Render(Renderer& renderer) {
     // 切替結果を次の描画フレームからバックエンドへ反映する
     renderer.SetRetroEffectEnabled(m_retroEffectEnabled);
+
+    // ゆっくり明滅する星空をUIの背面へ描画する
+    SpaceBackground::Render(renderer, Time::unscaledTime);
+
     // オプション画面の見出しを描画する
     renderer.DrawText(
         "OPTIONS",

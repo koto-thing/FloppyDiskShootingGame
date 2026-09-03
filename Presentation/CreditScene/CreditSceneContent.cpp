@@ -13,14 +13,15 @@ CreditSceneContent CreditSceneContent::CreateDefault() {
     content.AddColumn({
         {
             { "SPACE YAKUZA", 0.012f, CreditTextAlignment::Center },
-            { "MOMIJI GUMI", 0.009f, CreditTextAlignment::Center }
+            { "AIZU-KAI", 0.009f, CreditTextAlignment::Center }
         },
         0.08f
     });
     
     content.AddColumn({
         {
-            { "LEAD PROGRAMMER", 0.011f, CreditTextAlignment::Center },
+            { "LEAD PROGRAMMERS", 0.011f, CreditTextAlignment::Center },
+            { "koto", 0.009f, CreditTextAlignment::Center },
             { "Ryota", 0.009f, CreditTextAlignment::Center }
         }
     });
@@ -30,10 +31,17 @@ CreditSceneContent CreditSceneContent::CreateDefault() {
         {
             { "PROGRAMMERS", 0.011f, CreditTextAlignment::Center },
             { "botamochi", 0.009f, CreditTextAlignment::Center },
-            { "lumi", 0.009f, CreditTextAlignment::Center },
-            { "koto", 0.009f, CreditTextAlignment::Center }
+            { "lumi", 0.009f, CreditTextAlignment::Center }
         },
         0.06f
+    });
+    
+    content.AddColumn({
+        {
+            { "SOUND PROGRAMMERS", 0.011f, CreditTextAlignment::Center },
+            { "botamochi", 0.009f, CreditTextAlignment::Center },
+            { "koto", 0.009f, CreditTextAlignment::Center }
+        }
     });
     
     content.AddColumn({
@@ -46,10 +54,37 @@ CreditSceneContent CreditSceneContent::CreateDefault() {
     
     content.AddColumn({
         {
+            { "GRAPHIC DESIGNER", 0.011f, CreditTextAlignment::Center },
+            { "koto", 0.009f, CreditTextAlignment::Center },
+        }
+    });
+    
+    content.AddColumn({
+        {
             { "LEAD SOUND DESIGNER", 0.011f, CreditTextAlignment::Center },
             { "botamochi", 0.009f, CreditTextAlignment::Center },
         },
         0.06f
+    });
+    
+    content.AddColumn({
+        {
+            { "SOUND DESIGNER", 0.011f, CreditTextAlignment::Center },
+            { "koto", 0.009f, CreditTextAlignment::Center },
+        }
+    });
+    
+    content.AddColumn({
+        {
+            { "VOICE", 0.011f, CreditTextAlignment::Center },
+            { "momiji", 0.009f, CreditTextAlignment::Center },
+            { "taittyann", 0.009f, CreditTextAlignment::Center },
+            { "eastsource", 0.009f, CreditTextAlignment::Center },
+            { "lumi", 0.009f, CreditTextAlignment::Center },
+            { "botamochi", 0.009f, CreditTextAlignment::Center },
+            { "ryota", 0.009f, CreditTextAlignment::Center },
+            { "koto", 0.009f, CreditTextAlignment::Center }
+        }
     });
     
     content.AddColumn({

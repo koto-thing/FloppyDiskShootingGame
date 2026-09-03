@@ -25,8 +25,15 @@ private:
     /** @brief 現在表示中のボタンへ入力を渡す */
     void UpdateActiveButtons(const UIInputState& inputState);
 
+    /**
+     * @brief マウスオーバー中の機体をデモ表示対象へ反映する
+     * @return なし
+     */
+    void UpdatePlayerPreview();
+
     std::unique_ptr<ModeSelectionStateController> m_stateController;
     std::array<std::unique_ptr<Button>, 3> m_difficultyButtons;
     std::array<std::unique_ptr<Button>, 3> m_playerTypeButtons;
     std::unique_ptr<Button> m_backButton;
+    PlayerType m_previewPlayerType = Homing;
 };

@@ -46,6 +46,13 @@ public:
     static void Reset(SideScrollingShooter& shooter);
 
     /**
+     * @brief 巨大ウミヘビの出現フレームで水しぶき効果音を再生する
+     * @param shooter 更新するゲーム本体
+     * @return なし
+     */
+    static void TickAfterFrame(SideScrollingShooter& shooter);
+
+    /**
      * @brief Stage 3の敵出現とボス弾幕定義を取得する
      * @return Stage 3の不変定義
      */
@@ -243,6 +250,13 @@ public:
      * @return ワールド座標系のカメラY座標
      */
     static float SideCameraY(const SideScrollingShooter& shooter);
+
+    /**
+     * @brief Phase2バリア内の自機X移動範囲を取得する
+     * @param shooter 判定対象
+     * @return Xを下限、Yを上限とするゲーム座標
+     */
+    static Vector2 PlayerXRange(const SideScrollingShooter& shooter);
 
     /**
      * @brief Phase2バリア内の2D自機Y移動範囲を取得する

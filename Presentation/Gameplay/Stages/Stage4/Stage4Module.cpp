@@ -13,6 +13,7 @@
 #include "Stage4EnemySheetHard.h"
 #include "Stage4EnemySheetNormal.h"
 #include "Stage4WeaponDroneView.h"
+#include "../Common/CityBackgroundModule.h"
 
 using ShooterStages::Stage4::ShotKind;
 using Stage4Logic = ShooterStages::Stage4::State;
@@ -523,6 +524,8 @@ void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
 
 bool SideScrollingShooter::Stage4Module::HitsHazard(
     const SideScrollingShooter& shooter, float x, float y, float z, float radius) {
+    if (CityBackgroundModule::HitsTruck(shooter, x, y, z, radius)) return true;
+
     for (const Enemy& enemy : shooter.m_enemies) {
         if (!enemy.active || enemy.type != 2 || !enemy.collisionEnabled) continue;
 

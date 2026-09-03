@@ -41,6 +41,7 @@ public:
     ColorF disabledColor {0.25f, 0.25f, 0.25f, 1.0f};
     ColorF textColor = ColorF::White();
     float textSize = 0.012f;
+    float characterSpacing = 0.002f;
 
 private:
     Rect m_bounds;

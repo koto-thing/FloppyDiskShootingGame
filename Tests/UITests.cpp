@@ -39,6 +39,14 @@ void RunUITests() {
     button.Update({{0.8f, 0.0f}, false, false, true});
     Require(clickCount == 1, "Button must not click when released outside bounds");
 
+    Renderer renderer;
+    renderer.BeginFrame();
+    button.Render(renderer);
+    RequireNear(renderer.Command(1).characterSpacing, 0.002f,
+                "Button text must use slightly expanded character spacing by default");
+    RequireNear(renderer.Command(1).position.x, -0.04f,
+                "Button text must remain centered when character spacing is applied");
+
     Slider slider{{{-0.5f, -0.1f}, {1.0f, 0.2f}}, 10.0f, 20.0f, 10.0f};
     int changeCount = 0;
     slider.SetOnValueChanged([&changeCount](float) { ++changeCount; });

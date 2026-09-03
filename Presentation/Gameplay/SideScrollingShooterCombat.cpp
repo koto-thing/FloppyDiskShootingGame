@@ -38,14 +38,13 @@ void SideScrollingShooter::TickPlayer() {
         dy *= 0.7071f;
     }
     /** @brief 2D画面ではHUDを除くプレイ領域全体を移動可能にする */
-    const float minX = IsRailGameplayActive() ? -1.2f : Side2DPlayerMinX;
-    const float maxX = IsRailGameplayActive() ? 1.2f : Side2DPlayerMaxX;
+    const Vector2 xRange = StageDispatch::PlayerXRange(*this);
     const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
     const float minY = IsRailGameplayActive() ? PlayerRailMinY() : sideYRange.x;
     const float maxY = IsRailGameplayActive() ?
         StageDispatch::RailPlayerMaxY(*this) : sideYRange.y;
     const float speedScale = m_slowMove ? 0.5f : 1.0f;
-    m_playerX = (std::clamp)(m_playerX + dx * 0.018f * speedScale, minX, maxX);
+    m_playerX = (std::clamp)(m_playerX + dx * 0.018f * speedScale, xRange.x, xRange.y);
     m_playerY = (std::clamp)(m_playerY + dy * 0.024f * speedScale, minY, maxY);
 }
 

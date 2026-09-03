@@ -334,6 +334,7 @@ void SideScrollingShooter::Tick() {
         m_displayBossHp = static_cast<float>(m_bossHp);
     }
     if (m_clear) {
+        StageDispatch::TickBossDefeat(*this);
         TickExplosions();
         TickDebris();
         --m_clearTimer;

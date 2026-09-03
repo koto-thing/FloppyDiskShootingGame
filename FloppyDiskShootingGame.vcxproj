@@ -170,6 +170,7 @@
     <ClCompile Include="Presentation\Gameplay\Stages\Stage4\Stage4Module.cpp" />
     <ClCompile Include="Presentation\Gameplay\Stages\Stage5\Stage5Module.cpp" />
     <ClCompile Include="Presentation\Gameplay\Stages\Stage5\Stage5Rendering.cpp" />
+    <ClCompile Include="Presentation\Common\SpaceBackground.cpp" />
     <ClCompile Include="Presentation\CreditScene\CreditContentController.cpp" />
     <ClCompile Include="Presentation\CreditScene\CreditContentPresenter.cpp" />
     <ClCompile Include="Presentation\CreditScene\CreditSceneContent.cpp" />
@@ -205,6 +206,7 @@
     <ClInclude Include="Infrastructure\Repositories\UserDataPath.h" />
     <ClInclude Include="Application\Interfaces\IScene.h" />
     <ClInclude Include="Application\UseCases\SceneManager.h" />
+    <ClInclude Include="Presentation\Common\SpaceBackground.h" />
     <ClInclude Include="Presentation\CreditScene\CreditContentController.h" />
     <ClInclude Include="Presentation\CreditScene\CreditContentPresenter.h" />
     <ClInclude Include="Presentation\Gameplay\Voices\VoiceSamples.h" />

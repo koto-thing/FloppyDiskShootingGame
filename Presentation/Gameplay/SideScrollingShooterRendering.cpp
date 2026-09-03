@@ -917,6 +917,8 @@ void SideScrollingShooter::DrawBossPhaseDividers(Renderer& renderer, float y,
             y, 0.008f, 0.035f, color);
         previousPhase = phase;
     }
+}
+
 /** @brief チュートリアル案内を描画する @param renderer 描画先 */
 void SideScrollingShooter::DrawTutorialHud(Renderer& renderer) const {
     constexpr float CharacterSpacing = 0.0025f;
