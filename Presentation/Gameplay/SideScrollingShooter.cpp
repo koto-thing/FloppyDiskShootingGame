@@ -47,10 +47,10 @@ constexpr float PowerAfterDebugIncrease(float power, float maxPower) {
  * @brief 敵出現数と撃破数からボムボーナスの獲得条件を判定する
  * @param defeatCount 敵撃破数
  * @param spawnCount 敵出現数
- * @return せん滅率が90%以上の場合true
+ * @return せん滅率が80%を超える場合true
  */
 constexpr bool EarnsChapterBombBonus(int defeatCount, int spawnCount) {
-    return spawnCount > 0 && defeatCount * 10 >= spawnCount * 9;
+    return spawnCount > 0 && defeatCount * 5 > spawnCount * 4;
 }
 
 constexpr int ScaleHpByPercent(int hp, int percent) {
@@ -68,8 +68,8 @@ static_assert(PowerAfterRestart(3.25f) == 2.25f);
 static_assert(PowerAfterRestart(0.75f) == 0.0f);
 static_assert(PowerAfterDebugIncrease(2.25f, 4.0f) == 3.25f);
 static_assert(PowerAfterDebugIncrease(3.50f, 4.0f) == 4.0f);
-static_assert(EarnsChapterBombBonus(9, 10));
-static_assert(!EarnsChapterBombBonus(8, 9));
+static_assert(EarnsChapterBombBonus(5, 6));
+static_assert(!EarnsChapterBombBonus(4, 5));
 static_assert(!EarnsChapterBombBonus(0, 0));
 static_assert(ScaleHpByPercent(10, 70) == 7);
 static_assert(ScaleHpByPercent(10, 100) == 10);
@@ -654,7 +654,7 @@ void SideScrollingShooter::TickChapterExitEnemies() {
 void SideScrollingShooter::FinishChapter() {
     m_chapterResult.retryCount = m_chapterRetryCounts[m_chapterNumber - 1];
     m_chapterResult.totalScore = CalculateChapterTotalScore(m_chapterResult);
-    m_chapterResult.bombAwarded = EarnsChapterBombBonus(
+    m_chapterResult.bombAwarded = m_bombCount < MaxBombCount && EarnsChapterBombBonus(
         m_chapterResult.enemyDefeatCount, m_chapterResult.enemySpawnCount);
     if (m_chapterResult.bombAwarded) ++m_bombCount;
     m_chapterResultTimer = 0;

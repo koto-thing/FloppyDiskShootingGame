@@ -1135,18 +1135,6 @@ void SideScrollingShooter::Stage5Module::DrawScreenEffects(const SideScrollingSh
     const float intensity = RainIntensity(shooter.m_stage5.phase, shooter.m_chapterNumber,
         shooter.m_stage5.tayamaTransformation, shooter.m_stage5.phaseTimer);
 
-}
-
-/**
- * @brief Stage 5の稲光と照準表示を画面空間へ描画する
- * @param shooter 更新対象
- * @param renderer 描画先レンダラー
- * @return なし
- */
-void SideScrollingShooter::Stage5Module::DrawScreenEffects(const SideScrollingShooter& shooter, Renderer& renderer) {
-    const float intensity = RainIntensity(shooter.m_stage5.phase, shooter.m_chapterNumber,
-        shooter.m_stage5.tayamaTransformation, shooter.m_stage5.phaseTimer);
-
     // 稲光はTAYAMAの輪郭と警告灯を一瞬だけ強調する
     if (intensity > 0.30f && ((shooter.m_frame % 241) < 3 || ((shooter.m_frame + 73) % 389) < 2)) {
         const float alpha = (shooter.m_frame % 2 == 0 ? 0.30f : 0.16f) * intensity;

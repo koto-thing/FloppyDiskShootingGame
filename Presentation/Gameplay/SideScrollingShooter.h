@@ -339,7 +339,8 @@ private:
     static constexpr int BombChargeFrames = 12;
     static constexpr int BombExplosionLifetimeFrames = 42;
     static constexpr int BombExplosionEffectType = 5;
-    static constexpr int InitialBombCount = 3;
+    static constexpr int MaxBombCount = 3;
+    static constexpr int InitialBombCount = MaxBombCount;
     static constexpr int AttackWarningFrames = 12;
     static constexpr int BossPartHitFlashFrames = 12;
     static constexpr int DebrisCapacity = 96;
