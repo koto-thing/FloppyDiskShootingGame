@@ -317,9 +317,9 @@ public:
      * @param shooter 描画に使用するゲーム本体
      * @param renderer 描画先レンダラー
      * @param camera 現在の描画カメラ
-     * @param enemy 描画対象のボス
-     * @param yaw ボス全体のY軸回転
-     * @return 専用モデルを描画済みならtrue、共通ボスモデルを使用する場合false
+     * @param enemy 描画対象の敵
+     * @param yaw 敵全体のY軸回転
+     * @return 専用モデルを描画済みならtrue
      */
     static bool DrawBossModel(const SideScrollingShooter& shooter,
         Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw);
@@ -333,6 +333,25 @@ public:
      */
     static void ApplyCameraCorrection(const SideScrollingShooter& shooter,
         Vector3& railPosition, Vector3& railTarget);
+
+    /**
+     * @brief 現在ステージ固有のレールカメラ画角を取得する
+     * @param shooter 判定対象
+     * @param defaultFieldOfView 通常の画角
+     * @return 適用する画角
+     */
+    static float CameraFieldOfView(const SideScrollingShooter& shooter,
+        float defaultFieldOfView);
+
+    /**
+     * @brief 現在ステージ固有の自機描画Transformを適用する
+     * @param shooter 判定対象
+     * @param position 補正する自機ワールド座標
+     * @param pitch 補正する自機X軸回転
+     * @return なし
+     */
+    static void ApplyPlayerRenderCorrection(const SideScrollingShooter& shooter,
+        Vector3& position, float& pitch);
 
     /**
      * @brief 現在ステージの2DカメラY座標を取得する
@@ -461,6 +480,13 @@ public:
      * @return 切り替えをロックする場合true、切り替えを許可する場合false
      */
     static bool IsViewLocked(const SideScrollingShooter& shooter);
+
+    /**
+     * @brief 現在ステージが操作不能なムービー区間か判定する
+     * @param shooter 判定対象
+     * @return 操作とHUDを停止する場合true
+     */
+    static bool IsCinematic(const SideScrollingShooter& shooter);
 
     /**
      * @brief 現在ステージで背景スクロールを進めるか判定する

@@ -20,7 +20,9 @@
 #include "../Gameplay/Stages/Stage3/Stage3FunnelModelView.h"
 #include "../Gameplay/Stages/Stage4/Stage4BossModelView.h"
 #include "../Gameplay/Stages/Stage4/Stage4WeaponDroneView.h"
+#include "../Gameplay/Stages/Stage5/Stage5CityModelView.h"
 #include "../Gameplay/Stages/Stage5/Stage5ModelView.h"
+#include "../Gameplay/Stages/Stage5/WallSecurityDroneModelView.h"
 
 namespace {
 /** @brief ギャラリーUIとカメラ調整に使う展示定義 */
@@ -28,13 +30,13 @@ struct ExhibitDefinition {
     GalleryEntry entry;
     const char* name;
     const char* description;
-    std::array<const char*, 11> animations;
+    std::array<const char*, 15> animations;
     int animationCount;
     float modelScale;
     float cameraDistance;
 };
 
-constexpr std::array<ExhibitDefinition, 17> Exhibits {{
+constexpr std::array<ExhibitDefinition, 19> Exhibits {{
     {GalleryEntry::Player, "POLICE INTERCEPTOR",
         "A COMPACT POLICE FIGHTER BUILT FOR RAPID INTERCEPTION",
         {"IDLE"}, 1, 3.8f, 15.0f},
@@ -89,7 +91,20 @@ constexpr std::array<ExhibitDefinition, 17> Exhibits {{
     {GalleryEntry::Stage4WeaponDrone, "HEAVY WEAPON DRONE",
         "A DEDICATED AERIAL CRANE FOR REPLACING THE WAR MACHINE'S MAIN GUN",
         {"IDLE", "WORK CYCLE", "SIEGE MORTAR CARRY", "ROMANCE CANNON CARRY"},
-        4, 2.7f, 19.0f}
+        4, 2.7f, 19.0f},
+    {GalleryEntry::WallSecurityDrone, "WALL SECURITY DRONE",
+        "A HARDENED SATELLITE DRONE THAT PATROLS NEO AIZU BUILDING WALLS",
+        {"PATROL", "DETECTED", "ATTACK", "FRONT", "SIDE", "REAR",
+            "360 ROTATION", "SENSOR YAW", "SENSOR PITCH", "LIGHT YAW",
+            "LIGHT PITCH", "GUN YAW", "GUN PITCH", "CONTACT STOWED",
+            "CONTACT DEPLOYED"},
+        15, 4.0f, 17.0f},
+    {GalleryEntry::NeoAizuBuildings, "NEO AIZU BUILDINGS",
+        "PROCEDURAL CITY MODELS REBUILT FROM THE REFERENCE SILHOUETTES",
+        {"MAIN TOWER", "TALL SUB TOWER", "SMALL SUB TOWER", "LEFT BUILDING",
+            "SMALL LEFT", "RIGHT BUILDING", "SMALL RIGHT", "TAYAMA FACE",
+            "ALL BUILDINGS", "360 ROTATION"},
+        10, 0.55f, 19.0f}
 }};
 
 constexpr float LockedColor[4] = {0.025f, 0.030f, 0.040f, 1.0f};
@@ -483,6 +498,89 @@ void GalleryScene::RenderExhibit(Renderer& renderer) const {
             droneTransform = Stage4WeaponDroneView::PlaceLiftPointAt(
                 droneTransform, carryPose, carryPoint);
             Stage4WeaponDroneView::Draw(droneTransform, carryPose, drawPart);
+        }
+        break;
+    }
+    case GalleryEntry::WallSecurityDrone: {
+        WallSecurityDronePose pose;
+        Stage5ModelTransform transform {{0.0f, 0.15f, 0.0f}, {}, exhibit.modelScale};
+        const float yawSweep = std::sin(m_animationTime * 1.1f) * 0.62f;
+        const float pitchSweep = std::sin(m_animationTime * 0.9f) * 0.28f;
+
+        // 巡回、探知、攻撃の三状態をAIなしでPoseだけから再現する
+        if (m_animationIndex == 1) {
+            pose.sensorYaw = yawSweep;
+            pose.sensorPitch = pitchSweep * 0.5f;
+            pose.searchLightYaw = yawSweep;
+            pose.searchLightPitch = -0.20f + pitchSweep;
+            pose.machineGunDeployment = 1.0f;
+            pose.warningLightColor = WallSecurityDroneModelView::DetectedWarning;
+        } else if (m_animationIndex == 2) {
+            pose.sensorYaw = yawSweep;
+            pose.sensorPitch = pitchSweep;
+            pose.searchLightYaw = yawSweep;
+            pose.searchLightPitch = pitchSweep;
+            pose.machineGunYaw = yawSweep;
+            pose.machineGunPitch = pitchSweep;
+            pose.machineGunDeployment = 1.0f;
+            pose.warningLightColor = WallSecurityDroneModelView::AttackWarning;
+        }
+
+        // 固定三面、360度回転、各可動軸、接触機構の端点を個別確認する
+        if (m_animationIndex == 4) transform.rotation.y = Math::HalfPi;
+        if (m_animationIndex == 5) transform.rotation.y = Math::Pi;
+        if (m_animationIndex == 6) transform.rotation.y = m_animationTime * 0.55f;
+        if (m_animationIndex == 7) pose.sensorYaw = yawSweep;
+        if (m_animationIndex == 8) pose.sensorPitch = pitchSweep;
+        if (m_animationIndex == 9) pose.searchLightYaw = yawSweep;
+        if (m_animationIndex == 10) pose.searchLightPitch = -0.20f + pitchSweep;
+        if (m_animationIndex == 11) {
+            pose.machineGunDeployment = 1.0f;
+            pose.machineGunYaw = yawSweep;
+        }
+        if (m_animationIndex == 12) {
+            pose.machineGunDeployment = 1.0f;
+            pose.machineGunPitch = pitchSweep;
+        }
+        if (m_animationIndex == 13) pose.contactExtension = 0.0f;
+        if (m_animationIndex == 14) pose.contactExtension = 1.0f;
+
+        WallSecurityDroneModelView::DrawAll(transform, pose, drawMatrixPart);
+        break;
+    }
+    case GalleryEntry::NeoAizuBuildings: {
+        auto drawCityPart = [&](PrimitiveShape shape, const Matrix4x4& world,
+            const ColorF& color) {
+            drawMatrixPart(shape, world, color, 0);
+        };
+        constexpr float GroundY = -4.15f;
+
+        // 最初の7状態はFBX基準の相対寸法を共通倍率のまま単体表示する
+        if (m_animationIndex < static_cast<int>(Stage5BuildingType::Count)) {
+            const auto type = static_cast<Stage5BuildingType>(m_animationIndex);
+            Stage5CityModelView::VisitBuilding(type,
+                Stage5ModelTransform {{0.0f, GroundY, 0.0f}, {}, exhibit.modelScale},
+                drawCityPart);
+            break;
+        }
+
+        // TAYAMAfaceは建物へ埋め込まず独立した広告パネルとして表示する
+        if (m_animationIndex == 7) {
+            const Matrix4x4 faceWorld = Matrix4x4::Scale({3.0f, 3.0f, 3.0f});
+            Stage5CityModelView::VisitTayamaFace(faceWorld, drawCityPart);
+            break;
+        }
+
+        // 横並びと自動360度回転は同じ7棟を小さな共通倍率で再利用する
+        const Matrix4x4 turntable = m_animationIndex == 9 ?
+            Matrix4x4::RotationY(m_animationTime * 0.55f) : Matrix4x4::Identity;
+        constexpr float LineupScale = 0.24f;
+        for (int building = 0; building < static_cast<int>(Stage5BuildingType::Count); ++building) {
+            const float x = static_cast<float>(building - 3) * 1.45f;
+            const Matrix4x4 root = turntable * Matrix4x4::Translation({x, GroundY, 0.0f}) *
+                Matrix4x4::Scale({LineupScale, LineupScale, LineupScale});
+            Stage5CityModelView::VisitBuilding(
+                static_cast<Stage5BuildingType>(building), root, drawCityPart);
         }
         break;
     }

@@ -82,6 +82,20 @@ public:
     static bool IsViewLocked(const SideScrollingShooter& shooter);
 
     /**
+     * @brief NEO AIZU上空を進む第2部道中か判定する
+     * @param shooter 判定対象
+     * @return 第2部道中の場合true
+     */
+    static bool IsPart2Route(const SideScrollingShooter& shooter);
+
+    /**
+     * @brief EASTSOURCE撃破後のムービー区間か判定する
+     * @param shooter 判定対象
+     * @return 操作とHUDを停止する場合true
+     */
+    static bool IsCinematic(const SideScrollingShooter& shooter);
+
+    /**
      * @brief 現在のStage 5状態で背景スクロールを進めるか判定する
      * @param shooter 判定対象
      * @return 背景スクロールを進める場合true、進行を止める場合false
@@ -169,6 +183,25 @@ public:
         Vector3& railPosition, Vector3& railTarget);
 
     /**
+     * @brief Stage 5演出用のレールカメラ画角を取得する
+     * @param shooter 判定対象
+     * @param defaultFieldOfView 通常の画角
+     * @return 適用する画角
+     */
+    static float CameraFieldOfView(const SideScrollingShooter& shooter,
+        float defaultFieldOfView);
+
+    /**
+     * @brief EASTSOURCE撃破後ムービー用の自機描画Transformを適用する
+     * @param shooter 判定対象
+     * @param position 補正する自機ワールド座標
+     * @param pitch 補正する自機X軸回転
+     * @return なし
+     */
+    static void ApplyPlayerRenderCorrection(const SideScrollingShooter& shooter,
+        Vector3& position, float& pitch);
+
+    /**
      * @brief Stage 5用カメラFar Clipを取得する
      * @return Stage 5のFar Clip
      */
@@ -191,6 +224,39 @@ public:
      */
     static void DrawStageWorld3D(const SideScrollingShooter& shooter,
         Renderer& renderer, const Camera3D& camera);
+
+    /**
+     * @brief 第2部道中のNEO AIZU市街とPANDD会ビルを描画する
+     * @param shooter 描画対象
+     * @param renderer 描画先
+     * @param camera 現在の3Dカメラ
+     * @param railWeight 横視点からレール視点への補間率
+     * @return なし
+     */
+    static void DrawPart2Background(const SideScrollingShooter& shooter,
+        Renderer& renderer, const Camera3D& camera, float railWeight);
+
+    /**
+     * @brief Stage 5の雨粒を3D空間へ描画する
+     * @param shooter 描画対象
+     * @param renderer 描画先
+     * @param camera 現在の3Dカメラ
+     * @param railWeight 横視点からレール視点への補間率
+     * @return なし
+     */
+    static void DrawRain3D(const SideScrollingShooter& shooter,
+        Renderer& renderer, const Camera3D& camera, float railWeight);
+
+    /**
+     * @brief Stage5ではStage4の約2倍へ拡大した専用ビル群を描画する
+     * @param shooter 描画対象
+     * @param renderer 描画先
+     * @param camera 現在の3Dカメラ
+     * @param railWeight 横視点からレール視点への補間率
+     * @return なし
+     */
+    static void DrawCityBuildings(const SideScrollingShooter& shooter,
+        Renderer& renderer, const Camera3D& camera, float railWeight);
 
     /**
      * @brief Stage 5専用2D画面エフェクトを描画する
@@ -229,12 +295,12 @@ public:
         Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float size);
 
     /**
-     * @brief EASTSOURCE専用モデルを描画する
+     * @brief EASTSOURCEと外壁警備ドローンの専用モデルを描画する
      * @param shooter 描画対象
      * @param renderer 描画先
      * @param camera 現在の3Dカメラ
      * @param enemy 描画する敵
-     * @return 専用モデルを描画して共通ボスモデルを省略する場合true、共通ボスモデルを使用する場合false
+     * @return 専用モデルを描画して共通敵モデルを省略する場合true
      */
     static bool DrawBossModel(const SideScrollingShooter& shooter,
         Renderer& renderer, const Camera3D& camera, const Enemy& enemy);
@@ -264,6 +330,8 @@ private:
         const SearchlightState& light, int lightIndex);
     static void TickSearchlights(SideScrollingShooter& shooter,
         int activeCount, bool tayamaWeakpoints);
+    static void TickWallEnemyWave(SideScrollingShooter& shooter,
+        int overheadInterval, int droneInterval);
     static void SpawnEnemyShotAt(SideScrollingShooter& shooter,
         float sourceX, float sourceY, float sourceZ,
         float targetX, float targetY, float targetZ, float speed);
@@ -280,6 +348,6 @@ private:
     static void TickTayama(SideScrollingShooter& shooter);
     static void TickStateMachine(SideScrollingShooter& shooter);
     static void PlayCue(SideScrollingShooter& shooter, int cue);
-    static void DrawWeather(const SideScrollingShooter& shooter, Renderer& renderer);
+    static void DrawScreenEffects(const SideScrollingShooter& shooter, Renderer& renderer);
     static void DrawStage5Hud(const SideScrollingShooter& shooter, Renderer& renderer);
 };

@@ -22,12 +22,51 @@ constexpr float PowerAfterRestart(float power) {
     return power > 1.0f ? power - 1.0f : 0.0f;
 }
 
+/**
+ * @brief 音声サンプルの60fps換算再生フレーム数を取得する
+ * @param sample 変換する音声サンプル
+ * @return 端数を切り上げた再生フレーム数
+ */
+constexpr int VoicePlaybackFrames(const VoiceSamples::ImaAdpcmSample& sample) {
+    return static_cast<int>((sample.sampleCount * 60 + sample.sampleRate - 1) / sample.sampleRate);
+}
+
+constexpr int VoiceGapFrames = 9;
+constexpr int MissionStartSecondVoiceFrame =
+    VoicePlaybackFrames(VoiceSamples::mission) + VoiceGapFrames;
+constexpr int MissionClearSecondVoiceFrame =
+    VoicePlaybackFrames(VoiceSamples::suspect) + VoiceGapFrames;
+
 static_assert(PowerAfterRestart(3.25f) == 2.25f);
 static_assert(PowerAfterRestart(0.75f) == 0.0f);
 
-/** @brief 先頭無音を除去した無線風の自機撃破音声を取得する @return 44100Hz PCMデータ */
+/** @brief 無線風に加工した自機撃破音声を取得する @return 44100Hz PCMデータ */
 const std::vector<std::int16_t>& MomijiDeathVoice() {
     static const auto voice = VoiceCodec::DecodeRadioForAudioService(VoiceSamples::momijiDeath);
+    return voice;
+}
+
+/** @brief ミッション開始前半の音声を取得する @return 44100Hz PCMデータ */
+const std::vector<std::int16_t>& MissionVoice() {
+    static const auto voice = VoiceCodec::DecodeForAudioService(VoiceSamples::mission);
+    return voice;
+}
+
+/** @brief ミッション開始後半の音声を取得する @return 44100Hz PCMデータ */
+const std::vector<std::int16_t>& StartVoice() {
+    static const auto voice = VoiceCodec::DecodeForAudioService(VoiceSamples::start);
+    return voice;
+}
+
+/** @brief ミッション完了前半の音声を取得する @return 44100Hz PCMデータ */
+const std::vector<std::int16_t>& SuspectVoice() {
+    static const auto voice = VoiceCodec::DecodeForAudioService(VoiceSamples::suspect);
+    return voice;
+}
+
+/** @brief ミッション完了後半の音声を取得する @return 44100Hz PCMデータ */
+const std::vector<std::int16_t>& ArrestedVoice() {
+    static const auto voice = VoiceCodec::DecodeForAudioService(VoiceSamples::arrested);
     return voice;
 }
 }
@@ -94,6 +133,11 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::LinkedLaserEnem
     return behavior;
 }
 
+const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::WallSecurityDroneEnemyBehaviorInstance() {
+    static const WallSecurityDroneEnemyBehavior behavior;
+    return behavior;
+}
+
 const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorForType(int type) {
     switch (type) {
     case 1:
@@ -114,6 +158,8 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorFo
         return MissileShooterEnemyBehaviorInstance();
     case 9:
         return LinkedLaserEnemyBehaviorInstance();
+    case 10:
+        return WallSecurityDroneEnemyBehaviorInstance();
     default:
         return BasicEnemyBehaviorInstance();
     }
@@ -127,8 +173,12 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorFo
  * @return なし
  */
 void SideScrollingShooter::Initialize(AudioService* audio, PlayerType playerType, DifficultyType difficulty) {
-    // プレイ開始前に音声をデコードして初回撃破時の処理待ちをなくす
+    // プレイ開始前に音声をデコードして初回再生時の処理待ちをなくす
     (void)MomijiDeathVoice();
+    (void)MissionVoice();
+    (void)StartVoice();
+    (void)SuspectVoice();
+    (void)ArrestedVoice();
     m_audio = audio;
     m_playerType = playerType;
     m_difficulty = difficulty;
@@ -317,6 +367,13 @@ void SideScrollingShooter::Tick() {
 
     // ミッション開始表示中は背景を維持したまま戦闘進行と操作を止める
     if (m_missionStartTimer > 0) {
+        static_assert(MissionStartSecondVoiceFrame + VoicePlaybackFrames(VoiceSamples::start) <=
+            MissionBannerDisplayFrames);
+        if (!m_tutorialMode && m_audio) {
+            const int elapsedFrames = MissionBannerDisplayFrames - m_missionStartTimer;
+            if (elapsedFrames == 0) m_audio->PlaySE(MissionVoice());
+            else if (elapsedFrames == MissionStartSecondVoiceFrame) m_audio->PlaySE(StartVoice());
+        }
         --m_missionStartTimer;
         return;
     }
@@ -334,6 +391,13 @@ void SideScrollingShooter::Tick() {
         m_displayBossHp = static_cast<float>(m_bossHp);
     }
     if (m_clear) {
+        static_assert(MissionClearSecondVoiceFrame + VoicePlaybackFrames(VoiceSamples::arrested) <=
+            ClearWaitFrames);
+        if (!m_tutorialMode && m_audio && m_clearTimer > 0 && m_clearTimer <= ClearWaitFrames) {
+            const int elapsedFrames = ClearWaitFrames - m_clearTimer;
+            if (elapsedFrames == 0) m_audio->PlaySE(SuspectVoice());
+            else if (elapsedFrames == MissionClearSecondVoiceFrame) m_audio->PlaySE(ArrestedVoice());
+        }
         StageDispatch::TickBossDefeat(*this);
         TickExplosions();
         TickDebris();
@@ -400,7 +464,8 @@ void SideScrollingShooter::Tick() {
         FinishChapter();
     }
 
-    TickPlayer();
+    const bool cinematic = StageDispatch::IsCinematic(*this);
+    if (!cinematic) TickPlayer();
     StageDispatch::TickWorld(*this);
 
     // 3Dから2Dへ確定するフレームだけは、座標変換直後の特殊障害物との誤接触を除外する
@@ -410,7 +475,7 @@ void SideScrollingShooter::Tick() {
         return;
     }
 
-    TickPlayerWeapons();
+    if (!cinematic) TickPlayerWeapons();
 
     if (!m_bossBattle && !m_chapterResultActive &&
         StageDispatch::UsesChapterTimeline(*this)) {
@@ -423,7 +488,7 @@ void SideScrollingShooter::Tick() {
         }
     }
 
-    TickBomb();
+    if (!cinematic) TickBomb();
     TickEnemies();
     TickShots();
     TickExplosions();
@@ -585,6 +650,13 @@ void SideScrollingShooter::InitializeRailObjects() {
             m_stage->ConfigureBossRailAnchor(enemy);
             continue;
         }
+        if (enemy.type == Stage::WallSecurityDroneEnemy) {
+            // 外壁警備ドローンは視点切り替え直後から壁面のZ座標を維持する
+            enemy.z = WallSecurityDroneEnemyBehavior::WallSurfaceZ();
+            enemy.baseX = enemy.railAnchorX;
+            enemy.x = enemy.baseX;
+            continue;
+        }
         if (enemy.type == Stage::SquareShooterEnemy) {
             enemy.z = ToRailZFromSideX(enemy.transitionSideX);
             enemy.baseX = enemy.railAnchorX;
@@ -643,6 +715,12 @@ void SideScrollingShooter::InitializeRailObjects() {
         if (shot.z <= 0.0f) {
             shot.z = ToRailZFromSideX(shot.x);
         }
+        if (!shot.enemy && UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase)) {
+            // 第2部の自機弾は3Dへ切り替えても壁面上方向の速度を維持する
+            shot.z = PlayerRailZ + 2.0f;
+            shot.vz = 0.0f;
+            continue;
+        }
         /** @brief 2D横移動をレール奥行きの移動量へ変換する */
         if (shot.enemy) {
             shot.vz = sideVx * 18.0f;
@@ -678,6 +756,12 @@ void SideScrollingShooter::InitializeSideObjects() {
         if (!shot.active) continue;
         shot.transitionSideX = shot.x;
         shot.transitionSideY = shot.y;
+        if (!shot.enemy && UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase)) {
+            // 第2部の自機弾は3Dの奥行きを2D横位置へ変換せず上方向を維持する
+            shot.z = ToRailZFromSideX(shot.x);
+            shot.vz = 0.0f;
+            continue;
+        }
         if (shot.enemy && shot.barrageCount < 0) {
             constexpr int GridSize = 5;
             constexpr float AimedShotSpeed = 0.018f;
@@ -976,6 +1060,7 @@ void SideScrollingShooter::TickTutorial() {
             SpawnShot(1.05f, y, BarrageSpeed2D, 0.0f, true,
                 EnemyRailFarZ, BarrageSpeed3D);
         }
+        PlayEnemyShotSound();
     }
 
     if (m_tutorialStep <= 1) {

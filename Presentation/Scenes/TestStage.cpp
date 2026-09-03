@@ -11,6 +11,8 @@
 #include <windows.h>
 
 namespace {
+constexpr int FinalClearDisplayFrames = 180;
+
 /**
  * @brief 現在のクライアント領域に対応するUI入力を取得する
  * @return NDC座標へ変換済みのUI入力状態
@@ -59,7 +61,7 @@ void TestStage::Tick() {
     if (!m_game->IsAllStagesCleared()) return;
 
     // 最終クリア表示を見せてからスコアを保存し、エンディングへ遷移する
-    if (++m_allClearTimer < 120) return;
+    if (++m_allClearTimer < FinalClearDisplayFrames) return;
     ScoreRepository {}.Save(getData().difficulty, m_game->Score());
     changeScene(SceneType::Ending);
 }

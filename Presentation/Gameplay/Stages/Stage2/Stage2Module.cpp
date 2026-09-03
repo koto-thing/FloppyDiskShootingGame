@@ -736,6 +736,7 @@ void SideScrollingShooter::Stage2Module::FireBossPartBarrage(
         {0.65f, 2.60f, 0.0f}, {2.85f, 2.18f, 0.92f}, {0.25f, 1.42f, 0.0f}
     };
     const bool railMode = shooter.IsRailGameplayActive();
+    bool fired = false;
     const float yaw = railMode ? 0.0f : Math::HalfPi;
     const float cosine = std::cos(yaw);
     const float sine = std::sin(yaw);
@@ -781,8 +782,10 @@ void SideScrollingShooter::Stage2Module::FireBossPartBarrage(
                 FromWorldY(world.y) + bullet.offsetY,
                 bullet.vx, bullet.vy, true, world.z,
                 boss.behavior->RailAimedShotSpeed());
+            fired = true;
         }
     }
+    if (fired) shooter.PlayEnemyShotSound();
 }
 
 void SideScrollingShooter::Stage2Module::TickSpecialShotBeforeMove(

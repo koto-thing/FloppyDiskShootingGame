@@ -172,6 +172,8 @@ void SideScrollingShooter::StageDispatch::DrawSky(
         Stage3Module::DrawSky(shooter, renderer);
         break;
     case 4:
+        CityBackgroundModule::DrawSky(renderer);
+        break;
     case 5:
         CityBackgroundModule::DrawSky(renderer);
         break;
@@ -232,6 +234,7 @@ void SideScrollingShooter::StageDispatch::FireBossPartBarrage(
         break;
     case 4:
         Stage4Module::FireBossPartBarrage(shooter, boss);
+        break;
     case 3:
         Stage3Module::FireBossPartBarrage(shooter, boss);
         break;
@@ -345,8 +348,16 @@ void SideScrollingShooter::StageDispatch::DrawBackground2D(
         Stage3Module::DrawBackground2D(shooter, renderer, camera);
         break;
     case 4:
-    case 5:
         CityBackgroundModule::DrawBackground2D(shooter, renderer, camera);
+        break;
+    case 5:
+        if (Stage5Module::IsPart2Route(shooter)) {
+            Stage5Module::DrawPart2Background(shooter, renderer, camera, 0.0f);
+        } else {
+            CityBackgroundModule::DrawBackground2D(shooter, renderer, camera);
+            Stage5Module::DrawCityBuildings(shooter, renderer, camera, 0.0f);
+        }
+        Stage5Module::DrawRain3D(shooter, renderer, camera, 0.0f);
         break;
     }
 }
@@ -365,8 +376,16 @@ void SideScrollingShooter::StageDispatch::DrawBackground3D(
         Stage3Module::DrawBackground3D(shooter, renderer, camera, railWeight);
         break;
     case 4:
-    case 5:
         CityBackgroundModule::DrawBackground3D(shooter, renderer, camera, railWeight);
+        break;
+    case 5:
+        if (Stage5Module::IsPart2Route(shooter)) {
+            Stage5Module::DrawPart2Background(shooter, renderer, camera, railWeight);
+        } else {
+            CityBackgroundModule::DrawBackground3D(shooter, renderer, camera, railWeight);
+            Stage5Module::DrawCityBuildings(shooter, renderer, camera, railWeight);
+        }
+        Stage5Module::DrawRain3D(shooter, renderer, camera, railWeight);
         break;
     }
 }
@@ -392,6 +411,14 @@ void SideScrollingShooter::StageDispatch::ApplyCameraCorrection(
     case 5:
         Stage5Module::ApplyCameraCorrection(shooter, railPosition, railTarget);
         break;
+    }
+}
+
+float SideScrollingShooter::StageDispatch::CameraFieldOfView(
+    const SideScrollingShooter& shooter, float defaultFieldOfView) {
+    switch (shooter.m_stageNumber) {
+    case 5: return Stage5Module::CameraFieldOfView(shooter, defaultFieldOfView);
+    default: return defaultFieldOfView;
     }
 }
 
@@ -457,6 +484,13 @@ bool SideScrollingShooter::StageDispatch::DrawHud(
     }
 }
 
+void SideScrollingShooter::StageDispatch::ApplyPlayerRenderCorrection(
+    const SideScrollingShooter& shooter, Vector3& position, float& pitch) {
+    if (shooter.m_stageNumber == 5) {
+        Stage5Module::ApplyPlayerRenderCorrection(shooter, position, pitch);
+    }
+}
+
 bool SideScrollingShooter::StageDispatch::DrawSpecialAttackWarning3D(
     const SideScrollingShooter& shooter, Renderer& renderer,
     const Camera3D& camera, const Enemy& enemy, float size) {
@@ -498,6 +532,14 @@ bool SideScrollingShooter::StageDispatch::IsViewLocked(
     case 1: return shooter.m_clear;
     case 3: return Stage3Module::IsViewLocked(shooter);
     case 5: return Stage5Module::IsViewLocked(shooter);
+    default: return false;
+    }
+}
+
+bool SideScrollingShooter::StageDispatch::IsCinematic(
+    const SideScrollingShooter& shooter) {
+    switch (shooter.m_stageNumber) {
+    case 5: return Stage5Module::IsCinematic(shooter);
     default: return false;
     }
 }

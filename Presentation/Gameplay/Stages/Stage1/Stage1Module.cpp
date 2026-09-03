@@ -4,9 +4,11 @@
 #include <cmath>
 
 #include "../../../../Engine/Graphics/Renderer.h"
+#include "../../../../Infrastructure/ExternalServices/AudioService.h"
 #include "../../GameplayRandom.h"
 #include "../../SideScrollingShooterShared.h"
 #include "../../SideScrollingShooterEnemies.h"
+#include "../../Voices/VoiceDpcmDecoder.h"
 #include "../Common/StageDefinition.h"
 #include "Stage1EnemySheetEasy.h"
 #include "Stage1EnemySheetHard.h"
@@ -39,9 +41,12 @@ constexpr int Stage1BossRushFrames = Stage1BossRushSegmentFrames * Stage1BossRus
 constexpr int Stage1BossSettleFrames = 96;
 constexpr int Stage1BossEntranceFrames = Stage1BossRushFrames + Stage1BossSettleFrames;
 
-constexpr int BossDefeatMoveSegmentFrames = 45;
+constexpr int BossDefeatMoveSegmentFrames = 24;
 constexpr int BossDefeatMoveSegmentCount = 6;
-constexpr int BossDefeatImpactFrame = BossDefeatMoveSegmentFrames * BossDefeatMoveSegmentCount;
+constexpr int BossDefeatFinalRushFrames = 8;
+constexpr int BossDefeatFinalRushStartFrame =
+    BossDefeatMoveSegmentFrames * (BossDefeatMoveSegmentCount - 1);
+constexpr int BossDefeatImpactFrame = BossDefeatFinalRushStartFrame + BossDefeatFinalRushFrames;
 constexpr int BossDefeatBreakIntervalFrames = 60;
 constexpr int BossDefeatFinalExplosionFrame = BossDefeatImpactFrame +
     BossDefeatBreakIntervalFrames * 5 + 30;
@@ -50,7 +55,7 @@ constexpr float BossDefeatMeteorX = -0.92f;
 constexpr float BossDefeatMeteorY = -0.15f;
 constexpr float BossDefeatMeteorScale = 4.50f;
 constexpr float BossDefeatMeteorBottomMargin = 0.20f;
-constexpr int BossDefeatMeteorRiseFrames = 180;
+constexpr int BossDefeatMeteorRiseFrames = BossDefeatFinalRushStartFrame;
 constexpr float BossDefeatPlayerRetreatSpeed = 0.035f;
 constexpr float BossDefeatImpactX = -0.42f;
 
@@ -77,8 +82,8 @@ constexpr int MeteorSpawnIntervalForBossHp(
  */
 constexpr int BossDefeatMoveSegment(int age) {
     if (age <= 0) return 0;
-    const int segment = age / BossDefeatMoveSegmentFrames;
-    return segment < BossDefeatMoveSegmentCount ? segment : BossDefeatMoveSegmentCount - 1;
+    if (age >= BossDefeatFinalRushStartFrame) return BossDefeatMoveSegmentCount - 1;
+    return age / BossDefeatMoveSegmentFrames;
 }
 
 /**
@@ -119,7 +124,10 @@ static_assert(Stage1BossRushSegment(0) == 0);
 static_assert(Stage1BossRushSegment(Stage1BossRushFrames - 1) == 3);
 static_assert(Stage1BossEntranceFrames == 240);
 static_assert(BossDefeatMoveSegment(0) == 0);
+static_assert(BossDefeatMoveSegment(BossDefeatFinalRushStartFrame - 1) == 4);
+static_assert(BossDefeatMoveSegment(BossDefeatFinalRushStartFrame) == 5);
 static_assert(BossDefeatMoveSegment(BossDefeatImpactFrame - 1) == 5);
+static_assert(BossDefeatFinalRushFrames < BossDefeatMoveSegmentFrames);
 static_assert(BossDefeatImpactFrame < BossDefeatFinalExplosionFrame);
 static_assert(BossDefeatFinalExplosionFrame < BossDefeatSequenceFrames);
 static_assert(MeteorSpawnMinFrames < MeteorSpawnMaxFrames);
@@ -436,9 +444,11 @@ void SideScrollingShooter::Stage1Module::TickBossDefeat(
     // 画面右半分を上下に暴走し、最後の一区間だけ左側の隕石へ突入する
     if (age < BossDefeatImpactFrame) {
         const int segment = BossDefeatMoveSegment(age);
+        const int segmentStartFrame = segment * BossDefeatMoveSegmentFrames;
+        const int segmentFrames = segment == BossDefeatMoveSegmentCount - 1 ?
+            BossDefeatFinalRushFrames : BossDefeatMoveSegmentFrames;
         const float progress = SmoothStep(static_cast<float>(
-            age - segment * BossDefeatMoveSegmentFrames) /
-            static_cast<float>(BossDefeatMoveSegmentFrames));
+            age - segmentStartFrame) / static_cast<float>(segmentFrames));
         boss.x = Math::Lerp(PathX[segment], PathX[segment + 1], progress);
         boss.y = Math::Lerp(PathY[segment], PathY[segment + 1], progress);
     } else {
@@ -456,6 +466,9 @@ void SideScrollingShooter::Stage1Module::TickBossDefeat(
         shooter.SpawnExplosion(boss.x - 0.20f, boss.y, boss.z, true);
         SpawnMeteorDebris(shooter, shooter.m_stage1.meteors[0], 6);
         shooter.PlayHitSound();
+        static const auto kotoDeathVoice =
+            VoiceCodec::DecodeForAudioService(VoiceSamples::kotoDeath);
+        if (shooter.m_audio) shooter.m_audio->PlaySE(kotoDeathVoice);
     }
 
     // 外装を一定間隔で剥がし、機体全体が一度に消えないよう段階破壊する

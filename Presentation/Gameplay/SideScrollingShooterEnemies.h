@@ -880,6 +880,165 @@ private:
 };
 
 /**
+ * @brief NEO AIZU外壁へ接近して左右を巡回する警備ドローンを制御する
+ */
+class SideScrollingShooter::WallSecurityDroneEnemyBehavior final
+    : public SideScrollingShooter::EnemyBehavior {
+public:
+    int Type() const override {
+        return 10;
+    }
+
+    int MaxHp() const override {
+        return 65;
+    }
+
+    void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
+        if (!shooter.IsRailGameplayActive()) {
+            // 2DではPANDD会ビル側へ固定し、外壁上だけを上下巡回する
+            enemy.x = SideWallX;
+            enemy.y = enemy.baseY +
+                std::cos(enemy.phase + static_cast<float>(enemy.age) * PatrolSpeed) * PatrolHeight;
+            enemy.z = ToRailZFromSideX(enemy.x);
+        } else {
+            // 3Dでは生成直後からビル前面へ固定し、外壁区画内だけを楕円巡回する
+            enemy.z = WallPatrolZ;
+            const float patrolAge = static_cast<float>(enemy.age);
+            enemy.x = enemy.baseX + std::sin(enemy.phase + patrolAge * PatrolSpeed) * PatrolWidth;
+            enemy.y = enemy.baseY + std::cos(enemy.phase + patrolAge * PatrolSpeed * 1.35f) * PatrolHeight;
+        }
+
+        // 接触時の照準を連射終了まで固定し、終了後は走査へ戻す
+        TickSearchlightAttack(shooter, enemy);
+    }
+
+    int AimedShotInterval() const override {
+        return 0;
+    }
+
+    float RailAimedShotSpeed() const override {
+        return 0.52f;
+    }
+
+    int Score(const Enemy&) const override {
+        return 450;
+    }
+
+    float CollisionRadius(const Enemy&) const override {
+        return 0.12f;
+    }
+
+    float CollisionRadius3D(const Enemy&) const override {
+        return 1.15f;
+    }
+
+    float ShotHitRadius3D(const Enemy&) const override {
+        return 1.05f;
+    }
+
+    float RenderScale() const override {
+        return 1.45f;
+    }
+
+    /**
+     * @brief 3D外壁表面の固定Z座標を取得する
+     * @return 外壁表面のレール座標Z
+     */
+    static constexpr float WallSurfaceZ() {
+        return WallPatrolZ;
+    }
+
+private:
+    /**
+     * @brief レーザーポインター走査と接触後のマシンガン連射を更新する
+     * @param shooter ゲーム本体
+     * @param enemy 更新する壁面警備ドローン
+     * @return なし
+     */
+    static void TickSearchlightAttack(SideScrollingShooter& shooter, Enemy& enemy) {
+        using namespace ShooterStages::Stage5;
+
+        // 連射中は接触時の方向を維持して一定間隔で発射する
+        if (enemy.motionAge > 0) {
+            enemy.turretAimX = enemy.attackWarningTargetX;
+            enemy.turretAimY = enemy.attackWarningTargetY;
+            enemy.attackWarningFrames = enemy.motionAge;
+            if (IsDroneMachineGunFireFrame(enemy.motionAge)) {
+                FireMachineGun(shooter, enemy);
+            }
+            if (--enemy.motionAge == 0) {
+                enemy.recoilAge = DroneMachineGunCooldownFrames;
+                enemy.attackWarningFrames = 0;
+            }
+            return;
+        }
+
+        // 画面内を巡回するレーザーポインターの照射地点を更新する
+        const float scanAge = static_cast<float>(enemy.age);
+        enemy.turretAimX = std::sin(enemy.phase + scanAge * 0.031f) * 0.88f;
+        enemy.turretAimY = std::sin(enemy.phase * 1.7f + scanAge * 0.023f) * 0.70f;
+        if (enemy.recoilAge > 0) {
+            --enemy.recoilAge;
+            return;
+        }
+
+        // ポインターへ自機が触れた瞬間の地点を連射方向として保存する
+        if (!DroneSearchlightTouches(shooter.m_playerX, shooter.m_playerY,
+                enemy.turretAimX, enemy.turretAimY, 0.055f)) return;
+        enemy.attackWarningTargetX = shooter.m_playerX;
+        enemy.attackWarningTargetY = shooter.m_playerY;
+        enemy.motionAge = DroneMachineGunBurstFrames;
+        enemy.attackWarningFrames = enemy.motionAge;
+        FireMachineGun(shooter, enemy);
+        --enemy.motionAge;
+    }
+
+    /**
+     * @brief 接触時に保存した方向へマシンガン弾を一発生成する
+     * @param shooter ゲーム本体
+     * @param enemy 発射する壁面警備ドローン
+     * @return なし
+     */
+    static void FireMachineGun(SideScrollingShooter& shooter, const Enemy& enemy) {
+        const float dx = enemy.attackWarningTargetX - enemy.x;
+        const float dy = enemy.attackWarningTargetY - enemy.y;
+        const int shotIndex = (ShooterStages::Stage5::DroneMachineGunBurstFrames -
+            enemy.motionAge) / ShooterStages::Stage5::DroneMachineGunShotIntervalFrames;
+        if (!shooter.IsRailGameplayActive()) {
+            const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy));
+            shooter.SpawnShotDirect(enemy.x - 0.06f, enemy.y, enemy.z,
+                dx / length * SideShotSpeed, dy / length * SideShotSpeed, 0.0f,
+                true, shotIndex, 0);
+            shooter.PlayBossMachineGunSound();
+            return;
+        }
+
+        // 3Dではゲーム座標のXYをワールド比率へ変換して固定地点へ飛ばす
+        const float worldDx = ToWorldX(enemy.attackWarningTargetX) - ToWorldX(enemy.x);
+        const float worldDy = ToWorldY(enemy.attackWarningTargetY) - ToWorldY(enemy.y);
+        const float worldDz = SideScrollingShooter::PlayerRailZ - enemy.z;
+        const float length = (std::max)(0.001f,
+            std::sqrt(worldDx * worldDx + worldDy * worldDy + worldDz * worldDz));
+        shooter.SpawnShotDirect(enemy.x, enemy.y, enemy.z,
+            FromWorldX(worldDx / length * RailShotSpeed),
+            FromWorldY(worldDy / length * RailShotSpeed),
+            worldDz / length * RailShotSpeed, true, shotIndex, 0);
+        shooter.PlayBossMachineGunSound();
+    }
+
+    static constexpr float WallPatrolZ = 40.8f;
+    static constexpr float SideWallX = 1.55f;
+    static constexpr float PatrolSpeed = 0.024f;
+    static constexpr float PatrolWidth = 0.34f;
+    static constexpr float PatrolHeight = 0.22f;
+    static constexpr float SideShotSpeed = 0.022f;
+    static constexpr float RailShotSpeed = 0.68f;
+    static_assert(WallPatrolZ > SideScrollingShooter::PlayerRailZ);
+    static_assert(SideWallX > 0.0f);
+    static_assert(PatrolWidth > 0.0f && PatrolHeight > 0.0f);
+};
+
+/**
  * @brief ボスの移動と通常狙い弾間隔を制御する
  */
 class SideScrollingShooter::BossEnemyBehavior final : public SideScrollingShooter::EnemyBehavior {

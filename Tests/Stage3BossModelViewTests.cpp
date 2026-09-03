@@ -152,6 +152,18 @@ void RunStage3BossModelViewTests() {
     assert(std::fabs(sideAim.y) > 0.01f);
     assert(std::fabs(railAim.y) > 0.01f);
 
+    // 気球損傷位置が親Transformに追従し、全点がゴンドラより上の表面へ並ぶことを確認する
+    const BossModelTransform damageTransform {{2.0f, -3.0f, 5.0f}, {}, 0.0f, 2.0f};
+    for (int i = 0; i < Stage3BossModelView::BalloonDamagePointCount; ++i) {
+        const Vector3 damage = Stage3BossModelView::BalloonDamageWorldPosition(i, damageTransform);
+        assert(damage.x > damageTransform.position.x - 14.0f);
+        assert(damage.x < damageTransform.position.x + 14.0f);
+        assert(damage.y > damageTransform.position.y + 4.0f);
+    }
+    const Vector3 damageCenter = Stage3BossModelView::BalloonDamageWorldPosition(
+        Stage3BossModelView::BalloonDamagePointCount / 2, damageTransform);
+    assert(std::fabs(damageCenter.x - damageTransform.position.x) < 0.0001f);
+
     // 大口径砲の砲口が支点ではなく回転後の砲身先端へ一致することを確認する
     const BossModelTransform cannonTransform {{4.0f, -3.0f, 12.0f}, {}, 0.0f, 1.8f};
     const Vector3 cannonMuzzle = Stage3BossModelView::HeavyCannonMuzzleWorldPosition(

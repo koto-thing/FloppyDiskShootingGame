@@ -33,6 +33,7 @@ public:
     static constexpr int HeavyCannonCount = 2;
     static constexpr int MissilePodCount = 2;
     static constexpr int FunnelPodCount = 3;
+    static constexpr int BalloonDamagePointCount = 5;
     static constexpr int StaticBodyPrimitiveCount = 30;
     static constexpr int GondolaBodyPrimitiveCount = 32;
     static constexpr int WeaponPrimitiveCount = 73;
@@ -98,6 +99,17 @@ public:
      */
     static Vector3 TopGunWorldPosition(int index, const BossModelTransform& transform) {
         return TransformLocalPosition(transform, TopGunMount(index).localPosition);
+    }
+
+    /**
+     * @brief 気球表面の損傷エフェクト位置を取得する
+     * @param index 0以上BalloonDamagePointCount未満の位置番号
+     * @param transform 親Transform
+     * @return 気球表面のワールド座標
+     */
+    static Vector3 BalloonDamageWorldPosition(
+        int index, const BossModelTransform& transform) {
+        return TransformLocalPosition(transform, BalloonDamageLocalPositions[index]);
     }
 
     /**
@@ -445,6 +457,13 @@ private:
         {{0.0f, -4.00f, -2.08f}, {}, Stage3BossPartType::FunnelPod, 0},
         {{2.7f, -4.05f, 2.08f}, {}, Stage3BossPartType::FunnelPod, 1},
         {{5.2f, -4.10f, -2.00f}, {}, Stage3BossPartType::FunnelPod, 2}
+    };
+    inline static constexpr Vector3 BalloonDamageLocalPositions[BalloonDamagePointCount] = {
+        {-6.4f, 2.46f, -0.95f},
+        {-3.3f, 2.92f, 0.80f},
+        {0.0f, 3.02f, -0.55f},
+        {3.3f, 2.88f, 0.75f},
+        {6.2f, 2.28f, -0.85f}
     };
 
     /**

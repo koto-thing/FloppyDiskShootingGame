@@ -29,7 +29,9 @@ void RunScoreRepositoryTests() {
     if (sanitized.masterVolume != 0.0f ||
         sanitized.bgmVolume != 1.0f ||
         !std::isfinite(sanitized.seVolume) || sanitized.seVolume != 1.0f ||
-        sanitized.galleryUnlocks != DefaultGalleryUnlocks) {
+        sanitized.galleryUnlocks != DefaultGalleryUnlocks ||
+        (sanitized.galleryUnlocks &
+            GalleryEntryBit(GalleryEntry::WallSecurityDrone)) == 0u) {
         throw std::runtime_error("Settings volumes must remain finite and in range");
     }
 
@@ -45,7 +47,9 @@ void RunScoreRepositoryTests() {
 
     const GameSettings expectedSettings {0.25f, 0.5f, 0.75f, false,
         GalleryEntryBit(GalleryEntry::Player) |
-        GalleryEntryBit(GalleryEntry::Stage3Boss)};
+        GalleryEntryBit(GalleryEntry::Stage3Boss) |
+        GalleryEntryBit(GalleryEntry::WallSecurityDrone) |
+        GalleryEntryBit(GalleryEntry::NeoAizuBuildings)};
     SettingsRepository repository;
     repository.Save(expectedSettings);
     const GameSettings loadedSettings = repository.Load();

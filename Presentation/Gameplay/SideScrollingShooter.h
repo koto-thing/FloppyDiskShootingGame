@@ -126,6 +126,7 @@ private:
     class SquareShooterEnemyBehavior;
     class MissileShooterEnemyBehavior;
     class LinkedLaserEnemyBehavior;
+    class WallSecurityDroneEnemyBehavior;
     class StageDispatch;
     class Stage1Module;
     class Stage2Module;
@@ -246,6 +247,7 @@ private:
         std::array<int, BossPartCount> bossPartMaxHp {};
         std::array<int, BossPartCount> bossPartHitFlashFrames {};
         bool collisionEnabled = true;
+        bool entersFromTop = false;
         const EnemyBehavior* behavior = nullptr;
         bool active = false;
     };
@@ -415,6 +417,16 @@ public:
     }
 
     /**
+     * @brief Stage 5第2部の縦スクロール弾道を使用するか判定する
+     * @param stageNumber 現在のステージ番号
+     * @param phase 現在のStage 5状態
+     * @return 第2部道中の場合true
+     */
+    static constexpr bool UsesVerticalPlayerShots(int stageNumber, Stage5Phase phase) {
+        return stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(phase);
+    }
+
+    /**
      * @brief 指定弱点が現在フェーズで有効か判定する
      * @param weakpoint 判定する弱点
      * @param phase 現在のStage 5状態
@@ -460,6 +472,7 @@ private:
     static const EnemyBehavior& SquareShooterEnemyBehaviorInstance();
     static const EnemyBehavior& MissileShooterEnemyBehaviorInstance();
     static const EnemyBehavior& LinkedLaserEnemyBehaviorInstance();
+    static const EnemyBehavior& WallSecurityDroneEnemyBehaviorInstance();
     static const EnemyBehavior& EnemyBehaviorForType(int type);
     void TickViewTransition();
     /**
@@ -609,6 +622,8 @@ private:
     bool TryHitDefaultBossPart(const Shot& shot, const Enemy& boss, BossPart& part) const;
     void PlayShotSound();
     void PlayHitSound();
+    /** @brief 敵のエネルギー弾発射音を再生する @return なし */
+    void PlayEnemyShotSound();
     /** @brief ミサイル噴射開始音を再生する @return なし */
     void PlayMissileLaunchSound();
     /** @brief ボスマシンガンの単発音を再生する @return なし */
@@ -798,10 +813,13 @@ private:
      * @param z 自機中心のワールド座標Z
      * @param visible 自機を描画する場合true
      * @param yaw 自機のY軸回転角度
+     * @param pitch 自機のX軸回転角度
+     * @param roll 自機のZ軸回転角度
      * @return なし
      */
     void DrawPlayerModel(Renderer& renderer, const Camera3D& camera,
-        float x, float y, float z, bool visible, float yaw = 0.0f) const;
+        float x, float y, float z, bool visible,
+        float yaw = 0.0f, float pitch = 0.0f, float roll = 0.0f) const;
     void DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw = 0.0f) const;
     /**
      * @brief 接続レーザー敵の機体間レーザーを描画する
@@ -949,6 +967,10 @@ static_assert(SideScrollingShooter::IsValidStage5Transition(
 static_assert(!SideScrollingShooter::IsValidStage5Transition(
     SideScrollingShooter::Stage5Phase::EastsourceBattle,
     SideScrollingShooter::Stage5Phase::EndingReady));
+static_assert(SideScrollingShooter::UsesVerticalPlayerShots(
+    5, SideScrollingShooter::Stage5Phase::WallClimbLower));
+static_assert(!SideScrollingShooter::UsesVerticalPlayerShots(
+    4, SideScrollingShooter::Stage5Phase::WallClimbLower));
 static_assert(SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
     SideScrollingShooter::TayamaWeakpoint::FireControlRadar,
     SideScrollingShooter::Stage5Phase::TayamaFireControl));

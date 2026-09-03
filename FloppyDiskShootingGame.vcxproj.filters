@@ -311,6 +311,12 @@
     <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5ModelView.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5CityModelView.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage5\WallSecurityDroneModelView.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Presentation\Gameplay\SideScrollingShooterShared.h">
       <Filter>Header Files</Filter>
     </ClInclude>

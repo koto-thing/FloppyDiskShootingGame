@@ -88,7 +88,7 @@ inline std::vector<std::int16_t> DecodeForAudioService(
 }
 
 /**
- * @brief 音声の先頭無音を除去して無線風の帯域制限と粗さを加える
+ * @brief 音声へ無線風の帯域制限と粗さを加える
  * @param sample 変換するIMA ADPCM音声
  * @return AudioServiceで再生可能な44100Hz PCMデータ
  */
@@ -96,22 +96,11 @@ inline std::vector<std::int16_t> DecodeRadioForAudioService(
     const VoiceSamples::ImaAdpcmSample& sample)
 {
     constexpr std::uint32_t OutputRate = 44100;
-    constexpr int SilenceThreshold = 384;
-    constexpr std::size_t PreRollSamples = OutputRate * 3 / 1000;
     constexpr float Pi = 3.14159265358979323846f;
     constexpr float HighPassCutoff = 320.0f;
     constexpr float LowPassCutoff = 3200.0f;
     constexpr int QuantizationStep = 256;
     std::vector<std::int16_t> output = DecodeForAudioService(sample);
-
-    // 発声直前の3msだけ残して素材先頭の無音による再生遅れを除く
-    const auto audible = std::find_if(output.begin(), output.end(), [](std::int16_t value) {
-        return std::abs(static_cast<int>(value)) >= SilenceThreshold;
-    });
-    if (audible == output.end()) return {};
-    const std::size_t audibleIndex = static_cast<std::size_t>(audible - output.begin());
-    output.erase(output.begin(), output.begin() + (audibleIndex > PreRollSamples ?
-        audibleIndex - PreRollSamples : 0));
 
     // 通信音声の狭い帯域へ絞り、軽いクリップと量子化でざらつきを加える
     const float interval = 1.0f / static_cast<float>(OutputRate);

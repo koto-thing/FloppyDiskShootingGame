@@ -73,7 +73,8 @@ public:
         const int recoilAge = boss.recoilAge;
         const bool rushing = IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) && rushPhase > 0.0f;
         boss.x = 1.80f;
-        boss.y = -0.5f;
+        // 履帯を道路帯の内側へ収めて路面上を走って見える高さに置く
+        boss.y = -0.80f;
         boss.z = ToRailZFromSideX(boss.x);
         boss.baseX = boss.x;
         boss.baseY = boss.y;

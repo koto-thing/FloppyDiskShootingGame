@@ -95,7 +95,13 @@ float4 PSPlayerShot(VS_OUTPUT input) : SV_TARGET
         alpha = saturate(outerGlow * 0.52f + flame * 0.72f + core);
         color = lerp(float3(0.72f, 0.002f, 0.001f), float3(1.0f, 0.075f, 0.008f), flame);
         color = lerp(color, float3(1.0f, 0.82f, 0.62f), core) * pulse;
-        if (u_shotType > 4.5f) color = 1.0f - saturate(color);
+        if (u_shotType > 5.5f)
+        {
+            // PLAYER NORMAL: 敵通常弾の炎形状を青い発光へ差し替える
+            color = lerp(float3(0.001f, 0.08f, 0.78f), float3(0.02f, 0.42f, 1.0f), flame);
+            color = lerp(color, float3(0.68f, 0.94f, 1.0f), core) * pulse;
+        }
+        else if (u_shotType > 4.5f) color = 1.0f - saturate(color);
     }
 
     if (alpha < 0.01f) discard;
