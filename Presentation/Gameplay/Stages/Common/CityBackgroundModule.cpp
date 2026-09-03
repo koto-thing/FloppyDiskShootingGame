@@ -61,12 +61,13 @@ static_assert(Stage4SideRoadTopY > Stage4UpperTrafficY &&
  * @param bossBattle ボス戦中か
  * @return 交通車両を描画する場合true
  */
-constexpr bool ShouldDrawTraffic(int stageNumber, bool bossBattle) {
-    return stageNumber != 4 || !bossBattle;
+constexpr bool ShouldDrawTraffic(int stageNumber, bool bossBattle, bool bossEntering = false) {
+    return stageNumber != 4 || !bossBattle || bossEntering;
 }
 
 static_assert(ShouldDrawTraffic(4, false));
 static_assert(!ShouldDrawTraffic(4, true));
+static_assert(ShouldDrawTraffic(4, true, true));
 static_assert(ShouldDrawTraffic(5, true));
 
 }
@@ -126,7 +127,9 @@ void SideScrollingShooter::CityBackgroundModule::DrawRoad(
         }
     }
 
-    if (!ShouldDrawTraffic(shooter.m_stageNumber, shooter.m_bossBattle)) return;
+    const bool bossEntering = shooter.m_stageNumber == 4 && shooter.m_bossBattle &&
+        shooter.m_bossIntroductionPhase == BossIntroductionPhase::Entrance;
+    if (!ShouldDrawTraffic(shooter.m_stageNumber, shooter.m_bossBattle, bossEntering)) return;
 
     // 横向きの遠景車を小さく、手前車を大きくして上下車線を逆方向へ流す
     for (int i = 0; i < 10; ++i) {
@@ -145,43 +148,79 @@ void SideScrollingShooter::CityBackgroundModule::DrawRoad(
         const float railZ = 8.0f + WrapDistance(
             static_cast<float>(i) * 19.0f +
             railDirection * shooter.m_scroll * railSpeed, 120.0f);
-        const float x = Math::Lerp(sideX, railX, railWeight);
-        const float y = Math::Lerp(sideY, RailRoadTopY + 0.52f * 0.5f, railWeight);
-        const float z = Math::Lerp(SideRoadZ - 0.24f, railZ, railWeight);
+        float x = Math::Lerp(sideX, railX, railWeight);
+        float y = Math::Lerp(sideY, RailRoadTopY + 0.52f * 0.5f, railWeight);
+        float z = Math::Lerp(SideRoadZ - 0.24f, railZ, railWeight);
+        float tumble = 0.0f;
+        float alpha = 1.0f;
+
+        // 先頭六台は超重戦車の進路から左右へ弾き、残りは混雑を避けて消す
+        if (bossEntering) {
+            if (i < 6) {
+                const float kick = SmoothStep(ShooterStages::Stage4::TrafficKickRate(
+                    shooter.m_bossIntroductionTimer, i));
+                const float direction = i % 2 == 0 ? -1.0f : 1.0f;
+                x += direction * kick * Math::Lerp(3.8f, 10.0f, railWeight);
+                y += std::sin(kick * Math::Pi) * Math::Lerp(2.2f, 4.5f, railWeight) + kick;
+                z -= kick * railWeight * (2.0f + static_cast<float>(i % 3));
+                tumble = direction * kick * Math::Pi * 1.35f;
+                alpha = 1.0f - SmoothStep(ShooterStages::Stage4::EntranceRate(
+                    shooter.m_bossIntroductionTimer - 82 - i * 3, 42));
+            } else {
+                alpha = SmoothStep(ShooterStages::Stage4::TrafficFadeAlpha(
+                    shooter.m_bossIntroductionTimer));
+            }
+        }
+        if (alpha <= 0.0f) continue;
+
+        // 全部品を車体中心の同じ回転へ乗せて飛散中も一台の車として保つ
+        const float cosine = std::cos(tumble);
+        const float sine = std::sin(tumble);
+        const auto TumblePoint = [&](float partX, float partY, float partZ) {
+            const float dx = partX - Math::Lerp(sideX, railX, railWeight);
+            const float dy = partY - Math::Lerp(
+                sideY, RailRoadTopY + 0.52f * 0.5f, railWeight);
+            return Vector3 {x + dx * cosine - dy * sine,
+                y + dx * sine + dy * cosine, z + partZ - Math::Lerp(SideRoadZ - 0.24f, railZ, railWeight)};
+        };
         const float* bodyColor = i % 2 == 0 ? CarBodyColor : CarAccentColor;
+        const float fadedBodyColor[4] = {bodyColor[0], bodyColor[1], bodyColor[2], alpha};
         DrawModelPrimitive(renderer, camera, 1,
             x, y, z,
             Math::Lerp(sideBodyWidth, 2.25f, railWeight),
             Math::Lerp(sideBodyHeight, 0.52f, railWeight),
-            Math::Lerp(0.12f, 3.8f, railWeight), bodyColor);
+            Math::Lerp(0.12f, 3.8f, railWeight), fadedBodyColor, 0.0f, tumble);
 
         // 車体上へキャビンを積み、横向きのシルエットを作る
-        DrawModelPrimitive(renderer, camera, 1,
+        const Vector3 cabin = TumblePoint(
             Math::Lerp(sideX + sideDirection * sideBodyWidth * 0.10f, railX, railWeight),
             Math::Lerp(sideY + sideBodyHeight * 0.58f,
                 RailRoadTopY + 0.52f + 0.38f * 0.5f, railWeight),
-            Math::Lerp(SideRoadZ - 0.34f, railZ - 0.15f, railWeight),
+            Math::Lerp(SideRoadZ - 0.34f, railZ - 0.15f, railWeight));
+        const float cabinColor[4] = {BuildingColor[0], BuildingColor[1], BuildingColor[2], alpha};
+        DrawModelPrimitive(renderer, camera, 1, cabin.x, cabin.y, cabin.z,
             Math::Lerp(sideBodyWidth * 0.48f, 1.42f, railWeight),
             Math::Lerp(sideBodyHeight * 0.72f, 0.38f, railWeight),
-            Math::Lerp(0.08f, 1.85f, railWeight), BuildingColor);
+            Math::Lerp(0.08f, 1.85f, railWeight), cabinColor, 0.0f, tumble);
 
         // 2Dでは角張ったタイヤ、3Dへ入ると後部灯火になる同数の部品を描画する
         const float wheelColor[4] = {
             Math::Lerp(BuildingColor[0], LaneColor[0], railWeight),
             Math::Lerp(BuildingColor[1], LaneColor[1], railWeight),
             Math::Lerp(BuildingColor[2], LaneColor[2], railWeight),
-            1.0f
+            alpha
         };
         for (int side = -1; side <= 1; side += 2) {
-            DrawModelPrimitive(renderer, camera, 1,
+            const Vector3 wheel = TumblePoint(
                 Math::Lerp(sideX + static_cast<float>(side) * sideBodyWidth * 0.32f,
                     railX + static_cast<float>(side) * 0.67f, railWeight),
                 Math::Lerp(sideY - sideBodyHeight * 0.48f,
                     RailRoadTopY + 0.14f * 0.5f, railWeight),
-                Math::Lerp(SideRoadZ - 0.38f, railZ - 1.94f, railWeight),
+                Math::Lerp(SideRoadZ - 0.38f, railZ - 1.94f, railWeight));
+            DrawModelPrimitive(renderer, camera, 1, wheel.x, wheel.y, wheel.z,
                 Math::Lerp(sideBodyHeight * 0.56f, 0.24f, railWeight),
                 Math::Lerp(sideBodyHeight * 0.56f, 0.14f, railWeight),
-                Math::Lerp(0.06f, 0.10f, railWeight), wheelColor);
+                Math::Lerp(0.06f, 0.10f, railWeight), wheelColor, 0.0f, tumble);
         }
     }
 }
@@ -230,7 +269,8 @@ void SideScrollingShooter::CityBackgroundModule::DrawBackground2D(
 
     // Stage 4とStage 5で同じ横向きの2.5D道路を描画する
     DrawRoad(shooter, renderer, camera, backgroundHalfWidth, 0.0f);
-    if (shooter.m_stageNumber == 4 && !shooter.m_bossBattle) {
+    if (shooter.m_stageNumber == 4 && (!shooter.m_bossBattle ||
+        shooter.m_bossIntroductionPhase == BossIntroductionPhase::Entrance)) {
         DrawTruck(shooter, renderer, camera, 0.0f);
     }
 
@@ -315,7 +355,8 @@ void SideScrollingShooter::CityBackgroundModule::DrawBackground3D(
 
     // 両都市ステージを同じ2D終点からレール道路へ連続変形する
     DrawRoad(shooter, renderer, camera, sideBackgroundHalfWidth, railWeight);
-    if (shooter.m_stageNumber == 4 && !shooter.m_bossBattle) {
+    if (shooter.m_stageNumber == 4 && (!shooter.m_bossBattle ||
+        shooter.m_bossIntroductionPhase == BossIntroductionPhase::Entrance)) {
         DrawTruck(shooter, renderer, camera, railWeight);
     }
 
@@ -369,6 +410,15 @@ void SideScrollingShooter::CityBackgroundModule::DrawBackground3D(
 void SideScrollingShooter::CityBackgroundModule::DrawTruck(
     const SideScrollingShooter& shooter, Renderer& renderer,
     const Camera3D& camera, float railWeight) {
+    const float alpha = shooter.m_bossBattle ?
+        SmoothStep(ShooterStages::Stage4::TrafficFadeAlpha(
+            shooter.m_bossIntroductionTimer)) : 1.0f;
+    if (alpha <= 0.0f) return;
+    const float bodyColor[4] = {TruckBodyColor[0], TruckBodyColor[1], TruckBodyColor[2], alpha};
+    const float neonColor[4] = {TruckNeonColor[0], TruckNeonColor[1], TruckNeonColor[2], alpha};
+    const float accentColor[4] = {
+        TruckAccentColor[0], TruckAccentColor[1], TruckAccentColor[2], alpha};
+    const float cabinColor[4] = {BuildingColor[0], BuildingColor[1], BuildingColor[2], alpha};
     constexpr float SideRoadZ = SidePlaneZ + 13.55f;
     const float sideX = WrapNdcX(0.47f - shooter.m_scroll * 0.72f) * 18.0f;
     constexpr float SideY = -6.0f + TruckSideHeight * 0.5f;
@@ -385,19 +435,19 @@ void SideScrollingShooter::CityBackgroundModule::DrawTruck(
 
     // 荷台を道路から高く立ち上げ、大型トラックの箱型シルエットを作る
     DrawModelPrimitive(renderer, camera, 1,
-        x, y, z, width, height, depth, TruckBodyColor);
+        x, y, z, width, height, depth, bodyColor);
 
     // 車体後面を囲う発光フレームで暗い市街地でも外形を見失わないようにする
     const float frameZ = z - depth * 0.505f;
     const float frameThickness = Math::Lerp(0.12f, 0.18f, railWeight);
     DrawModelPrimitive(renderer, camera, 1,
         x, y + height * 0.47f, frameZ,
-        width, frameThickness, Math::Lerp(0.08f, 0.14f, railWeight), TruckAccentColor);
+        width, frameThickness, Math::Lerp(0.08f, 0.14f, railWeight), accentColor);
     for (int side = -1; side <= 1; side += 2) {
         DrawModelPrimitive(renderer, camera, 1,
             x + static_cast<float>(side) * width * 0.47f, y, frameZ,
             frameThickness, height, Math::Lerp(0.08f, 0.14f, railWeight),
-            TruckAccentColor);
+            accentColor);
     }
 
     // 発光帯を荷台正面から離し、同一深度面によるちらつきを防ぐ
@@ -405,10 +455,10 @@ void SideScrollingShooter::CityBackgroundModule::DrawTruck(
     const float stripeDepth = Math::Lerp(0.04f, 0.08f, railWeight);
     DrawModelPrimitive(renderer, camera, 1,
         x, y + height * 0.30f, stripeZ,
-        width * 0.96f, height * 0.12f, stripeDepth, TruckNeonColor);
+        width * 0.96f, height * 0.12f, stripeDepth, neonColor);
     DrawModelPrimitive(renderer, camera, 1,
         x, y - height * 0.28f, stripeZ,
-        width * 0.98f, height * 0.10f, stripeDepth, TruckAccentColor);
+        width * 0.98f, height * 0.10f, stripeDepth, accentColor);
 
     // 前部キャブと灯火を荷台手前の低い位置へ配置する
     const float cabZ = z - Math::Lerp(0.02f, depth * 0.34f, railWeight);
@@ -416,13 +466,13 @@ void SideScrollingShooter::CityBackgroundModule::DrawTruck(
         x, Math::Lerp(y, -3.55f + 1.15f, railWeight), cabZ,
         width * 0.88f, Math::Lerp(height * 0.48f, 2.3f, railWeight),
         Math::Lerp(0.20f, depth * 0.30f, railWeight),
-        BuildingColor);
+        cabinColor);
     for (int side = -1; side <= 1; side += 2) {
         DrawModelPrimitive(renderer, camera, 1,
             x + static_cast<float>(side) * width * 0.34f,
             y - height * 0.23f, z - depth * 0.51f,
             width * 0.12f, height * 0.13f, Math::Lerp(0.10f, 0.16f, railWeight),
-            TruckNeonColor);
+            neonColor);
     }
 }
 

@@ -327,7 +327,10 @@ private:
         bool bombAwarded = false;
     };
 
-    static constexpr int ShotCapacity = 128;
+    static constexpr int DefaultShotCapacity = 128;
+    static constexpr int Stage5ShotCapacity = 256;
+    static_assert(Stage5ShotCapacity > DefaultShotCapacity);
+    static constexpr int ShotCapacity = Stage5ShotCapacity;
     static constexpr int EnemyCapacity = 12;
     static constexpr int ItemCapacity = 48;
     static constexpr int ExplosionCapacity = ShotCapacity + 32;
@@ -577,6 +580,13 @@ private:
     void StartNextStage();
     void SpawnShot(float x, float y, float vx, float vy, bool enemy,
         float z = -1.0f, float railSpeed = -1.0f, int damage = 1);
+    /**
+     * @brief 現在のStageで使用できる弾プール容量を取得する
+     * @return Stage5では拡張容量、それ以外では標準容量
+     */
+    constexpr int ActiveShotCapacity() const {
+        return m_stageNumber == 5 ? Stage5ShotCapacity : DefaultShotCapacity;
+    }
     /**
      * @brief XYZ速度を指定して固定長プールへ弾を生成する
      * @param x 発射元ゲーム座標X

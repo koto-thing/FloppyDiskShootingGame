@@ -308,6 +308,9 @@
     <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3FunnelModelView.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5ModelTypes.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5ModelView.h">
       <Filter>Header Files</Filter>
     </ClInclude>

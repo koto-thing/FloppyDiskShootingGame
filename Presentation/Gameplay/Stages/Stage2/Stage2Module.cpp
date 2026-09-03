@@ -405,7 +405,8 @@ void SideScrollingShooter::Stage2Module::LaunchFunnel(
 
 void SideScrollingShooter::Stage2Module::SpawnFunnel(
     SideScrollingShooter& shooter, float x, float y, float z, bool delayedEngine) {
-    for (auto& shot : shooter.m_shots) {
+    for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+        auto& shot = shooter.m_shots[shotIndex];
         if (shot.active) continue;
         shot = {};
         shot.x = x;
@@ -443,7 +444,8 @@ void SideScrollingShooter::Stage2Module::SpawnFunnel(
 
 void SideScrollingShooter::Stage2Module::SpawnMissile(
     SideScrollingShooter& shooter, float x, float y, float z, float side) {
-    for (auto& shot : shooter.m_shots) {
+    for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+        auto& shot = shooter.m_shots[shotIndex];
         if (shot.active) continue;
         shot = {};
         shot.x = x;

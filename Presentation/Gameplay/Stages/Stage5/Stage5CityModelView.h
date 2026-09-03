@@ -4,7 +4,7 @@
 #include <cmath>
 #include <cstddef>
 
-#include "Stage5ModelView.h"
+#include "Stage5ModelTypes.h"
 
 /** @brief 添付FBXのシルエットを近似するNEO AIZU建築形状 */
 enum class Stage5BuildingType {

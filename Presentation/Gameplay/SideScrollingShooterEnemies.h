@@ -791,7 +791,8 @@ private:
      */
     static void SpawnStage2DelayedMissile(
         SideScrollingShooter& shooter, float x, float y, float z) {
-        for (auto& shot : shooter.m_shots) {
+        for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+            auto& shot = shooter.m_shots[shotIndex];
             if (shot.active) continue;
             shot = {};
             shot.x = x;

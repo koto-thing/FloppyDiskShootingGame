@@ -2,6 +2,41 @@
 
 namespace ShooterStages::Stage4 {
 
+inline constexpr int BossEntranceFrames = 3 * 60;
+inline constexpr int BossApproachFrames = 120;
+inline constexpr int TrafficFadeFrames = 72;
+
+/**
+ * @brief 登場演出用のフレーム値を0から1へ収める
+ * @param frame 現在フレーム
+ * @param duration 演出時間
+ * @return 0から1の進行率
+ */
+constexpr float EntranceRate(int frame, int duration) {
+    if (frame <= 0) return 0.0f;
+    if (frame >= duration) return 1.0f;
+    return static_cast<float>(frame) / static_cast<float>(duration);
+}
+
+/**
+ * @brief 車両ごとの蹴散らし進行率を取得する
+ * @param frame 登場演出の現在フレーム
+ * @param carIndex 車両番号
+ * @return 0から1の進行率
+ */
+constexpr float TrafficKickRate(int frame, int carIndex) {
+    return EntranceRate(frame - 10 - carIndex * 5, 48);
+}
+
+/**
+ * @brief 蹴散らされない交通車両の不透明度を取得する
+ * @param frame 登場演出の現在フレーム
+ * @return 0から1の不透明度
+ */
+constexpr float TrafficFadeAlpha(int frame) {
+    return 1.0f - EntranceRate(frame, TrafficFadeFrames);
+}
+
 /** @brief Stage 4ボスの主砲交換を含む戦闘フェーズ */
 enum class BossPhase {
     Phase1,

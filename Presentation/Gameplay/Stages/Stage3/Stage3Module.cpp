@@ -35,6 +35,7 @@ constexpr float SeaSerpentEyeColor[4] = {1.00f, 0.84f, 0.16f, 1.0f};
 constexpr float SeaSerpentMouthColor[4] = {0.08f, 0.015f, 0.02f, 1.0f};
 constexpr float SeaSerpentSideEyeSurfaceOffset = 0.90f;
 constexpr float SeaSerpentRailEyeSurfaceOffset = 1.70f;
+constexpr float SeaSerpentHitboxScale = 0.55f;
 constexpr int SeaSerpentCycleFrames = 420;
 constexpr int SeaSerpentWarningFrames = 90;
 constexpr int DawnStartFrame = 500;
@@ -141,10 +142,7 @@ constexpr float SeaSerpentWarningIntensity(int frame, int startFrame) {
 static_assert(SeaSerpentWarningIntensity(10, 100) == 0.0f);
 static_assert(SeaSerpentWarningIntensity(55, 100) == 0.5f);
 static_assert(SeaSerpentWarningIntensity(100, 100) == 1.0f);
-constexpr int ReflectFunnelMissileIntervalFrames = 10 * 60;
-constexpr int ReflectFunnelMissileLifetimeFrames = 8 * 60;
-constexpr float ReflectFunnelMissileSpeed = 0.045f;
-constexpr float ReflectFunnelMissileTurnRate = 0.015f;
+constexpr int ReflectFunnelMineIntervalFrames = 10 * 60;
 constexpr int ReflectFunnelSpinFrames = 30;
 constexpr Vector3 ReflectFunnelTargetLocal[ShooterStages::Stage3::ReflectFunnelCount] = {
     {-5.2f, -6.5f, -1.6f},
@@ -171,7 +169,8 @@ constexpr bool AreReflectFunnelTargetsInsideBarrier() {
     return true;
 }
 static_assert(AreReflectFunnelTargetsInsideBarrier());
-static_assert(ReflectFunnelMissileLifetimeFrames < ReflectFunnelMissileIntervalFrames);
+static_assert(ShooterStages::Stage3::FunnelMineLifetimeFrames <
+    ReflectFunnelMineIntervalFrames);
 
 /**
  * @brief 反射成立後の砲塔2回転Yawを取得する
@@ -274,6 +273,50 @@ const std::vector<int16_t>& BossPhase2MachineGunSound() {
         return Audio::SfxrGenerator::GeneratePCM(sound, BossSoundSampleRate);
     }();
     return pcm;
+}
+
+/**
+ * @brief Stage3ボスのバリア展開効果音を再生する
+ * @param audio 使用するオーディオサービス
+ * @return なし
+ */
+void PlayBossBarrierDeploySound(AudioService* audio) {
+    if (!audio) return;
+
+    // 上昇する鋸波で大型バリアの起動と展開を表現する
+    Audio::SfxrParams sound;
+    sound.waveType = Audio::SfxrWaveType::Sawtooth;
+    sound.attackTime = 0.08f;
+    sound.sustainTime = 0.48f;
+    sound.decayTime = 0.34f;
+    sound.startFrequency = 0.18f;
+    sound.minFrequency = 0.18f;
+    sound.slide = 0.32f;
+    sound.masterVolume = 0.58f;
+    audio->PlaySE(sound);
+}
+
+/**
+ * @brief Stage3ボスの破壊効果音を再生する
+ * @param audio 使用するオーディオサービス
+ * @param finalImpact 撃破演出の最終衝突の場合true
+ * @return なし
+ */
+void PlayBossDestructionSound(AudioService* audio, bool finalImpact) {
+    if (!audio) return;
+
+    // 低域ノイズを長く落として大型構造物の破砕音を作る
+    Audio::SfxrParams sound;
+    sound.waveType = Audio::SfxrWaveType::Noise;
+    sound.attackTime = 0.0f;
+    sound.sustainTime = finalImpact ? 0.44f : 0.24f;
+    sound.decayTime = finalImpact ? 0.96f : 0.52f;
+    sound.startFrequency = finalImpact ? 0.25f : 0.31f;
+    sound.minFrequency = 0.015f;
+    sound.slide = finalImpact ? -0.34f : -0.27f;
+    sound.masterVolume = finalImpact ? 0.96f : 0.78f;
+    audio->PlaySE(sound);
+    if (finalImpact) audio->PlayMMLSE("t68 o1 l2 v15 c g c");
 }
 
 /**
@@ -678,6 +721,7 @@ void SideScrollingShooter::Stage3Module::TickBoss(
         }
         boss.phase = BossPhase2Deploy;
         boss.motionAge = BossPhase2DeployFrames;
+        PlayBossBarrierDeploySound(shooter.m_audio);
         return;
     }
 
@@ -730,6 +774,7 @@ void SideScrollingShooter::Stage3Module::TickBoss(
         for (int i = 0; i < Stage3BossModelView::MissilePodCount; ++i) {
             ExplodeMount(Stage3BossModelView::MissilePodMount(i));
         }
+        PlayBossDestructionSound(shooter.m_audio, false);
         shooter.m_stage3 = {};
         boss.phase = BossPhase3Survival;
         boss.motionAge = Phase3SurvivalFrames;
@@ -813,7 +858,8 @@ void SideScrollingShooter::Stage3Module::TickBoss(
             const float dy = ToWorldY(destination.y - source.y);
             const float dz = shooter.IsRailGameplayActive() ? destination.z - source.z : 0.0f;
             const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
-            for (auto& shot : shooter.m_shots) {
+            for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+                auto& shot = shooter.m_shots[shotIndex];
                 if (shot.active) continue;
                 shot = {};
                 shot.x = source.x; shot.y = source.y; shot.z = source.z;
@@ -831,11 +877,11 @@ void SideScrollingShooter::Stage3Module::TickBoss(
         }
         if (firedReflectPass) shooter.PlayEnemyShotSound();
 
-        // 各ファンネル砲塔から10秒ごとに小型追尾ミサイルを1発ずつ放つ
+        // 各ファンネル砲塔から10秒ごとに静止型の空中機雷を1基ずつ設置する
         for (int owner = 0; owner < ShooterStages::Stage3::ReflectFunnelCount; ++owner) {
             const auto& source = shooter.m_stage3.reflectFunnels[owner];
-            if (!source.active || source.age < ReflectFunnelMissileIntervalFrames ||
-                source.age % ReflectFunnelMissileIntervalFrames != 0) continue;
+            if (!source.active || source.age < ReflectFunnelMineIntervalFrames ||
+                source.age % ReflectFunnelMineIntervalFrames != 0) continue;
             const Vector3 sourceWorld {ToWorldX(source.x), ToWorldY(source.y), source.z};
             const Vector3 playerWorld {ToWorldX(shooter.m_playerX),
                 ToWorldY(shooter.m_playerY),
@@ -852,12 +898,8 @@ void SideScrollingShooter::Stage3Module::TickBoss(
                 gunYaw, gunPitch, 0.0f);
             constexpr float FunnelScale = 1.6f;
             const Vector3 muzzle = sourceWorld + muzzleLocal * FunnelScale;
-            const float dx = playerWorld.x - muzzle.x;
-            const float dy = playerWorld.y - muzzle.y;
-            const float dz = playerWorld.z - muzzle.z;
-            const float length = (std::max)(0.001f,
-                std::sqrt(dx * dx + dy * dy + dz * dz));
-            for (auto& shot : shooter.m_shots) {
+            for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+                auto& shot = shooter.m_shots[shotIndex];
                 if (shot.active) continue;
                 shot = {};
                 shot.x = FromWorldX(muzzle.x);
@@ -865,15 +907,12 @@ void SideScrollingShooter::Stage3Module::TickBoss(
                 shot.z = muzzle.z;
                 shot.transitionSideX = shot.x;
                 shot.transitionSideY = shot.y;
-                shot.vx = FromWorldX(dx / length * ReflectFunnelMissileSpeed);
-                shot.vy = FromWorldY(dy / length * ReflectFunnelMissileSpeed);
-                shot.vz = dz / length * ReflectFunnelMissileSpeed;
-                shot.hitRadius = 0.030f;
+                shot.hitRadius = 0.090f;
                 shot.damage = 1;
                 shot.enemy = true;
                 shot.special = true;
                 shot.barrageIndex = owner;
-                shot.stage2.kind = ShooterStages::Stage2::ShotKind::FunnelMissile;
+                shot.stage2.kind = ShooterStages::Stage2::ShotKind::FunnelMine;
                 shot.active = true;
                 shooter.PlayMissileLaunchSound();
                 break;
@@ -1165,7 +1204,8 @@ void SideScrollingShooter::Stage3Module::FireBossPartBarrage(
             const float length = (std::max)(0.001f,
                 std::sqrt(dx * dx + dy * dy + dz * dz));
             const Vector3 direction {dx / length, dy / length, dz / length};
-            for (auto& shot : shooter.m_shots) {
+            for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+                auto& shot = shooter.m_shots[shotIndex];
                 if (shot.active) continue;
                 shot = {};
                 shot.x = FromWorldX(mount.x);
@@ -1283,7 +1323,8 @@ void SideScrollingShooter::Stage3Module::FireBossPartBarrage(
             (BossTurretMuzzleLocalOffset * transform.scale);
 
         // Stage2ファンネル外観を使う小型ミサイルを一基ずつ射出する
-        for (auto& shot : shooter.m_shots) {
+        for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+            auto& shot = shooter.m_shots[shotIndex];
             if (shot.active) continue;
             shot = {};
             shot.x = FromWorldX(muzzle.x);
@@ -1352,7 +1393,8 @@ void SideScrollingShooter::Stage3Module::FireBossMachineGun(
             (BossTurretMuzzleLocalOffset * transform.scale);
 
         // 通常敵弾モデルを小口径弾として固定長Poolへ追加する
-        for (auto& shot : shooter.m_shots) {
+        for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+            auto& shot = shooter.m_shots[shotIndex];
             if (shot.active) continue;
             shot = {};
             shot.x = FromWorldX(muzzle.x);
@@ -1377,21 +1419,12 @@ void SideScrollingShooter::Stage3Module::TickSpecialShotBeforeMove(
     SideScrollingShooter& shooter, Shot& shot) {
     if (!shot.enemy) return;
 
-    if (shot.stage2.kind == ShooterStages::Stage2::ShotKind::FunnelMissile) {
-        if (++shot.age >= ReflectFunnelMissileLifetimeFrames) {
+    if (shot.stage2.kind == ShooterStages::Stage2::ShotKind::FunnelMine) {
+        if (ShooterStages::Stage3::IsFunnelMineExpired(++shot.age)) {
+            shooter.SpawnExplosion(shot.x, shot.y, shot.z, true);
+            shooter.PlayHitSound();
             shot.active = false;
-            return;
         }
-        const float dx = ToWorldX(shooter.m_playerX - shot.x);
-        const float dy = ToWorldY(shooter.m_playerY - shot.y);
-        const float dz = shooter.IsRailGameplayActive() ? PlayerRailZ - shot.z : 0.0f;
-        const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
-        const float desiredVx = FromWorldX(dx / length * ReflectFunnelMissileSpeed);
-        const float desiredVy = FromWorldY(dy / length * ReflectFunnelMissileSpeed);
-        const float desiredVz = dz / length * ReflectFunnelMissileSpeed;
-        shot.vx += (desiredVx - shot.vx) * ReflectFunnelMissileTurnRate;
-        shot.vy += (desiredVy - shot.vy) * ReflectFunnelMissileTurnRate;
-        shot.vz += (desiredVz - shot.vz) * ReflectFunnelMissileTurnRate;
         return;
     }
 
@@ -1504,8 +1537,8 @@ bool SideScrollingShooter::Stage3Module::IsShotCullProtected(const Shot& shot) {
 
 float SideScrollingShooter::Stage3Module::EnemyShotHitRadius(
     const Shot& shot, bool railMode) {
-    if (shot.stage2.kind == ShooterStages::Stage2::ShotKind::FunnelMissile) {
-        return railMode ? 0.24f : 0.030f;
+    if (shot.stage2.kind == ShooterStages::Stage2::ShotKind::FunnelMine) {
+        return railMode ? 0.72f : 0.090f;
     }
     if (shot.stage2.kind != ShooterStages::Stage2::ShotKind::Funnel) {
         if (shot.stage2.kind == ShooterStages::Stage2::ShotKind::Missile) {
@@ -1523,13 +1556,21 @@ bool SideScrollingShooter::Stage3Module::CanEnemyShotDamagePlayer(const Shot& sh
 bool SideScrollingShooter::Stage3Module::DrawSpecialShot(
     const SideScrollingShooter& shooter, Renderer& renderer,
     const Camera3D& camera, const Shot& shot, float yaw) {
-    if (shot.stage2.kind == ShooterStages::Stage2::ShotKind::FunnelMissile) {
-        constexpr float Body[4] = {0.92f, 0.36f, 0.10f, 1.0f};
-        constexpr float Glow[4] = {1.00f, 0.72f, 0.18f, 0.85f};
-        DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
-            0.07f, 0.07f, 0.24f, Body, yaw);
-        DrawModelPrimitive(renderer, camera, 1, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
-            0.10f, 0.10f, 0.08f, Glow, yaw);
+    if (shot.stage2.kind == ShooterStages::Stage2::ShotKind::FunnelMine) {
+        constexpr float Body[4] = {0.18f, 0.16f, 0.13f, 1.0f};
+        constexpr float Spike[4] = {0.42f, 0.38f, 0.30f, 1.0f};
+        constexpr float Glow[4] = {1.00f, 0.22f, 0.05f, 0.90f};
+        const float x = ToWorldX(shot.x);
+        const float y = ToWorldY(shot.y);
+        const float pulse = 0.11f + std::sin(static_cast<float>(shot.age) * 0.12f) * 0.025f;
+        DrawModelPrimitive(renderer, camera, 5, x, y, shot.z,
+            0.72f, 0.72f, 0.72f, Body, yaw);
+        for (float angle : {0.0f, Math::HalfPi}) {
+            DrawModelPrimitive(renderer, camera, 4, x, y, shot.z,
+                0.82f, 0.15f, 0.15f, Spike, yaw + angle);
+        }
+        DrawModelPrimitive(renderer, camera, 5, x, y, shot.z,
+            pulse, pulse, pulse, Glow, yaw);
         return true;
     }
     if (shot.stage2.kind != ShooterStages::Stage2::ShotKind::ReflectPass &&
@@ -1604,6 +1645,19 @@ bool SideScrollingShooter::Stage3Module::HandleBossDefeat(
     shooter.m_viewToggleRequested = false;
     shooter.RequestViewMode(ViewMode::Side2D);
     return true;
+}
+
+void SideScrollingShooter::Stage3Module::TickBossDefeat(
+    SideScrollingShooter& shooter) {
+    if (!shooter.m_clear) return;
+
+    // 船体を穿つ二回の描画衝突と同じフレームで破壊音を鳴らす
+    const int defeatAge = BossDefeatSequenceFrames - shooter.m_clearTimer;
+    if (defeatAge == BossDefeatFirstImpactFrame) {
+        PlayBossDestructionSound(shooter.m_audio, false);
+    } else if (defeatAge == BossDefeatSecondImpactFrame) {
+        PlayBossDestructionSound(shooter.m_audio, true);
+    }
 }
 
 bool SideScrollingShooter::Stage3Module::DrawBossModel(
@@ -2427,8 +2481,10 @@ bool SideScrollingShooter::Stage3Module::HitsHazard(
             const float railY = -3.65f + (segment.elevation < railHeight ?
                 visibleHeight * 0.5f : segment.elevation - railHeight * 0.5f);
             const float movingRadius = radius * WorldXScale;
-            const float horizontalRadius = 1.25f * visibleScale + movingRadius;
-            const float verticalRadius = visibleHeight * 0.5f + movingRadius;
+            const float horizontalRadius =
+                1.25f * visibleScale * SeaSerpentHitboxScale + movingRadius;
+            const float verticalRadius =
+                visibleHeight * 0.5f * SeaSerpentHitboxScale + movingRadius;
             if (SideScrollingShooterShared::HitsEllipsoid(
                 ToWorldX(x) - segment.railX, ToWorldY(y) - railY,
                 z - segment.railZ, horizontalRadius, verticalRadius,
@@ -2443,8 +2499,10 @@ bool SideScrollingShooter::Stage3Module::HitsHazard(
             }
             const float visibleWidth = 1.18f * segment.scale *
                 std::sqrt(visibleHeight / sideHeight);
-            const float hitWidth = visibleWidth * 0.5f + radius * WorldXScale;
-            const float hitHeight = visibleHeight * 0.5f + radius * WorldYScale;
+            const float hitWidth =
+                visibleWidth * 0.5f * SeaSerpentHitboxScale + radius * WorldXScale;
+            const float hitHeight =
+                visibleHeight * 0.5f * SeaSerpentHitboxScale + radius * WorldYScale;
             const float dx = (ToWorldX(x) - segment.sideX) / hitWidth;
             const float sideY = -6.0f + (segment.elevation < sideHeight ?
                 visibleHeight * 0.5f : segment.elevation - sideHeight * 0.5f);

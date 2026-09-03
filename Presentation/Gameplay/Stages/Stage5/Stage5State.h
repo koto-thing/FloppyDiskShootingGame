@@ -104,7 +104,7 @@ inline constexpr float RooftopSurfaceY = -3.35f;
 inline constexpr float TayamaBossScale = 1.18f;
 inline constexpr float WallClimbHeight = 360.0f;
 inline constexpr float Part2SideEnemyEntryY = 2.35f;
-inline constexpr float Part2RailEnemyEntryY = 14.6f;
+inline constexpr float Part2RailEnemyEntryY = 68.0f;
 inline constexpr float Part2RailEnemyEntryStep = 0.45f;
 inline constexpr float Part2RailEnemyFallSpeed = 0.32f;
 inline constexpr float Part2RailEnemyPlaneZ = 35.0f;
@@ -292,7 +292,7 @@ static_assert(Part2RouteElapsedFrames(Phase::WallClimbLower, 0) == 0);
 static_assert(Part2RouteElapsedFrames(Phase::WallClimbMiddle, 0) == WallClimbLowerFrames);
 static_assert(Part2RouteElapsedFrames(Phase::WallClimbUpper, 0) ==
     WallClimbLowerFrames + WallClimbMiddleFrames);
-static_assert(Part2RailEnemyEntryY > 10.0f);
+static_assert(Part2RailEnemyEntryY > 60.0f);
 static_assert(Part2SideEnemyEntryY > 2.0f);
 static_assert(Part2RailEnemyFallSpeed > 0.0f);
 static_assert(Part2SideSceneryFallSpeed > 0.0f);

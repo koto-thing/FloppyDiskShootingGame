@@ -2,12 +2,21 @@
 #include <cmath>
 
 #include "../Presentation/Gameplay/Stages/Stage4/Stage4BossModelView.h"
+#include "../Presentation/Gameplay/Stages/Stage4/Stage4State.h"
 
 /**
  * @brief Stage4ボスの構成数、破壊単位、親Transform合成を検証する
  * @return なし
  */
 void RunStage4BossModelViewTests() {
+    // 登場時は接触車が順に飛散し、非接触車が演出前半で消えることを確認する
+    static_assert(ShooterStages::Stage4::TrafficKickRate(10, 0) == 0.0f);
+    static_assert(ShooterStages::Stage4::TrafficKickRate(58, 0) == 1.0f);
+    static_assert(ShooterStages::Stage4::TrafficKickRate(15, 1) == 0.0f);
+    static_assert(ShooterStages::Stage4::TrafficFadeAlpha(0) == 1.0f);
+    static_assert(ShooterStages::Stage4::TrafficFadeAlpha(
+        ShooterStages::Stage4::TrafficFadeFrames) == 0.0f);
+
     // 完全状態のPrimitive数と使用形状を数える
     int primitiveCount = 0;
     int shapeCounts[6] {};
@@ -150,6 +159,15 @@ void RunStage4BossModelViewTests() {
             });
         assert(weaponCount == WeaponPrimitiveCounts[weapon]);
     }
+
+    // 半壊主砲は固定基部と砲尾だけを残し、長砲身を描画しないことを確認する
+    int damagedCannonCount = 0;
+    Stage4BossModelView::DrawDamagedRomanceCannon({}, {},
+        [&](int, const Vector3&, const Vector3&, const float[4], float, float) {
+            ++damagedCannonCount;
+        });
+    assert(damagedCannonCount > 0);
+    assert(damagedCannonCount < Stage4BossModelView::RomanceCannonPrimitiveCount);
 
     // 共通マウントが親移動、Yaw、拡縮を反映して独立Transformになることを確認する
     const BossModelTransform mounted = Stage4BossModelView::MainWeaponMount(transform);

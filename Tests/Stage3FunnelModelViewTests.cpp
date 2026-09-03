@@ -15,6 +15,10 @@ void RunStage3FunnelModelViewTests() {
     for (const auto& funnel : state.reflectFunnels) assert(!funnel.active && funnel.hp == 0);
     for (const int cooldown : state.funnelPortCooldowns) assert(cooldown == 0);
 
+    // 空中機雷が5秒間残り、300フレーム目に自然爆発することを確認する
+    assert(!ShooterStages::Stage3::IsFunnelMineExpired(299));
+    assert(ShooterStages::Stage3::IsFunnelMineExpired(300));
+
     // 両モデルの描画数が宣言値と一致することを確認する
     auto countDraws = [](auto drawModel) {
         int count = 0;
