@@ -2,6 +2,7 @@
 
 #include "../Presentation/Gameplay/SideScrollingShooter.h"
 #include "../Presentation/Gameplay/Stages/Stage5/Stage5ModelView.h"
+#include "../Presentation/Gameplay/Stages/Stage5/Stage5CityModelView.h"
 
 /**
  * @brief Stage 5の状態順序と共有モデルTransformを検証する
@@ -55,4 +56,21 @@ void RunStage5ModelViewTests() {
         tayamaState, TayamaPartGroup::LeftFlightDeck);
     assert(before.valid && after.valid);
     assert((after.center - before.center).LengthSquared() > 1.0f);
+
+    // 全ビルと全広告が単体列挙でき、各ビルが有効な広告マウントを持つ
+    for (int building = 0; building < static_cast<int>(Stage5BuildingType::Count); ++building) {
+        const auto type = static_cast<Stage5BuildingType>(building);
+        int primitiveCount = 0;
+        Stage5CityModelView::VisitBuilding(type, Stage5ModelTransform {},
+            [&](PrimitiveShape, const Matrix4x4&, const ColorF&) { ++primitiveCount; });
+        assert(primitiveCount >= 20);
+        assert(Stage5CityModelView::MountCount(type) >= 2);
+        assert(Stage5CityModelView::SignMount(type, 0).transform.scale.x > 0.0f);
+    }
+    for (int ad = 0; ad < static_cast<int>(Stage5AdType::Count); ++ad) {
+        int primitiveCount = 0;
+        Stage5CityModelView::VisitAd(static_cast<Stage5AdType>(ad), Matrix4x4::Identity,
+            [&](PrimitiveShape, const Matrix4x4&, const ColorF&) { ++primitiveCount; });
+        assert(primitiveCount >= 5);
+    }
 }

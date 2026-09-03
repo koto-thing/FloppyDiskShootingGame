@@ -7,8 +7,10 @@
 
 #include "../../../../Engine/Graphics/Renderer.h"
 #include "../../SideScrollingShooterEnemies.h"
+#include "../../SideScrollingShooterShared.h"
 #include "../Common/StageDefinition.h"
 #include "Stage5ModelView.h"
+#include "Stage5CityModelView.h"
 
 namespace {
 constexpr float TowerFacadeColor[4] = { 0.10f, 0.13f, 0.24f, 1.0f };
@@ -16,6 +18,88 @@ constexpr float SatelliteLightColor[4] = { 0.82f, 0.94f, 1.0f, 1.0f };
 constexpr float SearchlightColor[4] = { 1.00f, 0.82f, 0.20f, 0.24f };
 constexpr float SearchlightLockedColor[4] = { 1.00f, 0.08f, 0.08f, 0.50f };
 constexpr float StormCloudColor[4] = { 0.05f, 0.07f, 0.13f, 1.0f };
+constexpr int RainCycle = 240;
+constexpr int RainFallSpeed = 4;
+constexpr int RainSplashDuration = 32;
+
+/**
+ * @brief 雨粒の落下位相を周期内へ折り返す
+ * @param index 雨粒番号
+ * @param frame 現在フレーム
+ * @return 0が接地、RainCycle未満が上空となる落下位相
+ */
+constexpr int RainFallPhase(int index, int frame) {
+    return (index * 83 + RainCycle - (frame * RainFallSpeed) % RainCycle) % RainCycle;
+}
+
+/**
+ * @brief 接地直後の経過位相を跳ね返り進行率へ変換する
+ * @param fallPhase 現在の落下位相
+ * @return 表示期間中は0から1、期間外は負数
+ */
+constexpr float RainSplashProgress(int fallPhase) {
+    const int age = (RainCycle - fallPhase) % RainCycle;
+    return age < RainSplashDuration ?
+        static_cast<float>(age) / static_cast<float>(RainSplashDuration) : -1.0f;
+}
+constexpr int CityBuildingCount = 30;
+constexpr float CityBuildingNdcSpacing = 2.0f / CityBuildingCount;
+
+/**
+ * @brief 値を横画面の循環範囲へ収める
+ * @param value 循環前の値
+ * @return -1以上1未満の値
+ */
+float WrapCityNdcX(float value) {
+    float wrapped = std::fmod(value + 1.0f, 2.0f);
+    if (wrapped < 0.0f) wrapped += 2.0f;
+    return wrapped - 1.0f;
+}
+
+/**
+ * @brief 値を正の距離範囲へ収める
+ * @param value 循環前の値
+ * @param length 循環距離
+ * @return 0以上length未満の値
+ */
+float WrapCityDistance(float value, float length) {
+    float wrapped = std::fmod(value, length);
+    if (wrapped < 0.0f) wrapped += length;
+    return wrapped;
+}
+
+/**
+ * @brief Stage 5進行状態から雨量を取得する
+ * @param phase 現在の進行状態
+ * @param chapter 現在のチャプター番号
+ * @param tayamaTransformation TAYAMA変形率
+ * @param phaseTimer 現在状態の経過フレーム数
+ * @return 0から1の雨量
+ */
+constexpr float RainIntensity(ShooterStages::Stage5::Phase phase, int chapter,
+    float tayamaTransformation, int phaseTimer) {
+    if (phase == ShooterStages::Stage5::Phase::Approach) {
+        return 0.22f + static_cast<float>(chapter - 1) * 0.27f;
+    }
+    if (phase <= ShooterStages::Stage5::Phase::EastsourceFall) return 1.0f;
+    if (phase <= ShooterStages::Stage5::Phase::WallClimbUpper) {
+        return 0.88f - tayamaTransformation * 0.28f;
+    }
+    if (phase <= ShooterStages::Stage5::Phase::TayamaFireControl) return 0.42f;
+    if (phase == ShooterStages::Stage5::Phase::TayamaLiftEngines) return 0.22f;
+    if (phase == ShooterStages::Stage5::Phase::TayamaCommandCore) {
+        return 0.22f * (1.0f - Math::Clamp01(static_cast<float>(phaseTimer) / 180.0f));
+    }
+    return 0.0f;
+}
+
+static_assert(RainIntensity(ShooterStages::Stage5::Phase::Approach, 1, 0.0f, 0) == 0.22f);
+static_assert(RainIntensity(ShooterStages::Stage5::Phase::EastsourceBattle, 3, 0.0f, 0) == 1.0f);
+static_assert(RainIntensity(ShooterStages::Stage5::Phase::TayamaCommandCore, 3, 1.0f, 180) == 0.0f);
+static_assert(RainFallPhase(0, 0) == 0);
+static_assert(RainFallPhase(0, 1) == RainCycle - RainFallSpeed);
+static_assert(RainSplashProgress(RainCycle - RainFallSpeed) == 0.125f);
+static_assert(RainSplashProgress(RainCycle - RainSplashDuration) < 0.0f);
 }
 
 /**
@@ -76,7 +160,7 @@ bool SideScrollingShooter::Stage5Module::ShouldDrawEnemy(
  */
 void SideScrollingShooter::Stage5Module::DrawOverlay2D(
     const SideScrollingShooter& shooter, Renderer& renderer) {
-    DrawWeather(shooter, renderer);
+    DrawScreenEffects(shooter, renderer);
 }
 
 /**
@@ -87,7 +171,7 @@ void SideScrollingShooter::Stage5Module::DrawOverlay2D(
  */
 void SideScrollingShooter::Stage5Module::DrawOverlay3D(
     const SideScrollingShooter& shooter, Renderer& renderer) {
-    DrawWeather(shooter, renderer);
+    DrawScreenEffects(shooter, renderer);
 }
 
 /**
@@ -222,6 +306,71 @@ bool SideScrollingShooter::Stage5Module::SpawnBossDebris(
             ++pieceNumber;
         });
     return true;
+}
+
+/**
+ * @brief 既存都市背景と同じ配置と寸法でStage5専用ビル群を描画する
+ * @param shooter 描画対象
+ * @param renderer 描画先
+ * @param camera 現在の3Dカメラ
+ * @param railWeight 横視点からレール視点への補間率
+ * @return なし
+ */
+void SideScrollingShooter::Stage5Module::DrawCityBuildings(
+    const SideScrollingShooter& shooter, Renderer& renderer,
+    const Camera3D& camera, float railWeight) {
+    constexpr float SideBackgroundZ = SidePlaneZ + 20.0f;
+    const float sideHalfHeight =
+        (SideBackgroundZ - SideScrollingShooterShared::SideCameraZ) *
+        std::tan(Math::ToRadians(SideScrollingShooterShared::SideCameraFieldOfView) * 0.5f) * 1.01f;
+    const float sideHalfWidth = sideHalfHeight * renderer.AspectRatio();
+
+    // 旧30棟と同じ循環位置、接地面、幅、高さ、奥行きをモデル全体の外形へ適用する
+    for (int index = 0; index < CityBuildingCount; ++index) {
+        const bool leftSide = index % 2 == 0;
+        const float sideX = WrapCityNdcX(
+            index * CityBuildingNdcSpacing - shooter.m_scroll * 0.18f) *
+            (sideHalfWidth + 2.0f);
+        const float sideWidth = 3.65f + static_cast<float>((index * 11) % 3) * 0.38f;
+        const float sideHeight = 3.8f + static_cast<float>((index * 17) % 5) * 1.18f;
+        const float railWidth = 4.2f + static_cast<float>(index % 3) * 0.8f;
+        const float railHeight = 9.0f + static_cast<float>((index * 17) % 5) * 2.4f;
+        const float width = Math::Lerp(sideWidth, railWidth, railWeight);
+        const float height = Math::Lerp(sideHeight, railHeight, railWeight);
+        const float depth = Math::Lerp(0.42f, 7.0f, railWeight);
+        const float x = Math::Lerp(sideX, leftSide ? -18.0f : 18.0f, railWeight);
+        const float groundY = Math::Lerp(-6.0f, -3.65f, railWeight);
+        const float z = Math::Lerp(SidePlaneZ + 13.7f,
+            10.0f + WrapCityDistance(
+                static_cast<float>(index * 29) - shooter.m_scroll * 36.0f, 100.0f),
+            railWeight);
+        const Stage5BuildingType building = static_cast<Stage5BuildingType>(
+            index % static_cast<int>(Stage5BuildingType::Count));
+        const Vector3 modelSize = Stage5CityModelView::ModelSize(building);
+        const Matrix4x4 root = Matrix4x4::Translation({x, groundY, z}) *
+            Matrix4x4::Scale({width / modelSize.x, height / modelSize.y, depth / modelSize.z});
+
+        // 既存の暗紺壁とシアン／マゼンタ系アクセントを保ったまま形状だけ差し替える
+        Stage5CityModelView::VisitBuilding(building, root,
+            [&](PrimitiveShape shape, const Matrix4x4& world, const ColorF& color) {
+                const float partColor[] = {color.r, color.g, color.b, color.a};
+                shooter.DrawModelPrimitive(renderer, camera,
+                    static_cast<int>(shape), world, partColor);
+            });
+
+        // 密度を崩さないよう3棟ごとに一つだけ独立広告をマウントする
+        if (index % 3 != 0) continue;
+        const Stage5SignMount mount = Stage5CityModelView::SignMount(building, 0);
+        const Matrix4x4 adWorld = root * Stage5ModelDetail::Matrix(mount.transform);
+        const Stage5AdType ad = static_cast<Stage5AdType>(
+            (index / 3) % static_cast<int>(Stage5AdType::Count));
+        Stage5CityModelView::VisitAd(ad, adWorld,
+            [&](PrimitiveShape shape, const Matrix4x4& world, const ColorF& color) {
+                const float partColor[] = {color.r, color.g, color.b, color.a};
+                shooter.DrawModelPrimitive(renderer, camera,
+                    static_cast<int>(shape), world, partColor);
+            });
+    }
 }
 
 /**
@@ -399,38 +548,103 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
 }
 
 /**
- * @brief Stage 5の雨、稲光、照準表示を画面空間へ描画する
+ * @brief Stage 5の雨粒を3D空間へ描画する
+ * @param shooter 描画対象
+ * @param renderer 描画先レンダラー
+ * @param camera 現在の3Dカメラ
+ * @param railWeight 横視点からレール視点への補間率
+ * @return なし
+ */
+void SideScrollingShooter::Stage5Module::DrawRain3D(const SideScrollingShooter& shooter,
+    Renderer& renderer, const Camera3D& camera, float railWeight) {
+    const float intensity = RainIntensity(shooter.m_stage5.phase, shooter.m_chapterNumber,
+        shooter.m_stage5.tayamaTransformation, shooter.m_stage5.phaseTimer);
+    const int rainCount = intensity > 0.0f ? static_cast<int>(32.0f + intensity * 64.0f) : 0;
+    const int frame = shooter.m_frame;
+    const float weight = Math::Clamp01(railWeight);
+
+    // 横視点は前景、中景、後景の3層とし、遷移に合わせて3D降雨域へ展開する
+    for (int index = 0; index < rainCount; ++index) {
+        constexpr float SideGroundY = -6.0f;
+        constexpr float RailGroundY = -3.65f;
+        const int fallPhase = RainFallPhase(index, frame);
+        const float fallRate = static_cast<float>(fallPhase) / static_cast<float>(RainCycle);
+        const int sideColumn = (index * 137 + frame * 2) % 340;
+        const float streakLength = 0.80f + static_cast<float>(index % 5) * 0.18f;
+        const float railStreakLength = streakLength * 1.55f;
+        const float sideZ = SidePlaneZ - 3.0f + static_cast<float>(index % 3) * 4.0f;
+        const Vector3 sidePosition {
+            -17.0f + static_cast<float>(sideColumn) * 0.1f,
+            SideGroundY + streakLength * 0.5f + fallRate * 15.0f,
+            sideZ
+        };
+
+        const int railColumn = (index * 137 + frame * 2) % 400;
+        const float railZ = -2.0f + static_cast<float>((index * 197) % 960) * 0.1f;
+        const Vector3 railPosition {
+            -20.0f + static_cast<float>(railColumn) * 0.1f,
+            RailGroundY + railStreakLength * 0.5f + fallRate * 24.0f,
+            railZ
+        };
+
+        const float thickness = 0.045f + intensity * 0.025f;
+        const Vector3 scale {
+            thickness,
+            Math::Lerp(streakLength, railStreakLength, weight),
+            thickness
+        };
+        const Vector3 rotation {Math::Lerp(0.0f, 0.08f, weight), 0.0f,
+            -0.18f - static_cast<float>(index % 3) * 0.025f};
+        const float rainColor[] = {0.50f, 0.72f, 0.90f, 0.16f + intensity * 0.34f};
+        shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
+            Vector3::Lerp(sidePosition, railPosition, weight), scale, rotation, rainColor);
+
+        // 落下位相が地面を折り返した直後だけ小さなBox雨粒を跳ね上げる
+        const float splashProgress = RainSplashProgress(fallPhase);
+        if (splashProgress < 0.0f) continue;
+        const int framesSinceImpact =
+            ((RainCycle - fallPhase) % RainCycle + RainFallSpeed - 1) / RainFallSpeed;
+        const int sideImpactColumn =
+            (sideColumn + 340 - framesSinceImpact * 2) % 340;
+        const int railImpactColumn =
+            (railColumn + 400 - framesSinceImpact * 2) % 400;
+        const float arc = std::sin(splashProgress * Math::Pi);
+        const float particleSize = Math::Lerp(0.09f, 0.035f, splashProgress);
+        const float splashColor[] = {
+            0.58f, 0.78f, 0.96f, intensity * (1.0f - splashProgress) * 0.62f
+        };
+        for (int particle = 0; particle < 4; ++particle) {
+            const float direction = static_cast<float>(particle) - 1.5f;
+            const Vector3 sideSplash {
+                -17.0f + static_cast<float>(sideImpactColumn) * 0.1f +
+                    direction * splashProgress * 0.24f,
+                SideGroundY + particleSize * 0.5f + arc *
+                    (0.28f + static_cast<float>(particle % 2) * 0.12f),
+                sideZ + (particle % 2 == 0 ? -1.0f : 1.0f) * splashProgress * 0.16f
+            };
+            const Vector3 railSplash {
+                -20.0f + static_cast<float>(railImpactColumn) * 0.1f +
+                    direction * splashProgress * 0.42f,
+                RailGroundY + particleSize * 0.5f + arc *
+                    (0.42f + static_cast<float>(particle % 2) * 0.18f),
+                railZ + direction * splashProgress * 0.28f
+            };
+            shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
+                Vector3::Lerp(sideSplash, railSplash, weight),
+                {particleSize, particleSize, particleSize}, {}, splashColor);
+        }
+    }
+}
+
+/**
+ * @brief Stage 5の稲光と照準表示を画面空間へ描画する
  * @param shooter 更新対象
  * @param renderer 描画先レンダラー
  * @return なし
  */
-void SideScrollingShooter::Stage5Module::DrawWeather(const SideScrollingShooter& shooter, Renderer& renderer) {
-    float intensity = 0.0f;
-    if (shooter.m_stage5.phase == Stage5Phase::Approach) {
-        intensity = 0.22f + static_cast<float>(shooter.m_chapterNumber - 1) * 0.27f;
-    } else if (shooter.m_stage5.phase <= Stage5Phase::EastsourceFall) {
-        intensity = 1.0f;
-    } else if (shooter.m_stage5.phase <= Stage5Phase::WallClimbUpper) {
-        intensity = 0.88f - shooter.m_stage5.tayamaTransformation * 0.28f;
-    } else if (shooter.m_stage5.phase <= Stage5Phase::TayamaFireControl) {
-        intensity = 0.42f;
-    } else if (shooter.m_stage5.phase == Stage5Phase::TayamaLiftEngines) {
-        intensity = 0.22f;
-    } else if (shooter.m_stage5.phase == Stage5Phase::TayamaCommandCore) {
-        intensity = 0.22f * (1.0f - Math::Clamp01(static_cast<float>(shooter.m_stage5.phaseTimer) / 180.0f));
-    }
-
-    // 最大96本の決定的な横殴り雨を画面空間へ流す
-    const int rainCount = intensity > 0.0f ? static_cast<int>(32.0f + intensity * 64.0f) : 0;
-    for (int index = 0; index < rainCount; ++index) {
-        const int phase = (index * 73 + shooter.m_frame * (3 + index % 3)) % 220;
-        const int row = (index * 47 + shooter.m_frame * (5 + index % 2)) % 210;
-        const float x = -1.10f + static_cast<float>(phase) * 0.010f;
-        const float y = 1.05f - static_cast<float>(row) * 0.010f;
-        const float rainColor[] = {0.50f, 0.72f, 0.90f, 0.16f + intensity * 0.34f};
-        shooter.DrawShape(renderer, x, y, 0.004f + intensity * 0.002f,
-            0.035f + intensity * 0.055f, rainColor);
-    }
+void SideScrollingShooter::Stage5Module::DrawScreenEffects(const SideScrollingShooter& shooter, Renderer& renderer) {
+    const float intensity = RainIntensity(shooter.m_stage5.phase, shooter.m_chapterNumber,
+        shooter.m_stage5.tayamaTransformation, shooter.m_stage5.phaseTimer);
 
     // 稲光はTAYAMAの輪郭と警告灯を一瞬だけ強調する
     if (intensity > 0.30f && ((shooter.m_frame % 241) < 3 || ((shooter.m_frame + 73) % 389) < 2)) {

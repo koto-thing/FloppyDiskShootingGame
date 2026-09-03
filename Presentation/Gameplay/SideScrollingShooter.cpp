@@ -22,10 +22,23 @@ constexpr float PowerAfterRestart(float power) {
     return power > 1.0f ? power - 1.0f : 0.0f;
 }
 
+/**
+ * @brief 敵出現数と撃破数からボムボーナスの獲得条件を判定する
+ * @param defeatCount 敵撃破数
+ * @param spawnCount 敵出現数
+ * @return せん滅率が90%以上の場合true
+ */
+constexpr bool EarnsChapterBombBonus(int defeatCount, int spawnCount) {
+    return spawnCount > 0 && defeatCount * 10 >= spawnCount * 9;
+}
+
 static_assert(PowerAfterRestart(3.25f) == 2.25f);
 static_assert(PowerAfterRestart(0.75f) == 0.0f);
+static_assert(EarnsChapterBombBonus(9, 10));
+static_assert(!EarnsChapterBombBonus(8, 9));
+static_assert(!EarnsChapterBombBonus(0, 0));
 
-/** @brief 先頭無音を除去した無線風の自機撃破音声を取得する @return 44100Hz PCMデータ */
+/** @brief 無線風に加工した自機撃破音声を取得する @return 44100Hz PCMデータ */
 const std::vector<std::int16_t>& MomijiDeathVoice() {
     static const auto voice = VoiceCodec::DecodeRadioForAudioService(VoiceSamples::momijiDeath);
     return voice;
@@ -176,6 +189,7 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
     m_invincible = 90;
     m_score = 0;
     m_kills = 0;
+    m_bombCount = InitialBombCount;
     m_bossHp = 0;
     m_displayBossHp = 0.0f;
     m_bossStoryLine = 0;
@@ -507,6 +521,9 @@ void SideScrollingShooter::TickChapterExitEnemies() {
 void SideScrollingShooter::FinishChapter() {
     m_chapterResult.retryCount = m_chapterRetryCounts[m_chapterNumber - 1];
     m_chapterResult.totalScore = CalculateChapterTotalScore(m_chapterResult);
+    m_chapterResult.bombAwarded = EarnsChapterBombBonus(
+        m_chapterResult.enemyDefeatCount, m_chapterResult.enemySpawnCount);
+    if (m_chapterResult.bombAwarded) ++m_bombCount;
     m_chapterResultTimer = 0;
     m_chapterResultActive = true;
 
@@ -816,6 +833,7 @@ void SideScrollingShooter::StartNextStage() {
     ++m_stageNumber;
 
     // スコアと残機を維持したまま、次のステージ用に戦闘オブジェクトを初期化する
+    m_bombCount = (std::max)(m_bombCount, InitialBombCount);
     m_shots = {};
     m_enemies = {};
     m_explosions = {};
@@ -859,10 +877,12 @@ void SideScrollingShooter::DamagePlayer() {
     if (StageDispatch::IsPlayerDamageIgnored(*this)) return;
     if (m_playerDestructionTimer > 0) return;
 
+    // 被弾成立と同時に撃破音声を開始する
+    if (m_audio) m_audio->PlaySE(MomijiDeathVoice());
+
     // 敵撃破と同じ破壊爆発を自機位置へ生成してから復帰を待つ
     SpawnExplosion(m_playerX, m_playerY, PlayerRailZ, true);
     PlayHitSound();
-    if (m_audio) m_audio->PlaySE(MomijiDeathVoice());
     m_playerDestructionTimer = PlayerDestructionWaitFrames;
 }
 

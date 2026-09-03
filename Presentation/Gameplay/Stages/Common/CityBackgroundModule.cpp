@@ -37,7 +37,10 @@ constexpr float Stage4SideRoadBottomY = -11.3f;
 constexpr float Stage4UpperTrafficY = -7.15f;
 constexpr float Stage4LaneDividerY = -8.65f;
 constexpr float Stage4LowerTrafficY = -9.65f;
+constexpr int CityBuildingCount = 30;
+constexpr float CityBuildingNdcSpacing = 2.0f / CityBuildingCount;
 static_assert(TruckRailCycleLength > 120.0f);
+static_assert(CityBuildingCount * CityBuildingNdcSpacing == 2.0f);
 static_assert(Stage4SideRoadTopY > Stage4UpperTrafficY &&
     Stage4UpperTrafficY > Stage4LaneDividerY &&
     Stage4LaneDividerY > Stage4LowerTrafficY &&
@@ -238,8 +241,10 @@ void SideScrollingShooter::CityBackgroundModule::DrawBackground2D(
         DrawTruck(shooter, renderer, camera, 0.0f);
     }
 
-    for (int i = 0; i < 30; ++i) {
-        const float x = WrapNdcX(i * 0.035f - shooter.m_scroll * 0.18f) *
+    // Stage5のビル群は専用モデルで同じ配置枠へ描画する
+    if (shooter.m_stageNumber == 5) return;
+    for (int i = 0; i < CityBuildingCount; ++i) {
+        const float x = WrapNdcX(i * CityBuildingNdcSpacing - shooter.m_scroll * 0.18f) *
             (backgroundHalfWidth + 2.0f);
         const float width = 3.65f + static_cast<float>((i * 11) % 3) * 0.38f;
         const float height = 3.8f + static_cast<float>((i * 17) % 5) * 1.18f;
@@ -355,9 +360,11 @@ void SideScrollingShooter::CityBackgroundModule::DrawBackground3D(
         DrawTruck(shooter, renderer, camera, railWeight);
     }
 
-    for (int i = 0; i < 30; ++i) {
+    // Stage5のビル群は専用モデルで同じ配置枠へ描画する
+    if (shooter.m_stageNumber == 5) return;
+    for (int i = 0; i < CityBuildingCount; ++i) {
         const bool leftSide = i % 2 == 0;
-        const float sideX = WrapNdcX(i * 0.035f - shooter.m_scroll * 0.18f) *
+        const float sideX = WrapNdcX(i * CityBuildingNdcSpacing - shooter.m_scroll * 0.18f) *
             (sideBackgroundHalfWidth + 2.0f);
         const float sideWidth = 3.65f + static_cast<float>((i * 11) % 3) * 0.38f;
         const float sideHeight = 3.8f + static_cast<float>((i * 17) % 5) * 1.18f;
