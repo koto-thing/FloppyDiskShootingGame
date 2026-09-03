@@ -1011,14 +1011,15 @@ void SideScrollingShooter::SpawnExplosion(
  * @param x 2D座標系のX座標
  * @param y 2D座標系のY座標
  * @param z 3Dレール座標系のZ座標
+ * @param hitRadius 爆破当たり判定半径
  * @return なし
  */
-void SideScrollingShooter::SpawnMortarExplosion(float x, float y, float z) {
+void SideScrollingShooter::SpawnMortarExplosion(float x, float y, float z, float hitRadius) {
     for (auto& explosion : m_explosions) {
         if (explosion.active) continue;
         explosion = {
             x, y, IsRailGameplayActive() ? z : ToRailZFromSideX(x),
-            0, false, true, 1, 0.55f
+            0, false, true, 1, hitRadius
         };
         return;
     }

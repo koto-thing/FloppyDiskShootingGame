@@ -14,6 +14,7 @@
 #include "Stage4EnemySheetNormal.h"
 #include "Stage4WeaponDroneView.h"
 #include "../Common/CityBackgroundModule.h"
+#include "../../GameplayRandom.h"
 
 using ShooterStages::Stage4::ShotKind;
 using Stage4Logic = ShooterStages::Stage4::State;
@@ -25,14 +26,22 @@ using Stage4SwapConfig = ShooterStages::Stage4::WeaponSwapConfig;
 
 namespace {
 
+// Boss4の攻撃の調整値
 constexpr float Stage4BossScale = 1.00f;
 constexpr float Stage4ModelYawOffset = -Math::HalfPi;
 constexpr float Stage4TrackWheelRadius = 0.74f;
-constexpr float Stage4CannonballSpeed = 0.56f;
+constexpr float Stage4CannonballSpeed = 0.7f;
 constexpr float Stage4CannonballGravity = 0.00135f;
+constexpr float Stage4SiegeMortarPitchRate = Math::Pi * 1.4f / 180.0f;
+constexpr float Stage4SiegeMortarYawRate = Math::Pi * 1.8f / 180.0f;
 constexpr float Stage4CannonMuzzleDistance = 4.47f;
-constexpr float Stage4CannonballRailRadius = 0.52f;
 constexpr float Stage4CannonballSideRadius = 0.075f;
+constexpr float Stage4GiantCannonballSideRadius = 0.150f;
+constexpr float Stage4GiantExplosionRadius = 0.65f;
+constexpr float Stage4RomanceCannonballSpeed = 1.00f;
+constexpr float Stage4RomanceCannonballSideRadius = 0.320f;
+constexpr float Stage4RomanceExplosionRadius = 1.25f;
+constexpr int Stage4RomanceCannonRecoilFrames = 158;
 constexpr float Stage4RailGroundGameY = -0.829545f;
 constexpr float Stage4BodyHitRadius = 3.35f;
 constexpr int Stage4MainCannonRecoilFrames = 30;
@@ -51,6 +60,30 @@ constexpr Vector3 Stage4SecondaryGunLocal[] = {
 };
 constexpr float Stage4MainCannonHitRadius = 1.45f;
 constexpr float Stage4SecondaryGunHitRadius = 0.82f;
+
+/** @brief 表示モード別の迫撃砲攻撃設定 */
+struct Stage4SiegeMortarConfig {
+    float normalSpeed;
+    float giantSpeed;
+    float minPitch;
+    float maxPitch;
+    float minYaw;
+    float maxYaw;
+};
+
+constexpr Stage4SiegeMortarConfig Stage4SiegeMortarSideConfig {
+    0.20f, 0.35f,
+    Stage4BossModelView::SiegeMortarMinPitch,
+    Stage4BossModelView::SiegeMortar2DMaxPitch,
+    0.0f, 0.0f
+};
+constexpr Stage4SiegeMortarConfig Stage4SiegeMortarRailConfig {
+    0.7f, 0.80f,
+    Stage4BossModelView::SiegeMortarMinPitch,
+    Stage4BossModelView::SiegeMortar3DMaxPitch,
+    -Math::Pi * 10.0f / 180.0f,
+    Math::Pi * 10.0f / 180.0f
+};
 
 /** @brief 交換工程に対応する継続フレーム数を取得する @param state 工程 @param config 演出設定 @return 継続フレーム数 */
 int SwapStateFrames(Stage4SwapState state, const Stage4SwapConfig& config) {
@@ -77,6 +110,67 @@ Stage4MainWeaponType ViewWeaponType(Stage4Weapon weapon) {
     case Stage4Weapon::RomanceCannon: return Stage4MainWeaponType::RomanceCannon;
     default: return Stage4MainWeaponType::Phase1Cannon;
     }
+}
+
+/** @brief 表示モードに対応する迫撃砲設定を取得する @param railMode 3D表示中か @return 迫撃砲設定 */
+constexpr Stage4SiegeMortarConfig SiegeMortarConfig(bool railMode) {
+    return railMode ? Stage4SiegeMortarRailConfig : Stage4SiegeMortarSideConfig;
+}
+
+/** @brief 論理主砲に対応する現在姿勢を取得する @param state Stage 4状態 @param weapon 論理主砲種別 @return 主砲姿勢 */
+Stage4MainWeaponPose WeaponPose(const Stage4Logic& state, Stage4Weapon weapon, bool railMode) {
+    const Stage4MainWeaponType weaponType = ViewWeaponType(weapon);
+    Stage4MainWeaponPose pose = Stage4BossModelView::DefaultMainWeaponPose(weaponType);
+    if (weapon == Stage4Weapon::SiegeMortar) {
+        const Stage4SiegeMortarConfig config = SiegeMortarConfig(railMode);
+        pose.barrelPitch = (std::clamp)(state.siegeMortarPitch,
+            config.minPitch, config.maxPitch);
+        pose.localYaw = railMode ? (std::clamp)(state.siegeMortarYaw,
+            config.minYaw, config.maxYaw) : 0.0f;
+    }
+    return pose;
+}
+
+/** @brief 迫撃砲の姿勢から発射速度を作る @param baseYaw 車体基準Yaw @param yawOffset 主砲左右角 @param pitch 主砲仰角 @param speed 発射速度 @return ワールド弾速 */
+Vector3 SiegeMortarVelocity(float baseYaw, float yawOffset, float pitch, float speed) {
+    const float horizontalSpeed = speed * std::cos(pitch);
+    const float yaw = baseYaw + yawOffset;
+    return {
+        -horizontalSpeed * std::cos(yaw),
+        speed * std::sin(pitch),
+        horizontalSpeed * std::sin(yaw)
+    };
+}
+
+/** @brief Phase1主砲の自機追尾方向を可動仰角内に丸める @param delta 支点から目標への差分 @param baseYaw 車体正面Yaw @param tracksYaw Yaw追尾する場合true @return 砲身方向 */
+Vector3 Phase1CannonDirection(const Vector3& delta, float baseYaw, bool tracksYaw) {
+    const float forwardX = -std::cos(baseYaw);
+    const float forwardZ = std::sin(baseYaw);
+    const float horizontal = (std::max)(0.001f, tracksYaw ?
+        std::sqrt(delta.x * delta.x + delta.z * delta.z) :
+        std::abs(delta.x * forwardX + delta.z * forwardZ));
+    const float length = (std::max)(0.001f,
+        std::sqrt(horizontal * horizontal + delta.y * delta.y));
+    const float yaw = tracksYaw ? std::atan2(delta.z, -delta.x) : baseYaw;
+    const float elevation = (std::clamp)(std::asin(delta.y / length),
+        Stage4BossModelView::Phase1CannonMinElevation,
+        Stage4BossModelView::Phase1CannonMaxElevation);
+    const float pitchCosine = std::cos(elevation);
+    return {
+        -std::cos(yaw) * pitchCosine,
+        std::sin(elevation),
+        std::sin(yaw) * pitchCosine
+    };
+}
+
+/** @brief Phase1主砲の発射速度を取得する @param direction 砲身方向 @param railMode 3D表示中か @return 発射速度 */
+Vector3 Phase1CannonVelocity(const Vector3& direction, bool railMode) {
+    if (!railMode || std::abs(direction.z) <= 0.0001f) {
+        return direction * Stage4CannonballSpeed;
+    }
+
+    // 3D中は奥行き方向の進行速度を通常主砲の基準速度に合わせる
+    return direction * (Stage4CannonballSpeed / std::abs(direction.z));
 }
 
 /** @brief 親Transformのローカル方向へ位置をずらす @param transform 基準Transform @param offset ローカル移動量 @return 移動後Transform */
@@ -149,6 +243,39 @@ bool SideScrollingShooter::Stage4Module::TickWeaponSwap(
 bool SideScrollingShooter::Stage4Module::IsWeaponSwapActive(
     const SideScrollingShooter& shooter) {
     return shooter.m_stage4.swapState != Stage4SwapState::None;
+}
+
+void SideScrollingShooter::Stage4Module::TickSiegeMortarAim(SideScrollingShooter& shooter) {
+    Stage4Logic& state = shooter.m_stage4;
+    if (state.currentWeapon != Stage4Weapon::SiegeMortar) return;
+    const bool railMode = shooter.IsRailGameplayActive();
+    const Stage4SiegeMortarConfig config = SiegeMortarConfig(railMode);
+
+    // 射撃後に決まった目標仰角へ一定速度で砲身を動かす
+    state.siegeMortarPitch = (std::clamp)(state.siegeMortarPitch,
+        config.minPitch, config.maxPitch);
+    state.siegeMortarTargetPitch = (std::clamp)(state.siegeMortarTargetPitch,
+        config.minPitch, config.maxPitch);
+    const float delta = state.siegeMortarTargetPitch - state.siegeMortarPitch;
+    if (std::abs(delta) <= Stage4SiegeMortarPitchRate) {
+        state.siegeMortarPitch = state.siegeMortarTargetPitch;
+    } else {
+        state.siegeMortarPitch += delta > 0.0f ?
+            Stage4SiegeMortarPitchRate : -Stage4SiegeMortarPitchRate;
+    }
+
+    // 3D表示中だけ正面基準の左右旋回を行う
+    state.siegeMortarYaw = (std::clamp)(state.siegeMortarYaw,
+        config.minYaw, config.maxYaw);
+    state.siegeMortarTargetYaw = railMode ? (std::clamp)(state.siegeMortarTargetYaw,
+        config.minYaw, config.maxYaw) : 0.0f;
+    const float yawDelta = state.siegeMortarTargetYaw - state.siegeMortarYaw;
+    if (std::abs(yawDelta) <= Stage4SiegeMortarYawRate) {
+        state.siegeMortarYaw = state.siegeMortarTargetYaw;
+    } else {
+        state.siegeMortarYaw += yawDelta > 0.0f ?
+            Stage4SiegeMortarYawRate : -Stage4SiegeMortarYawRate;
+    }
 }
 
 bool SideScrollingShooter::Stage4Module::HandleBossPhaseAfterDamage(
@@ -293,6 +420,9 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
     aimedTransform.secondaryGunsTrackTarget = true;
     aimedTransform.mainGunTracksTarget = swap.currentWeapon == Stage4Weapon::Phase1Cannon &&
         swap.swapState == Stage4SwapState::None && enemy.phase <= 0.0f;
+    aimedTransform.mainGunTracksYaw = shooter.IsRailGameplayActive();
+    aimedTransform.mainGunMinElevation = Stage4BossModelView::Phase1CannonMinElevation;
+    aimedTransform.mainGunMaxElevation = Stage4BossModelView::Phase1CannonMaxElevation;
     aimedTransform.trackRoll = (shooter.IsRailGameplayActive() ?
         enemy.z - enemy.baseZ : ToWorldX(enemy.x - enemy.baseX)) /
         Stage4TrackWheelRadius;
@@ -324,7 +454,7 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
         }
         const Stage4MainWeaponType outgoingType = ViewWeaponType(swap.outgoingWeapon);
         const Stage4MainWeaponPose outgoingPose =
-            Stage4BossModelView::DefaultMainWeaponPose(outgoingType);
+            WeaponPose(swap, swap.outgoingWeapon, shooter.IsRailGameplayActive());
         Stage4BossModelView::DrawMainWeapon(outgoingType, outgoingTransform,
             outgoingPose, DrawBossPart, state.mainCannonHit);
 
@@ -382,7 +512,7 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
         incomingTransform = OffsetTransform(incomingTransform, offset);
         const Stage4MainWeaponType incomingType = ViewWeaponType(swap.incomingWeapon);
         const Stage4MainWeaponPose incomingPose =
-            Stage4BossModelView::DefaultMainWeaponPose(incomingType);
+            WeaponPose(swap, swap.incomingWeapon, shooter.IsRailGameplayActive());
         Stage4BossModelView::DrawMainWeapon(
             incomingType, incomingTransform, incomingPose, DrawBossPart);
 
@@ -482,7 +612,8 @@ void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
 
         if (part == BossNose) {
             SpawnMainCannonball(shooter, boss);
-            boss.recoilAge = Stage4MainCannonRecoilFrames;
+            boss.recoilAge = shooter.m_stage4.currentWeapon == Stage4Weapon::RomanceCannon ?
+                Stage4RomanceCannonRecoilFrames : Stage4MainCannonRecoilFrames;
             continue;
         }
 
@@ -564,10 +695,11 @@ void SideScrollingShooter::Stage4Module::TickSpecialShotAfterMove(
     const bool hitGround = previousY > groundY && shot.y <= groundY;
     const bool hitEdge = shooter.IsRailGameplayActive() ?
         (shot.z <= 0.0f || shot.z >= 72.0f ||
-            std::abs(shot.x) >= 1.2f || std::abs(shot.y) >= 1.24f) :
+            std::abs(shot.x) >= 1.2f ||
+            (!shot.stage4.gravity && std::abs(shot.y) >= 1.24f)) :
         (shot.x <= Side2DPlayerMinX || shot.x >= Side2DPlayerMaxX ||
-            shot.y >= Side2DPlayerMaxY);
-    const bool hitPlayerZ = shooter.IsRailGameplayActive() &&
+            (!shot.stage4.gravity && shot.y >= Side2DPlayerMaxY));
+    const bool hitPlayerZ = shot.stage4.detonateAtPlayerZ && shooter.IsRailGameplayActive() &&
         ((previousZ <= PlayerRailZ && shot.z >= PlayerRailZ) ||
             (previousZ >= PlayerRailZ && shot.z <= PlayerRailZ));
     if (!hitGround && !hitEdge && !hitPlayerZ) return;
@@ -598,7 +730,8 @@ void SideScrollingShooter::Stage4Module::TickSpecialShotAfterMove(
     }
 
     shooter.SpawnMortarExplosion(
-        shot.x, hitGround && !impactAtPlayerZ ? groundY : shot.y, impactZ);
+        shot.x, hitGround && !impactAtPlayerZ ? groundY : shot.y,
+        impactZ, shot.stage4.explosionRadius);
     shot.active = false;
 }
 
@@ -611,7 +744,7 @@ float SideScrollingShooter::Stage4Module::EnemyShotHitRadius(
     if (shot.stage4.kind != ShotKind::Cannonball) {
         return railMode ? 0.28f : 0.022f;
     }
-    return railMode ? Stage4CannonballRailRadius : Stage4CannonballSideRadius;
+    return railMode ? shot.hitRadius * WorldXScale : shot.hitRadius;
 }
 
 bool SideScrollingShooter::Stage4Module::SpawnBossDebris(
@@ -653,13 +786,13 @@ bool SideScrollingShooter::Stage4Module::SpawnBossDebris(
 bool SideScrollingShooter::Stage4Module::DrawSpecialShot(
     const SideScrollingShooter& shooter, Renderer& renderer,
     const Camera3D& camera, const Shot& shot, float yaw) {
+    (void)shooter;
     if (!shot.enemy || shot.stage4.kind != ShotKind::Cannonball) return false;
 
     // 主砲弾は通常敵弾より大きな鉄球として描画する
     constexpr float ShellColor[] = {0.16f, 0.16f, 0.17f, 1.0f};
     constexpr float HotCoreColor[] = {0.85f, 0.18f, 0.035f, 1.0f};
-    const float radius = shooter.IsRailGameplayActive() ?
-        Stage4CannonballRailRadius : Stage4CannonballSideRadius * WorldXScale;
+    const float radius = shot.hitRadius * WorldXScale;
     DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
         radius, radius, radius, ShellColor, yaw + shot.age * 0.12f);
     DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z - 0.02f,
@@ -697,15 +830,6 @@ Vector3 SideScrollingShooter::Stage4Module::BossPartLocalPosition(BossPart part)
 
 void SideScrollingShooter::Stage4Module::SpawnMainCannonball(
     SideScrollingShooter& shooter, const Enemy& boss) {
-    Shot* available = nullptr;
-    for (auto& shot : shooter.m_shots) {
-        if (!shot.active) {
-            available = &shot;
-            break;
-        }
-    }
-    if (available == nullptr) return;
-
     // 現在装着中の主砲Transformと砲口APIから射出位置を決める
     const Stage4Weapon logicalWeapon = shooter.m_stage4.currentWeapon;
     const Stage4MainWeaponType weaponType = ViewWeaponType(logicalWeapon);
@@ -715,12 +839,14 @@ void SideScrollingShooter::Stage4Module::SpawnMainCannonball(
         shooter.IsRailGameplayActive() ? boss.turretAimZ : boss.z
     };
     Vector3 muzzle;
+    Stage4MainWeaponPose weaponPose;
+    Vector3 phase1Direction;
     if (logicalWeapon == Stage4Weapon::Phase1Cannon) {
         const Vector3 pivot = LocalToWorld(shooter, boss, Stage4MainCannonPivotLocal);
-        const Vector3 aimDelta = aimTarget - pivot;
-        const float aimLength = (std::max)(0.001f, std::sqrt(
-            aimDelta.x * aimDelta.x + aimDelta.y * aimDelta.y + aimDelta.z * aimDelta.z));
-        muzzle = pivot + aimDelta / aimLength * Stage4CannonMuzzleDistance;
+        const float yaw = ModelYaw(shooter);
+        phase1Direction = Phase1CannonDirection(aimTarget - pivot, yaw,
+            shooter.IsRailGameplayActive());
+        muzzle = pivot + phase1Direction * Stage4CannonMuzzleDistance;
     } else {
         BossModelTransform tankTransform;
         tankTransform.position = {ToWorldX(boss.x), ToWorldY(boss.y), boss.z};
@@ -728,29 +854,102 @@ void SideScrollingShooter::Stage4Module::SpawnMainCannonball(
         tankTransform.scale = Stage4BossScale;
         const BossModelTransform weaponTransform =
             Stage4BossModelView::MainWeaponMount(tankTransform);
-        const Stage4MainWeaponPose pose = Stage4BossModelView::DefaultMainWeaponPose(weaponType);
-        muzzle = Stage4BossModelView::MainWeaponPointWorldPosition(weaponTransform, pose,
-            Stage4BossModelView::MainWeaponMuzzleLocalPosition(weaponType, pose));
+        weaponPose =
+            WeaponPose(shooter.m_stage4, logicalWeapon, shooter.IsRailGameplayActive());
+        muzzle = Stage4BossModelView::MainWeaponPointWorldPosition(weaponTransform, weaponPose,
+            Stage4BossModelView::MainWeaponMuzzleLocalPosition(weaponType, weaponPose));
     }
-    const Vector3 delta = aimTarget - muzzle;
-    const float length = (std::max)(0.001f,
-        std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z));
-    const Vector3 direction = delta / length;
+    if (logicalWeapon == Stage4Weapon::SiegeMortar) {
+        SpawnSiegeMortarBarrage(shooter, boss, muzzle, weaponPose);
+        ChooseNextSiegeMortarAim(shooter);
+        return;
+    }
+    if (logicalWeapon == Stage4Weapon::RomanceCannon) {
+        SpawnRomanceCannonShot(shooter, muzzle, weaponPose);
+        return;
+    }
 
-    Shot& shot = *available;
-    shot = {};
-    shot.x = FromWorldX(muzzle.x);
-    shot.y = FromWorldY(muzzle.y);
-    shot.z = muzzle.z;
-    shot.transitionSideX = shot.x;
-    shot.transitionSideY = shot.y;
-    shot.vx = FromWorldX(direction.x * Stage4CannonballSpeed);
-    shot.vy = FromWorldY(direction.y * Stage4CannonballSpeed);
-    shot.vz = shooter.IsRailGameplayActive() ? direction.z * Stage4CannonballSpeed : 0.0f;
-    shot.hitRadius = Stage4CannonballSideRadius;
-    shot.damage = 2;
-    shot.enemy = true;
-    shot.stage4.kind = ShotKind::Cannonball;
-    shot.stage4.gravity = false;
-    shot.active = true;
+    SpawnCannonballShot(shooter, muzzle,
+        Phase1CannonVelocity(phase1Direction, shooter.IsRailGameplayActive()),
+        Stage4CannonballSideRadius, 0.55f, false, true, 2);
+}
+
+void SideScrollingShooter::Stage4Module::SpawnRomanceCannonShot(
+    SideScrollingShooter& shooter, const Vector3& muzzle,
+    const Stage4MainWeaponPose& pose) {
+    Vector3 velocity = SiegeMortarVelocity(ModelYaw(shooter), pose.localYaw,
+        pose.barrelPitch, Stage4RomanceCannonballSpeed);
+    if (!shooter.IsRailGameplayActive()) velocity.z = 0.0f;
+
+    // 画面縦幅を覆う超巨大爆発として扱う
+    SpawnCannonballShot(shooter, muzzle, velocity,
+        Stage4RomanceCannonballSideRadius, Stage4RomanceExplosionRadius,
+        false, true, 4);
+}
+
+void SideScrollingShooter::Stage4Module::SpawnSiegeMortarBarrage(
+    SideScrollingShooter& shooter, const Enemy& boss,
+    const Vector3& muzzle, const Stage4MainWeaponPose& pose) {
+    (void)boss;
+    constexpr float Spread[] = {-2.0f, -1.0f, 0.0f, 1.0f, 2.0f};
+    const bool railMode = shooter.IsRailGameplayActive();
+    const Stage4SiegeMortarConfig config = SiegeMortarConfig(railMode);
+    const float pitch = (std::clamp)(pose.barrelPitch, config.minPitch, config.maxPitch);
+    const float yaw = railMode ? (std::clamp)(pose.localYaw, config.minYaw, config.maxYaw) : 0.0f;
+    const auto launchArc = [&](float targetOffset, float speed) {
+        const float spreadYaw = railMode ? targetOffset * Math::Pi * 4.0f / 180.0f : 0.0f;
+        const float spreadPitch = railMode ? 0.0f : targetOffset * Math::Pi * 2.0f / 180.0f;
+        Vector3 velocity = SiegeMortarVelocity(ModelYaw(shooter), yaw + spreadYaw,
+            (std::clamp)(pitch + spreadPitch, config.minPitch, config.maxPitch), speed);
+        if (!railMode) velocity.z = 0.0f;
+        return velocity;
+    };
+
+    // 中央の特大砲丸を先に生成し、周囲へPhase1砲丸サイズを散らす
+    SpawnCannonballShot(shooter, muzzle,
+        launchArc(0.0f, config.giantSpeed),
+        Stage4GiantCannonballSideRadius, Stage4GiantExplosionRadius, true, true, 3);
+    for (float spread : Spread) {
+        SpawnCannonballShot(shooter, muzzle,
+            launchArc(spread, config.normalSpeed + std::abs(spread) * 0.025f),
+            Stage4CannonballSideRadius, 0.55f, true, true, 2);
+    }
+}
+
+void SideScrollingShooter::Stage4Module::ChooseNextSiegeMortarAim(
+    SideScrollingShooter& shooter) {
+    const bool railMode = shooter.IsRailGameplayActive();
+    const Stage4SiegeMortarConfig config = SiegeMortarConfig(railMode);
+    shooter.m_stage4.siegeMortarTargetPitch = GameplayRandom::Range(
+        config.minPitch, config.maxPitch);
+    shooter.m_stage4.siegeMortarTargetYaw = railMode ?
+        GameplayRandom::Range(config.minYaw, config.maxYaw) : 0.0f;
+}
+
+bool SideScrollingShooter::Stage4Module::SpawnCannonballShot(
+    SideScrollingShooter& shooter, const Vector3& muzzle, const Vector3& velocity,
+    float sideRadius, float explosionRadius,
+    bool gravity, bool detonateAtPlayerZ, int damage) {
+    for (auto& shot : shooter.m_shots) {
+        if (shot.active) continue;
+        shot = {};
+        shot.x = FromWorldX(muzzle.x);
+        shot.y = FromWorldY(muzzle.y);
+        shot.z = muzzle.z;
+        shot.transitionSideX = shot.x;
+        shot.transitionSideY = shot.y;
+        shot.vx = FromWorldX(velocity.x);
+        shot.vy = FromWorldY(velocity.y);
+        shot.vz = shooter.IsRailGameplayActive() ? velocity.z : 0.0f;
+        shot.hitRadius = sideRadius;
+        shot.damage = damage;
+        shot.enemy = true;
+        shot.stage4.kind = ShotKind::Cannonball;
+        shot.stage4.gravity = gravity;
+        shot.stage4.detonateAtPlayerZ = detonateAtPlayerZ;
+        shot.stage4.explosionRadius = explosionRadius;
+        shot.active = true;
+        return true;
+    }
+    return false;
 }
