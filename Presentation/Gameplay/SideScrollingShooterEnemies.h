@@ -416,8 +416,8 @@ public:
     }
 
 private:
-    static constexpr float SideTriggerLeadX = 0.62f;
-    static constexpr float RailTriggerLeadZ = 18.0f;
+    static constexpr float SideTriggerLeadX = 1.52f;
+    static constexpr float RailTriggerLeadZ = 25.0f;
     static constexpr int StopFrames = 24;
     static constexpr int DiveCurveFrames = 42;
     static constexpr float SideApproachSpeed = 0.020f;

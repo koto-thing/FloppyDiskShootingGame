@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../GameplayRandom.h"
 #include "Stage3EnemySheet.h"
 
 /** @brief NORMAL用のStage3敵出現シートを定義する */
@@ -45,7 +46,15 @@ public:
         constexpr Chapter Chapters[] = {
             MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)
         };
-        return TrySelectByChapters(
-            Chapters, 3, ChapterFrameLength(), frame, spawnIndex, spawn, chapterNumber);
+        const bool selected = TrySelectByChapters(Chapters, 3, ChapterFrameLength(), frame, spawnIndex, spawn, chapterNumber);
+        // YとZの生成範囲をランダム化
+        if (selected) {
+            if (spawn.enemyType != DiveRusherEnemy) {
+                spawn.y = GameplayRandom::Range(-0.86f, 0.86f);
+                spawn.railX = GameplayRandom::Range(-1.0f, 1.0f);
+            }
+        }
+
+        return selected;
     }
 };
