@@ -240,6 +240,13 @@
     <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3EnemySheetHard.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3EnemySheetNormal.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4EnemySheet.h" />
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4EnemySheetEasy.h" />
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4EnemySheetHard.h" />
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage4\Stage4EnemySheetNormal.h" />
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5EnemySheet.h" />
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5EnemySheetEasy.h" />
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5EnemySheetHard.h" />
+    <ClInclude Include="Presentation\Gameplay\Stages\Stage5\Stage5EnemySheetNormal.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage1\Stage1Story.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage2\Stage2Story.h" />
     <ClInclude Include="Presentation\Gameplay\Stages\Stage3\Stage3Story.h" />

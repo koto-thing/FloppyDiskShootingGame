@@ -94,6 +94,13 @@ private:
     class Stage3EnemySheetNormal;
     class Stage3EnemySheetHard;
     class Stage4EnemySheet;
+    class Stage4EnemySheetEasy;
+    class Stage4EnemySheetNormal;
+    class Stage4EnemySheetHard;
+    class Stage5EnemySheet;
+    class Stage5EnemySheetEasy;
+    class Stage5EnemySheetNormal;
+    class Stage5EnemySheetHard;
     class EnemyBehavior;
     class BasicEnemyBehavior;
     class HeavyEnemyBehavior;

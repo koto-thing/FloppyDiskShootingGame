@@ -9,6 +9,9 @@
 
 #include "Stage4BossModelView.h"
 #include "Stage4EnemySheet.h"
+#include "Stage4EnemySheetEasy.h"
+#include "Stage4EnemySheetHard.h"
+#include "Stage4EnemySheetNormal.h"
 #include "Stage4WeaponDroneView.h"
 
 using ShooterStages::Stage4::ShotKind;
@@ -236,9 +239,16 @@ void SideScrollingShooter::Stage4Module::StartDebugWeaponSwap(
     BeginWeaponSwap(shooter, boss, incomingWeapon);
 }
 
-const SideScrollingShooter::Stage& SideScrollingShooter::Stage4Module::Definition() {
-    static const Stage4EnemySheet definition;
-    return definition;
+const SideScrollingShooter::Stage& SideScrollingShooter::Stage4Module::Definition(
+    DifficultyType difficulty) {
+    static const Stage4EnemySheetEasy easyStage;
+    static const Stage4EnemySheetNormal normalStage;
+    static const Stage4EnemySheetHard hardStage;
+    switch (difficulty) {
+    case Hard: return hardStage;
+    case Normal: return normalStage;
+    default: return easyStage;
+    }
 }
 
 bool SideScrollingShooter::Stage4Module::DrawBossModel(

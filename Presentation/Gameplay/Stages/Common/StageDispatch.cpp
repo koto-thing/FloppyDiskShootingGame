@@ -20,8 +20,8 @@ const SideScrollingShooter::Stage& SideScrollingShooter::StageDispatch::Definiti
     case 1: return Stage1Module::Definition(difficulty);
     case 2: return Stage2Module::Definition(difficulty);
     case 3: return Stage3Module::Definition(difficulty);
-    case 4: return Stage4Module::Definition();
-    case 5: return Stage5Module::Definition();
+    case 4: return Stage4Module::Definition(difficulty);
+    case 5: return Stage5Module::Definition(difficulty);
     default: return Stage1Module::Definition(difficulty);
     }
 }
