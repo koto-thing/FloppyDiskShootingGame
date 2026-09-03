@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cmath>
+
 #include "../Common/StageDefinition.h"
 #include "Stage4Module.h"
 
@@ -127,10 +129,10 @@ public:
      */
     void TickBoss(SideScrollingShooter& shooter, Enemy& boss) const override {
         constexpr float TurretTrackingRate = 0.06f;
-        boss.motionAge = 0;
 
         // 交換中は戦車を基準位置へ止めて攻撃用の移動処理を行わない
         if (Stage4Module::TickWeaponSwap(shooter, boss)) {
+            boss.motionAge = 0;
             boss.phase = 0.0f;
             boss.x = boss.baseX;
             boss.y = boss.baseY;
@@ -139,6 +141,7 @@ public:
         }
 
         // Phase2以降は一定間隔で後退、突進、待機、復帰を行う
+        Stage4Module::TickSiegeMortarAim(shooter);
         if (IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) &&
             (boss.phase > 0.0f || boss.age % RushIntervalFrames == 0)) {
             int rushFrame = static_cast<int>(boss.phase);
@@ -149,11 +152,16 @@ public:
                 rushFrame = 1;
             }
 
+            boss.motionAge = 0;
             ApplyRushPosition(boss, shooter.IsRailGameplayActive(), rushFrame);
 
             boss.phase = rushFrame < RushTotalFrames ?
                 static_cast<float>(rushFrame + 1) : 0.0f;
+        } else if (shooter.m_stage4.currentWeapon == ShooterStages::Stage4::MainWeaponType::SiegeMortar) {
+            boss.phase = 0.0f;
+            ApplySiegeMortarBodyMotion(boss, shooter.IsRailGameplayActive());
         } else {
+            boss.motionAge = 0;
             boss.phase = 0.0f;
             boss.x = boss.baseX;
             boss.y = boss.baseY;
@@ -256,6 +264,9 @@ private:
     inline static constexpr int MainCannonRecoilFrames = 40;
     inline static constexpr float SideMainCannonRecoilDistance = 0.10f;
     inline static constexpr float RailMainCannonRecoilDistance = 1.40f;
+    inline static constexpr float SiegeBodyMotionRate = 0.045f;
+    inline static constexpr float SideSiegeBodyMotionDistance = 0.35f;
+    inline static constexpr float RailSiegeBodyMotionDistance = 3.50f;
 
     /**
      * @brief 突進攻撃を行うフェーズか取得する
@@ -320,6 +331,28 @@ private:
     }
 
     /**
+     * @brief SiegeMortar形態の車体往復移動を反映する
+     * @param boss 更新するボス
+     * @param railMode レール表示中か
+     * @return なし
+     */
+    static void ApplySiegeMortarBodyMotion(Enemy& boss, bool railMode) {
+        const float motion = std::sin(static_cast<float>(++boss.motionAge) *
+            SiegeBodyMotionRate);
+        boss.y = boss.baseY;
+        if (railMode) {
+            boss.x = boss.baseX;
+            boss.z = boss.baseZ + motion * RailSiegeBodyMotionDistance;
+        } else {
+            boss.x = boss.baseX + motion * SideSiegeBodyMotionDistance;
+            boss.z = ToRailZFromSideX(boss.x);
+        }
+        boss.actionX = boss.x;
+        boss.actionY = boss.y;
+        boss.actionZ = boss.z;
+    }
+
+    /**
      * @brief 主砲発射反動をボス本体位置へ加算する
      * @param boss 反動を適用するボス
      * @param railMode レール表示中か
@@ -349,6 +382,7 @@ private:
      * @return 発射間隔
      */
     int BossAttackInterval(BossPhase phase) const override {
+        (void)phase;
         return 150;
     }
 };

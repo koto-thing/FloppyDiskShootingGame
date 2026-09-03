@@ -125,8 +125,18 @@ void RunStage4BossModelViewTests() {
         Math::Pi * 40.0f / 180.0f);
     const Vector3 mortarHigh = Stage4BossModelView::SiegeMortarMuzzleLocalPosition(
         Math::Pi * 65.0f / 180.0f);
+    const Vector3 mortarHorizontal = Stage4BossModelView::SiegeMortarMuzzleLocalPosition(
+        Stage4BossModelView::SiegeMortarMinPitch);
+    const Vector3 mortarMax = Stage4BossModelView::SiegeMortarMuzzleLocalPosition(
+        Stage4BossModelView::SiegeMortarMaxPitch);
+    const Vector3 mortarOverMax = Stage4BossModelView::SiegeMortarMuzzleLocalPosition(
+        Math::Pi);
     assert(mortarHigh.y > mortarLow.y);
     assert(mortarHigh.x > mortarLow.x);
+    assert(mortarHorizontal.y < mortarLow.y);
+    assert(mortarMax.y > mortarHigh.y);
+    assert(std::fabs(mortarMax.x - mortarOverMax.x) < 0.0001f);
+    assert(std::fabs(mortarMax.y - mortarOverMax.y) < 0.0001f);
     const Vector3 romanceReady = Stage4BossModelView::RomanceCannonMuzzleLocalPosition(0.0f, 0.0f);
     const Vector3 romanceRecoiled = Stage4BossModelView::RomanceCannonMuzzleLocalPosition(0.0f, 1.0f);
     assert(romanceReady.x < romanceRecoiled.x);

@@ -2,6 +2,8 @@
 
 #include "../../SideScrollingShooter.h"
 
+struct Stage4MainWeaponPose;
+
 /**
  * @brief Stage 4の定義と専用描画入口を集約する
  */
@@ -30,6 +32,13 @@ public:
      * @return 主砲交換中の場合true、通常行動を続ける場合false
      */
     static bool TickWeaponSwap(SideScrollingShooter& shooter, Enemy& boss);
+
+    /**
+     * @brief Stage 4の迫撃砲照準角を目標角へ近づける
+     * @param shooter 更新するゲーム本体
+     * @return なし
+     */
+    static void TickSiegeMortarAim(SideScrollingShooter& shooter);
 
     /**
      * @brief 現在主砲交換中か判定する
@@ -181,12 +190,48 @@ private:
         ShooterStages::Stage4::MainWeaponType incomingWeapon);
 
     /**
-     * @brief Stage 4主砲身から重力砲丸を生成する
+     * @brief Stage 4主砲身から現在形態に対応する砲丸を生成する
      * @param shooter 弾を生成するゲーム本体
      * @param boss 発射元となるStage 4ボス
      * @return なし
      */
     static void SpawnMainCannonball(SideScrollingShooter& shooter, const Enemy& boss);
+
+    /**
+     * @brief Phase2主砲から重力つき砲丸弾幕を生成する
+     * @param shooter 弾を生成するゲーム本体
+     * @param boss 発射元となるStage 4ボス
+     * @param muzzle 砲口ワールド座標
+     * @param pose 発射時の主砲姿勢
+     * @return なし
+     */
+    static void SpawnSiegeMortarBarrage(
+        SideScrollingShooter& shooter, const Enemy& boss,
+        const Vector3& muzzle, const Stage4MainWeaponPose& pose);
+
+    /**
+     * @brief 次回射撃に向けた迫撃砲照準角をランダムに決める
+     * @param shooter 更新するゲーム本体
+     * @return なし
+     */
+    static void ChooseNextSiegeMortarAim(SideScrollingShooter& shooter);
+
+    /**
+     * @brief 砲丸弾を固定長プールへ追加する
+     * @param shooter 弾を生成するゲーム本体
+     * @param muzzle 砲口ワールド座標
+     * @param velocity 弾速ワールドベクトル
+     * @param sideRadius 2D座標系の当たり判定半径
+     * @param explosionRadius 爆破当たり判定半径
+     * @param gravity 重力を使う場合true
+     * @param detonateAtPlayerZ 3D中に自機Z到達で爆破する場合true
+     * @param damage 自機命中時のダメージ
+     * @return 生成できた場合true、空きがない場合false
+     */
+    static bool SpawnCannonballShot(SideScrollingShooter& shooter,
+        const Vector3& muzzle, const Vector3& velocity,
+        float sideRadius, float explosionRadius,
+        bool gravity, bool detonateAtPlayerZ, int damage);
 
     /**
      * @brief Stage 4ボスモデルのY軸回転を取得する

@@ -59,6 +59,12 @@ public:
 
     /** @brief Siege Mortarの標準仰角 */
     static constexpr float SiegeMortarDefaultPitch = Math::Pi * 52.5f / 180.0f;
+    /** @brief Siege Mortarの最小仰角 */
+    static constexpr float SiegeMortarMinPitch = 0.0f;
+    /** @brief Siege Mortarの2D時の最大仰角 */
+    static constexpr float SiegeMortar2DMaxPitch = Math::Pi * 85.0f / 180.0f;
+    /** @brief Siege Mortarの3D時の最大仰角 */
+    static constexpr float SiegeMortar3DMaxPitch = Math::Pi * 10.0f / 180.0f;
 
     /**
      * @brief 三種類の主砲が共有する車体ローカル取付位置を取得する
@@ -117,7 +123,7 @@ public:
         switch (weaponType) {
         case Stage4MainWeaponType::SiegeMortar: {
             const float pitch = (std::clamp)(pose.barrelPitch,
-                Math::Pi * 20.0f / 180.0f, Math::Pi * 75.0f / 180.0f);
+                SiegeMortarMinPitch, SiegeMortar2DMaxPitch);
             return Vector3 {-0.25f, 1.28f, 0.0f} +
                 AxisLocalPosition(4.10f - recoil * 0.55f, pitch);
         }
@@ -654,7 +660,7 @@ private:
         const float* window = hit ? Hit : Window;
         const float* gold = hit ? Hit : Gold;
         const float pitch = (std::clamp)(pose.barrelPitch,
-            Math::Pi * 20.0f / 180.0f, Math::Pi * 75.0f / 180.0f);
+            SiegeMortarMinPitch, SiegeMortar2DMaxPitch);
         const float recoil = Math::Clamp01(pose.recoil) * 0.55f;
         auto BarrelPart = [&](PrimitiveShape shape, float distance, const Vector3& scale,
             const float color[4]) {

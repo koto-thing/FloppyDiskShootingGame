@@ -97,6 +97,10 @@ struct State {
     WeaponVisualState outgoingVisual = WeaponVisualState::Attached;
     WeaponVisualState incomingVisual = WeaponVisualState::Hidden;
     int timer = 0;
+    float siegeMortarPitch = 0.91629785f;
+    float siegeMortarTargetPitch = 0.91629785f;
+    float siegeMortarYaw = 0.0f;
+    float siegeMortarTargetYaw = 0.0f;
 };
 
 /**
@@ -173,6 +177,8 @@ enum class ShotKind {
 struct ShotState {
     ShotKind kind = ShotKind::None;
     bool gravity = false;
+    bool detonateAtPlayerZ = true;
+    float explosionRadius = 0.55f;
 };
 
 }

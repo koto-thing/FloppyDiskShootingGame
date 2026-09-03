@@ -531,9 +531,10 @@ private:
      * @param x 2D座標系のX座標
      * @param y 2D座標系のY座標
      * @param z 3Dレール座標系のZ座標
+     * @param hitRadius 爆破当たり判定半径
      * @return なし
      */
-    void SpawnMortarExplosion(float x, float y, float z);
+    void SpawnMortarExplosion(float x, float y, float z, float hitRadius = 0.55f);
     /** @brief 機体モデルを構成する部品を飛散エフェクトとして生成する */
     void SpawnEnemyDebris(const Enemy& enemy, int bossPart = -1);
     /** @brief 飛散するモデル部品を固定長プールへ追加する */
