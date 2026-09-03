@@ -286,10 +286,9 @@ private:
      * @return Phase1の場合true、それ以外の場合false
      */
     static constexpr bool IsRushPhase(BossPhase phase) {
-        return phase == BossNormalPhase1 || phase == BossSpecialPhase1;
+        return phase == BossNormalPhase1;
     }
-    static_assert(BossNormalPhase1 + 1 == BossSpecialPhase1);
-    static_assert(BossSpecialPhase1 != BossNormalPhase2);
+    static_assert(BossNormalPhase1 != BossSpecialPhase1);
 
     /**
      * @brief 突進フレームから現在表示モードの突進位置を反映する
