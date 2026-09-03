@@ -12,6 +12,24 @@
 #include "SideScrollingShooterEnemies.h"
 #include "Stages/Common/StageDefinition.h"
 
+namespace {
+/**
+ * @brief ボムの発射位置から画面中央までの座標を求める
+ * @param start 発射位置
+ * @param age 発射後の経過フレーム
+ * @param travelFrames 中央へ到達するフレーム数
+ * @return 現在座標
+ */
+constexpr float BombTravelCoordinate(float start, int age, int travelFrames) {
+    if (travelFrames <= 0 || age >= travelFrames) return 0.0f;
+    if (age <= 0) return start;
+    return start * static_cast<float>(travelFrames - age) / static_cast<float>(travelFrames);
+}
+
+static_assert(BombTravelCoordinate(-0.8f, 0, 24) == -0.8f);
+static_assert(BombTravelCoordinate(-0.8f, 24, 24) == 0.0f);
+}
+
 void SideScrollingShooter::TickPlayer() {
     float dx = static_cast<float>(m_moveRight) - static_cast<float>(m_moveLeft);
     float dy = static_cast<float>(m_moveUp) - static_cast<float>(m_moveDown);
@@ -52,6 +70,61 @@ void SideScrollingShooter::TickPlayerWeapons() {
         firedPlayerShot = true;
     }
     if (firedPlayerShot) PlayShotSound();
+}
+
+/**
+ * @brief ボムの移動、発光待機、爆発を更新する
+ * @return なし
+ */
+void SideScrollingShooter::TickBomb() {
+    // 同時に存在できるボムは一個だけとする
+    if (m_bombRequested && !m_bomb.active) {
+        m_bomb = {m_playerX, m_playerY, m_playerX, m_playerY,
+            PlayerRailZ + 6.0f, 0, true};
+    }
+    if (!m_bomb.active) return;
+
+    // 発射位置から画面中央へ直線移動し、到達後は短時間発光させる
+    ++m_bomb.age;
+    m_bomb.x = BombTravelCoordinate(m_bomb.startX, m_bomb.age, BombTravelFrames);
+    m_bomb.y = BombTravelCoordinate(m_bomb.startY, m_bomb.age, BombTravelFrames);
+    if (m_bomb.age >= BombTravelFrames + BombChargeFrames) DetonateBomb();
+}
+
+/**
+ * @brief ボムを爆発させ、画面内の通常敵と敵弾を消去する
+ * @return なし
+ */
+void SideScrollingShooter::DetonateBomb() {
+    // 画面内の通常敵だけを消し、ボス戦の進行状態は維持する
+    const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
+    for (auto& enemy : m_enemies) {
+        if (!enemy.active || enemy.type == 2) continue;
+        const bool visible = IsRailGameplayActive() ?
+            enemy.z >= PlayerRailZ - 2.0f && enemy.z <= EnemyRailFarZ &&
+                std::abs(enemy.x) <= 1.4f && std::abs(enemy.y) <= 1.4f :
+            enemy.x >= Side2DPlayerMinX - Side2DShotCullMargin &&
+                enemy.x <= Side2DPlayerMaxX + Side2DShotCullMargin &&
+                enemy.y >= sideYRange.x - Side2DShotCullMargin &&
+                enemy.y <= sideYRange.y + Side2DShotCullMargin;
+        if (visible) enemy.active = false;
+    }
+
+    // 敵弾は固定長プール上の全種類を一括で消去する
+    for (auto& shot : m_shots) {
+        if (shot.active && shot.enemy) shot.active = false;
+    }
+
+    // 中央に青い爆発エフェクトを生成する
+    for (auto& explosion : m_explosions) {
+        if (explosion.active) continue;
+        explosion = {0.0f, 0.0f, m_bomb.z, 0, false, true,
+            BombExplosionEffectType};
+        break;
+    }
+    if (m_audio) m_audio->PlaySE(Audio::SfxrPreset::Explosion);
+    ShakeScreen(0.24f, 20);
+    m_bomb = {};
 }
 
 void SideScrollingShooter::TickEnemies() {
@@ -822,7 +895,8 @@ void SideScrollingShooter::TickExplosions() {
                 return;
             }
         }
-        const int lifetime = explosion.effectType == 1 ? MortarExplosionLifetimeFrames :
+        const int lifetime = explosion.effectType == BombExplosionEffectType ?
+            BombExplosionLifetimeFrames : explosion.effectType == 1 ? MortarExplosionLifetimeFrames :
             (explosion.destruction ? DestructionExplosionLifetimeFrames : ExplosionLifetimeFrames);
         if (++explosion.age >= lifetime) explosion.active = false;
     }

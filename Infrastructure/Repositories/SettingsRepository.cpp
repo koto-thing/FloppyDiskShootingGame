@@ -42,6 +42,8 @@ GameSettings SettingsRepository::Load() const {
     if (input >> retroEffectEnabled) settings.retroEffectEnabled = retroEffectEnabled != 0;
     // 旧形式ではプレイヤー展示だけを初期解放する
     input >> settings.galleryUnlocks;
+    int tutorialCompleted = 0;
+    if (input >> tutorialCompleted) settings.tutorialCompleted = tutorialCompleted != 0;
     return Sanitize(settings);
 }
 
@@ -63,7 +65,8 @@ void SettingsRepository::Save(const GameSettings& settings) const {
            << sanitized.bgmVolume << '\n'
            << sanitized.seVolume << '\n'
            << (sanitized.retroEffectEnabled ? 1 : 0) << '\n'
-           << sanitized.galleryUnlocks << '\n';
+           << sanitized.galleryUnlocks << '\n'
+           << (sanitized.tutorialCompleted ? 1 : 0) << '\n';
     output.close();
     if (!output) return;
 

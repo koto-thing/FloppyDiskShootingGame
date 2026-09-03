@@ -180,6 +180,7 @@
     <ClCompile Include="Presentation\Scenes\RankingScene.cpp" />
     <ClCompile Include="Presentation\Scenes\OptionScene.cpp" />
     <ClCompile Include="Presentation\Scenes\TestStage.cpp" />
+    <ClCompile Include="Presentation\Scenes\TutorialStage.cpp" />
     <ClCompile Include="Presentation\Scenes\GalleryScene.cpp" />
     <ClCompile Include="Presentation\Scenes\TitleScene.cpp" />
     <ClCompile Include="Presentation\TitleScene\TitleSceneColumn.cpp" />
@@ -205,6 +206,7 @@
     <ClInclude Include="Application\UseCases\SceneManager.h" />
     <ClInclude Include="Presentation\CreditScene\CreditContentController.h" />
     <ClInclude Include="Presentation\CreditScene\CreditContentPresenter.h" />
+    <ClInclude Include="Presentation\Gameplay\Voices\VoiceSamples.h" />
     <ClInclude Include="Presentation\ModeSelectionScene\ModeSelectionStateController.h" />
     <ClInclude Include="Presentation\Scenes\CreditScene.h" />
     <ClInclude Include="Presentation\CreditScene\CreditSceneColumn.h" />
@@ -215,6 +217,7 @@
     <ClInclude Include="Presentation\Scenes\RankingScene.h" />
     <ClInclude Include="Presentation\Scenes\OptionScene.h" />
     <ClInclude Include="Presentation\Scenes\TestStage.h" />
+    <ClInclude Include="Presentation\Scenes\TutorialStage.h" />
     <ClInclude Include="Presentation\Scenes\GalleryScene.h" />
     <ClInclude Include="Presentation\Gameplay\SideScrollingShooter.h" />
     <ClInclude Include="Presentation\Gameplay\SideScrollingShooterShared.h" />
@@ -289,6 +292,9 @@
   <ItemGroup>
     <Folder Include=".agents\" />
     <Folder Include="View\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Content Include="Presentation\Gameplay\Voices\VoiceDpcmDecoder.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

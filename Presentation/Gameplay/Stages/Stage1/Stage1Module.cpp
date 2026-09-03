@@ -25,6 +25,10 @@ constexpr int MeteorSpawnMaxFrames = 240;
 constexpr float MeteorStartTravel = -60.0f;
 constexpr float MeteorEndTravel = 140.0f;
 constexpr float MeteorBaseSpeed = 0.32f;
+constexpr float MeteorSideWidth = 2.20f;
+constexpr float MeteorSideHeight = 2.55f;
+constexpr float MeteorSideDepth = 1.45f;
+constexpr float MeteorRailDiameter = 5.30f;
 
 constexpr int Stage1BossRushSegmentFrames = 36;
 constexpr int Stage1BossRushSegmentCount = 4;
@@ -43,6 +47,16 @@ float WrapNdcX(float value) {
         wrapped += 2.0f;
     }
     return wrapped - 1.0f;
+}
+
+/**
+ * @brief 隕石の2D表示Y座標を取得する
+ * @param meteor 座標を取得する隕石
+ * @return 2D表示Y座標
+ */
+float MeteorSideY(const ShooterStages::Stage1::Meteor& meteor) {
+    return meteor.straightPath ? meteor.tutorialY :
+        0.55f + std::sin(meteor.travel * 0.105f + meteor.pathPhase) * 0.34f;
 }
 
 /**
@@ -94,10 +108,16 @@ void SideScrollingShooter::Stage1Module::TickWorld(SideScrollingShooter& shooter
     // 表示中の隕石を小さいものほど高速で移動させる
     for (auto& meteor : shooter.m_stage1.meteors) {
         if (meteor.destroyed) continue;
-        meteor.travel += MeteorBaseSpeed / meteor.scale;
-        if (meteor.travel >= MeteorEndTravel) meteor.destroyed = true;
+        meteor.travel += MeteorBaseSpeed / meteor.scale * meteor.speedScale;
+        const float sideX = 1.85f - std::fmod(meteor.travel * 0.0325f, 4.40f);
+        const float sideHalfWidth = 1.10f * meteor.scale / SideScrollingShooter::WorldXScale;
+        if ((shooter.m_tutorialMode && sideX + sideHalfWidth <= SideScrollingShooter::Side2DPlayerMinX) ||
+            (!shooter.m_tutorialMode && meteor.travel >= MeteorEndTravel)) meteor.destroyed = true;
         meteor.yaw += meteor.spin;
     }
+
+    // チュートリアルでは課題用の3個以外を追加生成しない
+    if (shooter.m_tutorialMode) return;
 
     // 共通タイマーで隕石を1個ずつまばらに投入する
     if (shooter.m_stage1.spawnFrames-- > 0) return;
@@ -280,18 +300,27 @@ int SideScrollingShooter::Stage1Module::FindMeteor(const SideScrollingShooter& s
         const ShooterStages::Stage1::Meteor& meteor = shooter.m_stage1.meteors[i];
         if (meteor.destroyed) continue;
         const float sideX = 1.85f - std::fmod(meteor.travel * 0.0325f, 4.40f);
-        const float sideY = 0.55f + std::sin(meteor.travel * 0.105f + meteor.pathPhase) * 0.34f;
+        const float sideY = MeteorSideY(meteor);
         if (shooter.IsRailGameplayActive()) {
             const float railX = std::sin(meteor.travel * 0.090f + meteor.pathPhase) * 7.0f;
             const float railY = 0.80f + std::sin(
                 meteor.travel * 0.135f + meteor.pathPhase * 1.37f) * 2.0f;
             if (Hit3D(ToWorldX(x), ToWorldY(y), z, radius * WorldXScale,
-                railX, railY, 72.0f - meteor.travel, 2.70f * meteor.scale)) {
+                railX, railY, 72.0f - meteor.travel,
+                MeteorRailDiameter * 0.5f * meteor.scale)) {
                 return i;
             }
             continue;
         }
-        if (Hit(x, y, radius, sideX, sideY, 0.42f * meteor.scale)) return i;
+
+        // 横視点の扁平な見た目と同じ楕円へ判定対象の半径を加える
+        const float hitWidth = MeteorSideWidth * 0.5f * meteor.scale +
+            radius * WorldXScale;
+        const float hitHeight = MeteorSideHeight * 0.5f * meteor.scale +
+            radius * WorldYScale;
+        if (SideScrollingShooterShared::HitsEllipsoid(
+            ToWorldX(x - sideX), ToWorldY(y - sideY), 0.0f,
+            hitWidth, hitHeight, 1.0f)) return i;
     }
     return -1;
 }
@@ -299,7 +328,7 @@ int SideScrollingShooter::Stage1Module::FindMeteor(const SideScrollingShooter& s
 void SideScrollingShooter::Stage1Module::SpawnMeteorDebris(
     SideScrollingShooter& shooter, const ShooterStages::Stage1::Meteor& meteor, int count) {
     const float sideX = 1.85f - std::fmod(meteor.travel * 0.0325f, 4.40f);
-    const float sideY = 0.55f + std::sin(meteor.travel * 0.105f + meteor.pathPhase) * 0.34f;
+    const float sideY = MeteorSideY(meteor);
     const float railX = std::sin(meteor.travel * 0.090f + meteor.pathPhase) * 7.0f;
     const float railY = 0.80f + std::sin(
         meteor.travel * 0.135f + meteor.pathPhase * 1.37f) * 2.0f;
@@ -327,16 +356,16 @@ void SideScrollingShooter::Stage1Module::DrawMeteors(
         const ShooterStages::Stage1::Meteor& meteor = shooter.m_stage1.meteors[i];
         if (meteor.destroyed) continue;
         const float sideX = 1.85f - std::fmod(meteor.travel * 0.0325f, 4.40f);
-        const float sideY = 0.55f + std::sin(meteor.travel * 0.105f + meteor.pathPhase) * 0.34f;
+        const float sideY = MeteorSideY(meteor);
         const float railX = std::sin(meteor.travel * 0.090f + meteor.pathPhase) * 7.0f;
         const float railY = 0.80f + std::sin(
             meteor.travel * 0.135f + meteor.pathPhase * 1.37f) * 2.0f;
         const float x = Math::Lerp(ToWorldX(sideX), railX, railWeight);
         const float y = Math::Lerp(ToWorldY(sideY), railY, railWeight);
         const float z = Math::Lerp(SidePlaneZ + 1.2f, 72.0f - meteor.travel, railWeight);
-        const float width = Math::Lerp(2.20f, 5.30f, railWeight) * meteor.scale;
-        const float height = Math::Lerp(2.55f, 5.30f, railWeight) * meteor.scale;
-        const float depth = Math::Lerp(1.45f, 5.30f, railWeight) * meteor.scale;
+        const float width = Math::Lerp(MeteorSideWidth, MeteorRailDiameter, railWeight) * meteor.scale;
+        const float height = Math::Lerp(MeteorSideHeight, MeteorRailDiameter, railWeight) * meteor.scale;
+        const float depth = Math::Lerp(MeteorSideDepth, MeteorRailDiameter, railWeight) * meteor.scale;
 
         // 本体とクレーターを同じ回転角で動かし、視点遷移中も形状を維持する
         DrawModelPrimitive(renderer, camera, 5,
