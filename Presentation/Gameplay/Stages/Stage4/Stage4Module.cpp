@@ -25,10 +25,11 @@ using Stage4SwapConfig = ShooterStages::Stage4::WeaponSwapConfig;
 
 namespace {
 
+// Boss4の攻撃の調整値
 constexpr float Stage4BossScale = 1.00f;
 constexpr float Stage4ModelYawOffset = -Math::HalfPi;
 constexpr float Stage4TrackWheelRadius = 0.74f;
-constexpr float Stage4CannonballSpeed = 0.56f;
+constexpr float Stage4CannonballSpeed = 0.7f;
 constexpr float Stage4CannonballGravity = 0.00135f;
 constexpr float Stage4SiegeMortarPitchRate = Math::Pi * 1.4f / 180.0f;
 constexpr float Stage4SiegeMortarYawRate = Math::Pi * 1.8f / 180.0f;
@@ -134,6 +135,37 @@ Vector3 SiegeMortarVelocity(float baseYaw, float yawOffset, float pitch, float s
         speed * std::sin(pitch),
         horizontalSpeed * std::sin(yaw)
     };
+}
+
+/** @brief Phase1主砲の自機追尾方向を可動仰角内に丸める @param delta 支点から目標への差分 @param baseYaw 車体正面Yaw @param tracksYaw Yaw追尾する場合true @return 砲身方向 */
+Vector3 Phase1CannonDirection(const Vector3& delta, float baseYaw, bool tracksYaw) {
+    const float forwardX = -std::cos(baseYaw);
+    const float forwardZ = std::sin(baseYaw);
+    const float horizontal = (std::max)(0.001f, tracksYaw ?
+        std::sqrt(delta.x * delta.x + delta.z * delta.z) :
+        std::abs(delta.x * forwardX + delta.z * forwardZ));
+    const float length = (std::max)(0.001f,
+        std::sqrt(horizontal * horizontal + delta.y * delta.y));
+    const float yaw = tracksYaw ? std::atan2(delta.z, -delta.x) : baseYaw;
+    const float elevation = (std::clamp)(std::asin(delta.y / length),
+        Stage4BossModelView::Phase1CannonMinElevation,
+        Stage4BossModelView::Phase1CannonMaxElevation);
+    const float pitchCosine = std::cos(elevation);
+    return {
+        -std::cos(yaw) * pitchCosine,
+        std::sin(elevation),
+        std::sin(yaw) * pitchCosine
+    };
+}
+
+/** @brief Phase1主砲の発射速度を取得する @param direction 砲身方向 @param railMode 3D表示中か @return 発射速度 */
+Vector3 Phase1CannonVelocity(const Vector3& direction, bool railMode) {
+    if (!railMode || std::abs(direction.z) <= 0.0001f) {
+        return direction * Stage4CannonballSpeed;
+    }
+
+    // 3D中は奥行き方向の進行速度を通常主砲の基準速度に合わせる
+    return direction * (Stage4CannonballSpeed / std::abs(direction.z));
 }
 
 /** @brief 親Transformのローカル方向へ位置をずらす @param transform 基準Transform @param offset ローカル移動量 @return 移動後Transform */
@@ -383,6 +415,9 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
     aimedTransform.secondaryGunsTrackTarget = true;
     aimedTransform.mainGunTracksTarget = swap.currentWeapon == Stage4Weapon::Phase1Cannon &&
         swap.swapState == Stage4SwapState::None && enemy.phase <= 0.0f;
+    aimedTransform.mainGunTracksYaw = shooter.IsRailGameplayActive();
+    aimedTransform.mainGunMinElevation = Stage4BossModelView::Phase1CannonMinElevation;
+    aimedTransform.mainGunMaxElevation = Stage4BossModelView::Phase1CannonMaxElevation;
     aimedTransform.trackRoll = (shooter.IsRailGameplayActive() ?
         enemy.z - enemy.baseZ : ToWorldX(enemy.x - enemy.baseX)) /
         Stage4TrackWheelRadius;
@@ -797,12 +832,13 @@ void SideScrollingShooter::Stage4Module::SpawnMainCannonball(
     };
     Vector3 muzzle;
     Stage4MainWeaponPose weaponPose;
+    Vector3 phase1Direction;
     if (logicalWeapon == Stage4Weapon::Phase1Cannon) {
         const Vector3 pivot = LocalToWorld(shooter, boss, Stage4MainCannonPivotLocal);
-        const Vector3 aimDelta = aimTarget - pivot;
-        const float aimLength = (std::max)(0.001f, std::sqrt(
-            aimDelta.x * aimDelta.x + aimDelta.y * aimDelta.y + aimDelta.z * aimDelta.z));
-        muzzle = pivot + aimDelta / aimLength * Stage4CannonMuzzleDistance;
+        const float yaw = ModelYaw(shooter);
+        phase1Direction = Phase1CannonDirection(aimTarget - pivot, yaw,
+            shooter.IsRailGameplayActive());
+        muzzle = pivot + phase1Direction * Stage4CannonMuzzleDistance;
     } else {
         BossModelTransform tankTransform;
         tankTransform.position = {ToWorldX(boss.x), ToWorldY(boss.y), boss.z};
@@ -821,11 +857,8 @@ void SideScrollingShooter::Stage4Module::SpawnMainCannonball(
         return;
     }
 
-    const Vector3 delta = aimTarget - muzzle;
-    const float length = (std::max)(0.001f,
-        std::sqrt(delta.x * delta.x + delta.y * delta.y + delta.z * delta.z));
-    const Vector3 direction = delta / length;
-    SpawnCannonballShot(shooter, muzzle, direction * Stage4CannonballSpeed,
+    SpawnCannonballShot(shooter, muzzle,
+        Phase1CannonVelocity(phase1Direction, shooter.IsRailGameplayActive()),
         Stage4CannonballSideRadius, 0.55f, false, true, 2);
 }
 

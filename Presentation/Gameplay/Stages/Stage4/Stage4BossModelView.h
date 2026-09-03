@@ -65,6 +65,10 @@ public:
     static constexpr float SiegeMortar2DMaxPitch = Math::Pi * 85.0f / 180.0f;
     /** @brief Siege Mortarの3D時の最大仰角 */
     static constexpr float SiegeMortar3DMaxPitch = Math::Pi * 10.0f / 180.0f;
+    /** @brief Phase1主砲の最小仰角 */
+    static constexpr float Phase1CannonMinElevation = -Math::Pi * 15.0f / 180.0f;
+    /** @brief Phase1主砲の最大仰角 */
+    static constexpr float Phase1CannonMaxElevation = Math::Pi * 70.0f / 180.0f;
 
     /**
      * @brief 三種類の主砲が共有する車体ローカル取付位置を取得する
@@ -413,12 +417,18 @@ private:
      * @param distance 基部から砲口方向への距離
      * @param scale ローカル寸法
      * @param color 部品色
+     * @param tracksYaw 照準先へYawを向ける場合true
+     * @param clampElevation 仰角を制限する場合true
+     * @param minElevation 最小仰角
+     * @param maxElevation 最大仰角
      * @return なし
      */
     template<class DrawPart>
     static void GunPart(const BossModelTransform& transform, DrawPart& drawPart,
         bool tracksTarget, const Vector3& aimTarget, const Vector3& localPivot,
-        PrimitiveShape shape, float distance, const Vector3& scale, const float color[4]) {
+        PrimitiveShape shape, float distance, const Vector3& scale, const float color[4],
+        bool tracksYaw = true, bool clampElevation = false,
+        float minElevation = -Math::HalfPi, float maxElevation = Math::HalfPi) {
         const float cosine = std::cos(transform.yaw);
         const float sine = std::sin(transform.yaw);
         const Vector3 pivot {
@@ -430,15 +440,26 @@ private:
         };
         const Vector3 delta = tracksTarget ? aimTarget - pivot :
             Vector3 {-cosine, 0.0f, sine};
-        const float horizontal = (std::max)(0.001f,
-            std::sqrt(delta.x * delta.x + delta.z * delta.z));
+        const float forwardX = -cosine;
+        const float forwardZ = sine;
+        const float horizontal = (std::max)(0.001f, tracksYaw ?
+            std::sqrt(delta.x * delta.x + delta.z * delta.z) :
+            std::abs(delta.x * forwardX + delta.z * forwardZ));
         const float length = (std::max)(0.001f,
             std::sqrt(horizontal * horizontal + delta.y * delta.y));
-        const float gunYaw = std::atan2(delta.z, -delta.x);
-        const float gunPitch = -std::asin(delta.y / length);
-        const Vector3 position = pivot + delta / length * (distance * transform.scale);
+        const float gunYaw = tracksYaw ? std::atan2(delta.z, -delta.x) : transform.yaw;
+        const float rawElevation = tracksTarget ? std::asin(delta.y / length) : 0.0f;
+        const float gunElevation = clampElevation ?
+            (std::clamp)(rawElevation, minElevation, maxElevation) : rawElevation;
+        const float pitchCosine = std::cos(gunElevation);
+        const Vector3 direction {
+            -std::cos(gunYaw) * pitchCosine,
+            std::sin(gunElevation),
+            std::sin(gunYaw) * pitchCosine
+        };
+        const Vector3 position = pivot + direction * (distance * transform.scale);
         drawPart(static_cast<int>(shape), position, scale * transform.scale,
-            color, gunYaw, gunPitch);
+            color, gunYaw, -gunElevation);
     }
 
     /**
@@ -593,22 +614,34 @@ private:
         aimedTransform.position += Vector3 {cosine * recoil, 0.0f, -sine * recoil} * transform.scale;
         GunPart(aimedTransform, drawPart, aimedTransform.mainGunTracksTarget,
             aimedTransform.aimTarget, {},
-            PrimitiveShape::Cylinder, 0.00f, {1.18f, 1.18f, 1.18f}, armor);
+            PrimitiveShape::Cylinder, 0.00f, {1.18f, 1.18f, 1.18f}, armor,
+            aimedTransform.mainGunTracksYaw, true,
+            aimedTransform.mainGunMinElevation, aimedTransform.mainGunMaxElevation);
         GunPart(aimedTransform, drawPart, aimedTransform.mainGunTracksTarget,
             aimedTransform.aimTarget, {},
-            PrimitiveShape::Cylinder, 1.30f, {2.35f, 0.92f, 0.92f}, highlight);
+            PrimitiveShape::Cylinder, 1.30f, {2.35f, 0.92f, 0.92f}, highlight,
+            aimedTransform.mainGunTracksYaw, true,
+            aimedTransform.mainGunMinElevation, aimedTransform.mainGunMaxElevation);
         GunPart(aimedTransform, drawPart, aimedTransform.mainGunTracksTarget,
             aimedTransform.aimTarget, {},
-            PrimitiveShape::Cylinder, 3.25f, {1.65f, 0.76f, 0.76f}, armor);
+            PrimitiveShape::Cylinder, 3.25f, {1.65f, 0.76f, 0.76f}, armor,
+            aimedTransform.mainGunTracksYaw, true,
+            aimedTransform.mainGunMinElevation, aimedTransform.mainGunMaxElevation);
         GunPart(aimedTransform, drawPart, aimedTransform.mainGunTracksTarget,
             aimedTransform.aimTarget, {},
-            PrimitiveShape::Cylinder, 4.23f, {0.42f, 1.16f, 1.16f}, main);
+            PrimitiveShape::Cylinder, 4.23f, {0.42f, 1.16f, 1.16f}, main,
+            aimedTransform.mainGunTracksYaw, true,
+            aimedTransform.mainGunMinElevation, aimedTransform.mainGunMaxElevation);
         GunPart(aimedTransform, drawPart, aimedTransform.mainGunTracksTarget,
             aimedTransform.aimTarget, {},
-            PrimitiveShape::Cylinder, 4.47f, {0.18f, 0.68f, 0.68f}, window);
+            PrimitiveShape::Cylinder, 4.47f, {0.18f, 0.68f, 0.68f}, window,
+            aimedTransform.mainGunTracksYaw, true,
+            aimedTransform.mainGunMinElevation, aimedTransform.mainGunMaxElevation);
         GunPart(aimedTransform, drawPart, aimedTransform.mainGunTracksTarget,
             aimedTransform.aimTarget, {},
-            PrimitiveShape::Cylinder, 4.00f, {0.12f, 1.22f, 1.22f}, gold);
+            PrimitiveShape::Cylinder, 4.00f, {0.12f, 1.22f, 1.22f}, gold,
+            aimedTransform.mainGunTracksYaw, true,
+            aimedTransform.mainGunMinElevation, aimedTransform.mainGunMaxElevation);
     }
 
     /**
