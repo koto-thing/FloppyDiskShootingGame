@@ -47,6 +47,15 @@ public:
     }
 
     void init(const Key& firstSceneKey) { Initialize(firstSceneKey); }
+
+    /**
+     * @brief フレーム境界で反映するシーン遷移を要求する
+     * @param nextKey 遷移先シーンの識別キー
+     * @return なし
+     */
+    void RequestTransition(const Key& nextKey) {
+        m_pendingSceneRequest = nextKey;
+    }
     
     /**
      * @brief 現在実行中のシーンの入力処理を呼び出す

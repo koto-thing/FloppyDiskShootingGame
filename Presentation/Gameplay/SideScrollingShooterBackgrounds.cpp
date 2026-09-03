@@ -25,6 +25,7 @@ void SideScrollingShooter::Render(Renderer& renderer) const {
     }
     DrawBossNameReveal(renderer);
     DrawMissionBanner(renderer);
+    if (m_tutorialMode) DrawTutorialHud(renderer);
 }
 
 void SideScrollingShooter::Render2D(Renderer& renderer) const {
@@ -50,6 +51,11 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
         sideShot.z = SidePlaneZ + (shot.enemy ? 1.0f : -0.4f);
         DrawShotModel(renderer, camera, sideShot, Math::HalfPi);
     }
+    if (m_bomb.active) {
+        Bomb sideBomb = m_bomb;
+        sideBomb.z = SidePlaneZ - 0.5f;
+        DrawBomb(renderer, camera, sideBomb);
+    }
     for (const auto& explosion : m_explosions) {
         if (!explosion.active) continue;
         Explosion sideExplosion = explosion;
@@ -69,7 +75,7 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
         DrawItemModel(renderer, camera, sideItem, 0.0f);
     }
     const bool playerVisible = m_playerDestructionTimer == 0 &&
-        (m_invincible == 0 || (m_invincible / 5) % 2 == 0);
+        (m_tutorialMode || m_invincible == 0 || (m_invincible / 5) % 2 == 0);
     DrawPlayerModel(renderer, camera, ToWorldX(m_playerX), ToWorldY(m_playerY),
         SidePlaneZ, playerVisible, Math::HalfPi);
     if (m_slowMove && playerVisible) {
@@ -81,9 +87,15 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     }
 
     renderer.ResetCamera();
+    DrawHudBackground(renderer);
     StageDispatch::DrawOverlay2D(*this, renderer);
     DrawPowerUp(renderer, camera, SidePlaneZ);
+    DrawTutorialControlHint(renderer, camera, SidePlaneZ);
+    DrawViewToggleCooldownHud(renderer, camera, SidePlaneZ);
     DrawAttackWarnings2D(renderer);
+
+    // チュートリアル固有HUDだけを描画し、通常ステージ情報との重なりを防ぐ
+    if (m_tutorialMode) return;
 
     char stageStatus[48];
     char scoreStatus[32];
@@ -99,10 +111,9 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     renderer.DrawText(scoreStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.025f });
     renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
     renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
-    DrawViewToggleCooldownHud(renderer, camera, SidePlaneZ);
     renderer.DrawText(StageDispatch::IsViewLocked(*this) ?
-        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  3D MODE LOCKED" :
-        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  MODE: X", { -0.92f, -0.92f }, 0.012f,
+        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  BOMB: C  3D MODE LOCKED" :
+        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  BOMB: C  MODE: X", { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
 
     DrawBossHud(renderer);
@@ -168,6 +179,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
         drawShot.z = Math::Lerp(SidePlaneZ + (shot.enemy ? 1.0f : -0.4f), shot.z, railWeight);
         DrawShotModel(renderer, camera, drawShot, shot.enemy ? enemyYaw : playerYaw);
     }
+    if (m_bomb.active) DrawBomb(renderer, camera, m_bomb);
     for (const auto& explosion : m_explosions) {
         if (!explosion.active) continue;
         // 2Dではレール変換済みの奥行きで船体背後へ隠れないよう前景面へ寄せる
@@ -184,7 +196,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
         DrawItemModel(renderer, camera, item, 0.0f);
     }
     const bool playerVisible = m_playerDestructionTimer == 0 &&
-        (m_invincible == 0 || (m_invincible / 5) % 2 == 0);
+        (m_tutorialMode || m_invincible == 0 || (m_invincible / 5) % 2 == 0);
     if (railWeight > 0.01f && playerVisible) {
         const float groundTopY = StageDispatch::RailGroundY(*this);
         DrawBlobShadow(renderer, camera, ToWorldX(m_playerX),
@@ -207,8 +219,15 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     DrawAttackWarnings3D(renderer, camera, railWeight);
 
     renderer.ResetCamera();
+    DrawHudBackground(renderer);
     StageDispatch::DrawOverlay3D(*this, renderer);
-    DrawPowerUp(renderer, camera, Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight));
+    const float playerZ = Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight);
+    DrawPowerUp(renderer, camera, playerZ);
+    DrawTutorialControlHint(renderer, camera, playerZ);
+    DrawViewToggleCooldownHud(renderer, camera, playerZ);
+
+    // チュートリアル固有HUDだけを描画し、通常ステージ情報との重なりを防ぐ
+    if (m_tutorialMode) return;
 
     char stageStatus[48];
     char scoreStatus[32];
@@ -224,11 +243,9 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     renderer.DrawText(scoreStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.025f });
     renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
     renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
-    DrawViewToggleCooldownHud(
-        renderer, camera, Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight));
     renderer.DrawText(StageDispatch::IsViewLocked(*this) ?
-        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  3D MODE LOCKED" :
-        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  MODE: X", { -0.92f, -0.92f }, 0.012f,
+        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  BOMB: C  3D MODE LOCKED" :
+        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  BOMB: C  MODE: X", { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
     if (m_viewTransitionTimer > 0) {
         renderer.DrawText("CAMERA SHIFT", { -0.16f, -0.02f }, 0.026f,

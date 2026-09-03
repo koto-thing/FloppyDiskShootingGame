@@ -24,6 +24,7 @@ void RunStage2BossModelViewTests();
 void RunStage4BossModelViewTests();
 void RunStage4WeaponDroneViewTests();
 void RunStage5ModelViewTests();
+void RunVoiceDpcmDecoderTests();
 #include <thread>
 
 namespace {
@@ -207,6 +208,7 @@ int main()
         RunStage4BossModelViewTests();
         RunStage4WeaponDroneViewTests();
         RunStage5ModelViewTests();
+        RunVoiceDpcmDecoderTests();
     } catch (const std::exception& exception) {
         std::cerr << "TimeTests failed: " << exception.what() << '\n';
         return 1;

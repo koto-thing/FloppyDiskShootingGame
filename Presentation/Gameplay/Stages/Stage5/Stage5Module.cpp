@@ -7,6 +7,7 @@
 #include "../../../../Engine/Input/Input.h"
 #include "../../../../Engine/Input/KeyCode.h"
 #include "../../../../Infrastructure/ExternalServices/AudioService.h"
+#include "../../Voices/VoiceDpcmDecoder.h"
 
 /**
  * @brief 値を一フレームの最大移動量以内で目標へ近づける
@@ -801,6 +802,9 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
  */
 void SideScrollingShooter::Stage5Module::DefeatEastsource(SideScrollingShooter& shooter, Enemy& eastsource) {
     if (shooter.m_stage5.phase != Stage5Phase::EastsourceBattle) return;
+    static const auto eastsourceDeathVoice =
+        VoiceCodec::DecodeForAudioService(VoiceSamples::eastsourceDeath);
+    if (shooter.m_audio) shooter.m_audio->PlaySE(eastsourceDeathVoice);
     shooter.UnlockGallery(GalleryEntry::Eastsource);
     eastsource.hp = 0;
     eastsource.collisionEnabled = false;
@@ -1225,6 +1229,9 @@ bool SideScrollingShooter::Stage5Module::TryDamageTayama(SideScrollingShooter& s
             } else if (shooter.m_stage5.phase == Stage5Phase::TayamaLiftEngines) {
                 StartTayamaPhase(shooter, Stage5Phase::TayamaCommandCore);
             } else {
+                static const auto tayamaDeathVoice =
+                    VoiceCodec::DecodeForAudioService(VoiceSamples::tayamaDeath);
+                if (shooter.m_audio) shooter.m_audio->PlaySE(tayamaDeathVoice);
                 shooter.UnlockGallery(GalleryEntry::Tayama);
                 StartPhase(shooter, Stage5Phase::TayamaCollapse, false);
             }

@@ -7,6 +7,7 @@ enum class SceneType {
     Title,
     ModeSelection,
     Story,
+    TutorialStage,
     Option,
     Credit,
     TestStage,

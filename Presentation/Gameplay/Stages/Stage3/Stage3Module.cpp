@@ -2166,8 +2166,13 @@ bool SideScrollingShooter::Stage3Module::HitsHazard(
             const float visibleScale = segment.scale * std::sqrt(visibleHeight / railHeight);
             const float railY = -3.65f + (segment.elevation < railHeight ?
                 visibleHeight * 0.5f : segment.elevation - railHeight * 0.5f);
-            if (Hit3D(ToWorldX(x), ToWorldY(y), z, radius * WorldXScale,
-                segment.railX, railY, segment.railZ, 1.25f * visibleScale)) {
+            const float movingRadius = radius * WorldXScale;
+            const float horizontalRadius = 1.25f * visibleScale + movingRadius;
+            const float verticalRadius = visibleHeight * 0.5f + movingRadius;
+            if (SideScrollingShooterShared::HitsEllipsoid(
+                ToWorldX(x) - segment.railX, ToWorldY(y) - railY,
+                z - segment.railZ, horizontalRadius, verticalRadius,
+                horizontalRadius)) {
                 return true;
             }
         } else {
