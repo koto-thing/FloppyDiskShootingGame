@@ -321,6 +321,7 @@ private:
         int retryCount = 0;
         int score = 0;
         int totalScore = 0;
+        bool bombAwarded = false;
     };
 
     static constexpr int ShotCapacity = 64;
@@ -335,6 +336,7 @@ private:
     static constexpr int BombChargeFrames = 12;
     static constexpr int BombExplosionLifetimeFrames = 42;
     static constexpr int BombExplosionEffectType = 5;
+    static constexpr int InitialBombCount = 3;
     static constexpr int AttackWarningFrames = 12;
     static constexpr int BossPartHitFlashFrames = 12;
     static constexpr int DebrisCapacity = 96;
@@ -894,6 +896,7 @@ private:
     int m_invincible = 0;
     int m_score = 0;
     int m_kills = 0;
+    int m_bombCount = InitialBombCount;
     int m_bossHp = 0;
     float m_displayBossHp = 0.0f;
     int m_bossStoryLine = 0;

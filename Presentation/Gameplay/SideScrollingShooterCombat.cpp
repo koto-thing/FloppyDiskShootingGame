@@ -77,9 +77,10 @@ void SideScrollingShooter::TickPlayerWeapons() {
  */
 void SideScrollingShooter::TickBomb() {
     // 同時に存在できるボムは一個だけとする
-    if (m_bombRequested && !m_bomb.active) {
+    if (m_bombRequested && !m_bomb.active && m_bombCount > 0) {
         m_bomb = {m_playerX, m_playerY, m_playerX, m_playerY,
             PlayerRailZ + 6.0f, 0, true};
+        --m_bombCount;
     }
     if (!m_bomb.active) return;
 
@@ -106,7 +107,11 @@ void SideScrollingShooter::DetonateBomb() {
                 enemy.x <= Side2DPlayerMaxX + Side2DShotCullMargin &&
                 enemy.y >= sideYRange.x - Side2DShotCullMargin &&
                 enemy.y <= sideYRange.y + Side2DShotCullMargin;
-        if (visible) enemy.active = false;
+        if (visible) {
+            enemy.active = false;
+            ++m_kills;
+            ++m_chapterResult.enemyDefeatCount;
+        }
     }
 
     // 敵弾は固定長プール上の全種類を一括で消去する

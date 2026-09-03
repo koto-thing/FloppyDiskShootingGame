@@ -193,6 +193,28 @@ public:
         Renderer& renderer, const Camera3D& camera);
 
     /**
+     * @brief Stage 5の雨粒を3D空間へ描画する
+     * @param shooter 描画対象
+     * @param renderer 描画先
+     * @param camera 現在の3Dカメラ
+     * @param railWeight 横視点からレール視点への補間率
+     * @return なし
+     */
+    static void DrawRain3D(const SideScrollingShooter& shooter,
+        Renderer& renderer, const Camera3D& camera, float railWeight);
+
+    /**
+     * @brief 既存都市背景と同じ配置と寸法でStage5専用ビル群を描画する
+     * @param shooter 描画対象
+     * @param renderer 描画先
+     * @param camera 現在の3Dカメラ
+     * @param railWeight 横視点からレール視点への補間率
+     * @return なし
+     */
+    static void DrawCityBuildings(const SideScrollingShooter& shooter,
+        Renderer& renderer, const Camera3D& camera, float railWeight);
+
+    /**
      * @brief Stage 5専用2D画面エフェクトを描画する
      * @param shooter 描画対象
      * @param renderer 描画先
@@ -280,6 +302,6 @@ private:
     static void TickTayama(SideScrollingShooter& shooter);
     static void TickStateMachine(SideScrollingShooter& shooter);
     static void PlayCue(SideScrollingShooter& shooter, int cue);
-    static void DrawWeather(const SideScrollingShooter& shooter, Renderer& renderer);
+    static void DrawScreenEffects(const SideScrollingShooter& shooter, Renderer& renderer);
     static void DrawStage5Hud(const SideScrollingShooter& shooter, Renderer& renderer);
 };
