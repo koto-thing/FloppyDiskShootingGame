@@ -46,8 +46,8 @@ void SideScrollingShooter::TickPlayer() {
     const float maxY = IsRailGameplayActive() ?
         StageDispatch::RailPlayerMaxY(*this) : sideYRange.y;
     const float speedScale = m_slowMove ? 0.5f : 1.0f;
-    m_playerX = (std::clamp)(m_playerX + dx * 0.018f * speedScale, xRange.x, xRange.y);
-    m_playerY = (std::clamp)(m_playerY + dy * 0.024f * speedScale, minY, maxY);
+    m_playerX = (std::clamp)(m_playerX + dx * 0.023f * speedScale, xRange.x, xRange.y);
+    m_playerY = (std::clamp)(m_playerY + dy * 0.029f * speedScale, minY, maxY);
 }
 
 /**
@@ -755,9 +755,8 @@ void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, 
 void SideScrollingShooter::FireSpecialShots() {
     const auto& config = PlayerShotConfigs[static_cast<size_t>(m_playerType)];
     const int powerLevel = PowerLevel();
-    const int projectileCount = m_playerType == Spread ? config.projectileCount + powerLevel * 2 :
-        config.projectileCount + powerLevel;
-    const int damage = m_playerType == Piercing ? config.damage + powerLevel : config.damage;
+    const int projectileCount = m_playerType == Spread ? config.projectileCount + powerLevel : config.projectileCount + powerLevel;
+    const int damage = config.damage;
     constexpr float DegreesToRadians = 3.1415926535f / 180.0f;
 
     /** @brief 弾数に応じて左右対称の角度と発射位置を求める */

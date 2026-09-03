@@ -39,11 +39,11 @@ public:
     /** @brief 機体タイプ別の自機弾パラメータ */
     inline static constexpr std::array<PlayerShotParameters, 3> PlayerShotConfigs {{
         // HOMING
-        { 10, 2, 0.038f, 5.0f, 0.08f, 0.20f, 0.025f, 1, 0.075f, false },
+        { 10, 2, 0.038f, 5.0f, 0.08f, 0.20f, 0.025f, 1, 0.100f, false },
         // PIERCING
-        { 14, 2, 0.052f, 0.0f, 0.10f, 0.20f, 0.032f, 2, 0.000f, true },
+        { 14, 2, 0.052f, 0.0f, 0.12f, 0.09f, 0.032f, 1, 0.000f, true },
         // SPREAD
-        { 12, 5, 0.043f, 24.0f, 0.17f, 0.00f, 0.022f, 1, 0.000f, false },
+        { 12, 7, 0.043f, 65.0f, 0.17f, 0.00f, 0.022f, 1, 0.000f, false },
     }};
 
     /** @brief 全機体共通の通常弾パラメータ */
@@ -325,7 +325,7 @@ private:
         bool bombAwarded = false;
     };
 
-    static constexpr int ShotCapacity = 64;
+    static constexpr int ShotCapacity = 128;
     static constexpr int EnemyCapacity = 12;
     static constexpr int ItemCapacity = 48;
     static constexpr int ExplosionCapacity = ShotCapacity + 32;

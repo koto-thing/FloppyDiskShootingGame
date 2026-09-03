@@ -9,7 +9,7 @@
  */
 class SideScrollingShooter::Stage1EnemySheet : public SideScrollingShooter::Stage {
 public:
-    static constexpr int BossPhaseHp[] = {480, 360, 240, 120};
+    static constexpr int BossPhaseHp[] = {800, 600, 400, 200};
 
     int StageIndex() const override { return 1; }
 
@@ -19,6 +19,12 @@ public:
      */
     int BossMaxHp() const override {
         return BossPhaseHp[0];
+    }
+
+    /** @brief 部位破壊ダメージを取得する @param part 破壊された部位 @return ダメージ120 */
+    int BossPartBreakDamage(BossPart part) const override {
+        (void)part;
+        return 70;
     }
 
     /**
@@ -201,7 +207,7 @@ public:
      * @return 発射間隔
      */
     int BossAttackInterval(BossPhase phase) const override {
-        return phase == BossNormalPhase1 || phase == BossNormalPhase2 ? 120 : 84;
+        return phase == BossNormalPhase1 || phase == BossNormalPhase2 ? 120 : 74;
     }
 
     /**

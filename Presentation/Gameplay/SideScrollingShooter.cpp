@@ -22,6 +22,10 @@ constexpr float PowerAfterRestart(float power) {
     return power > 1.0f ? power - 1.0f : 0.0f;
 }
 
+constexpr float PowerAfterDebugIncrease(float power, float maxPower) {
+    return power + 1.0f < maxPower ? power + 1.0f : maxPower;
+}
+
 /**
  * @brief 敵出現数と撃破数からボムボーナスの獲得条件を判定する
  * @param defeatCount 敵撃破数
@@ -34,6 +38,8 @@ constexpr bool EarnsChapterBombBonus(int defeatCount, int spawnCount) {
 
 static_assert(PowerAfterRestart(3.25f) == 2.25f);
 static_assert(PowerAfterRestart(0.75f) == 0.0f);
+static_assert(PowerAfterDebugIncrease(2.25f, 4.0f) == 3.25f);
+static_assert(PowerAfterDebugIncrease(3.50f, 4.0f) == 4.0f);
 static_assert(EarnsChapterBombBonus(9, 10));
 static_assert(!EarnsChapterBombBonus(8, 9));
 static_assert(!EarnsChapterBombBonus(0, 0));
@@ -309,6 +315,11 @@ void SideScrollingShooter::ProcessInput() {
     if (Input::GetKeyDown(KeyCode::Alpha1)) StartDebugCheckpoint(m_stageNumber, 1, false);
     if (Input::GetKeyDown(KeyCode::Alpha2)) StartDebugCheckpoint(m_stageNumber, 2, false);
     if (Input::GetKeyDown(KeyCode::Alpha3)) StartDebugCheckpoint(m_stageNumber, 3, false);
+    if (Input::GetKeyDown(KeyCode::P)) {
+        const int previousPowerLevel = PowerLevel();
+        m_power = PowerAfterDebugIncrease(m_power, MaxPower);
+        if (PowerLevel() > previousPowerLevel) m_powerUpTimer = 120;
+    }
     if (Input::GetKeyDown(KeyCode::B) && !StageDispatch::HandleDebugBossInput(*this)) {
         StartDebugCheckpoint(m_stageNumber, 3, true);
     }
