@@ -134,6 +134,32 @@ void SideScrollingShooter::TickEnemies() {
             return;
         }
     }
+    TickLinkedEnemyLasers();
+}
+
+void SideScrollingShooter::TickLinkedEnemyLasers() {
+    if (m_invincible > 0) return;
+
+    for (const auto& upper : m_enemies) {
+        if (!upper.active || upper.type != Stage::LinkedLaserEnemy || upper.laserLinkRole <= 0) continue;
+        for (const auto& lower : m_enemies) {
+            if (!lower.active || lower.type != Stage::LinkedLaserEnemy ||
+                lower.laserLinkId != upper.laserLinkId || lower.laserLinkRole >= 0) continue;
+            const bool playerHit = IsRailGameplayActive() ?
+                DistancePointToSegment3D({ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ},
+                    {ToWorldX(upper.x), ToWorldY(upper.y), upper.z},
+                    {ToWorldX(lower.x), ToWorldY(lower.y), lower.z}) <=
+                        LinkedLaserEnemyBehavior::LaserRadius3D() + 0.38f :
+                DistancePointToSegment2D({m_playerX, m_playerY},
+                    {upper.x, upper.y}, {lower.x, lower.y}) <=
+                        LinkedLaserEnemyBehavior::LaserRadius2D() + 0.050f;
+            if (playerHit) {
+                DamagePlayer();
+                return;
+            }
+            break;
+        }
+    }
 }
 
 void SideScrollingShooter::TickShots() {
@@ -352,6 +378,44 @@ void SideScrollingShooter::TickItems() {
 
 void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, float y, float railZ) {
     constexpr float SideEnemyEntryX = 2.80f;
+
+    if (enemyType == Stage::LinkedLaserEnemy) {
+        Enemy* upper = nullptr;
+        Enemy* lower = nullptr;
+        for (auto& enemy : m_enemies) {
+            if (enemy.active) continue;
+            if (upper == nullptr) {
+                upper = &enemy;
+            } else {
+                lower = &enemy;
+                break;
+            }
+        }
+        if (upper == nullptr || lower == nullptr) return;
+
+        const int linkId = m_frame * EnemyCapacity + m_chapterResult.enemySpawnCount + 1;
+        const bool upperRight = (linkId & 1) == 0;
+        const float upperRailX = upperRight ?
+            LinkedLaserEnemyBehavior::RightRailX() : LinkedLaserEnemyBehavior::LeftRailX();
+        const float lowerRailX = upperRight ?
+            LinkedLaserEnemyBehavior::LeftRailX() : LinkedLaserEnemyBehavior::RightRailX();
+        auto ConfigureLinked = [&](Enemy& enemy, int role, float fixedY, float linkRailX) {
+            enemy.active = true;
+            m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
+            enemy.railAnchorX = linkRailX;
+            enemy.baseX = IsRailGameplayActive() ? linkRailX : (std::max)(sideX, SideEnemyEntryX);
+            enemy.x = enemy.baseX;
+            enemy.baseY = fixedY;
+            enemy.y = fixedY;
+            enemy.z = IsRailGameplayActive() ? (std::max)(railZ, EnemyRailFarZ) : ToRailZFromSideX(enemy.x);
+            enemy.laserLinkId = linkId;
+            enemy.laserLinkRole = role;
+        };
+        ConfigureLinked(*upper, 1, LinkedLaserEnemyBehavior::UpperY(), upperRailX);
+        ConfigureLinked(*lower, -1, LinkedLaserEnemyBehavior::LowerY(), lowerRailX);
+        m_chapterResult.enemySpawnCount += 2;
+        return;
+    }
 
     for (auto& enemy : m_enemies) {
         if (enemy.active) continue;

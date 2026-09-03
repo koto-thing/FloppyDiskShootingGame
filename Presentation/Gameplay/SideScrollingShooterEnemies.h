@@ -803,6 +803,83 @@ private:
 };
 
 /**
+ * @brief 上下2機を接続レーザーで結ぶ敵を制御する
+ */
+class SideScrollingShooter::LinkedLaserEnemyBehavior final : public SideScrollingShooter::EnemyBehavior {
+public:
+    int Type() const override {
+        return 9;
+    }
+
+    int MaxHp() const override {
+        return 40;
+    }
+
+    void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
+        if (shooter.IsRailGameplayActive()) {
+            enemy.z -= RailMoveSpeed;
+            enemy.x = enemy.baseX;
+        } else {
+            enemy.x -= SideMoveSpeed;
+            enemy.z = ToRailZFromSideX(enemy.x);
+        }
+        enemy.y = enemy.baseY;
+    }
+
+    int AimedShotInterval() const override {
+        return 0;
+    }
+
+    int Score(const Enemy&) const override {
+        return 260;
+    }
+
+    float RenderScale() const override {
+        return 1.08f;
+    }
+
+    static constexpr float UpperY() {
+        return UpperYValue;
+    }
+
+    static constexpr float LowerY() {
+        return LowerYValue;
+    }
+
+    static constexpr float LaserRadius2D() {
+        return LaserRadius2DValue;
+    }
+
+    static constexpr float LaserRadius3D() {
+        return LaserRadius3DValue;
+    }
+
+    static constexpr float LeftRailX() {
+        return LeftRailXValue;
+    }
+
+    static constexpr float RightRailX() {
+        return RightRailXValue;
+    }
+
+private:
+    static constexpr float UpperYValue = 1.10f;
+    static constexpr float LowerYValue = -1.26f;
+    static constexpr float LeftRailXValue = -1.0f;
+    static constexpr float RightRailXValue = 1.0f;
+    static constexpr float LaserRadius2DValue = 0.035f;
+    static constexpr float LaserRadius3DValue = 0.24f;
+    static constexpr float SideMoveSpeed = 0.012f;
+    static constexpr float RailMoveSpeed = 0.24f;
+    static_assert(UpperYValue > LowerYValue);
+    static_assert(LeftRailXValue < RightRailXValue);
+    static_assert(LaserRadius2DValue > 0.0f);
+    static_assert(LaserRadius3DValue > 0.0f);
+    static_assert(SideMoveSpeed > 0.0f);
+    static_assert(RailMoveSpeed > 0.0f);
+};
+
+/**
  * @brief ボスの移動と通常狙い弾間隔を制御する
  */
 class SideScrollingShooter::BossEnemyBehavior final : public SideScrollingShooter::EnemyBehavior {

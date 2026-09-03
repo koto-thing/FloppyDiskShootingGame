@@ -43,6 +43,7 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
         sideEnemy.z = SidePlaneZ + (enemy.type == 2 ? 2.2f : 1.5f);
         DrawEnemyModel(renderer, camera, sideEnemy, Math::HalfPi);
     }
+    DrawLinkedEnemyLasers(renderer, camera, 0.0f);
     for (const auto& shot : m_shots) {
         if (!shot.active) continue;
         Shot sideShot = shot;
@@ -154,6 +155,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
         }
         DrawEnemyModel(renderer, camera, drawEnemy, enemyYaw);
     }
+    DrawLinkedEnemyLasers(renderer, camera, railWeight);
     for (const auto& shot : m_shots) {
         if (!shot.active) continue;
         Shot drawShot = shot;

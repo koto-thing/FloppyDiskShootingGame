@@ -32,6 +32,7 @@ public:
         };
         static constexpr EnemySpawnRule Chapter2[] = {
             {StraightShooterEnemy, 10, 42, 1.10f, 0.28f, -0.88f, 40.0f},
+            {LinkedLaserEnemy, 34, 190, 1.12f, -0.45f, 0.0f, 60.0f},
             {CircleShooterEnemy, 55, 132, 1.14f, 0.82f, 0.32f, 56.0f},
             {MissileShooterEnemy, 72, 160, 1.14f, -0.40f, -0.92f, 60.0f},
             {DiveRusherEnemy, 90, 140, 1.12f, -0.58f, 0.96f, 60.0f},
@@ -39,6 +40,7 @@ public:
         };
         static constexpr EnemySpawnRule Chapter3[] = {
             {ArmoredEnemy, 10, 110, 1.12f, -0.85f, -0.18f, 60.0f},
+            {LinkedLaserEnemy, 30, 170, 1.12f, 0.45f, 0.0f, 60.0f},
             {CircleShooterEnemy, 50, 118, 1.14f, -0.28f, 0.86f, 50.0f},
             {MissileShooterEnemy, 62, 140, 1.14f, 0.20f, -0.92f, 60.0f},
             {DiveRusherEnemy, 70, 126, 1.12f, 0.48f, 0.96f, 60.0f},

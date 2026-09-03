@@ -111,6 +111,7 @@ private:
     class CircleShooterEnemyBehavior;
     class SquareShooterEnemyBehavior;
     class MissileShooterEnemyBehavior;
+    class LinkedLaserEnemyBehavior;
     class StageDispatch;
     class Stage1Module;
     class Stage2Module;
@@ -224,6 +225,8 @@ private:
         int attackWarningFrames = 0;
         float attackWarningTargetX = 0.0f;
         float attackWarningTargetY = 0.0f;
+        int laserLinkId = 0;
+        int laserLinkRole = 0;
         int bossPhase = BossNormalPhase1;
         std::array<int, BossPartCount> bossPartHp {};
         std::array<int, BossPartCount> bossPartMaxHp {};
@@ -426,6 +429,7 @@ private:
     static const EnemyBehavior& CircleShooterEnemyBehaviorInstance();
     static const EnemyBehavior& SquareShooterEnemyBehaviorInstance();
     static const EnemyBehavior& MissileShooterEnemyBehaviorInstance();
+    static const EnemyBehavior& LinkedLaserEnemyBehaviorInstance();
     static const EnemyBehavior& EnemyBehaviorForType(int type);
     void TickViewTransition();
     /**
@@ -443,6 +447,8 @@ private:
      */
     void TickPlayerWeapons();
     void TickEnemies();
+    /** @brief 接続レーザー敵のレーザー接触判定を更新する */
+    void TickLinkedEnemyLasers();
     void TickShots();
     /** @brief 生存中の爆発エフェクトを更新する */
     void TickExplosions();
@@ -564,6 +570,22 @@ private:
     void PlayBossMachineGunSound();
     static bool Hit(float ax, float ay, float ar, float bx, float by, float br);
     static bool Hit3D(float ax, float ay, float az, float ar, float bx, float by, float bz, float br);
+    /**
+     * @brief 点と2D線分の最短距離を取得する
+     * @param point 判定点
+     * @param start 線分開始点
+     * @param end 線分終了点
+     * @return 最短距離
+     */
+    static float DistancePointToSegment2D(const Vector2& point, const Vector2& start, const Vector2& end);
+    /**
+     * @brief 点と3D線分の最短距離を取得する
+     * @param point 判定点
+     * @param start 線分開始点
+     * @param end 線分終了点
+     * @return 最短距離
+     */
+    static float DistancePointToSegment3D(const Vector3& point, const Vector3& start, const Vector3& end);
     /**
      * @brief 線分上を移動する球が対象球へ接触したか判定する
      * @param startX 移動前のワールド座標X
@@ -719,6 +741,27 @@ private:
     void DrawPlayerModel(Renderer& renderer, const Camera3D& camera,
         float x, float y, float z, bool visible, float yaw = 0.0f) const;
     void DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw = 0.0f) const;
+    /**
+     * @brief 接続レーザー敵の機体間レーザーを描画する
+     * @param renderer 描画先レンダラー
+     * @param camera 現在の3Dカメラ
+     * @param railWeight 横視点からレール視点への補間率
+     * @return なし
+     */
+    void DrawLinkedEnemyLasers(Renderer& renderer, const Camera3D& camera, float railWeight) const;
+    /**
+     * @brief Stage2主砲と同じRailgunシェーダーで線分レーザーを描画する
+     * @param renderer 描画先レンダラー
+     * @param camera 現在の3Dカメラ
+     * @param start 開始ワールド座標
+     * @param end 終了ワールド座標
+     * @param width レーザー幅
+     * @param progress シェーダーへ渡す進行値
+     * @param effectType シェーダー効果種別
+     * @return なし
+     */
+    static void DrawRailgunBeamBetween(Renderer& renderer, const Camera3D& camera,
+        const Vector3& start, const Vector3& end, float width, float progress, int effectType);
     void DrawShotModel(Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw = 0.0f) const;
     /** @brief 爆発エフェクトをHLSLへ渡す描画コマンドとして記録する */
     static void DrawExplosion(Renderer& renderer, const Camera3D& camera, const Explosion& explosion);
