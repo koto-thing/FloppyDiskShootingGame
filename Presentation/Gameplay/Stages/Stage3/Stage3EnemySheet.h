@@ -13,6 +13,7 @@ public:
     static constexpr int StraightShooterEnemy = SideScrollingShooter::Stage::StraightShooterEnemy;
     static constexpr int ArmoredEnemy = SideScrollingShooter::Stage::ArmoredEnemy;
     static constexpr int CircleShooterEnemy = SideScrollingShooter::Stage::CircleShooterEnemy;
+    static constexpr int SquareShooterEnemy = SideScrollingShooter::Stage::SquareShooterEnemy;
     static constexpr int DiveRusherEnemy = SideScrollingShooter::Stage::DiveRusherEnemy;
     static constexpr int MissileShooterEnemy = SideScrollingShooter::Stage::MissileShooterEnemy;
     static constexpr int LinkedLaserEnemy = SideScrollingShooter::Stage::LinkedLaserEnemy;
