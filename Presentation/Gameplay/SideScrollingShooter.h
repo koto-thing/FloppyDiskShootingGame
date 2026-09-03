@@ -680,6 +680,11 @@ private:
     float PlayerRailMinY() const;
     /** @brief 現在のPowerから弾強化段階を取得する */
     int PowerLevel() const;
+    /**
+     * @brief 現在チャプター内の到達率を取得する
+     * @return 0から100までの到達率
+     */
+    int ChapterProgressPercent() const;
     /** @brief チャプターの総合スコアを算出する */
     static int CalculateChapterTotalScore(const ChapterResult& result);
     float RailBlend() const;

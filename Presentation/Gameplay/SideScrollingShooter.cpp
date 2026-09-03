@@ -40,6 +40,13 @@ constexpr int ScaleHpByPercent(int hp, int percent) {
     return hp <= 0 ? 0 : (std::max)(1, (hp * percent + 50) / 100);
 }
 
+constexpr int ChapterProgressPercentForFrame(int frame, int startFrame, int endFrame, bool bossBattle) {
+    if (bossBattle) return 100;
+    const int duration = endFrame > startFrame ? endFrame - startFrame : 1;
+    const int elapsed = frame <= startFrame ? 0 : (frame >= endFrame ? duration : frame - startFrame);
+    return elapsed * 100 / duration;
+}
+
 static_assert(PowerAfterRestart(3.25f) == 2.25f);
 static_assert(PowerAfterRestart(0.75f) == 0.0f);
 static_assert(PowerAfterDebugIncrease(2.25f, 4.0f) == 3.25f);
@@ -51,6 +58,10 @@ static_assert(ScaleHpByPercent(10, 70) == 7);
 static_assert(ScaleHpByPercent(10, 100) == 10);
 static_assert(ScaleHpByPercent(10, 150) == 15);
 static_assert(ScaleHpByPercent(1, 70) == 1);
+static_assert(ChapterProgressPercentForFrame(0, 0, 1000, false) == 0);
+static_assert(ChapterProgressPercentForFrame(500, 0, 1000, false) == 50);
+static_assert(ChapterProgressPercentForFrame(1000, 0, 1000, false) == 100);
+static_assert(ChapterProgressPercentForFrame(1200, 1000, 2000, true) == 100);
 
 /** @brief 無線風に加工した自機撃破音声を取得する @return 44100Hz PCMデータ */
 const std::vector<std::int16_t>& MomijiDeathVoice() {
@@ -1243,6 +1254,19 @@ float SideScrollingShooter::PlayerRailMinY() const {
  */
 int SideScrollingShooter::PowerLevel() const {
     return static_cast<int>(m_power);
+}
+
+/**
+ * @brief 現在チャプター内の到達率を取得する
+ * @return 0から100までの到達率
+ */
+int SideScrollingShooter::ChapterProgressPercent() const {
+    if (m_stage == nullptr) return 0;
+
+    // 現在チャプターの開始/終了フレームから進行率を求める
+    const int startFrame = m_stage->ChapterEndFrame(m_chapterNumber - 1);
+    const int endFrame = m_stage->ChapterEndFrame(m_chapterNumber);
+    return ChapterProgressPercentForFrame(m_frame, startFrame, endFrame, m_bossBattle);
 }
 
 /**
