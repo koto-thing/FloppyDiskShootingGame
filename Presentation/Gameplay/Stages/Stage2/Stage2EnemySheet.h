@@ -17,7 +17,7 @@ public:
     }
 
     /** @brief Stage 2ボス最大HPを取得する @return Stage 2ボス最大HP */
-    int BossMaxHp() const override { return 1200; }
+    int BossMaxHp() const override { return 3600; }
 
     /** @brief 飛散部品の重力設定を取得する @return 重力を適用しないためfalse */
     bool HasDebrisGravity() const override { return false; }
@@ -94,14 +94,14 @@ public:
 
     /** @brief Stage 2ボス部位HPを設定する @param boss 設定するボス @return なし */
     void ConfigureBossPartHp(Enemy& boss) const override {
-        boss.bossPartHp = {300, 160, 160, 160, 240,
+        boss.bossPartHp = {600, 100, 100, 100, 300,
             30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30};
     }
 
     /** @brief 部位破壊ダメージを取得する @param part 破壊された部位 @return ダメージ120 */
     int BossPartBreakDamage(BossPart part) const override {
         (void)part;
-        return 120;
+        return 60;
     }
 
     /**

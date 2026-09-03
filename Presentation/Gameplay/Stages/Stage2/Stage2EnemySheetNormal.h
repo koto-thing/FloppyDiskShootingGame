@@ -28,27 +28,26 @@ public:
         EnemySpawnRule& spawn, int& chapterNumber) const override {
         // チャプター1
         static constexpr EnemySpawnRule Chapter1[] = {
-            {BasicEnemy, 35, 70, 2.6f, -0.72f, -0.54f, 60.0f},
-            {StraightShooterEnemy, 160, 360, 2.6f, -0.18f, 0.86f, 48.0f},
-            {SquareShooterEnemy, 300, 300, 2.6f, 0.0f, 0.0f, 54.0f}
+            {BasicEnemy, 35, 150, 2.6f, -0.72f, -0.54f, 60.0f},
+            {StraightShooterEnemy, 200, 400, 2.6f, -0.18f, 0.86f, 48.0f},
+            {StraightShooterEnemy, 400, 400, 2.6f, -0.18f, -0.86f, 48.0f},
+            {SquareShooterEnemy, 500, 1200, 2.6f, 0.0f, 0.0f, 54.0f}
         };
         // チャプター2
         static constexpr EnemySpawnRule Chapter2[] = {
-            {BasicEnemy, 25, 65, 2.6f, 0.42f, -0.12f, 60.0f},
-            {HeavyEnemy, 50, 280, 2.6f, 0.70f, 0.58f, 60.0f},
-            {SquareShooterEnemy, 300, 300, 2.6f, -0.6f, 0.0f, 54.0f},
-            {SquareShooterEnemy, 300, 300, 2.6f, 0.6f, 0.0f, 54.0f}
+            {BasicEnemy, 25, 150, 2.6f, 0.42f, -0.12f, 60.0f},
+            {StraightShooterEnemy, 300, 400, 2.6f, 0.0f, 0.0f, 48.0f},
+            {SquareShooterEnemy, 600, 1200, 2.6f, -0.6f, 0.0f, 54.0f},
+            {SquareShooterEnemy, 600, 1200, 2.6f, 0.6f, 0.0f, 54.0f}
         };
         // チャプター3
         static constexpr EnemySpawnRule Chapter3[] = {
-            {BasicEnemy, 25, 65, 2.6f, 0.42f, -0.12f, 60.0f},
-            {StraightShooterEnemy, 20, 160, 2.6f, -0.78f, 0.86f, 48.0f},
-            {CircleShooterEnemy, 100, 100, 2.6f, 0.78f, -0.86f, 36.0f},
-            {HeavyEnemy, 50, 200, 2.6f, 0.22f, 0.30f, 60.0f},
+            {BasicEnemy, 25, 120, 2.6f, 0.42f, -0.12f, 60.0f},
             {SquareShooterEnemy, 300, 1000, 2.6f, -0.9f, 0.5f, 54.0f},
             {SquareShooterEnemy, 300, 1000, 2.6f, 0.9f, -0.5f, 54.0f},
-            {SquareShooterEnemy, 700, 1000, 2.6f, 0.9f, 0.5f, 54.0f},
-            {SquareShooterEnemy, 700, 1000, 2.6f, -0.9f, -0.5f, 54.0f}
+            {CircleShooterEnemy, 600, 1000, 2.6f, 0.0f, 0.0f, 36.0f},
+            {SquareShooterEnemy, 900, 1000, 2.6f, 0.9f, 0.5f, 54.0f},
+            {SquareShooterEnemy, 900, 1000, 2.6f, -0.9f, -0.5f, 54.0f}
         };
         constexpr Chapter Chapters[] = {
             MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)
@@ -56,7 +55,7 @@ public:
         const bool selected = TrySelectByChapters(Chapters, 3, frame, spawnIndex, spawn, chapterNumber);
         // YとZの生成範囲をランダム化
         if (selected) {
-            if (spawn.enemyType != SquareShooterEnemy) {
+            if (spawn.enemyType == BasicEnemy) {
                 spawn.y = GameplayRandom::Range(-0.86f, 0.86f);
                 spawn.railX = GameplayRandom::Range(-1.0f, 1.0f);
             }
