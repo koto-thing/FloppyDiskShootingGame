@@ -289,6 +289,22 @@ public:
         }
     }
 
+    /**
+     * @brief 砲身を失い砲尾だけ残った半壊Romance Cannonを描画する
+     * @param weaponTransform 主砲単体Transform
+     * @param pose 取付補正と砲身姿勢
+     * @param drawPart 形状、ワールド座標、寸法、色、向きを受け取る描画関数
+     * @param hit 被弾色で描画する場合true
+     * @return なし
+     */
+    template<class DrawPart>
+    static void DrawDamagedRomanceCannon(const BossModelTransform& weaponTransform,
+        const Stage4MainWeaponPose& pose, DrawPart&& drawPart, bool hit = false) {
+        const BossModelTransform posedTransform = ApplyWeaponPose(weaponTransform, pose);
+        DrawRomanceCannonBase(posedTransform, drawPart, hit);
+        DrawRomanceCannonRearBreech(posedTransform, drawPart, hit);
+    }
+
 private:
     inline static constexpr float MainBlack[] = {0.025f, 0.025f, 0.030f, 1.0f};
     inline static constexpr float ArmorBlack[] = {0.060f, 0.065f, 0.075f, 1.0f};

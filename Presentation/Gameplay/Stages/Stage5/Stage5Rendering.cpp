@@ -21,6 +21,7 @@ constexpr float SearchlightLockedColor[4] = { 1.00f, 0.08f, 0.08f, 0.50f };
 constexpr float DronePointerColor[4] = { 1.00f, 0.03f, 0.02f, 0.72f };
 constexpr float StormCloudColor[4] = { 0.05f, 0.07f, 0.13f, 1.0f };
 constexpr float BuildingWindowColor[4] = { 0.20f, 0.78f, 0.92f, 1.0f };
+constexpr float MegaBuildingSilhouetteColor[4] = { 0.035f, 0.045f, 0.075f, 1.0f };
 constexpr int RainCycle = 240;
 constexpr int RainFallSpeed = 4;
 constexpr int RainSplashDuration = 32;
@@ -48,8 +49,8 @@ constexpr float RainSplashProgress(int fallPhase) {
 constexpr int CityBuildingCount = 30;
 constexpr float CityBuildingNdcSpacing = 2.0f / CityBuildingCount;
 constexpr float Stage5CityBuildingScale = 2.0f;
-constexpr int Stage5CityBuildingCount = static_cast<int>(Stage5BuildingType::Count);
-static_assert(Stage5CityBuildingCount == 7);
+constexpr int Stage5CityBuildingCount = static_cast<int>(Stage5BuildingType::Count) * 2;
+static_assert(Stage5CityBuildingCount == 14);
 
 /**
  * @brief 値を横画面の循環範囲へ収める
@@ -101,6 +102,7 @@ constexpr float RainIntensity(ShooterStages::Stage5::Phase phase, int chapter,
 
 static_assert(RainIntensity(ShooterStages::Stage5::Phase::Approach, 1, 0.0f, 0) == 0.22f);
 static_assert(RainIntensity(ShooterStages::Stage5::Phase::EastsourceBattle, 3, 0.0f, 0) == 1.0f);
+static_assert(RainIntensity(ShooterStages::Stage5::Phase::WallClimbTransition, 3, 0.0f, 0) > 0.0f);
 static_assert(RainIntensity(ShooterStages::Stage5::Phase::TayamaCommandCore, 3, 1.0f, 180) == 0.0f);
 static_assert(RainFallPhase(0, 0) == 0);
 static_assert(RainFallPhase(0, 1) == RainCycle - RainFallSpeed);
@@ -144,13 +146,13 @@ void SideScrollingShooter::Stage5Module::ApplyCameraCorrection(
         return;
     }
 
-    // 第2部道中は自機後方の少し上から中央外壁のはるか上を見上げる
+    // 第2部道中は自機後方から壁面に沿って上方を見上げる
     if (ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) {
         const float section = shooter.m_stage5.phase == Stage5Phase::WallClimbLower ? 0.0f :
             (shooter.m_stage5.phase == Stage5Phase::WallClimbMiddle ? 0.5f : 1.0f);
         railPosition.y += 0.72f;
         railPosition.z -= 6.0f;
-        railTarget.y += Math::Lerp(10.0f, 14.0f, section);
+        railTarget.y += Math::Lerp(42.0f, 48.0f, section);
         railTarget.z += 8.0f;
         return;
     }
@@ -497,7 +499,7 @@ void SideScrollingShooter::Stage5Module::DrawCityBuildings(
     const float buildingSpacing = shooter.m_stageNumber == 5 ?
         2.0f / Stage5CityBuildingCount : CityBuildingNdcSpacing;
 
-    // Stage5は2倍モデル7種を1棟ずつ並べ、ファサード同士の重なりを防ぐ
+    // Stage5は2倍モデル7種を2巡させ、形状の大きさを保ったまま街並みを詰める
     for (int index = 0; index < buildingCount; ++index) {
         const bool leftSide = index % 2 == 0;
         const float sideX = WrapCityNdcX(
@@ -804,27 +806,30 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
     if (ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) return;
 
     if (shooter.m_stage5.phase <= Stage5Phase::EastsourceFall) {
-        // 第1部遠景はラスボス変形前モデルではなく超巨大な市街ビルを配置する
+        // 第1部遠景は奥行きを潰した単色シルエットとして超巨大ビルを配置する
         constexpr float GroundTopY = -3.65f;
         constexpr float MegaBuildingScale = 10.0f;
+        constexpr float MegaBuildingDepthScale = 0.5f;
         constexpr float BackgroundSetback = 30.0f;
         const Stage5ModelTransform landmark = TayamaTransform(shooter);
         const Matrix4x4 root = Matrix4x4::Translation(
             {0.0f, GroundTopY, landmark.position.z + BackgroundSetback}) *
-            Matrix4x4::Scale({MegaBuildingScale, MegaBuildingScale, MegaBuildingScale});
+            Matrix4x4::Scale(
+                {MegaBuildingScale, MegaBuildingScale, MegaBuildingDepthScale});
         Stage5CityModelView::VisitBuilding(Stage5BuildingType::TowerSub, root,
-            [&](PrimitiveShape shape, const Matrix4x4& world, const ColorF& color) {
-                const float partColor[] = {color.r, color.g, color.b, color.a};
+            [&](PrimitiveShape shape, const Matrix4x4& world, const ColorF&) {
                 shooter.DrawModelPrimitive(renderer, camera,
-                    static_cast<int>(shape), world, partColor);
+                    static_cast<int>(shape), world, MegaBuildingSilhouetteColor);
             });
         return;
     }
 
     if (ShooterStages::Stage5::IsRooftopPhase(shooter.m_stage5.phase)) {
-        constexpr float RoofColor[] = {0.075f, 0.09f, 0.13f, 1.0f};
-        constexpr float RoofEdgeColor[] = {0.20f, 0.34f, 0.48f, 1.0f};
-        constexpr float RoofLightColor[] = {0.08f, 0.72f, 1.0f, 1.0f};
+        constexpr float RoofColor[] = {0.28f, 0.29f, 0.30f, 1.0f};
+        constexpr float RoofEdgeColor[] = {0.20f, 0.21f, 0.22f, 1.0f};
+        constexpr float RoofJointColor[] = {0.16f, 0.17f, 0.18f, 1.0f};
+        constexpr float SearchlightHousingColor[] = {0.12f, 0.13f, 0.14f, 1.0f};
+        constexpr float SearchlightGlowColor[] = {1.0f, 0.90f, 0.58f, 0.30f};
         constexpr float RoofWidth = 144.0f;
         constexpr float RoofDepth = 150.0f;
         constexpr float RoofCenterZ = 48.0f;
@@ -840,15 +845,44 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
                 1.2f, 1.6f, RoofDepth, RoofEdgeColor);
         }
 
-        // 奥行き方向の誘導灯で広い屋上面とボスの設置位置を読ませる
-        for (int marker = 0; marker < 9; ++marker) {
-            const float z = 14.0f + static_cast<float>(marker) * 11.0f;
-            for (int side = -1; side <= 1; side += 2) {
+        // 目地を薄く重ねて道路標示のないコンクリート床として見せる
+        for (int joint = -2; joint <= 2; ++joint) {
+            shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
+                static_cast<float>(joint) * 24.0f,
+                ShooterStages::Stage5::RooftopSurfaceY + 0.015f, RoofCenterZ,
+                0.10f, 0.025f, RoofDepth - 2.4f, RoofJointColor);
+            shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
+                0.0f, ShooterStages::Stage5::RooftopSurfaceY + 0.015f,
+                RoofCenterZ + static_cast<float>(joint) * 25.0f,
+                RoofWidth - 2.4f, 0.025f, 0.10f, RoofJointColor);
+        }
+
+        // 四隅の装飾サーチライトをTAYAMAへ向ける
+        const Vector3 lightTarget = TayamaTransform(shooter).position + Vector3 {0.0f, 2.2f, 0.0f};
+        for (int xSide = -1; xSide <= 1; xSide += 2) {
+            for (int zSide = -1; zSide <= 1; zSide += 2) {
+                const Vector3 source {
+                    static_cast<float>(xSide) * (RoofWidth * 0.5f - 6.0f),
+                    ShooterStages::Stage5::RooftopSurfaceY + 0.9f,
+                    RoofCenterZ + static_cast<float>(zSide) * (RoofDepth * 0.5f - 8.0f)
+                };
+                const Vector3 delta = lightTarget - source;
+                const float length = (std::max)(0.001f, delta.Length());
+                const Vector3 direction = delta / length;
+                const float yaw = std::atan2(direction.z, -direction.x);
+                const float pitch = -std::asin(direction.y);
+                const Matrix4x4 beamWorld =
+                    Matrix4x4::Translation(source + direction * (length * 0.5f)) *
+                    Matrix4x4::RotationY(yaw) * Matrix4x4::RotationZ(pitch) *
+                    Matrix4x4::Scale({length, 0.34f, 0.34f});
                 shooter.DrawModelPrimitive(renderer, camera,
-                    static_cast<int>(PrimitiveShape::Box),
-                    static_cast<float>(side) * 15.0f,
-                    ShooterStages::Stage5::RooftopSurfaceY + 0.04f, z,
-                    0.35f, 0.08f, 4.8f, RoofLightColor);
+                    static_cast<int>(PrimitiveShape::Cylinder), source,
+                    {1.5f, 0.55f, 1.5f}, {}, SearchlightHousingColor);
+                shooter.DrawModelPrimitive(renderer, camera,
+                    static_cast<int>(PrimitiveShape::Sphere), source + Vector3 {0.0f, 0.35f, 0.0f},
+                    {0.75f, 0.55f, 0.75f}, {}, SearchlightGlowColor);
+                shooter.DrawModelPrimitive(renderer, camera,
+                    static_cast<int>(PrimitiveShape::Box), beamWorld, SearchlightGlowColor);
             }
         }
     }
@@ -861,7 +895,7 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
         for (bool& flash : state.hitFlash) flash = true;
     }
 
-    // 同じ46パーツをビル端点から巨大メカ端点まで補間して描画する
+    // 同じ建築モジュールをビル端点から巨大建築ロボ端点まで補間して描画する
     TayamaModelView::VisitParts(transform, shooter.m_stage5.tayamaTransformation, state,
         [&](PrimitiveShape shape, const Matrix4x4& world, const ColorF& color, TayamaPartGroup) {
             const float brightness = lightning ? 1.55f : 1.0f;
@@ -1051,6 +1085,9 @@ void SideScrollingShooter::Stage5Module::DrawRain3D(const SideScrollingShooter& 
     const int rainCount = intensity > 0.0f ? static_cast<int>(32.0f + intensity * 64.0f) : 0;
     const int frame = shooter.m_frame;
     const float weight = Math::Clamp01(railWeight);
+    const float cinematicAltitude = shooter.m_stage5.phase == Stage5Phase::WallClimbTransition ?
+        SmoothStep(ShooterStages::Stage5::WallClimbProgress(shooter.m_stage5.phaseTimer)) *
+            ShooterStages::Stage5::WallClimbHeight : 0.0f;
 
     // 横視点は前景、中景、後景の3層とし、遷移に合わせて3D降雨域へ展開する
     for (int index = 0; index < rainCount; ++index) {
@@ -1064,7 +1101,7 @@ void SideScrollingShooter::Stage5Module::DrawRain3D(const SideScrollingShooter& 
         const float sideZ = SidePlaneZ - 3.0f + static_cast<float>(index % 3) * 4.0f;
         const Vector3 sidePosition {
             -17.0f + static_cast<float>(sideColumn) * 0.1f,
-            SideGroundY + streakLength * 0.5f + fallRate * 15.0f,
+            SideGroundY + cinematicAltitude + streakLength * 0.5f + fallRate * 15.0f,
             sideZ
         };
 
@@ -1072,7 +1109,7 @@ void SideScrollingShooter::Stage5Module::DrawRain3D(const SideScrollingShooter& 
         const float railZ = -2.0f + static_cast<float>((index * 197) % 960) * 0.1f;
         const Vector3 railPosition {
             -20.0f + static_cast<float>(railColumn) * 0.1f,
-            RailGroundY + railStreakLength * 0.5f + fallRate * 24.0f,
+            RailGroundY + cinematicAltitude + railStreakLength * 0.5f + fallRate * 24.0f,
             railZ
         };
 
@@ -1107,14 +1144,14 @@ void SideScrollingShooter::Stage5Module::DrawRain3D(const SideScrollingShooter& 
             const Vector3 sideSplash {
                 -17.0f + static_cast<float>(sideImpactColumn) * 0.1f +
                     direction * splashProgress * 0.24f,
-                SideGroundY + particleSize * 0.5f + arc *
+                SideGroundY + cinematicAltitude + particleSize * 0.5f + arc *
                     (0.28f + static_cast<float>(particle % 2) * 0.12f),
                 sideZ + (particle % 2 == 0 ? -1.0f : 1.0f) * splashProgress * 0.16f
             };
             const Vector3 railSplash {
                 -20.0f + static_cast<float>(railImpactColumn) * 0.1f +
                     direction * splashProgress * 0.42f,
-                RailGroundY + particleSize * 0.5f + arc *
+                RailGroundY + cinematicAltitude + particleSize * 0.5f + arc *
                     (0.42f + static_cast<float>(particle % 2) * 0.18f),
                 railZ + direction * splashProgress * 0.28f
             };

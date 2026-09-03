@@ -62,6 +62,10 @@ constexpr Vector3 Stage4SecondaryGunLocal[] = {
 constexpr float Stage4MainCannonHitRadius = 1.45f;
 constexpr float Stage4SecondaryGunHitRadius = 0.82f;
 constexpr int Stage4WeaponSwapReturnFrames = 42;
+constexpr int Stage4BossDefeatSequenceFrames = 360;
+constexpr int Stage4BossDefeatChargeStartFrame = 72;
+constexpr int Stage4BossDefeatBackfireFrame = 150;
+constexpr int Stage4BossDefeatExplosionFrames = 48;
 
 /** @brief 表示モード別の迫撃砲攻撃設定 */
 struct Stage4SiegeMortarConfig {
@@ -275,6 +279,26 @@ bool SideScrollingShooter::Stage4Module::IsWeaponSwapActive(
     return shooter.m_stage4.swapState != Stage4SwapState::None;
 }
 
+void SideScrollingShooter::Stage4Module::TickBossIntroduction(
+    SideScrollingShooter& shooter) {
+    if (shooter.m_bossIntroductionPhase != BossIntroductionPhase::Entrance ||
+        !shooter.m_enemies[0].active) return;
+
+    // 道路奥から車列を押し退けながら既存の戦闘基準位置へ進入する
+    Enemy& boss = shooter.m_enemies[0];
+    const float rate = SmoothStep(ShooterStages::Stage4::EntranceRate(
+        shooter.m_bossIntroductionTimer, ShooterStages::Stage4::BossApproachFrames));
+    if (shooter.IsRailGameplayActive()) {
+        boss.x = 0.0f;
+        boss.y = -0.5f;
+        boss.z = Math::Lerp(112.0f, 48.0f, rate);
+    } else {
+        boss.x = Math::Lerp(3.25f, 1.80f, rate);
+        boss.y = -0.80f;
+        boss.z = ToRailZFromSideX(boss.x);
+    }
+}
+
 void SideScrollingShooter::Stage4Module::TickSiegeMortarAim(SideScrollingShooter& shooter) {
     Stage4Logic& state = shooter.m_stage4;
     if (state.currentWeapon != Stage4Weapon::SiegeMortar) return;
@@ -335,6 +359,58 @@ bool SideScrollingShooter::Stage4Module::HandleBossPhaseAfterDamage(
         return false;
     }
     return boss.hp <= 0;
+}
+
+bool SideScrollingShooter::Stage4Module::HandleBossDefeat(
+    SideScrollingShooter& shooter, Enemy& boss) {
+    if (!boss.active) return false;
+
+    // 半壊した最終主砲を残し敵弾だけ消して専用撃破演出へ移る
+    for (auto& shot : shooter.m_shots) {
+        if (shot.enemy) shot.active = false;
+    }
+    shooter.SpawnExplosion(boss.x - 0.22f, boss.y + 0.20f, boss.z, true);
+    shooter.SpawnEnemyDebris(boss, BossNose);
+    shooter.UnlockGallery(GalleryEntry::Stage4Boss);
+    shooter.UnlockGallery(GalleryEntry::Stage4WeaponDrone);
+    shooter.m_bossHp = 0;
+    shooter.m_score += 5000;
+    shooter.m_clear = true;
+    shooter.m_clearTimer = Stage4BossDefeatSequenceFrames;
+    return true;
+}
+
+void SideScrollingShooter::Stage4Module::TickBossDefeat(SideScrollingShooter& shooter) {
+    if (!shooter.m_clear || !shooter.m_enemies[0].active) return;
+    Enemy& boss = shooter.m_enemies[0];
+    const int age = Stage4BossDefeatSequenceFrames - shooter.m_clearTimer;
+
+    // 再点火中は車体を震わせ、砲尾の暴発時に全身を粉砕する
+    if (age >= Stage4BossDefeatChargeStartFrame && age < Stage4BossDefeatBackfireFrame) {
+        const float strength = Math::Clamp01(static_cast<float>(age -
+            Stage4BossDefeatChargeStartFrame) /
+            static_cast<float>(Stage4BossDefeatBackfireFrame -
+                Stage4BossDefeatChargeStartFrame));
+        boss.x = boss.baseX + std::sin(static_cast<float>(age) * 1.7f) * 0.010f * strength;
+        boss.y = boss.baseY + std::sin(static_cast<float>(age) * 2.3f) * 0.008f * strength;
+        shooter.m_screenShakeIntensity = 0.010f + strength * 0.025f;
+        shooter.m_screenShakeFrames = 2;
+        shooter.m_screenShakeDurationFrames = 2;
+    }
+    if (age != Stage4BossDefeatBackfireFrame) return;
+
+    shooter.SpawnExplosion(boss.x, boss.y, boss.z, true);
+    for (int burst = 0; burst < 5; ++burst) {
+        shooter.SpawnExplosion(boss.x + (burst % 2 == 0 ? -0.18f : 0.18f),
+            boss.y + 0.10f - static_cast<float>(burst) * 0.06f,
+            boss.z + static_cast<float>(burst - 2) * 1.7f, true);
+    }
+    shooter.SpawnEnemyDebris(boss);
+    shooter.SpawnPowerItem(boss.x, boss.y, boss.z, 1.00f);
+    shooter.m_screenShakeIntensity = 0.085f;
+    shooter.m_screenShakeFrames = 32;
+    shooter.m_screenShakeDurationFrames = 32;
+    boss.active = false;
 }
 
 void SideScrollingShooter::Stage4Module::BeginWeaponSwap(
@@ -509,6 +585,33 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
             scale.x, scale.y, scale.z, color, partYaw, partPitch);
     };
     Stage4BossModelView::DrawBody(aimedTransform, DrawBossPart, state);
+
+    // 撃破後は砲身を失った砲尾が無理に再点火し、暴発直前まで発光する
+    if (shooter.m_clear) {
+        const int age = Stage4BossDefeatSequenceFrames - shooter.m_clearTimer;
+        Stage4MainWeaponPose damagedPose = WeaponPose(
+            swap, Stage4Weapon::RomanceCannon, shooter.IsRailGameplayActive());
+        if (age >= Stage4BossDefeatChargeStartFrame) {
+            const float charge = Math::Clamp01(static_cast<float>(age -
+                Stage4BossDefeatChargeStartFrame) /
+                static_cast<float>(Stage4BossDefeatBackfireFrame -
+                    Stage4BossDefeatChargeStartFrame));
+            damagedPose.barrelPitch += std::sin(static_cast<float>(age) * 0.32f) *
+                (0.02f + charge * 0.07f);
+            const BossModelTransform damagedMount =
+                Stage4BossModelView::MainWeaponMount(aimedTransform);
+            const Matrix4x4 chargeWorld = Matrix4x4::Translation(
+                OffsetTransform(damagedMount, {2.8f, 1.65f, 0.0f}).position) *
+                Matrix4x4::Scale({0.65f + charge * 1.65f,
+                    0.65f + charge * 1.65f, 1.0f});
+            renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * chargeWorld,
+                static_cast<float>(age) / 10.0f, 3});
+        }
+        Stage4BossModelView::DrawDamagedRomanceCannon(
+            Stage4BossModelView::MainWeaponMount(aimedTransform), damagedPose,
+            DrawBossPart, age < Stage4BossDefeatExplosionFrames && (age / 3) % 2 != 0);
+        return true;
+    }
 
     // 装着主砲またはパージ中の旧主砲を独立Transformで描画する
     const BossModelTransform mount = Stage4BossModelView::MainWeaponMount(aimedTransform);
@@ -833,7 +936,7 @@ bool SideScrollingShooter::Stage4Module::SpawnBossDebris(
     SideScrollingShooter& shooter, const Enemy& boss, int bossPart) {
     if (boss.type != 2) return false;
     const BossPart part = static_cast<BossPart>(bossPart);
-    if (part != BossNose && SecondaryGunIndex(part) < 0) return false;
+    if (bossPart >= 0 && part != BossNose && SecondaryGunIndex(part) < 0) return false;
 
     constexpr float ArmorBlack[] = {0.060f, 0.065f, 0.075f, 1.0f};
     constexpr float HighlightBlack[] = {0.10f, 0.10f, 0.12f, 1.0f};
@@ -850,11 +953,35 @@ bool SideScrollingShooter::Stage4Module::SpawnBossDebris(
             scale.z * Stage4BossScale, color);
     };
 
+    // 最終暴発では幅広い車体を小片へ分け、四方へ粉砕された輪郭を作る
+    if (bossPart < 0) {
+        constexpr Vector3 BodyPieces[] = {
+            {-5.5f, 0.1f, -7.0f}, {-5.5f, 0.3f, 0.0f}, {-5.5f, 0.1f, 7.0f},
+            {0.0f, 0.5f, -7.2f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.5f, 7.2f},
+            {5.5f, 0.2f, -7.0f}, {5.5f, 0.4f, 0.0f}, {5.5f, 0.2f, 7.0f},
+            {-1.5f, 3.0f, -4.3f}, {-1.5f, 3.2f, 0.0f}, {-1.5f, 3.0f, 4.3f}
+        };
+        for (int index = 0; index < 12; ++index) {
+            const float narrow = index % 3 == 1 ? 1.9f : 2.6f;
+            AddPiece(index % 4 == 0 ? 3 : 1, BodyPieces[index],
+                {narrow, 0.8f + static_cast<float>(index % 2) * 0.5f, 2.2f},
+                index % 3 == 0 ? HighlightBlack : ArmorBlack);
+        }
+        return true;
+    }
+
     // 破壊された砲の主要プリミティブだけを飛散させる
     if (part == BossNose) {
-        AddPiece(2, {-4.85f, 3.55f, 0.0f}, {2.35f, 0.92f, 0.92f}, HighlightBlack);
-        AddPiece(2, {-6.80f, 3.55f, 0.0f}, {1.65f, 0.76f, 0.76f}, ArmorBlack);
-        AddPiece(2, {-7.78f, 3.55f, 0.0f}, {0.42f, 1.16f, 1.16f}, ArmorBlack);
+        if (shooter.m_stage4.currentWeapon == Stage4Weapon::RomanceCannon) {
+            AddPiece(2, {-4.2f, 5.0f, 0.0f}, {3.2f, 1.55f, 1.55f}, HighlightBlack);
+            AddPiece(2, {-7.0f, 5.0f, 0.0f}, {2.6f, 1.35f, 1.35f}, ArmorBlack);
+            AddPiece(2, {-9.5f, 5.0f, 0.0f}, {2.1f, 1.15f, 1.15f}, ArmorBlack);
+            AddPiece(2, {-11.2f, 5.0f, 0.0f}, {0.7f, 2.3f, 2.3f}, HighlightBlack);
+        } else {
+            AddPiece(2, {-4.85f, 3.55f, 0.0f}, {2.35f, 0.92f, 0.92f}, HighlightBlack);
+            AddPiece(2, {-6.80f, 3.55f, 0.0f}, {1.65f, 0.76f, 0.76f}, ArmorBlack);
+            AddPiece(2, {-7.78f, 3.55f, 0.0f}, {0.42f, 1.16f, 1.16f}, ArmorBlack);
+        }
         return true;
     }
 
@@ -871,9 +998,9 @@ bool SideScrollingShooter::Stage4Module::DrawSpecialShot(
     (void)shooter;
     if (!shot.enemy || shot.stage4.kind != ShotKind::Cannonball) return false;
 
-    // 主砲弾は通常敵弾より大きな鉄球として描画する
-    constexpr float ShellColor[] = {0.16f, 0.16f, 0.17f, 1.0f};
-    constexpr float HotCoreColor[] = {0.85f, 0.18f, 0.035f, 1.0f};
+    // 主砲弾は通常敵弾より大きな黄金色の砲丸として描画する
+    constexpr float ShellColor[] = {0.95f, 0.62f, 0.08f, 1.0f};
+    constexpr float HotCoreColor[] = {1.0f, 0.90f, 0.34f, 1.0f};
     const float radius = shot.hitRadius * WorldXScale;
     DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
         radius, radius, radius, ShellColor, yaw + shot.age * 0.12f);
@@ -1017,7 +1144,8 @@ bool SideScrollingShooter::Stage4Module::SpawnCannonballShot(
     float sideRadius, float explosionRadius,
     bool gravity, bool detonateAtPlayerZ, int damage,
     bool fixedSideExplosionX, float sideExplosionX, float gravityScale) {
-    for (auto& shot : shooter.m_shots) {
+    for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+        auto& shot = shooter.m_shots[shotIndex];
         if (shot.active) continue;
         shot = {};
         shot.x = FromWorldX(muzzle.x);

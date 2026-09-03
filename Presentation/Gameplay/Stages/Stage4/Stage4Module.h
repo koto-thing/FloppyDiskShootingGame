@@ -26,6 +26,13 @@ public:
     static void ProcessDebugInput(SideScrollingShooter& shooter);
 
     /**
+     * @brief 車列を蹴散らすStage 4ボスの登場移動を進める
+     * @param shooter 更新するゲーム本体
+     * @return なし
+     */
+    static void TickBossIntroduction(SideScrollingShooter& shooter);
+
+    /**
      * @brief 必要なら主砲交換を開始して一フレーム進める
      * @param shooter 更新するゲーム本体
      * @param boss Stage 4ボス
@@ -54,6 +61,21 @@ public:
      * @return ボスを撃破した場合true
      */
     static bool HandleBossPhaseAfterDamage(SideScrollingShooter& shooter, Enemy& boss);
+
+    /**
+     * @brief Stage 4ボスの主砲暴発による専用撃破演出を開始する
+     * @param shooter 更新するゲーム本体
+     * @param boss 撃破されたStage 4ボス
+     * @return 専用撃破処理を開始した場合true
+     */
+    static bool HandleBossDefeat(SideScrollingShooter& shooter, Enemy& boss);
+
+    /**
+     * @brief Stage 4ボスの主砲再点火から車体分解までを一フレーム進める
+     * @param shooter 更新するゲーム本体
+     * @return なし
+     */
+    static void TickBossDefeat(SideScrollingShooter& shooter);
 
     /**
      * @brief Stage 4の敵出現とボス弾幕定義を取得する

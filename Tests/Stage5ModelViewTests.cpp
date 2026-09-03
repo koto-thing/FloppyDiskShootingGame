@@ -99,7 +99,7 @@ void RunStage5ModelViewTests() {
         ShooterStages::Stage5::Phase::WallClimbUpper, 0) ==
         ShooterStages::Stage5::WallClimbLowerFrames +
         ShooterStages::Stage5::WallClimbMiddleFrames);
-    assert(ShooterStages::Stage5::Part2RailEnemyEntryY > 10.0f);
+    assert(ShooterStages::Stage5::Part2RailEnemyEntryY > 60.0f);
     assert(ShooterStages::Stage5::Part2RailEnemyFallSpeed == 0.32f);
     assert(ShooterStages::Stage5::Part2RailEnemyPlaneZ > 0.0f);
     assert(ShooterStages::Stage5::Part2RailEnemyExitY < 0.0f);

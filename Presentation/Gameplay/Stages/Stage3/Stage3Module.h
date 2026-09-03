@@ -223,6 +223,13 @@ public:
     static bool HandleBossDefeat(SideScrollingShooter& shooter, Enemy& boss);
 
     /**
+     * @brief Stage3ボス撃破演出の衝突効果音を更新する
+     * @param shooter 更新するゲーム本体
+     * @return なし
+     */
+    static void TickBossDefeat(SideScrollingShooter& shooter);
+
+    /**
      * @brief 超巨大飛行戦艦、武装、Phase2バリアを描画する
      * @param shooter 描画に使用するゲーム本体
      * @param renderer 描画先レンダラー

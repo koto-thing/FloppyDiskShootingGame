@@ -69,7 +69,7 @@ enum class ShotKind {
     Missile,
     ReflectPass,
     ReflectAttack,
-    FunnelMissile
+    FunnelMine
 };
 
 /** @brief Stage 2特殊弾の状態 */

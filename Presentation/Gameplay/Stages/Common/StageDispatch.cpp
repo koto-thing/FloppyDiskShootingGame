@@ -306,6 +306,7 @@ bool SideScrollingShooter::StageDispatch::HandleBossDefeat(
     case 1: return Stage1Module::HandleBossDefeat(shooter, boss);
     case 2: return Stage2Module::HandleBossDefeat(shooter, boss);
     case 3: return Stage3Module::HandleBossDefeat(shooter, boss);
+    case 4: return Stage4Module::HandleBossDefeat(shooter, boss);
     case 5: return Stage5Module::HandleBossDefeat(shooter, boss);
     default: return false;
     }
@@ -313,7 +314,11 @@ bool SideScrollingShooter::StageDispatch::HandleBossDefeat(
 
 void SideScrollingShooter::StageDispatch::TickBossDefeat(
     SideScrollingShooter& shooter) {
-    if (shooter.m_stageNumber == 1) Stage1Module::TickBossDefeat(shooter);
+    switch (shooter.m_stageNumber) {
+    case 1: Stage1Module::TickBossDefeat(shooter); break;
+    case 3: Stage3Module::TickBossDefeat(shooter); break;
+    case 4: Stage4Module::TickBossDefeat(shooter); break;
+    }
 }
 
 bool SideScrollingShooter::StageDispatch::CanReplacePlayerShot(
@@ -353,7 +358,7 @@ void SideScrollingShooter::StageDispatch::DrawBackground2D(
     case 5:
         if (Stage5Module::IsPart2Route(shooter)) {
             Stage5Module::DrawPart2Background(shooter, renderer, camera, 0.0f);
-        } else {
+        } else if (!ShooterStages::Stage5::IsRooftopPhase(shooter.m_stage5.phase)) {
             CityBackgroundModule::DrawBackground2D(shooter, renderer, camera);
             Stage5Module::DrawCityBuildings(shooter, renderer, camera, 0.0f);
         }
@@ -381,7 +386,7 @@ void SideScrollingShooter::StageDispatch::DrawBackground3D(
     case 5:
         if (Stage5Module::IsPart2Route(shooter)) {
             Stage5Module::DrawPart2Background(shooter, renderer, camera, railWeight);
-        } else {
+        } else if (!ShooterStages::Stage5::IsRooftopPhase(shooter.m_stage5.phase)) {
             CityBackgroundModule::DrawBackground3D(shooter, renderer, camera, railWeight);
             Stage5Module::DrawCityBuildings(shooter, renderer, camera, railWeight);
         }
@@ -578,6 +583,8 @@ void SideScrollingShooter::StageDispatch::TickBossIntroduction(SideScrollingShoo
         Stage1Module::TickBossIntroduction(shooter);
     } else if (shooter.m_stageNumber == 3) {
         Stage3Module::TickBossIntroduction(shooter);
+    } else if (shooter.m_stageNumber == 4) {
+        Stage4Module::TickBossIntroduction(shooter);
     }
 }
 
@@ -615,8 +622,7 @@ int SideScrollingShooter::StageDispatch::BossIntroductionFrames(
     case 1: return Stage1Module::BossIntroductionFrames();
     case 2: return Stage2Module::BossIntroductionFrames();
     case 3: return Stage3Module::BossIntroductionFrames();
-    // 専用移動のないStage 4にも警告帯をフェードできる登場時間を確保する
-    case 4: return 3 * 60;
+    case 4: return ShooterStages::Stage4::BossEntranceFrames;
     default: return 1;
     }
 }

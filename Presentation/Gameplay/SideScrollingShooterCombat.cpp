@@ -720,7 +720,8 @@ void SideScrollingShooter::DefeatBoss(Enemy& boss) {
 
 void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool enemy,
     float z, float railSpeed, int damage) {
-    for (auto& shot : m_shots) {
+    for (int shotIndex = 0; shotIndex < ActiveShotCapacity(); ++shotIndex) {
+        auto& shot = m_shots[shotIndex];
         if (shot.active) continue;
         shot = {};
         shot.x = x;
@@ -885,7 +886,8 @@ void SideScrollingShooter::FireSpecialShots() {
         const float railSpawnOffsetX = config.spawnOffsetY > 0.0f ? config.spawnOffsetY : 0.05f;
 
         /** @brief 空きスロットへ機体タイプ固有の属性を設定する */
-        for (auto& shot : m_shots) {
+        for (int shotIndex = 0; shotIndex < ActiveShotCapacity(); ++shotIndex) {
+            auto& shot = m_shots[shotIndex];
             if (shot.active) continue;
             shot = {};
             // 3Dレールでは翼の左右から、2Dでは従来どおり機首の上下から発射する

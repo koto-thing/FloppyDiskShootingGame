@@ -19,6 +19,18 @@ struct ReflectFunnel {
 /** @brief Phase3で同時展開できる反射ファンネル数 */
 inline constexpr int ReflectFunnelCount = 5;
 
+/** @brief 反射ファンネル機雷が自然爆発するまでのフレーム数 */
+inline constexpr int FunnelMineLifetimeFrames = 5 * 60;
+
+/**
+ * @brief 反射ファンネル機雷が自然爆発する時刻か判定する
+ * @param age 機雷生成後の経過フレーム数
+ * @return 5秒以上経過した場合true
+ */
+constexpr bool IsFunnelMineExpired(int age) {
+    return age >= FunnelMineLifetimeFrames;
+}
+
 /** @brief Stage3固有の永続状態 */
 struct State {
     std::array<ReflectFunnel, ReflectFunnelCount> reflectFunnels {};
