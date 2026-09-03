@@ -30,12 +30,6 @@ enum class Stage5AdType {
     TayamaFace,
     Count
 };
-/** @brief Stage5のNEO AIZUビル形状 */
-enum class Stage5BuildingType { Slender, Vision, Narrow, Rounded, Arcade, Utility, Count };
-
-/** @brief Stage5の独立広告形状 */
-enum class Stage5AdType { VerticalNeon, Hanging, Rooftop, LightBox, Hologram, Lantern, Marquee, Count };
-
 /** @brief 広告取付位置の用途 */
 enum class Stage5SignMountKind { LeftWall, RightWall, FrontLarge, Rooftop, CornerBand };
 

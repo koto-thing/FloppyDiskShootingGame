@@ -351,11 +351,6 @@ void SideScrollingShooter::StageDispatch::DrawBackground2D(
         CityBackgroundModule::DrawBackground2D(shooter, renderer, camera);
         break;
     case 5:
-        CityBackgroundModule::DrawBackground2D(shooter, renderer, camera);
-        Stage5Module::DrawCityBuildings(shooter, renderer, camera, 0.0f);
-        Stage5Module::DrawRain3D(shooter, renderer, camera, 0.0f);
-        break;
-    case 5:
         if (Stage5Module::IsPart2Route(shooter)) {
             Stage5Module::DrawPart2Background(shooter, renderer, camera, 0.0f);
         } else {
@@ -382,11 +377,6 @@ void SideScrollingShooter::StageDispatch::DrawBackground3D(
         break;
     case 4:
         CityBackgroundModule::DrawBackground3D(shooter, renderer, camera, railWeight);
-        break;
-    case 5:
-        CityBackgroundModule::DrawBackground3D(shooter, renderer, camera, railWeight);
-        Stage5Module::DrawCityBuildings(shooter, renderer, camera, railWeight);
-        Stage5Module::DrawRain3D(shooter, renderer, camera, railWeight);
         break;
     case 5:
         if (Stage5Module::IsPart2Route(shooter)) {
