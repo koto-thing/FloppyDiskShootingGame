@@ -555,6 +555,8 @@ int SideScrollingShooter::StageDispatch::BossIntroductionFrames(
     case 1: return Stage1Module::BossIntroductionFrames();
     case 2: return Stage2Module::BossIntroductionFrames();
     case 3: return Stage3Module::BossIntroductionFrames();
+    // 専用移動のないStage 4にも警告帯をフェードできる登場時間を確保する
+    case 4: return 3 * 60;
     default: return 1;
     }
 }

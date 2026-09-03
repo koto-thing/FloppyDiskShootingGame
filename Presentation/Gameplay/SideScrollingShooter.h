@@ -440,9 +440,10 @@ private:
      * @param stageNumber 開始するステージ番号
      * @param chapterNumber 開始するチャプター番号
      * @param bossBattle ボス戦から開始する場合true
+     * @param playBossWarningSound ボス登場警報を再生する場合true
      * @return なし
      */
-    void StartDebugCheckpoint(int stageNumber, int chapterNumber, bool bossBattle);
+    void StartDebugCheckpoint(int stageNumber, int chapterNumber, bool bossBattle, bool playBossWarningSound = true);
     /**
      * @brief 指定番号のステージ定義を取得する
      * @param stageNumber 取得するステージ番号
@@ -519,7 +520,12 @@ private:
     void SpawnPowerItem(float x, float y, float z, float value);
     /** @brief 指定座標にScoreアイテムを生成する */
     void SpawnScoreItem(float x, float y, float z, int value);
-    void StartBossBattle();
+    /**
+     * @brief ボス戦開始状態を構築する
+     * @param playWarningSound ボス登場警報を再生する場合true
+     * @return なし
+     */
+    void StartBossBattle(bool playWarningSound = true);
     /**
      * @brief ボス部位から現在フェーズに対応する弾幕を発射する
      * @param boss 弾幕を発射するボス
@@ -692,7 +698,24 @@ private:
     void DrawAttackWarnings3D(Renderer& renderer, const Camera3D& camera, float railWeight) const;
     void DrawBossHud(Renderer& renderer) const;
     /**
-     * @brief 2Dと3Dの表示切り替えクールダウンを自機下部へ描画する
+     * @brief 実際のHPフェーズ境界へボスHPバーの区切りを描画する
+     * @param renderer 描画先レンダラー
+     * @param y HPバーの中心Y座標
+     * @param halfWidth HPバーの半幅
+     * @param maxHp ボスの最大HP
+     * @param color 区切り線のRGBA色
+     * @return なし
+     */
+    void DrawBossPhaseDividers(Renderer& renderer, float y, float halfWidth,
+        int maxHp, const float color[4]) const;
+    /**
+     * @brief ボス登場中に上下の警告帯を描画する
+     * @param renderer 描画先レンダラー
+     * @return なし
+     */
+    void DrawBossWarning(Renderer& renderer) const;
+    /**
+     * @brief 2Dと3Dの表示切り替えクールダウンを描画する
      * @param renderer 描画先レンダラー
      * @param camera 現在の3Dカメラ
      * @param playerZ 描画中の自機のワールド座標Z
