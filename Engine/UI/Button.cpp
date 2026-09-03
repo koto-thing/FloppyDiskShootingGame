@@ -33,7 +33,7 @@ void Button::Render(Renderer& renderer) const {
     if (!m_text.empty()) {
         // テキスト描画は先頭文字の中心座標を受け取るため、文字列全体をボタン中央へ寄せる
         const float firstGlyphX = m_bounds.Center().x -
-            static_cast<float>(m_text.size() - 1) * textSize * 0.75f;
-        renderer.DrawText(m_text, { firstGlyphX, m_bounds.Center().y }, textSize, textColor);
+            static_cast<float>(m_text.size() - 1) * (textSize * 1.5f + characterSpacing) * 0.5f;
+        renderer.DrawText(m_text, { firstGlyphX, m_bounds.Center().y }, textSize, textColor, characterSpacing);
     }
 }

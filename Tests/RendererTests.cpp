@@ -1,4 +1,5 @@
 #include "../Engine/Graphics/Renderer.h"
+#include "../Presentation/Common/SpaceBackground.h"
 
 #include <cmath>
 #include <stdexcept>
@@ -182,6 +183,37 @@ void EndFrameFlushesAndBackendIsOptional() {
     headless.EndFrame();
     Require(headless.CommandCount() == 1, "Headless Renderer must safely record commands");
 }
+
+/**
+ * @brief 星空背景が画面全体を覆い、星が時間経過で変化することを検証する
+ * @return なし
+ */
+void SpaceBackgroundCoversScreenAndAnimates() {
+    Renderer initialRenderer;
+    initialRenderer.BeginFrame();
+    SpaceBackground::Render(initialRenderer, 0.0f);
+
+    Require(initialRenderer.CommandCount() ==
+            static_cast<std::size_t>(SpaceBackground::StarCount + 1),
+        "Space background must record one fill and every star");
+    Require(initialRenderer.Command(0).rect.size == Vector2 {2.0f, 2.0f},
+        "Space background must cover the whole screen");
+
+    // 全星が余白を含む画面範囲内へ配置されていることを確認する
+    for (int index = 0; index < SpaceBackground::StarCount; ++index) {
+        const RenderCommand& star = initialRenderer.Command(static_cast<std::size_t>(index + 1));
+        Require(star.rect.position.x >= -1.04f && star.rect.position.x <= 1.04f &&
+                star.rect.position.y >= -1.04f && star.rect.position.y <= 1.04f,
+            "Space background stars must stay inside the covered field");
+    }
+
+    Renderer animatedRenderer;
+    animatedRenderer.BeginFrame();
+    SpaceBackground::Render(animatedRenderer, 1.0f);
+    Require(animatedRenderer.Command(1).rect.position.y != initialRenderer.Command(1).rect.position.y &&
+            animatedRenderer.Command(1).color.r != initialRenderer.Command(1).color.r,
+        "Space background stars must drift and twinkle over time");
+}
 }
 
 void RunRendererTests() {
@@ -194,4 +226,5 @@ void RunRendererTests() {
     HandlesTextAndOverflow();
     ExecutesOnlyOnFlush();
     EndFrameFlushesAndBackendIsOptional();
+    SpaceBackgroundCoversScreenAndAnimates();
 }

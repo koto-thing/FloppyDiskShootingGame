@@ -84,6 +84,9 @@ void SideScrollingShooter::StageDispatch::TickBeforeFrame(SideScrollingShooter& 
 
 void SideScrollingShooter::StageDispatch::TickAfterFrame(SideScrollingShooter& shooter) {
     switch (shooter.m_stageNumber) {
+    case 3:
+        Stage3Module::TickAfterFrame(shooter);
+        break;
     case 5:
         Stage5Module::TickAfterFrame(shooter);
         break;
@@ -134,6 +137,7 @@ void SideScrollingShooter::StageDispatch::TickWorld(SideScrollingShooter& shoote
 bool SideScrollingShooter::StageDispatch::HandleBossInteractionAfterTick(
     SideScrollingShooter& shooter, Enemy& boss) {
     switch (shooter.m_stageNumber) {
+    case 1: return Stage1Module::HandleBossInteractionAfterTick(shooter, boss);
     case 2: return Stage2Module::HandleBossInteractionAfterTick(shooter, boss);
     default: return false;
     }
@@ -296,11 +300,17 @@ bool SideScrollingShooter::StageDispatch::TickSpecialDebris(
 bool SideScrollingShooter::StageDispatch::HandleBossDefeat(
     SideScrollingShooter& shooter, Enemy& boss) {
     switch (shooter.m_stageNumber) {
+    case 1: return Stage1Module::HandleBossDefeat(shooter, boss);
     case 2: return Stage2Module::HandleBossDefeat(shooter, boss);
     case 3: return Stage3Module::HandleBossDefeat(shooter, boss);
     case 5: return Stage5Module::HandleBossDefeat(shooter, boss);
     default: return false;
     }
+}
+
+void SideScrollingShooter::StageDispatch::TickBossDefeat(
+    SideScrollingShooter& shooter) {
+    if (shooter.m_stageNumber == 1) Stage1Module::TickBossDefeat(shooter);
 }
 
 bool SideScrollingShooter::StageDispatch::CanReplacePlayerShot(
@@ -485,6 +495,7 @@ bool SideScrollingShooter::StageDispatch::DrawSpecialDebris(
 bool SideScrollingShooter::StageDispatch::IsViewLocked(
     const SideScrollingShooter& shooter) {
     switch (shooter.m_stageNumber) {
+    case 1: return shooter.m_clear;
     case 3: return Stage3Module::IsViewLocked(shooter);
     case 5: return Stage5Module::IsViewLocked(shooter);
     default: return false;
@@ -536,6 +547,13 @@ float SideScrollingShooter::StageDispatch::RailPlayerMaxY(
 float SideScrollingShooter::StageDispatch::SideCameraY(
     const SideScrollingShooter& shooter) {
     return shooter.m_stageNumber == 3 ? Stage3Module::SideCameraY(shooter) : 0.0f;
+}
+
+Vector2 SideScrollingShooter::StageDispatch::PlayerXRange(
+    const SideScrollingShooter& shooter) {
+    if (shooter.m_stageNumber == 3) return Stage3Module::PlayerXRange(shooter);
+    return shooter.IsRailGameplayActive() ? Vector2 {-1.2f, 1.2f} :
+        Vector2 {Side2DPlayerMinX, Side2DPlayerMaxX};
 }
 
 Vector2 SideScrollingShooter::StageDispatch::SidePlayerYRange(

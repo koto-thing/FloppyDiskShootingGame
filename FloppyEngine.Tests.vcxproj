@@ -70,6 +70,7 @@
     <ClCompile Include="Tests\Stage3FunnelModelViewTests.cpp" />
     <ClCompile Include="Tests\Stage5ModelViewTests.cpp" />
     <ClCompile Include="Tests\VoiceDpcmDecoderTests.cpp" />
+    <ClCompile Include="Presentation\Common\SpaceBackground.cpp" />
     <ClCompile Include="Infrastructure\Repositories\ScoreRepository.cpp" />
     <ClCompile Include="Infrastructure\Repositories\SettingsRepository.cpp" />
   </ItemGroup>

@@ -2,6 +2,8 @@
 #include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
 #include <windows.h>
 #include "../../Engine/Graphics/Renderer.h"
+#include "../../Engine/Time/Time.h"
+#include "../Common/SpaceBackground.h"
 
 #ifdef DrawText
 #undef DrawText
@@ -142,6 +144,9 @@ void TitleScene::Dispose() {
  * @brief タイトルシーンの描画処理
  */
 void TitleScene::Render(Renderer& renderer) {
+    // ゆっくり明滅する星空をUIの背面へ描画する
+    SpaceBackground::Render(renderer, Time::unscaledTime);
+
     // 画面上部に "TITLE" と表示
     renderer.DrawText(
         "SPACE YAKUZA",

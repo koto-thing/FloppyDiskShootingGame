@@ -1330,9 +1330,9 @@ void D3D12RenderingService::SetCamera(const CameraMatrices& matrices, const View
     m_hasCamera = viewport.IsValid();
     if (m_hasCamera) {
         // ウィンドウ基準のカメラ領域を低解像度RenderTargetへ写像する
-        const float scaleX = m_frameRetroEffectEnabled
+        const float scaleX = m_frameRetroEffectEnabled && !m_sceneUpscaled
             ? static_cast<float>(LOW_RES_WIDTH) / static_cast<float>(m_width) : 1.0f;
-        const float scaleY = m_frameRetroEffectEnabled
+        const float scaleY = m_frameRetroEffectEnabled && !m_sceneUpscaled
             ? static_cast<float>(LOW_RES_HEIGHT) / static_cast<float>(m_height) : 1.0f;
         const LONG left = static_cast<LONG>(viewport.x * scaleX);
         const LONG top = static_cast<LONG>(viewport.y * scaleY);

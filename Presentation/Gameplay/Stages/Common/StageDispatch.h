@@ -259,6 +259,13 @@ public:
     static bool HandleBossDefeat(SideScrollingShooter& shooter, Enemy& boss);
 
     /**
+     * @brief 現在ステージのボス撃破演出を更新する
+     * @param shooter 更新対象
+     * @return なし
+     */
+    static void TickBossDefeat(SideScrollingShooter& shooter);
+
+    /**
      * @brief 敵弾用スロット不足時に自機弾を置換できるか判定する
      * @param shooter 判定対象
      * @param enemy 生成対象が敵弾の場合true
@@ -333,6 +340,13 @@ public:
      * @return ワールド座標系のカメラY座標
      */
     static float SideCameraY(const SideScrollingShooter& shooter);
+
+    /**
+     * @brief 現在ステージの自機X移動範囲を取得する
+     * @param shooter 判定対象
+     * @return Xを下限、Yを上限とするゲーム座標
+     */
+    static Vector2 PlayerXRange(const SideScrollingShooter& shooter);
 
     /**
      * @brief 現在ステージの2D自機Y移動範囲を取得する

@@ -31,6 +31,15 @@ public:
     static void TickWorld(SideScrollingShooter& shooter);
 
     /**
+     * @brief Stage 1ボスに接触した隕石を破壊する
+     * @param shooter 更新するゲーム本体
+     * @param boss 判定するStage 1ボス
+     * @return 敵更新を続けるため常にfalse
+     */
+    static bool HandleBossInteractionAfterTick(
+        SideScrollingShooter& shooter, Enemy& boss);
+
+    /**
      * @brief 指定球がStage 1の隕石へ接触したか判定する
      * @param shooter 判定に使用するゲーム本体
      * @param x 判定対象のゲーム座標X
@@ -83,6 +92,21 @@ public:
      * @return 高速往復と定位置への移動を合わせたフレーム数
      */
     static int BossIntroductionFrames();
+
+    /**
+     * @brief Stage 1ボスを撃破演出へ移行する
+     * @param shooter 更新するゲーム本体
+     * @param boss 撃破されたボス
+     * @return 専用撃破処理を完了した場合true
+     */
+    static bool HandleBossDefeat(SideScrollingShooter& shooter, Enemy& boss);
+
+    /**
+     * @brief Stage 1ボス撃破後の暴走移動と段階破壊を更新する
+     * @param shooter 更新するゲーム本体
+     * @return なし
+     */
+    static void TickBossDefeat(SideScrollingShooter& shooter);
 
 private:
     /**
