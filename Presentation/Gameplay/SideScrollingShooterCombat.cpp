@@ -13,6 +13,8 @@
 #include "Stages/Common/StageDefinition.h"
 
 namespace {
+constexpr float MortarExplosionDepthHitRadius = 0.85f;
+
 /**
  * @brief ボムの発射位置から画面中央までの座標を求める
  * @param start 発射位置
@@ -959,10 +961,12 @@ void SideScrollingShooter::TickExplosions() {
         if (!explosion.active) continue;
         if (explosion.effectType == 1 && !explosion.damagedPlayer &&
             explosion.age <= AttackWarningFrames && m_invincible == 0) {
+            const float depthDistance = std::abs(PlayerRailZ - explosion.z);
             const bool playerHit = IsRailGameplayActive() ?
-                Hit3D(ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ, 0.38f,
-                    ToWorldX(explosion.x), ToWorldY(explosion.y), explosion.z,
-                    explosion.hitRadius * WorldXScale) :
+                depthDistance <= MortarExplosionDepthHitRadius &&
+                    Hit(ToWorldX(m_playerX), ToWorldY(m_playerY), 0.38f,
+                        ToWorldX(explosion.x), ToWorldY(explosion.y),
+                        explosion.hitRadius * WorldXScale) :
                 Hit(m_playerX, m_playerY, 0.050f, explosion.x, explosion.y,
                     explosion.hitRadius);
             if (playerHit) {

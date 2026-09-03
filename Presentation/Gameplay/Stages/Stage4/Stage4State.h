@@ -14,6 +14,7 @@ enum class BossPhase {
 /** @brief 主砲交換中の工程 */
 enum class WeaponSwapState {
     None,
+    ReturnToAnchor,
     Prepare,
     Unlock,
     Purge,
@@ -101,6 +102,20 @@ struct State {
     float siegeMortarTargetPitch = 0.91629785f;
     float siegeMortarYaw = 0.0f;
     float siegeMortarTargetYaw = 0.0f;
+    float rushAimX = 0.0f;
+    float rushAimY = 0.0f;
+    float rushAimZ = 0.0f;
+    float returnStartX = 0.0f;
+    float returnStartY = 0.0f;
+    float returnStartZ = 0.0f;
+    float returnStartAimX = 0.0f;
+    float returnStartAimY = 0.0f;
+    float returnStartAimZ = 0.0f;
+    float returnTargetAimX = 0.0f;
+    float returnTargetAimY = 0.0f;
+    float returnTargetAimZ = 0.0f;
+    float returnStartSiegeMortarPitch = 0.91629785f;
+    float returnStartSiegeMortarYaw = 0.0f;
 };
 
 /**
@@ -111,6 +126,9 @@ struct State {
 constexpr void AdvanceWeaponSwap(State& state) {
     state.timer = 0;
     switch (state.swapState) {
+    case WeaponSwapState::ReturnToAnchor:
+        state.swapState = WeaponSwapState::Prepare;
+        break;
     case WeaponSwapState::Prepare:
         state.swapState = WeaponSwapState::Unlock;
         break;
@@ -178,7 +196,10 @@ struct ShotState {
     ShotKind kind = ShotKind::None;
     bool gravity = false;
     bool detonateAtPlayerZ = true;
+    bool fixedSideExplosionX = false;
+    float gravityScale = 1.0f;
     float explosionRadius = 0.55f;
+    float sideExplosionX = 0.0f;
 };
 
 }

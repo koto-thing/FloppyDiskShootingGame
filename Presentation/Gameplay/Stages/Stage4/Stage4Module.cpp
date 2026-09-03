@@ -40,11 +40,12 @@ constexpr float Stage4GiantCannonballSideRadius = 0.150f;
 constexpr float Stage4GiantExplosionRadius = 0.65f;
 constexpr float Stage4RomanceCannonballSpeed = 1.00f;
 constexpr float Stage4RomanceCannonballSideRadius = 0.320f;
-constexpr float Stage4RomanceExplosionRadius = 1.25f;
-constexpr int Stage4RomanceCannonRecoilFrames = 158;
+constexpr float Stage4RomanceSideExplosionRadius = 1.85f;
+constexpr float Stage4RomanceRailExplosionRadius = 1.15f;
+constexpr float Stage4RomanceSideExplosionX = -1.5f;
+constexpr float Stage4RomanceCannonballGravityScale = 0.95f;
 constexpr float Stage4RailGroundGameY = -0.829545f;
 constexpr float Stage4BodyHitRadius = 3.35f;
-constexpr int Stage4MainCannonRecoilFrames = 30;
 constexpr Vector3 Stage4MainCannonLocal {-5.75f, 3.55f, 0.0f};
 constexpr Vector3 Stage4MainCannonPivotLocal {-3.25f, 3.55f, 0.0f};
 constexpr Vector3 Stage4BodyHitLocal[] = {
@@ -60,6 +61,7 @@ constexpr Vector3 Stage4SecondaryGunLocal[] = {
 };
 constexpr float Stage4MainCannonHitRadius = 1.45f;
 constexpr float Stage4SecondaryGunHitRadius = 0.82f;
+constexpr int Stage4WeaponSwapReturnFrames = 42;
 
 /** @brief 表示モード別の迫撃砲攻撃設定 */
 struct Stage4SiegeMortarConfig {
@@ -231,6 +233,34 @@ bool SideScrollingShooter::Stage4Module::TickWeaponSwap(
     }
     if (state.swapState == Stage4SwapState::None) return false;
 
+    // 交換前に車体と主砲姿勢を基準へ戻してから既存交換演出へ進める
+    if (state.swapState == Stage4SwapState::ReturnToAnchor) {
+        const float progress = SmoothStep(Math::Clamp01(
+            static_cast<float>(++state.timer) / static_cast<float>(Stage4WeaponSwapReturnFrames)));
+        boss.x = Math::Lerp(state.returnStartX, boss.baseX, progress);
+        boss.y = Math::Lerp(state.returnStartY, boss.baseY, progress);
+        boss.z = shooter.IsRailGameplayActive() ?
+            Math::Lerp(state.returnStartZ, boss.baseZ, progress) : ToRailZFromSideX(boss.x);
+        boss.turretAimX = Math::Lerp(state.returnStartAimX, state.returnTargetAimX, progress);
+        boss.turretAimY = Math::Lerp(state.returnStartAimY, state.returnTargetAimY, progress);
+        boss.turretAimZ = Math::Lerp(state.returnStartAimZ, state.returnTargetAimZ, progress);
+        state.siegeMortarPitch = Math::Lerp(state.returnStartSiegeMortarPitch,
+            Stage4BossModelView::SiegeMortarDefaultPitch, progress);
+        state.siegeMortarTargetPitch = state.siegeMortarPitch;
+        state.siegeMortarYaw = Math::Lerp(state.returnStartSiegeMortarYaw, 0.0f, progress);
+        state.siegeMortarTargetYaw = state.siegeMortarYaw;
+        if (state.timer >= Stage4WeaponSwapReturnFrames) {
+            boss.x = boss.baseX;
+            boss.y = boss.baseY;
+            boss.z = shooter.IsRailGameplayActive() ? boss.baseZ : ToRailZFromSideX(boss.x);
+            boss.turretAimX = state.returnTargetAimX;
+            boss.turretAimY = state.returnTargetAimY;
+            boss.turretAimZ = state.returnTargetAimZ;
+            ShooterStages::Stage4::AdvanceWeaponSwap(state);
+        }
+        return true;
+    }
+
     // 工程ごとの設定時間が過ぎたらタイマーをリセットして次へ進む
     const Stage4SwapConfig config = ShooterStages::Stage4::SwapConfig(state.incomingWeapon);
     if (++state.timer >= SwapStateFrames(state.swapState, config)) {
@@ -316,10 +346,39 @@ void SideScrollingShooter::Stage4Module::BeginWeaponSwap(
     state.incomingVisual = Stage4WeaponVisual::Hidden;
     state.phase = incomingWeapon == Stage4Weapon::SiegeMortar ?
         Stage4BossPhase::TransitionToPhase2 : Stage4BossPhase::TransitionToPhase3;
-    state.swapState = Stage4SwapState::Prepare;
+    state.swapState = Stage4SwapState::ReturnToAnchor;
     state.timer = 0;
     boss.phase = 0.0f;
     boss.recoilAge = 0;
+    boss.recoilType = 0;
+    state.returnStartX = boss.x;
+    state.returnStartY = boss.y;
+    state.returnStartZ = boss.z;
+    state.returnStartAimX = boss.turretAimX;
+    state.returnStartAimY = boss.turretAimY;
+    state.returnStartAimZ = boss.turretAimZ;
+    state.returnStartSiegeMortarPitch = state.siegeMortarPitch;
+    state.returnStartSiegeMortarYaw = state.siegeMortarYaw;
+    state.returnTargetAimX = boss.baseX;
+    state.returnTargetAimY = boss.baseY;
+    state.returnTargetAimZ = shooter.IsRailGameplayActive() ?
+        boss.baseZ : ToRailZFromSideX(boss.baseX);
+    if (state.outgoingWeapon == Stage4Weapon::Phase1Cannon) {
+        BossModelTransform transform;
+        transform.position = {
+            ToWorldX(boss.baseX), ToWorldY(boss.baseY),
+            shooter.IsRailGameplayActive() ? boss.baseZ : ToRailZFromSideX(boss.baseX)
+        };
+        transform.yaw = ModelYaw(shooter);
+        transform.scale = Stage4BossScale;
+        const Vector3 pivot = OffsetTransform(transform, Stage4MainCannonPivotLocal).position;
+        const Vector3 aim = pivot + Vector3 {
+            -std::cos(transform.yaw), 0.0f, std::sin(transform.yaw)
+        } * Stage4CannonMuzzleDistance;
+        state.returnTargetAimX = FromWorldX(aim.x);
+        state.returnTargetAimY = FromWorldY(aim.y);
+        state.returnTargetAimZ = aim.z;
+    }
 
     // 交換開始時に敵弾を消して演出と主砲なし状態を読みやすくする
     for (auto& shot : shooter.m_shots) {
@@ -415,11 +474,26 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
         state.secondaryGunsHit[i] = enemy.bossPartHitFlashFrames[part] > 0 &&
             (enemy.bossPartHitFlashFrames[part] / 2) % 2 != 0;
     }
+    const bool phase1MainCannonActive = swap.currentWeapon == Stage4Weapon::Phase1Cannon &&
+        (swap.swapState == Stage4SwapState::None ||
+            swap.swapState == Stage4SwapState::ReturnToAnchor);
+    const Vector3 rushAimTarget {
+            ToWorldX(swap.rushAimX),
+            ToWorldY(swap.rushAimY),
+            Math::Lerp(SidePlaneZ, swap.rushAimZ, railWeight)
+    };
+    const Vector3 rushOffset {
+        ToWorldX(enemy.x - enemy.actionX),
+        ToWorldY(enemy.y - enemy.actionY),
+        enemy.z - enemy.actionZ
+    };
+    const Vector3 mainAimTarget = phase1MainCannonActive && enemy.phase > 0.0f ?
+        rushAimTarget + rushOffset : aimTarget;
     BossModelTransform aimedTransform = transform;
+    aimedTransform.aimTarget = mainAimTarget;
     aimedTransform.secondaryAimTarget = aimTarget;
     aimedTransform.secondaryGunsTrackTarget = true;
-    aimedTransform.mainGunTracksTarget = swap.currentWeapon == Stage4Weapon::Phase1Cannon &&
-        swap.swapState == Stage4SwapState::None && enemy.phase <= 0.0f;
+    aimedTransform.mainGunTracksTarget = phase1MainCannonActive;
     aimedTransform.mainGunTracksYaw = shooter.IsRailGameplayActive();
     aimedTransform.mainGunMinElevation = Stage4BossModelView::Phase1CannonMinElevation;
     aimedTransform.mainGunMaxElevation = Stage4BossModelView::Phase1CannonMaxElevation;
@@ -612,8 +686,9 @@ void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
 
         if (part == BossNose) {
             SpawnMainCannonball(shooter, boss);
-            boss.recoilAge = shooter.m_stage4.currentWeapon == Stage4Weapon::RomanceCannon ?
-                Stage4RomanceCannonRecoilFrames : Stage4MainCannonRecoilFrames;
+            boss.recoilType = shooter.m_stage4.currentWeapon == Stage4Weapon::RomanceCannon ? 1 : 0;
+            boss.recoilAge = Stage4EnemySheet::MainCannonRecoilFramesForWeapon(
+                shooter.m_stage4.currentWeapon);
             continue;
         }
 
@@ -680,7 +755,9 @@ void SideScrollingShooter::Stage4Module::TickSpecialShotBeforeMove(
     if (!shot.enemy || shot.stage4.kind != ShotKind::Cannonball) return;
 
     // 重力付き砲撃だけ毎フレーム落下速度を増やす
-    if (shot.stage4.gravity) shot.vy -= Stage4CannonballGravity;
+    if (shot.stage4.gravity) {
+        shot.vy -= Stage4CannonballGravity * shot.stage4.gravityScale;
+    }
     ++shot.age;
 }
 
@@ -730,7 +807,9 @@ void SideScrollingShooter::Stage4Module::TickSpecialShotAfterMove(
     }
 
     shooter.SpawnMortarExplosion(
-        shot.x, hitGround && !impactAtPlayerZ ? groundY : shot.y,
+        !shooter.IsRailGameplayActive() && shot.stage4.fixedSideExplosionX ?
+            shot.stage4.sideExplosionX : shot.x,
+        hitGround && !impactAtPlayerZ ? groundY : shot.y,
         impactZ, shot.stage4.explosionRadius);
     shot.active = false;
 }
@@ -877,14 +956,18 @@ void SideScrollingShooter::Stage4Module::SpawnMainCannonball(
 void SideScrollingShooter::Stage4Module::SpawnRomanceCannonShot(
     SideScrollingShooter& shooter, const Vector3& muzzle,
     const Stage4MainWeaponPose& pose) {
+    const bool railMode = shooter.IsRailGameplayActive();
     Vector3 velocity = SiegeMortarVelocity(ModelYaw(shooter), pose.localYaw,
         pose.barrelPitch, Stage4RomanceCannonballSpeed);
-    if (!shooter.IsRailGameplayActive()) velocity.z = 0.0f;
+    if (!railMode) velocity.z = 0.0f;
 
     // 画面縦幅を覆う超巨大爆発として扱う
+    const float explosionRadius = railMode ?
+        Stage4RomanceRailExplosionRadius : Stage4RomanceSideExplosionRadius;
     SpawnCannonballShot(shooter, muzzle, velocity,
-        Stage4RomanceCannonballSideRadius, Stage4RomanceExplosionRadius,
-        false, true, 4);
+        Stage4RomanceCannonballSideRadius, explosionRadius,
+        true, true, 4, true, Stage4RomanceSideExplosionX,
+        Stage4RomanceCannonballGravityScale);
 }
 
 void SideScrollingShooter::Stage4Module::SpawnSiegeMortarBarrage(
@@ -929,7 +1012,8 @@ void SideScrollingShooter::Stage4Module::ChooseNextSiegeMortarAim(
 bool SideScrollingShooter::Stage4Module::SpawnCannonballShot(
     SideScrollingShooter& shooter, const Vector3& muzzle, const Vector3& velocity,
     float sideRadius, float explosionRadius,
-    bool gravity, bool detonateAtPlayerZ, int damage) {
+    bool gravity, bool detonateAtPlayerZ, int damage,
+    bool fixedSideExplosionX, float sideExplosionX, float gravityScale) {
     for (auto& shot : shooter.m_shots) {
         if (shot.active) continue;
         shot = {};
@@ -947,7 +1031,10 @@ bool SideScrollingShooter::Stage4Module::SpawnCannonballShot(
         shot.stage4.kind = ShotKind::Cannonball;
         shot.stage4.gravity = gravity;
         shot.stage4.detonateAtPlayerZ = detonateAtPlayerZ;
+        shot.stage4.fixedSideExplosionX = fixedSideExplosionX;
+        shot.stage4.gravityScale = gravityScale;
         shot.stage4.explosionRadius = explosionRadius;
+        shot.stage4.sideExplosionX = sideExplosionX;
         shot.active = true;
         return true;
     }

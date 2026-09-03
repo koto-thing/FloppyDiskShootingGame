@@ -235,6 +235,7 @@ private:
         int age = 0;
         int motionAge = 0;
         int recoilAge = 0;
+        int recoilType = 0;
         int shotInterval = 0;
         int attackWarningFrames = 0;
         float attackWarningTargetX = 0.0f;

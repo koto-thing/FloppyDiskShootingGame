@@ -47,6 +47,7 @@ public:
     void ConfigureBossRailAnchor(Enemy& boss) const override {
         const float rushPhase = boss.phase;
         const int recoilAge = boss.recoilAge;
+        const int recoilType = boss.recoilType;
         const bool rushing = IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) && rushPhase > 0.0f;
         boss.x = 0.0f;
         boss.y = -0.5f;
@@ -63,6 +64,7 @@ public:
         boss.phase = 0.0f;
         boss.motionAge = 0;
         boss.recoilAge = recoilAge;
+        boss.recoilType = recoilType;
         if (rushing) {
             boss.phase = rushPhase;
             ApplyRushPosition(boss, true, static_cast<int>(rushPhase));
@@ -73,9 +75,10 @@ public:
     void ConfigureBossSideAnchor(Enemy& boss) const override {
         const float rushPhase = boss.phase;
         const int recoilAge = boss.recoilAge;
+        const int recoilType = boss.recoilType;
         const bool rushing = IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) && rushPhase > 0.0f;
         boss.x = 1.80f;
-        boss.y = -0.5f;
+        boss.y = -1.05f;
         boss.z = ToRailZFromSideX(boss.x);
         boss.baseX = boss.x;
         boss.baseY = boss.y;
@@ -89,6 +92,7 @@ public:
         boss.phase = 0.0f;
         boss.motionAge = 0;
         boss.recoilAge = recoilAge;
+        boss.recoilType = recoilType;
         if (rushing) {
             boss.phase = rushPhase;
             ApplyRushPosition(boss, false, static_cast<int>(rushPhase));
@@ -134,14 +138,12 @@ public:
         if (Stage4Module::TickWeaponSwap(shooter, boss)) {
             boss.motionAge = 0;
             boss.phase = 0.0f;
-            boss.x = boss.baseX;
-            boss.y = boss.baseY;
-            boss.z = shooter.IsRailGameplayActive() ? boss.baseZ : ToRailZFromSideX(boss.x);
             return;
         }
 
         // Phase1は一定間隔で後退、突進、待機、復帰を行う
         Stage4Module::TickSiegeMortarAim(shooter);
+        bool rushedThisFrame = false;
         if (IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) &&
             (boss.phase > 0.0f || boss.age % RushIntervalFrames == 0)) {
             int rushFrame = static_cast<int>(boss.phase);
@@ -149,11 +151,15 @@ public:
                 boss.actionX = boss.baseX;
                 boss.actionY = boss.baseY;
                 boss.actionZ = boss.baseZ;
+                shooter.m_stage4.rushAimX = boss.turretAimX;
+                shooter.m_stage4.rushAimY = boss.turretAimY;
+                shooter.m_stage4.rushAimZ = boss.turretAimZ;
                 rushFrame = 1;
             }
 
             boss.motionAge = 0;
             ApplyRushPosition(boss, shooter.IsRailGameplayActive(), rushFrame);
+            rushedThisFrame = true;
 
             boss.phase = rushFrame < RushTotalFrames ?
                 static_cast<float>(rushFrame + 1) : 0.0f;
@@ -172,7 +178,8 @@ public:
         }
         ApplyMainCannonRecoil(boss, shooter.IsRailGameplayActive());
 
-        // 砲の照準は突進中も自機位置へ追従する
+        // 砲の通常照準は次の攻撃に向けて自機位置へ追従する
+        if (rushedThisFrame) return;
         boss.turretAimX += (shooter.m_playerX - boss.turretAimX) * TurretTrackingRate;
         boss.turretAimY += (shooter.m_playerY - boss.turretAimY) * TurretTrackingRate;
         const float targetZ = shooter.IsRailGameplayActive() ?
@@ -250,7 +257,7 @@ public:
     }
 
 private:
-    inline static constexpr int RushIntervalFrames = 400;
+    inline static constexpr int RushIntervalFrames = 700;
     inline static constexpr int RushWindupFrames = 42;
     inline static constexpr int RushChargeFrames = 61;
     inline static constexpr int RushWaitFrames = 48;
@@ -265,8 +272,8 @@ private:
     inline static constexpr int RomanceCannonRecoilFrames = 158;
     inline static constexpr float SideMainCannonRecoilDistance = 0.10f;
     inline static constexpr float RailMainCannonRecoilDistance = 1.40f;
-    inline static constexpr float SideRomanceCannonRecoilDistance = 0.24f;
-    inline static constexpr float RailRomanceCannonRecoilDistance = 5.10f;
+    inline static constexpr float SideRomanceCannonRecoilDistance = 1.64f;
+    inline static constexpr float RailRomanceCannonRecoilDistance = 20.10f;
     inline static constexpr float SiegeBodyMotionRate = 0.045f;
     inline static constexpr float SideSiegeBodyMotionDistance = 0.35f;
     inline static constexpr float RailSiegeBodyMotionDistance = 3.50f;
@@ -279,10 +286,9 @@ private:
      * @return Phase1の場合true、それ以外の場合false
      */
     static constexpr bool IsRushPhase(BossPhase phase) {
-        return phase == BossNormalPhase1 || phase == BossSpecialPhase1;
+        return phase == BossNormalPhase1;
     }
-    static_assert(BossNormalPhase1 + 1 == BossSpecialPhase1);
-    static_assert(BossSpecialPhase1 != BossNormalPhase2);
+    static_assert(BossNormalPhase1 != BossSpecialPhase1);
 
     /**
      * @brief 突進フレームから現在表示モードの突進位置を反映する
@@ -364,10 +370,10 @@ private:
      * @return なし
      */
     static void ApplyMainCannonRecoil(Enemy& boss, bool railMode) {
-        if (boss.recoilAge <= 0) return;
+        if (boss.recoilAge == 0) return;
 
-        // 前半で後退し、後半で基準位置へ戻る
-        const bool romance = boss.recoilAge > MainCannonRecoilFrames;
+        // 主砲3は高速にのけぞり、等速でゆっくり戻る
+        const bool romance = boss.recoilType == 1;
         const int recoilFrames = romance ? RomanceCannonRecoilFrames : MainCannonRecoilFrames;
         const float sideDistance = romance ?
             SideRomanceCannonRecoilDistance : SideMainCannonRecoilDistance;
@@ -376,15 +382,22 @@ private:
         const int frame = recoilFrames - boss.recoilAge + 1;
         const float t = static_cast<float>(frame) /
             static_cast<float>(recoilFrames);
-        const float half = t < 0.5f ? t * 2.0f : (1.0f - t) * 2.0f;
-        const float ease = SmoothStep(Math::Clamp01(half));
+        const float recoilTime = 0.22f;
+        const float easeOut = 1.0f - (1.0f - Math::Clamp01(t / recoilTime)) *
+            (1.0f - Math::Clamp01(t / recoilTime));
+        const float returnLinear = 1.0f - Math::Clamp01((t - recoilTime) / (1.0f - recoilTime));
+        const float offset = romance ? (t < recoilTime ? easeOut : returnLinear) :
+            SmoothStep(Math::Clamp01(t < 0.5f ? t * 2.0f : (1.0f - t) * 2.0f));
         if (railMode) {
-            boss.z += railDistance * ease;
+            boss.z += railDistance * offset;
         } else {
-            boss.x += sideDistance * ease;
+            boss.x += sideDistance * offset;
             boss.z = ToRailZFromSideX(boss.x);
         }
-        --boss.recoilAge;
+        if (--boss.recoilAge <= 0) {
+            boss.recoilAge = 0;
+            boss.recoilType = 0;
+        }
     }
 
     /**
@@ -395,5 +408,17 @@ private:
     int BossAttackInterval(BossPhase phase) const override {
         return phase == BossNormalPhase2 ?
             RomanceCannonAttackIntervalFrames : BossAttackIntervalFrames;
+    }
+
+public:
+    /**
+     * @brief 主砲種別に対応する反動フレーム数を取得する
+     * @param weapon 主砲種別
+     * @return 反動フレーム数
+     */
+    static constexpr int MainCannonRecoilFramesForWeapon(
+        ShooterStages::Stage4::MainWeaponType weapon) {
+        return weapon == ShooterStages::Stage4::MainWeaponType::RomanceCannon ?
+            RomanceCannonRecoilFrames : MainCannonRecoilFrames;
     }
 };

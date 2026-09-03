@@ -237,12 +237,17 @@ private:
      * @param gravity 重力を使う場合true
      * @param detonateAtPlayerZ 3D中に自機Z到達で爆破する場合true
      * @param damage 自機命中時のダメージ
+     * @param fixedSideExplosionX 2D爆発X座標を固定する場合true
+     * @param sideExplosionX 2D爆発時に使用する固定X座標
+     * @param gravityScale 重力の倍率
      * @return 生成できた場合true、空きがない場合false
      */
     static bool SpawnCannonballShot(SideScrollingShooter& shooter,
         const Vector3& muzzle, const Vector3& velocity,
         float sideRadius, float explosionRadius,
-        bool gravity, bool detonateAtPlayerZ, int damage);
+        bool gravity, bool detonateAtPlayerZ, int damage,
+        bool fixedSideExplosionX = false, float sideExplosionX = 0.0f,
+        float gravityScale = 1.0f);
 
     /**
      * @brief Stage 4ボスモデルのY軸回転を取得する
