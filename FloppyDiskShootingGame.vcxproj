@@ -194,6 +194,8 @@
     <ClInclude Include="Domain\ValueObjects\SceneSharedData.h" />
     <ClInclude Include="Domain\ValueObjects\SceneType.h" />
     <ClInclude Include="Infrastructure\ExternalServices\AudioService.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\WavSamples.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\MMLData.h" />
     <ClInclude Include="Infrastructure\ExternalServices\MMLParser.h" />
     <ClInclude Include="Infrastructure\ExternalServices\SynthWaveGenerator.h" />
     <ClInclude Include="Infrastructure\ExternalServices\SfxrGenerator.h" />

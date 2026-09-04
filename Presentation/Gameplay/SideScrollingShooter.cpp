@@ -1,4 +1,4 @@
-#include "SideScrollingShooter.h"
+﻿#include "SideScrollingShooter.h"
 
 #include <algorithm>
 #include <cmath>
@@ -7,6 +7,7 @@
 #include "../../Engine/Input/Input.h"
 #include "../../Engine/Input/KeyCode.h"
 #include "../../Infrastructure/ExternalServices/AudioService.h"
+#include "../../Infrastructure/ExternalServices/MMLData.h"
 #include "../../Infrastructure/ExternalServices/InputService.h"
 #include "../../Infrastructure/Repositories/SettingsRepository.h"
 #include "SideScrollingShooterShared.h"
@@ -331,6 +332,7 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
     m_viewToggleCooldown = 0;
     m_viewTransitionProgress = 0.0f;
     StageDispatch::ResetScriptState(*this);
+    PlayCurrentStageBgm(true);
 }
 
 /**
@@ -404,6 +406,8 @@ void SideScrollingShooter::StartDebugCheckpoint(
         m_bossStoryActive = false;
         m_bossIntroductionPhase = BossIntroductionPhase::None;
         m_bossIntroductionTimer = 0;
+    } else {
+        PlayCurrentStageBgm(true);
     }
 }
 
@@ -973,6 +977,7 @@ void SideScrollingShooter::StartBossBattle(bool playWarningSound) {
     if (m_audio && playWarningSound) {
         m_audio->PlayMMLSE(BossWarningSirenMml);
     }
+    PlayCurrentBossBgm(true);
 }
 
 /**
@@ -1082,6 +1087,7 @@ void SideScrollingShooter::StartNextStage() {
     m_chapterResultActive = false;
     m_invincible = (std::max)(m_invincible, 90);
     StageDispatch::ResetScriptState(*this);
+    PlayCurrentStageBgm(true);
 }
 
 /**
@@ -1257,6 +1263,11 @@ void SideScrollingShooter::TickTutorial() {
  * @return なし
  */
 void SideScrollingShooter::RestartCurrentChapter() {
+    m_isRestartingChapter = true;
+    struct RestartGuard {
+        bool& flag;
+        ~RestartGuard() { flag = false; }
+    } restartGuard { m_isRestartingChapter };
     // ボス戦中は警報を再生せずBキーと同じ戦闘開始状態へ戻す
     const bool restartBossBattle = m_bossBattle;
     if (restartBossBattle) {
@@ -1482,4 +1493,38 @@ bool SideScrollingShooter::CanToggleView() const {
     return m_viewTransitionTimer == 0 && m_viewToggleCooldown == 0 &&
         m_missionStartTimer == 0 && !StageDispatch::IsViewLocked(*this) &&
         m_bossIntroductionPhase == BossIntroductionPhase::None;
+}
+
+void SideScrollingShooter::PlayCurrentStageBgm(bool force) {
+    if (m_isRestartingChapter || m_tutorialMode || !m_audio) return;
+    int stageToPlay = m_stageNumber;
+    if (m_stageNumber == 5 && m_stage5.phase >= ShooterStages::Stage5::Phase::WallClimbTransition) {
+        stageToPlay = 6;
+    }
+    if (!force && m_currentBgmStage == stageToPlay && !m_currentBgmIsBoss) {
+        return;
+    }
+    m_currentBgmStage = stageToPlay;
+    m_currentBgmIsBoss = false;
+    auto mml = MMLData::GetStageBgm(stageToPlay);
+    if (!mml.empty()) {
+        m_audio->PlayMMLBGM(std::string(mml), true);
+    }
+}
+
+void SideScrollingShooter::PlayCurrentBossBgm(bool force) {
+    if (m_isRestartingChapter || m_tutorialMode || !m_audio) return;
+    int stageToPlay = m_stageNumber;
+    if (m_stageNumber == 5 && m_stage5.phase >= ShooterStages::Stage5::Phase::CarrierTransformation) {
+        stageToPlay = 6;
+    }
+    if (!force && m_currentBgmStage == stageToPlay && m_currentBgmIsBoss) {
+        return;
+    }
+    m_currentBgmStage = stageToPlay;
+    m_currentBgmIsBoss = true;
+    auto mml = MMLData::GetBossBgm(stageToPlay);
+    if (!mml.empty()) {
+        m_audio->PlayMMLBGM(std::string(mml), true);
+    }
 }

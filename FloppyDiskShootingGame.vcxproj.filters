@@ -206,6 +206,12 @@
     <ClInclude Include="Infrastructure\ExternalServices\AudioService.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Infrastructure\ExternalServices\WavSamples.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Infrastructure\ExternalServices\MMLData.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Infrastructure\ExternalServices\MMLParser.h">
       <Filter>Header Files</Filter>
     </ClInclude>

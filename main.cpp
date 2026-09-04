@@ -15,6 +15,7 @@
 #include "Domain/ValueObjects/SceneType.h"
 #include "Infrastructure/ExternalServices/Win32WindowService.h"
 #include "Infrastructure/ExternalServices/AudioService.h"
+#include "Infrastructure/ExternalServices/MMLData.h"
 #include "Infrastructure/Repositories/SettingsRepository.h"
 #include "Infrastructure/ExternalServices/D3D12RenderingService.h"
 #include "Engine/Graphics/Renderer.h"
@@ -119,6 +120,8 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         return 0;
     }
 
+
+
     // 通常決定音は高く、キャンセル音は低く鳴らす
     Button::SetClickSoundHandler([&audio](Button::ClickSound sound) {
         Audio::SfxrParams params = Audio::SfxrParams::CreatePreset(Audio::SfxrPreset::BlipSelect);
@@ -126,16 +129,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         audio.PlaySE(params);
     });
 
-    if (!audio.PlayMMLBGMFromFile("mml/test.mml", true) && 
-        !audio.PlayMMLBGMFromFile("Sound/mml/test.mml", true) &&
-        !audio.PlayMMLBGMFromFile("test.mml", true)) {
-        std::string sampleBGM = 
-            "t140 o5 l8 @0 v12 c e g o6 c r g e c ; "
-            "t140 o4 l8 @1 v9  e g o5 c e r c g e ; "
-            "t140 o3 l4 @3 v14 c g c g ; "
-            "t140 o4 l8 @5 v8  c r c r c c r r";
-        audio.PlayMMLBGM(sampleBGM, true);
-    }
+    audio.PlayMMLBGM(std::string(MMLData::title), true);
     
     // シーンマネージャを作成
     SceneManager<SceneType, SceneSharedData> app;
