@@ -139,6 +139,14 @@ public:
     static void TickBoss(SideScrollingShooter& shooter, Enemy& eastsource);
 
     /**
+     * @brief ラスボス第一形態の低速追尾ミサイルを更新する
+     * @param shooter 更新対象
+     * @param shot 更新する弾
+     * @return なし
+     */
+    static void TickSpecialShotBeforeMove(SideScrollingShooter& shooter, Shot& shot);
+
+    /**
      * @brief ラスボス第一形態の弾と発射元機体の再接触を処理する
      * @param shooter 更新対象
      * @param shot 更新する弾
@@ -213,7 +221,9 @@ public:
      * @brief Stage 5用カメラFar Clipを取得する
      * @return Stage 5のFar Clip
      */
-    static constexpr float CameraFarClip() { return 400.0f; }
+    static constexpr float CameraFarClip() {
+        return ShooterStages::Stage5::TayamaCameraFarClip;
+    }
 
     /**
      * @brief 現在の演出状態で敵を描画するか判定する
@@ -251,6 +261,16 @@ public:
      */
     static void DrawPart2Background(const SideScrollingShooter& shooter,
         Renderer& renderer, const Camera3D& camera, float railWeight);
+
+    /**
+     * @brief 第1部から第2部へのムービーと第2部道中へ嵐雲と星を描画する
+     * @param shooter 描画対象
+     * @param renderer 描画先
+     * @param camera 現在の3Dカメラ
+     * @return なし
+     */
+    static void DrawPart2StormSky(const SideScrollingShooter& shooter,
+        Renderer& renderer, const Camera3D& camera);
 
     /**
      * @brief 雲海とTAYAMA龍第2形態を2Dと3Dで共通描画する
@@ -379,6 +399,7 @@ private:
     static bool TryDamageWallSearchlight(SideScrollingShooter& shooter, Shot& shot);
     static bool TryDamageTayama(SideScrollingShooter& shooter, Shot& shot);
     static bool TryDamageTayamaDragon(SideScrollingShooter& shooter, Shot& shot);
+    static bool TryDamageTayamaReflectFunnel(SideScrollingShooter& shooter, Shot& shot);
     static void UpdateTayamaBossHp(SideScrollingShooter& shooter);
     static void StartTayamaPhase(SideScrollingShooter& shooter,
         Stage5Phase phase, bool resetCurrentHp = true);
@@ -396,6 +417,8 @@ private:
     static void DrawTayamaDragon(const SideScrollingShooter& shooter,
         Renderer& renderer, const Camera3D& camera, float railWeight);
     static Vector3 TayamaDragonSegmentPosition(const SideScrollingShooter& shooter,
+        int index, float railWeight);
+    static Vector3 TayamaReflectFunnelTarget(const SideScrollingShooter& shooter,
         int index, float railWeight);
     static float TayamaDragonSegmentRadius(int index, float railWeight);
     static Stage5ModelTransform TayamaDragonHeadTransform(

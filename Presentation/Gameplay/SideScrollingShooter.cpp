@@ -1,6 +1,7 @@
 ﻿#include "SideScrollingShooter.h"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 
@@ -8,12 +9,13 @@
 #include "../../Engine/Input/KeyCode.h"
 #include "../../Infrastructure/ExternalServices/AudioService.h"
 #include "../../Infrastructure/ExternalServices/MMLData.h"
-#include "../../Infrastructure/ExternalServices/InputService.h"
 #include "../../Infrastructure/Repositories/SettingsRepository.h"
 #include "SideScrollingShooterShared.h"
 #include "Stages/Common/StageDispatch.h"
 #include "Stages/Stage1/Stage1Module.h"
+#include "Stages/Stage4/Stage4Module.h"
 #include "Stages/Stage5/Stage5Module.h"
+#include "GameplayRandom.h"
 #include "Voices/VoiceDpcmDecoder.h"
 
 namespace {
@@ -83,10 +85,21 @@ static_assert(ChapterProgressPercentForFrame(500, 0, 1000, false) == 50);
 static_assert(ChapterProgressPercentForFrame(1000, 0, 1000, false) == 100);
 static_assert(ChapterProgressPercentForFrame(1200, 1000, 2000, true) == 100);
 
-/** @brief 無線風に加工した自機撃破音声を取得する @return 44100Hz PCMデータ */
-const std::vector<std::int16_t>& MomijiDeathVoice() {
-    static const auto voice = VoiceCodec::DecodeRadioForAudioService(VoiceSamples::momijiDeath);
-    return voice;
+/** @brief 無線風に加工した自機撃破音声群を取得する @return 44100Hz PCMデータ群 */
+const std::array<std::vector<std::int16_t>, 3>& MomijiDeathVoices() {
+    static const std::array<std::vector<std::int16_t>, 3> voices {
+        VoiceCodec::DecodeRadioForAudioService(VoiceSamples::momijiDeath),
+        VoiceCodec::DecodeRadioForAudioService(VoiceSamples::momijiDeathRattle2),
+        VoiceCodec::DecodeRadioForAudioService(VoiceSamples::momijiDeathRattle5)
+    };
+    return voices;
+}
+
+/** @brief 自機撃破音声をランダムに取得する @return 選択した44100Hz PCMデータ */
+const std::vector<std::int16_t>& RandomMomijiDeathVoice() {
+    const auto& voices = MomijiDeathVoices();
+    const float roll = GameplayRandom::Range(0.0f, 1.0f);
+    return voices[roll < 1.0f / 3.0f ? 0 : (roll < 2.0f / 3.0f ? 1 : 2)];
 }
 
 /** @brief ミッション開始前半の音声を取得する @return 44100Hz PCMデータ */
@@ -255,7 +268,7 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorFo
  */
 void SideScrollingShooter::Initialize(AudioService* audio, PlayerType playerType, DifficultyType difficulty) {
     // プレイ開始前に音声をデコードして初回再生時の処理待ちをなくす
-    (void)MomijiDeathVoice();
+    (void)MomijiDeathVoices();
     (void)MissionVoice();
     (void)StartVoice();
     (void)SuspectVoice();
@@ -416,20 +429,23 @@ void SideScrollingShooter::ProcessInput() {
     m_moveRight = Input::GetKey(KeyCode::RightArrow) || Input::GetKey(KeyCode::D);
     m_moveUp = Input::GetKey(KeyCode::UpArrow) || Input::GetKey(KeyCode::W);
     m_moveDown = Input::GetKey(KeyCode::DownArrow) || Input::GetKey(KeyCode::S);
-    m_slowMove = InputService::IsKeyPressed(VK_SHIFT);
+    m_slowMove = Input::GetKey(KeyCode::LeftShift) || Input::GetKey(KeyCode::RightShift);
     m_fire = Input::GetKey(KeyCode::Z) || Input::GetKey(KeyCode::Space);
     m_bombRequested = Input::GetKeyDown(KeyCode::C);
     m_viewToggleRequested = Input::GetKeyDown(KeyCode::X) && CanToggleView();
 
+#ifdef _DEBUG
     // デバッグ用に任意の進行地点へ移動する
     if (Input::GetKeyDown(KeyCode::F1)) StartDebugCheckpoint(1, 1, false);
     if (Input::GetKeyDown(KeyCode::F2)) StartDebugCheckpoint(2, 1, false);
     if (Input::GetKeyDown(KeyCode::F3)) StartDebugCheckpoint(3, 1, false);
     if (Input::GetKeyDown(KeyCode::F4)) StartDebugCheckpoint(4, 1, false);
     if (Input::GetKeyDown(KeyCode::F5)) StartDebugCheckpoint(5, 1, false);
+#endif
     if (Input::GetKeyDown(KeyCode::Alpha1)) StartDebugCheckpoint(m_stageNumber, 1, false);
     if (Input::GetKeyDown(KeyCode::Alpha2)) StartDebugCheckpoint(m_stageNumber, 2, false);
     if (Input::GetKeyDown(KeyCode::Alpha3)) StartDebugCheckpoint(m_stageNumber, 3, false);
+#ifdef _DEBUG
     if (Input::GetKeyDown(KeyCode::P)) {
         const int previousPowerLevel = PowerLevel();
         m_power = PowerAfterDebugIncrease(m_power, MaxPower);
@@ -438,6 +454,7 @@ void SideScrollingShooter::ProcessInput() {
     if (Input::GetKeyDown(KeyCode::B) && !StageDispatch::HandleDebugBossInput(*this)) {
         StartDebugCheckpoint(m_stageNumber, 3, true);
     }
+#endif
     StageDispatch::ProcessDebugInput(*this);
 
     if (m_clear && Input::GetKeyDown(KeyCode::R)) {
@@ -642,11 +659,25 @@ void SideScrollingShooter::TickChapterExitEnemies() {
     constexpr float SideExitSpeed = 0.10f;
     constexpr float RailExitSpeed = 1.4f;
     static_assert(SideExitSpeed > 0.0f && RailExitSpeed > 0.0f);
+    const bool exitsDownward = m_stageNumber == 5 &&
+        m_stage5.phase == ShooterStages::Stage5::Phase::WallClimbUpper;
+    const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
 
-    // 敵AIと射撃を止めたまま進行方向へ高速移動させる
+    // 敵AIと射撃を止めたまま画面外へ高速移動させる
     for (auto& enemy : m_enemies) {
         if (!enemy.active || enemy.type == 2) continue;
         enemy.collisionEnabled = false;
+        if (exitsDownward) {
+            // 第2部最終区間は屋上ムービー前に全敵を画面下へ高速退避させる
+            enemy.y = ShooterStages::Stage5::Part2EnemyExitY(
+                enemy.y, IsRailGameplayActive());
+            enemy.baseY = enemy.y;
+            const float exitY = IsRailGameplayActive() ?
+                ShooterStages::Stage5::Part2RailEnemyExitY :
+                sideYRange.x - Side2DShotCullMargin;
+            if (enemy.y < exitY) enemy.active = false;
+            continue;
+        }
         if (IsRailGameplayActive()) {
             enemy.z -= RailExitSpeed;
             if (enemy.z < 2.0f) enemy.active = false;
@@ -1028,9 +1059,15 @@ void SideScrollingShooter::TickBossIntroduction() {
     const int entranceFrames = StageDispatch::BossIntroductionFrames(*this);
     if (m_bossIntroductionPhase == BossIntroductionPhase::Entrance &&
         m_bossIntroductionTimer >= entranceFrames) {
-        // 定位置を既存ステージ定義へ戻して会話へ移行する
-        if (IsRailGameplayActive()) m_stage->ConfigureBossRailAnchor(boss);
-        else m_stage->ConfigureBossSideAnchor(boss);
+        // TAYAMAはムービー状態を抜けてから、その他は定位置へ戻して会話へ移行する
+        if (m_stageNumber == 5 &&
+            m_stage5.phase == ShooterStages::Stage5::Phase::CarrierTransformation) {
+            Stage5Module::CompleteTayamaIntroduction(*this);
+        } else if (IsRailGameplayActive()) {
+            m_stage->ConfigureBossRailAnchor(boss);
+        } else {
+            m_stage->ConfigureBossSideAnchor(boss);
+        }
         m_bossIntroductionPhase = BossIntroductionPhase::Dialogue;
         m_bossIntroductionTimer = 0;
         m_bossStoryActive = true;
@@ -1099,7 +1136,8 @@ void SideScrollingShooter::DamagePlayer() {
     if (m_playerDestructionTimer > 0) return;
 
     // 被弾成立と同時に撃破音声を開始する
-    if (m_audio) m_audio->PlaySE(MomijiDeathVoice());
+    if (m_audio) m_audio->PlaySE(RandomMomijiDeathVoice());
+    if (m_stageNumber == 4) Stage4Module::PlayDefeatVoice(*this);
 
     // 敵撃破と同じ破壊爆発を自機位置へ生成してから復帰を待つ
     const Vector3 player = PlayerWorldPosition();

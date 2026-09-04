@@ -202,6 +202,13 @@ void SideScrollingShooter::DetonateBomb() {
 }
 
 void SideScrollingShooter::TickEnemies() {
+    // 第2部最終ムービー前は通常更新を止めて全敵を画面下へ退避させる
+    if (m_stageNumber == 5 && ShooterStages::Stage5::IsPart2PlayerFlyingAway(
+        m_stage5.phase, m_stage5.phaseTimer)) {
+        TickChapterExitEnemies();
+        return;
+    }
+
     const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
     const Vector3 playerPosition = PlayerWorldPosition();
     for (auto& enemy : m_enemies) {
@@ -337,9 +344,9 @@ void SideScrollingShooter::TickLinkedEnemyLasers() {
 }
 
 void SideScrollingShooter::TickShots() {
-    // Stage3とStage4の遅延点火ミサイルは画面外到達または命中時に爆発へ変換する
+    // Stage3以降の遅延点火ミサイルは画面外到達または命中時に爆発へ変換する
     auto DeactivateShot = [this](Shot& shot) {
-        if ((m_stageNumber == 3 || m_stageNumber == 4) && shot.enemy &&
+        if ((m_stageNumber == 3 || m_stageNumber == 4 || m_stageNumber == 5) && shot.enemy &&
             shot.stage2.kind == ShooterStages::Stage2::ShotKind::Funnel &&
             shot.stage2.delayedEngine) {
             SpawnExplosion(shot.x, shot.y, shot.z);
@@ -1336,11 +1343,26 @@ void SideScrollingShooter::TickExplosions() {
 void SideScrollingShooter::TickDebris() {
     for (auto& debris : m_debris) {
         if (!debris.active || StageDispatch::TickSpecialDebris(*this, debris)) continue;
+        const Vector3 previous {debris.x, debris.y, debris.z};
         debris.x += debris.vx;
         debris.y += debris.vy;
         debris.z += debris.vz;
         if (debris.gravity || m_stage->HasDebrisGravity()) debris.vy -= 0.006f;
         debris.yaw += debris.spin;
+
+        // 危険ながれきだけを回転Boxの包含球で連続判定する
+        if (debris.damagesPlayer && m_invincible == 0) {
+            const Vector3 player = PlayerWorldPosition();
+            const float debrisRadius = std::sqrt(debris.width * debris.width +
+                debris.height * debris.height + debris.depth * debris.depth) * 0.5f;
+            if (Hit3DSegment(previous.x, previous.y, previous.z,
+                debris.x, debris.y, debris.z, debrisRadius,
+                player.x, player.y, player.z, 0.38f)) {
+                debris.active = false;
+                DamagePlayer();
+                return;
+            }
+        }
         if (++debris.age >= debris.lifetime) debris.active = false;
     }
 }
@@ -1402,17 +1424,19 @@ void SideScrollingShooter::SpawnMortarExplosion(float x, float y, float z, float
  * @param lifetime 部品が消滅するまでのフレーム数
  * @param shrinkStartAge 縮小を開始するフレーム
  * @param gravity 重力を適用する場合true
+ * @param damagesPlayer 自機との接触時に被弾させる場合true
  * @return 生成したデブリ、プール満杯の場合nullptr
  */
 SideScrollingShooter::Debris* SideScrollingShooter::SpawnDebrisPiece(
     float x, float y, float z, float vx, float vy, float vz,
     float yaw, float spin, int shape, float width, float height, float depth,
-    const float color[4], int lifetime, int shrinkStartAge, bool gravity) {
+    const float color[4], int lifetime, int shrinkStartAge, bool gravity,
+    bool damagesPlayer) {
     for (auto& debris : m_debris) {
         if (debris.active) continue;
         debris = {x, y, z, vx, vy, vz, yaw, spin, width, height, depth,
             {color[0], color[1], color[2], color[3]}, shape, 0, lifetime,
-            shrinkStartAge, {}, gravity, true};
+            shrinkStartAge, {}, gravity, damagesPlayer, true};
         return &debris;
     }
     return nullptr;

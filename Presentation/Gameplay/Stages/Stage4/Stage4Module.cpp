@@ -7,6 +7,7 @@
 #include "../../../../Engine/Graphics/Renderer.h"
 #include "../../../../Engine/Input/Input.h"
 #include "../../../../Engine/Input/KeyCode.h"
+#include "../../../../Infrastructure/ExternalServices/AudioService.h"
 
 #include "Stage4BossModelView.h"
 #include "Stage4EnemySheet.h"
@@ -18,6 +19,7 @@
 #include "../../GameplayRandom.h"
 #include "../../../../Infrastructure/ExternalServices/AudioService.h"
 #include "../../../../Infrastructure/ExternalServices/SfxrGenerator.h"
+#include "../../Voices/VoiceDpcmDecoder.h"
 
 using ShooterStages::Stage4::ShotKind;
 using Stage4Logic = ShooterStages::Stage4::State;
@@ -557,7 +559,21 @@ bool SideScrollingShooter::Stage4Module::HandleBossDefeat(
     shooter.m_score += 5000;
     shooter.m_clear = true;
     shooter.m_clearTimer = Stage4BossDefeatSequenceFrames;
+    PlayDefeatVoice(shooter);
     return true;
+}
+
+void SideScrollingShooter::Stage4Module::PlayDefeatVoice(
+    SideScrollingShooter& shooter) {
+    if (!shooter.m_audio) return;
+
+    // 二種類のBOTAMOCHI撃破音声を一度だけPCMへ復号してランダムに選ぶ
+    static const auto botaVoice =
+        VoiceCodec::DecodeForAudioService(VoiceSamples::botamochiDeathBota);
+    static const auto mochiVoice =
+        VoiceCodec::DecodeForAudioService(VoiceSamples::botamochiDeathMochi);
+    shooter.m_audio->PlaySE(GameplayRandom::Range(0.0f, 1.0f) < 0.5f ?
+        botaVoice : mochiVoice);
 }
 
 void SideScrollingShooter::Stage4Module::TickBossDefeat(SideScrollingShooter& shooter) {
@@ -1312,9 +1328,20 @@ bool SideScrollingShooter::Stage4Module::DrawSpecialShot(
     constexpr float ShellColor[] = {0.95f, 0.62f, 0.08f, 1.0f};
     constexpr float HotCoreColor[] = {1.0f, 0.90f, 0.34f, 1.0f};
     const float radius = shot.hitRadius * WorldXScale;
-    DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
+    const Vector3 center {ToWorldX(shot.x), ToWorldY(shot.y), shot.z};
+
+    // 既存の黄金色加算エフェクトを砲弾の背面へ重ねて脈動する光輪を作る
+    const float glowScale = radius *
+        (1.85f + std::sin(static_cast<float>(shot.age) * 0.16f) * 0.12f);
+    const Matrix4x4 glowWorld = Matrix4x4::Translation(center) *
+        Matrix4x4::Scale({glowScale, glowScale, 1.0f});
+    renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * glowWorld,
+        0.08f, 0});
+
+    // 発光の手前へ砲弾本体と高温の芯を描画する
+    DrawModelPrimitive(renderer, camera, 2, center.x, center.y, center.z,
         radius, radius, radius, ShellColor, yaw + shot.age * 0.12f);
-    DrawModelPrimitive(renderer, camera, 2, ToWorldX(shot.x), ToWorldY(shot.y), shot.z - 0.02f,
+    DrawModelPrimitive(renderer, camera, 2, center.x, center.y, center.z - 0.02f,
         radius * 0.36f, radius * 0.36f, radius * 0.36f, HotCoreColor,
         yaw + shot.age * 0.18f);
     return true;

@@ -35,8 +35,8 @@ public:
         };
         static constexpr EnemySpawnRule Chapter2[] = {
             {LinkedLaserEnemy, 10, 400, 1.12f, -0.45f, 0.0f, 60.0f },
-            {StraightShooterEnemy, 50, 100, 2.6f, 0.00f, 1.10f, 40.0f},
-            {StraightShooterEnemy, 50, 100, 2.6f, 0.00f, -1.00f, 40.0f},
+            {StraightShooterEnemy, 50, 150, 2.6f, 0.00f, 1.10f, 40.0f},
+            {StraightShooterEnemy, 50, 150, 2.6f, 0.00f, -1.00f, 40.0f},
             {SquareShooterEnemy, 300, 300, 2.6f, 0.0f, 0.0f, 54.0f},
         };
         static constexpr EnemySpawnRule Chapter3[] = {

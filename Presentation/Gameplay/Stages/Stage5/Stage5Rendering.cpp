@@ -10,6 +10,8 @@
 #include "../../SideScrollingShooterShared.h"
 #include "../Common/CityBackgroundModule.h"
 #include "../Common/StageDefinition.h"
+#include "../Stage4/Stage4BossModelView.h"
+#include "../Stage3/Stage3FunnelModelView.h"
 #include "Stage5ModelView.h"
 #include "Stage5CityModelView.h"
 #include "WallSecurityDroneModelView.h"
@@ -32,13 +34,58 @@ constexpr float WallUpperAccentColor[4] = { 1.00f, 0.77f, 0.24f, 1.0f };
 constexpr float WallLowerLightColor[4] = { 1.00f, 0.48f, 0.12f, 1.0f };
 constexpr float WallMiddleLightColor[4] = { 1.00f, 0.16f, 0.08f, 1.0f };
 constexpr float WallUpperLightColor[4] = { 1.00f, 0.82f, 0.34f, 1.0f };
+constexpr unsigned char PandDBuildingSignGlyphs[][7] = {
+    {30, 17, 17, 30, 16, 16, 16}, // P
+    {14, 17, 17, 31, 17, 17, 17}, // A
+    {17, 25, 21, 19, 17, 17, 17}, // N
+    {30, 17, 17, 17, 17, 17, 30}, // D
+    {30, 17, 17, 17, 17, 17, 30}, // D
+    {0, 0, 0, 31, 0, 0, 0},       // -
+    {17, 18, 20, 24, 20, 18, 17}, // K
+    {14, 17, 17, 31, 17, 17, 17}, // A
+    {31, 4, 4, 4, 4, 4, 31}       // I
+};
+constexpr int PandDBuildingSignCharacterCount =
+    static_cast<int>(std::size(PandDBuildingSignGlyphs));
+static_assert(PandDBuildingSignCharacterCount == 9);
+constexpr int TayamaGoldenLaserGlowEffect = 4;
+constexpr int TayamaGoldenLaserCoreEffect = 5;
 constexpr int RainCycle = 240;
 constexpr int RainFallSpeed = 4;
 constexpr int RainSplashDuration = 32;
+constexpr float RainViewMargin = 1.14f;
+constexpr float RainViewTravel = RainViewMargin * 2.0f;
 constexpr int CloudSeaTravelCycleFrames = 720;
 constexpr float CloudSeaTravelSpeed = 0.28f;
 constexpr float CloudSeaDepth =
     static_cast<float>(CloudSeaTravelCycleFrames) * CloudSeaTravelSpeed;
+constexpr int RooftopStarCount = 96;
+static_assert(RooftopStarCount > 0);
+constexpr int Part2StarCount = 72;
+constexpr int Part2CloudCount = 18;
+static_assert(Part2StarCount > Part2CloudCount);
+
+/**
+ * @brief 屋上の嵐雲をシーン内の固定座標へ配置する
+ * @param index 雲番号
+ * @return 屋上全体を覆うワールド座標
+ */
+constexpr Vector3 RooftopCloudPosition(int index) {
+    constexpr float TayamaHeadY = TayamaModelView::GroundedRootY(
+        ShooterStages::Stage5::RooftopSurfaceY,
+        ShooterStages::Stage5::TayamaBossScale) +
+        TayamaModelView::MechaHead.position.y * ShooterStages::Stage5::TayamaBossScale;
+    return {
+        -68.0f + static_cast<float>((index * 47) % 137),
+        TayamaHeadY + 18.0f + static_cast<float>(index % 4) * 1.1f,
+        -24.0f + static_cast<float>((index * 31) % 149)
+    };
+}
+
+static_assert(RooftopCloudPosition(0).x == -68.0f);
+static_assert(RooftopCloudPosition(1).z != RooftopCloudPosition(0).z);
+static_assert(RooftopCloudPosition(137).x == RooftopCloudPosition(0).x);
+static_assert(RooftopCloudPosition(0).y > 220.0f);
 
 /**
  * @brief 雲海がカメラから奥へ進む循環移動量を取得する
@@ -54,6 +101,29 @@ constexpr float CloudSeaTravelOffset(int frame) {
 static_assert(CloudSeaTravelOffset(0) == 0.0f);
 static_assert(CloudSeaTravelOffset(1) > 0.0f);
 static_assert(CloudSeaTravelOffset(CloudSeaTravelCycleFrames) == 0.0f);
+
+/**
+ * @brief TAYAMA龍第2形態のHPから夜明け進行率を取得する
+ * @param phase 現在のStage 5状態
+ * @param hp 第2形態の現在HP
+ * @param maxHp 第2形態の最大HP
+ * @return 夜を0、朝を1とする補間率
+ */
+constexpr float TayamaDragonDawnProgress(
+    ShooterStages::Stage5::Phase phase, int hp, int maxHp) {
+    if (phase == ShooterStages::Stage5::Phase::CloudSea || maxHp <= 0) return 0.0f;
+    if (phase >= ShooterStages::Stage5::Phase::TayamaDragonCollapse) return 1.0f;
+    const float progress = 1.0f - static_cast<float>((std::clamp)(hp, 0, maxHp)) /
+        static_cast<float>(maxHp);
+    return progress * progress * (3.0f - 2.0f * progress);
+}
+
+static_assert(TayamaDragonDawnProgress(
+    ShooterStages::Stage5::Phase::CloudSea, 0, 0) == 0.0f);
+static_assert(TayamaDragonDawnProgress(
+    ShooterStages::Stage5::Phase::TayamaDragonBattle, 4000, 4000) == 0.0f);
+static_assert(TayamaDragonDawnProgress(
+    ShooterStages::Stage5::Phase::TayamaDragonBattle, 0, 4000) == 1.0f);
 
 /**
  * @brief 雨粒の落下位相を周期内へ折り返す
@@ -147,30 +217,23 @@ Vector3 WeatherPosition(const Camera3D& camera, float lateral, float depth) {
  */
 constexpr float RainIntensity(ShooterStages::Stage5::Phase phase, int chapter,
     float tayamaTransformation, int phaseTimer) {
-    if (phase == ShooterStages::Stage5::Phase::Approach) {
-        return 0.22f + static_cast<float>(chapter - 1) * 0.27f;
-    }
-    if (phase <= ShooterStages::Stage5::Phase::EastsourceFall) return 1.0f;
-    if (phase <= ShooterStages::Stage5::Phase::WallClimbUpper) {
-        return 0.88f - tayamaTransformation * 0.28f;
-    }
-    if (phase <= ShooterStages::Stage5::Phase::TayamaFireControl) return 0.42f;
-    if (phase == ShooterStages::Stage5::Phase::TayamaLiftEngines) return 0.22f;
-    if (phase == ShooterStages::Stage5::Phase::TayamaCommandCore) {
-        return 0.22f * (1.0f - Math::Clamp01(static_cast<float>(phaseTimer) / 180.0f));
-    }
-    return 0.0f;
+    (void)chapter;
+    (void)tayamaTransformation;
+    (void)phaseTimer;
+    return phase <= ShooterStages::Stage5::Phase::TayamaCollapse ? 1.0f : 0.0f;
 }
 
-static_assert(RainIntensity(ShooterStages::Stage5::Phase::Approach, 1, 0.0f, 0) == 0.22f);
+static_assert(RainIntensity(ShooterStages::Stage5::Phase::Approach, 1, 0.0f, 0) == 1.0f);
 static_assert(RainIntensity(ShooterStages::Stage5::Phase::EastsourceBattle, 3, 0.0f, 0) == 1.0f);
 static_assert(RainIntensity(ShooterStages::Stage5::Phase::WallClimbTransition, 3, 0.0f, 0) > 0.0f);
 static_assert(RainIntensity(ShooterStages::Stage5::Phase::CarrierTransformation, 3, 0.5f, 90) > 0.0f);
-static_assert(RainIntensity(ShooterStages::Stage5::Phase::TayamaCommandCore, 3, 1.0f, 180) == 0.0f);
+static_assert(RainIntensity(ShooterStages::Stage5::Phase::TayamaCommandCore, 3, 1.0f, 180) == 1.0f);
 static_assert(RainFallPhase(0, 0) == 0);
 static_assert(RainFallPhase(0, 1) == RainCycle - RainFallSpeed);
 static_assert(RainSplashProgress(RainCycle - RainFallSpeed) == 0.125f);
 static_assert(RainSplashProgress(RainCycle - RainSplashDuration) < 0.0f);
+static_assert(RainViewMargin > 1.0f);
+static_assert(RainViewMargin - RainViewTravel < -1.0f);
 }
 
 /**
@@ -288,7 +351,7 @@ void SideScrollingShooter::Stage5Module::ApplyCameraCorrection(
         return;
     }
     if (ShooterStages::Stage5::IsCloudSeaPhase(shooter.m_stage5.phase)) {
-        railPosition = {0.0f, 18.0f, -35.0f};
+        railPosition = {0.0f, 12.0f, -24.0f};
         railTarget = {0.0f, 9.0f, 62.0f};
     }
 }
@@ -352,11 +415,15 @@ void SideScrollingShooter::Stage5Module::DrawSky(
         return;
     }
 
-    // 雲海待機画面は夜の都市から切り離した青空と明るい地平線で満たす
+    // 第2形態のHP減少に合わせ、暗い夜空から朝焼けの青空へ滑らかに変える
+    const float dawn = TayamaDragonDawnProgress(shooter.m_stage5.phase,
+        shooter.m_stage5.tayamaHp, shooter.m_stage5.tayamaMaxHp);
     renderer.Draw(Rect {{0.0f, 0.0f}, {2.0f, 2.0f}},
-        {0.16f, 0.40f, 0.68f, 1.0f});
+        {Math::Lerp(0.025f, 0.38f, dawn), Math::Lerp(0.035f, 0.62f, dawn),
+            Math::Lerp(0.10f, 0.86f, dawn), 1.0f});
     renderer.Draw(Rect {{0.0f, -0.58f}, {2.0f, 0.84f}},
-        {0.48f, 0.68f, 0.84f, 1.0f});
+        {Math::Lerp(0.10f, 0.96f, dawn), Math::Lerp(0.07f, 0.58f, dawn),
+            Math::Lerp(0.16f, 0.30f, dawn), 1.0f});
 }
 
 /**
@@ -742,7 +809,6 @@ void SideScrollingShooter::Stage5Module::DrawPart2Background(
     constexpr float GroundTopY = -3.65f;
     constexpr float BuildingZ = 45.0f;
     constexpr float EdgeColor[] = {0.20f, 0.34f, 0.48f, 1.0f};
-    constexpr float CloudColor[] = {0.07f, 0.09f, 0.15f, 0.92f};
     const float weight = SmoothStep(Math::Clamp01(railWeight));
     const float moveWeight = SmoothStep(Math::Clamp01(railWeight * 2.0f));
     const float expandWeight = SmoothStep(Math::Clamp01(railWeight * 2.0f - 1.0f));
@@ -760,38 +826,8 @@ void SideScrollingShooter::Stage5Module::DrawPart2Background(
     const float* lightColor = wallTier == 0 ? WallLowerLightColor :
         (wallTier == 1 ? WallMiddleLightColor : WallUpperLightColor);
 
-    // 雲は2Dでは上空、3Dでは外壁の左右を上から下へ循環させる
-    for (int cloud = 0; cloud < 4; ++cloud) {
-        const float sideCloudX = Math::Lerp(-sideHalfWidth * 0.82f,
-            sideHalfWidth * 0.62f, static_cast<float>(cloud) / 3.0f);
-        const float sideCloudCycleHeight = sideHalfHeight * 2.2f;
-        const float sideCloudY = -sideHalfHeight * 1.1f + WrapCityDistance(
-            (static_cast<float>(cloud) + 0.5f) * sideCloudCycleHeight / 4.0f -
-                static_cast<float>(routeFrame) *
-                ShooterStages::Stage5::Part2SideSceneryFallSpeed,
-            sideCloudCycleHeight);
-        const float railCloudX = cloud < 2 ? -34.0f : 34.0f;
-        constexpr float RailCloudBottomY = -10.0f;
-        constexpr float RailCloudCycleHeight = 44.0f;
-        const float railCloudY = RailCloudBottomY + WrapCityDistance(
-            34.0f + static_cast<float>(cloud) * 11.0f -
-                static_cast<float>(routeFrame) *
-                ShooterStages::Stage5::Part2RailSceneryFallSpeed,
-            RailCloudCycleHeight);
-        const float railCloudZ = 58.0f + static_cast<float>(cloud) * 8.0f;
-        for (int lobe = 0; lobe < 3; ++lobe) {
-            const float lobeOffset = static_cast<float>(lobe - 1);
-            shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
-                Math::Lerp(sideCloudX + lobeOffset * 0.72f,
-                    railCloudX + lobeOffset * 2.6f, weight),
-                Math::Lerp(sideCloudY + (lobe == 1 ? 0.22f : 0.0f),
-                    railCloudY + (lobe == 1 ? 0.8f : 0.0f), weight),
-                Math::Lerp(SidePlaneZ + 12.2f, railCloudZ, weight),
-                Math::Lerp(lobe == 1 ? 1.8f : 1.35f, lobe == 1 ? 6.8f : 5.2f, weight),
-                Math::Lerp(lobe == 1 ? 0.62f : 0.48f, lobe == 1 ? 2.2f : 1.6f, weight),
-                Math::Lerp(0.24f, 2.8f, weight), CloudColor);
-        }
-    }
+    // ムービー終端と同じ嵐空を道中でも継続する
+    DrawPart2StormSky(shooter, renderer, camera);
 
     // 2Dでは右三分の一、3Dでは画面中央奥へ同じ外壁を連続移動する
     const float sideBuildingWidth = sideHalfWidth * 0.68f;
@@ -846,6 +882,7 @@ void SideScrollingShooter::Stage5Module::DrawPart2Background(
             ShooterStages::Stage5::Part2SideSceneryFallSpeed,
         sideWindowSpacing);
     constexpr float RailWindowSpacing = 12.0f;
+    constexpr int WindowStartRowOffset = 4;
     const float railWindowScroll = std::fmod(
         static_cast<float>(routeFrame) *
             ShooterStages::Stage5::Part2RailSceneryFallSpeed,
@@ -859,11 +896,11 @@ void SideScrollingShooter::Stage5Module::DrawPart2Background(
                     0.5f) * 0.75f;
             const float sideWindowX = sideBuildingX + columnOffset * sideBuildingWidth;
             const float sideWindowY = -sideHalfHeight - sideWindowSpacing +
-                static_cast<float>(row) * sideWindowSpacing - sideWindowScroll;
+                static_cast<float>(row + WindowStartRowOffset) * sideWindowSpacing - sideWindowScroll;
             const float railWindowX = columnOffset *
                 ShooterStages::Stage5::PandDBuildingWidth;
             const float railWindowY = GroundTopY - RailWindowSpacing +
-                static_cast<float>(row) * RailWindowSpacing - railWindowScroll;
+                static_cast<float>(row + WindowStartRowOffset) * RailWindowSpacing - railWindowScroll;
             shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
                 Math::Lerp(sideWindowX, railWindowX, weight),
                 Math::Lerp(sideWindowY, railWindowY, weight),
@@ -932,6 +969,66 @@ void SideScrollingShooter::Stage5Module::DrawPart2Background(
 }
 
 /**
+ * @brief 第1部から第2部へのムービーと第2部道中へ嵐雲と星を描画する
+ * @param shooter 描画対象
+ * @param renderer 描画先
+ * @param camera 現在の3Dカメラ
+ * @return なし
+ */
+void SideScrollingShooter::Stage5Module::DrawPart2StormSky(
+    const SideScrollingShooter& shooter, Renderer& renderer, const Camera3D& camera) {
+    constexpr float StarColor[] = {0.62f, 0.76f, 1.0f, 0.92f};
+    constexpr float CloudColor[] = {0.045f, 0.060f, 0.11f, 0.84f};
+
+    // 星はカメラ前方の視錐台へ決定的に分散して視点旋回中も空を覆う
+    for (int index = 0; index < Part2StarCount; ++index) {
+        const std::uint32_t depthHash = ShooterStages::Stage5::WallWaveHash(index, 307);
+        const std::uint32_t lateralHash = ShooterStages::Stage5::WallWaveHash(index, 101);
+        const std::uint32_t verticalHash = ShooterStages::Stage5::WallWaveHash(index, 211);
+        const float depth = 190.0f + static_cast<float>(depthHash % 61u);
+        const float halfHeight = depth * std::tan(camera.FieldOfView() * 0.5f);
+        const float halfWidth = halfHeight * renderer.AspectRatio();
+        const float lateral = (-0.96f + static_cast<float>(lateralHash & 0xffffu) /
+            65535.0f * 1.92f) * halfWidth;
+        const float vertical = (-0.82f + static_cast<float>(verticalHash & 0xffffu) /
+            65535.0f * 1.68f) * halfHeight;
+        const Vector3 position = camera.Position() + camera.Forward() * depth +
+            camera.Right() * lateral + camera.Up() * vertical;
+        const float size = index % 11 == 0 ? 0.36f : 0.18f;
+        shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
+            position, {size, size, size * 0.32f}, {}, StarColor);
+    }
+
+    // 厚い雲群を左右へ流し、三つのCubeで荒れた輪郭を作る
+    for (int cloud = 0; cloud < Part2CloudCount; ++cloud) {
+        const std::uint32_t depthHash = ShooterStages::Stage5::WallWaveHash(cloud, 401);
+        const std::uint32_t lateralHash = ShooterStages::Stage5::WallWaveHash(cloud, 503);
+        const std::uint32_t verticalHash = ShooterStages::Stage5::WallWaveHash(cloud, 601);
+        const float depth = 145.0f + static_cast<float>(depthHash % 46u);
+        const float halfHeight = depth * std::tan(camera.FieldOfView() * 0.5f);
+        const float halfWidth = halfHeight * renderer.AspectRatio();
+        const float start = static_cast<float>(lateralHash & 0xffffu) / 65535.0f *
+            halfWidth * 2.4f;
+        const float travel = WrapCityDistance(start +
+            static_cast<float>(shooter.m_frame) * 0.055f, halfWidth * 2.4f);
+        const float lateral = -halfWidth * 1.2f + travel;
+        const float vertical = (0.12f + static_cast<float>(verticalHash & 0xffffu) /
+            65535.0f * 0.72f) * halfHeight;
+        const Vector3 center = camera.Position() + camera.Forward() * depth +
+            camera.Right() * lateral + camera.Up() * vertical;
+        for (int lobe = 0; lobe < 3; ++lobe) {
+            const float offset = static_cast<float>(lobe - 1);
+            shooter.DrawModelPrimitive(renderer, camera,
+                static_cast<int>(PrimitiveShape::Box),
+                center + camera.Right() * offset * (2.8f + cloud % 3) +
+                    camera.Up() * (lobe == 1 ? 0.8f : 0.0f),
+                {lobe == 1 ? 22.0f : 16.5f, lobe == 1 ? 7.2f : 5.4f,
+                    10.0f + static_cast<float>(cloud % 4) * 2.0f}, {}, CloudColor);
+        }
+    }
+}
+
+/**
  * @brief 終幕ムービーでビル背後から上昇する頭部なしのメカ龍を描画する
  * @param shooter 描画対象
  * @param renderer 描画先レンダラー
@@ -948,10 +1045,10 @@ void SideScrollingShooter::Stage5Module::DrawFinalEscapeDragon(
     if (progress <= 0.0f) return;
 
     constexpr int SegmentCount = 26;
-    constexpr float BodyColor[] = {0.10f, 0.12f, 0.16f, 1.0f};
-    constexpr float ArmorColor[] = {0.28f, 0.32f, 0.38f, 1.0f};
-    constexpr float EdgeColor[] = {0.48f, 0.56f, 0.64f, 1.0f};
-    constexpr float CoreColor[] = {0.08f, 0.72f, 1.0f, 1.0f};
+    constexpr float BodyColor[] = {0.36f, 0.18f, 0.025f, 1.0f};
+    constexpr float ArmorColor[] = {0.95f, 0.56f, 0.08f, 1.0f};
+    constexpr float EdgeColor[] = {1.55f, 0.92f, 0.16f, 1.0f};
+    constexpr float CoreColor[] = {1.80f, 0.62f, 0.06f, 1.0f};
     const auto SegmentPosition = [&](int index) {
         const float distance = static_cast<float>(index) * 8.6f;
         const float wave = progress * 4.4f - static_cast<float>(index) * 0.46f;
@@ -1020,9 +1117,9 @@ void SideScrollingShooter::Stage5Module::DrawFinalEscapeDragon(
 void SideScrollingShooter::Stage5Module::DrawCloudSea(
     const SideScrollingShooter& shooter, Renderer& renderer, const Camera3D& camera) {
     constexpr int CloudCount = 240;
-    constexpr float CloudShadow[] = {0.48f, 0.60f, 0.72f, 1.0f};
-    constexpr float CloudTop[] = {0.82f, 0.90f, 0.96f, 1.0f};
-    constexpr float CloudLight[] = {0.94f, 0.97f, 1.0f, 1.0f};
+    constexpr float CloudShadow[] = {0.20f, 0.20f, 0.32f, 1.0f};
+    constexpr float CloudTop[] = {0.46f, 0.38f, 0.45f, 1.0f};
+    constexpr float CloudLight[] = {0.78f, 0.62f, 0.45f, 1.0f};
     const float travel = CloudSeaTravelOffset(shooter.m_frame);
 
     // 大型Cubeを重なる密度で散らし、循環させながらカメラから奥の+Z方向へ流す
@@ -1076,6 +1173,33 @@ void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
     const int visibleCount = ShooterStages::Stage5::TayamaDragonSegmentCount - destroyed;
     const bool hitFlash = shooter.m_stage5.tayamaDragonHitFlashFrames > 0 &&
         (shooter.m_stage5.tayamaDragonHitFlashFrames / 2) % 2 != 0;
+    const int attackTimeline = ShooterStages::Stage5::TayamaDragonAttackTimeline(
+        shooter.m_stage5.tayamaDragonAttack, shooter.m_stage5.tayamaDragonAttackTimer);
+    const int romanceFrame = shooter.m_stage5.tayamaDragonAttack ==
+        ShooterStages::Stage5::TayamaDragonAttack::RomanceCannon ?
+        ShooterStages::Stage5::TayamaDragonRomanceCannonFrame(attackTimeline) : -1;
+
+    // ステージ3と同じ反射ファンネルモデルを自機周囲へ描画する
+    for (const auto& state : shooter.m_stage5.tayamaReflectFunnels) {
+        if (!state.active) continue;
+        const Vector3 position {ToWorldX(state.x), ToWorldY(state.y), state.z};
+        const Vector3 target = shooter.PlayerWorldPosition();
+        const Vector3 delta = target - position;
+        const float horizontal = (std::max)(0.001f,
+            std::sqrt(delta.x * delta.x + delta.z * delta.z));
+        const BossModelTransform transform {position, {}, 0.0f, 1.6f};
+        auto DrawPart = [&](int shape, const Vector3& partPosition,
+            const Vector3& scale, const float color[4], float yaw, float pitch) {
+            shooter.DrawModelPrimitive(renderer, camera, shape,
+                partPosition.x, partPosition.y, partPosition.z,
+                scale.x, scale.y, scale.z, color, yaw, pitch);
+        };
+        const float spin = state.spinFrames > 0 ? Math::TwoPi * 2.0f *
+            static_cast<float>(30 - state.spinFrames) / 29.0f : 0.0f;
+        Stage3FunnelModelView::DrawReflectShot(transform,
+            std::atan2(delta.z, -delta.x) + spin,
+            -std::atan2(delta.y, horizontal), 0.0f, DrawPart);
+    }
 
     // 箱型装甲と球形関節を共有節座標で連結し、視点切替中も龍の形を連続させる
     for (int index = 0; index < visibleCount; ++index) {
@@ -1121,6 +1245,51 @@ void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
         }
     }
 
+    // 発射する胴体節を予告中から膨張発光させ、発射後は滑らかに収束させる
+    if (shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle &&
+        shooter.m_stage5.tayamaDragonAttack ==
+            ShooterStages::Stage5::TayamaDragonAttack::BodyBarrage) {
+        constexpr int Sources[] = {4, 10, 16, 22};
+        const float glow = SmoothStep(ShooterStages::Stage5::TayamaDragonBarrageGlow(
+            attackTimeline));
+        if (glow > 0.0f) {
+            const int volley = shooter.m_stage5.attackTimer /
+                ShooterStages::Stage5::TayamaDragonBarrageIntervalFrames;
+            const Vector3 source = TayamaDragonSegmentPosition(shooter,
+                Sources[volley % static_cast<int>(std::size(Sources))], railWeight);
+            const float radius = 1.2f * glow;
+            shooter.DrawModelPrimitive(renderer, camera,
+                static_cast<int>(PrimitiveShape::Sphere), source,
+                {radius, radius, radius}, {}, CoreColor);
+        }
+    }
+
+    // 頭部の分離中だけ露出した首先端へStage4のロマン砲を接続する
+    if (!collapsing && romanceFrame >= 0) {
+        const Vector3 muzzleBase = TayamaDragonSegmentPosition(shooter, 0, railWeight);
+        const Vector3 target = shooter.PlayerWorldPosition();
+        const Vector3 direction = (target - muzzleBase).Normalized();
+        BossModelTransform cannonTransform;
+        cannonTransform.position = muzzleBase;
+        cannonTransform.yaw = std::atan2(direction.z, -direction.x);
+        cannonTransform.scale = Math::Lerp(0.22f, 0.42f, railWeight);
+        Stage4MainWeaponPose pose;
+        pose.barrelPitch = std::asin((std::clamp)(direction.y, -1.0f, 1.0f));
+        if (romanceFrame >= ShooterStages::Stage5::TayamaDragonRomanceCannonFireFrame &&
+            romanceFrame < ShooterStages::Stage5::TayamaDragonRomanceCannonFireFrame + 18) {
+            pose.recoil = 1.0f - static_cast<float>(romanceFrame -
+                ShooterStages::Stage5::TayamaDragonRomanceCannonFireFrame) / 18.0f;
+        }
+        Stage4BossModelView::DrawMainWeapon(Stage4MainWeaponType::RomanceCannon,
+            cannonTransform, pose,
+            [&](int shape, const Vector3& position, const Vector3& scale,
+                const float color[4], float yaw, float pitch) {
+                shooter.DrawModelPrimitive(renderer, camera,
+                    static_cast<PrimitiveShape>(shape), position.x, position.y, position.z,
+                    scale.x, scale.y, scale.z, color, yaw, pitch);
+            });
+    }
+
     // 暗転復帰後に逃げたTAYAMA頭部を首の接続環へ移動して合体させる
     if (!collapsing || shooter.m_stage5.phaseTimer <
         ShooterStages::Stage5::TayamaDragonCollapseHeadExplosionFrame) {
@@ -1136,9 +1305,18 @@ void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
         headState.visible.fill(false);
         headState.visible[static_cast<std::size_t>(TayamaPartGroup::Bridge)] = true;
         headState.hitFlash[static_cast<std::size_t>(TayamaPartGroup::Bridge)] = hitFlash;
+        headState.headScaleMultiplier = TayamaModelView::DragonHeadScale;
+        headState.goldenHeadAdornment = true;
+        const int removedHeadParts = collapsing ?
+            ShooterStages::Stage5::TayamaDragonDestroyedHeadPartCount(
+                shooter.m_stage5.phaseTimer) : 0;
+        std::size_t headPartIndex = 0;
         TayamaModelView::VisitParts(headTransform, 1.0f, headState,
             [&](PrimitiveShape shape, const Matrix4x4& world,
                 const ColorF& color, TayamaPartGroup) {
+                const std::size_t partIndex = headPartIndex++;
+                if (!TayamaModelView::IsHeadPartVisibleAfterRemoval(
+                    partIndex, removedHeadParts)) return;
                 shooter.DrawModelPrimitive(renderer, camera,
                     static_cast<int>(shape), world,
                     hitFlash ? HitColor : &color.r);
@@ -1148,26 +1326,38 @@ void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
     // 合体後の頭部レーザーを予告線と照射本体で描き分ける
     if (shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle &&
         shooter.m_stage5.headLaserArmed) {
-        const int laserFrame = shooter.m_stage5.attackTimer %
+        const int laserFrame = shooter.m_stage5.tayamaDragonAttackTimer %
             ShooterStages::Stage5::TayamaHeadLaserCycleFrames;
         const bool active = ShooterStages::Stage5::IsTayamaHeadLaserActive(
-            shooter.m_stage5.attackTimer);
+            attackTimeline);
         if (laserFrame < ShooterStages::Stage5::TayamaHeadLaserWarningFrames || active) {
-            const Vector3 eye = TayamaModelView::EyeWorldCenter(
-                TayamaDragonHeadTransform(shooter, railWeight));
-            const Vector3 direction = (shooter.m_stage5.headLaserTarget - eye).Normalized();
-            const Vector3 end = eye + direction * ShooterStages::Stage5::TayamaHeadLaserLength;
             const float progress = static_cast<float>(laserFrame) /
                 static_cast<float>(ShooterStages::Stage5::TayamaHeadLaserWarningFrames);
-            if (active) {
-                const float pulse = static_cast<float>(shooter.m_frame % 12) / 12.0f;
-                shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
-                    ShooterStages::Stage5::TayamaHeadLaserHitRadius * 1.7f, pulse, 2);
-                shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
-                    ShooterStages::Stage5::TayamaHeadLaserHitRadius, pulse, 0);
-            } else {
-                shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
-                    0.16f, progress, 3);
+            const auto eyes = TayamaModelView::EyeWorldPositions(
+                TayamaDragonHeadTransform(shooter, railWeight),
+                TayamaModelView::DragonHeadScale);
+            for (const Vector3& eye : eyes) {
+                const Vector3 direction =
+                    (shooter.m_stage5.headLaserTarget - eye).Normalized();
+                const Vector3 end = eye + direction *
+                    ShooterStages::Stage5::TayamaHeadLaserLength;
+                if (active) {
+                    const float pulse = static_cast<float>(shooter.m_frame % 12) / 12.0f;
+                    const float widthProgress = SmoothStep(
+                        ShooterStages::Stage5::TayamaDragonLaserWidthProgress(
+                            attackTimeline));
+                    const float width = Math::Lerp(0.16f,
+                        ShooterStages::Stage5::TayamaHeadLaserHitRadius, widthProgress);
+                    shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
+                        width * 1.7f, pulse,
+                        TayamaGoldenLaserGlowEffect);
+                    shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
+                        width, pulse,
+                        TayamaGoldenLaserCoreEffect);
+                } else {
+                    shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
+                        0.16f, progress, 3);
+                }
             }
         }
     }
@@ -1205,6 +1395,9 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
 
     const bool wallFacade = shooter.m_stage5.phase == Stage5Phase::WallClimbTransition;
     if (wallFacade) {
+        // 半透明の嵐雲を先に描き、巨大ビルが必ず手前を覆うようにする
+        DrawPart2StormSky(shooter, renderer, camera);
+
         // 外壁上昇用の超巨大ビル躯体を道路へ接地する
         constexpr float GroundTopY = -3.65f;
         constexpr float BuildingZ = 45.0f;
@@ -1256,6 +1449,64 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
             0.0f, GroundTopY + ShooterStages::Stage5::PandDBuildingHeight * 0.5f,
             BuildingZ, ShooterStages::Stage5::PandDBuildingWidth,
             ShooterStages::Stage5::PandDBuildingHeight, 6.0f, TowerFacadeColor);
+
+        // エントランス上部へPANDD-KAIの金色発光サインを固定する
+        constexpr float SignCenterY = GroundTopY + 9.0f;
+        constexpr float SignPanelZ = BuildingZ - 3.25f;
+        constexpr float SignGlyphZ = BuildingZ - 3.50f;
+        constexpr float SignCellStep = 0.90f;
+        constexpr float SignPanelColor[] = {0.028f, 0.016f, 0.006f, 1.0f};
+        constexpr float SignFrameColor[] = {0.78f, 0.42f, 0.055f, 1.0f};
+        shooter.DrawModelPrimitive(renderer, camera,
+            static_cast<int>(PrimitiveShape::Box),
+            0.0f, SignCenterY, SignPanelZ, 56.0f, 9.0f, 0.30f, SignPanelColor);
+
+        // 真鍮枠と左右の菱形飾りで看板へ立体的な輪郭を付ける
+        for (int side = -1; side <= 1; side += 2) {
+            shooter.DrawModelPrimitive(renderer, camera,
+                static_cast<int>(PrimitiveShape::Box),
+                0.0f, SignCenterY + static_cast<float>(side) * 4.25f,
+                SignGlyphZ + 0.02f, 56.0f, 0.24f, 0.16f, SignFrameColor);
+            shooter.DrawModelPrimitive(renderer, camera,
+                static_cast<int>(PrimitiveShape::Box),
+                static_cast<float>(side) * 27.75f, SignCenterY,
+                SignGlyphZ + 0.02f, 0.24f, 8.3f, 0.16f, SignFrameColor);
+            shooter.DrawModelPrimitive(renderer, camera,
+                static_cast<int>(PrimitiveShape::Box),
+                {static_cast<float>(side) * 27.75f, SignCenterY, SignGlyphZ - 0.08f},
+                {0.90f, 0.90f, 0.16f},
+                {0.0f, 0.0f, Math::Pi * 0.25f}, WallUpperAccentColor);
+        }
+
+        // 5x7セルの琥珀色の光彩へ明るい金色の芯を重ねる
+        constexpr float FirstCellX =
+            -static_cast<float>(PandDBuildingSignCharacterCount * 6 - 2) *
+                SignCellStep * 0.5f;
+        const float signPulse = 0.92f +
+            std::sin(static_cast<float>(shooter.m_frame) * 0.065f) * 0.08f;
+        const float signGlowColor[] = {1.0f, 0.46f, 0.025f, 0.38f * signPulse};
+        const float signCoreColor[] = {1.0f, 0.76f * signPulse, 0.18f, 1.0f};
+        for (int character = 0;
+            character < PandDBuildingSignCharacterCount; ++character) {
+            for (int row = 0; row < 7; ++row) {
+                const unsigned char bits = PandDBuildingSignGlyphs[character][row];
+                for (int column = 0; column < 5; ++column) {
+                    if ((bits & (1 << (4 - column))) == 0) continue;
+                    const float glyphX = FirstCellX +
+                        static_cast<float>(character * 6 + column) * SignCellStep;
+                    const float glyphY = SignCenterY +
+                        static_cast<float>(3 - row) * SignCellStep;
+                    shooter.DrawModelPrimitive(renderer, camera,
+                        static_cast<int>(PrimitiveShape::Box),
+                        glyphX, glyphY, SignGlyphZ + 0.10f,
+                        0.82f, 0.82f, 0.10f, signGlowColor);
+                    shooter.DrawModelPrimitive(renderer, camera,
+                        static_cast<int>(PrimitiveShape::Box),
+                        glyphX, glyphY, SignGlyphZ,
+                        0.58f, 0.58f, 0.18f, signCoreColor);
+                }
+            }
+        }
 
         // 接近と壁面上昇の全区間で見える窓を超巨大ビル正面へ規則配置する
         constexpr int WindowRowCount = 50;
@@ -1349,33 +1600,34 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
                 RoofWidth - 2.4f, 0.025f, 0.10f, RoofJointColor);
         }
 
-        // 四隅の装飾サーチライトをTAYAMAへ向ける
-        const Vector3 lightTarget = TayamaTransform(shooter).position + Vector3 {0.0f, 2.2f, 0.0f};
+        // 屋上の2基を壁面警備ドローン同様のレーザーポインターとして自機へ向ける
+        const Vector3 lightTarget = shooter.PlayerWorldPosition();
         for (int xSide = -1; xSide <= 1; xSide += 2) {
-            for (int zSide = -1; zSide <= 1; zSide += 2) {
-                const Vector3 source {
-                    static_cast<float>(xSide) * (RoofWidth * 0.5f - 6.0f),
-                    ShooterStages::Stage5::RooftopSurfaceY + 0.9f,
-                    RoofCenterZ + static_cast<float>(zSide) * (RoofDepth * 0.5f - 8.0f)
-                };
-                const Vector3 delta = lightTarget - source;
-                const float length = (std::max)(0.001f, delta.Length());
-                const Vector3 direction = delta / length;
-                const float yaw = std::atan2(direction.z, -direction.x);
-                const float pitch = -std::asin(direction.y);
-                const Matrix4x4 beamWorld =
-                    Matrix4x4::Translation(source + direction * (length * 0.5f)) *
-                    Matrix4x4::RotationY(yaw) * Matrix4x4::RotationZ(pitch) *
-                    Matrix4x4::Scale({length, 12.0f, 12.0f});
-                shooter.DrawModelPrimitive(renderer, camera,
-                    static_cast<int>(PrimitiveShape::Cylinder), source,
-                    {1.5f, 0.55f, 1.5f}, {}, SearchlightHousingColor);
-                shooter.DrawModelPrimitive(renderer, camera,
-                    static_cast<int>(PrimitiveShape::Sphere), source + Vector3 {0.0f, 0.35f, 0.0f},
-                    {0.75f, 0.55f, 0.75f}, {}, SearchlightGlowColor);
-                shooter.DrawModelPrimitive(renderer, camera,
-                    static_cast<int>(PrimitiveShape::Box), beamWorld, SearchlightGlowColor);
-            }
+            const Vector3 source {
+                static_cast<float>(xSide) * (RoofWidth * 0.5f - 6.0f),
+                ShooterStages::Stage5::RooftopSurfaceY + 0.9f,
+                RoofCenterZ
+            };
+            const Vector3 delta = lightTarget - source;
+            const float length = (std::max)(0.001f, delta.Length());
+            const Vector3 direction = delta / length;
+            const float yaw = std::atan2(direction.z, -direction.x);
+            const float pitch = -std::asin(direction.y);
+            const Matrix4x4 beamWorld =
+                Matrix4x4::Translation(source + direction * (length * 0.5f)) *
+                Matrix4x4::RotationY(yaw) * Matrix4x4::RotationZ(pitch) *
+                Matrix4x4::Scale({length, 0.025f, 0.025f});
+            shooter.DrawModelPrimitive(renderer, camera,
+                static_cast<int>(PrimitiveShape::Cylinder), source,
+                {1.5f, 0.55f, 1.5f}, {}, SearchlightHousingColor);
+            shooter.DrawModelPrimitive(renderer, camera,
+                static_cast<int>(PrimitiveShape::Sphere), source + Vector3 {0.0f, 0.35f, 0.0f},
+                {0.75f, 0.55f, 0.75f}, {}, SearchlightGlowColor);
+            shooter.DrawModelPrimitive(renderer, camera,
+                static_cast<int>(PrimitiveShape::Box), beamWorld, DronePointerColor);
+            shooter.DrawModelPrimitive(renderer, camera,
+                static_cast<int>(PrimitiveShape::Sphere), lightTarget,
+                {0.16f, 0.16f, 0.05f}, {}, DronePointerColor);
         }
     }
 
@@ -1411,21 +1663,23 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
             ShooterStages::Stage5::TayamaHeadLaserCycleFrames;
         const bool active = ShooterStages::Stage5::IsTayamaHeadLaserActive(attackTimer);
         if (laserFrame < ShooterStages::Stage5::TayamaHeadLaserWarningFrames || active) {
-            const Vector3 eye = TayamaModelView::EyeWorldCenter(transform);
-            const Vector3 direction = (shooter.m_stage5.headLaserTarget - eye).Normalized();
-            const Vector3 end = eye +
-                direction * ShooterStages::Stage5::TayamaHeadLaserLength;
             const float progress = static_cast<float>(laserFrame) /
                 static_cast<float>(ShooterStages::Stage5::TayamaHeadLaserWarningFrames);
-            if (active) {
-                const float pulse = static_cast<float>(shooter.m_frame % 12) / 12.0f;
-                shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
-                    ShooterStages::Stage5::TayamaHeadLaserHitRadius * 1.7f, pulse, 2);
-                shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
-                    ShooterStages::Stage5::TayamaHeadLaserHitRadius, pulse, 0);
-            } else {
-                shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
-                    0.16f, progress, 3);
+            for (const Vector3& eye : TayamaModelView::EyeWorldPositions(transform)) {
+                const Vector3 direction =
+                    (shooter.m_stage5.headLaserTarget - eye).Normalized();
+                const Vector3 end = eye + direction *
+                    ShooterStages::Stage5::TayamaHeadLaserLength;
+                if (active) {
+                    const float pulse = static_cast<float>(shooter.m_frame % 12) / 12.0f;
+                    shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
+                        ShooterStages::Stage5::TayamaHeadLaserHitRadius * 1.7f, pulse, 2);
+                    shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
+                        ShooterStages::Stage5::TayamaHeadLaserHitRadius, pulse, 0);
+                } else {
+                    shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
+                        0.16f, progress, 3);
+                }
             }
         }
     }
@@ -1469,24 +1723,36 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
             3.0f, 4.2f, 0.35f, TowerFacadeColor, 0.0f, -deformation * 0.16f);
     }
 
-    // 嵐の上層を少数のCube帯で表現する
-    const bool transformationCinematic =
-        shooter.m_stage5.phase == Stage5Phase::RooftopArrival ||
-        shooter.m_stage5.phase == Stage5Phase::CarrierTransformation;
-    const bool tayamaBattle = shooter.IsTayamaBattle();
+    // 屋上戦の視錐台上部へ決定的な星を分散配置する
+    const bool rooftopClouds = ShooterStages::Stage5::IsRooftopPhase(shooter.m_stage5.phase);
+    if (rooftopClouds) {
+        constexpr float RooftopStarColor[] = {0.68f, 0.80f, 1.0f, 1.0f};
+        for (int i = 0; i < RooftopStarCount; ++i) {
+            const float depth = 72.0f + static_cast<float>((i * 29) % 61);
+            const float halfHeight = depth * std::tan(camera.FieldOfView() * 0.5f);
+            const float halfWidth = halfHeight * renderer.AspectRatio();
+            const float lateral = (-0.96f +
+                static_cast<float>((i * 71) % 193) / 100.0f) * halfWidth;
+            Vector3 position = WeatherPosition(camera, lateral, depth);
+            position.y = camera.Position().y + camera.Forward().y * depth +
+                camera.Up().y * halfHeight *
+                    (0.05f + static_cast<float>((i * 43) % 91) / 100.0f);
+            const float size = i % 11 == 0 ? 0.34f : 0.18f;
+            shooter.DrawModelPrimitive(renderer, camera,
+                static_cast<int>(PrimitiveShape::Box), position,
+                {size, size, size * 0.35f}, {}, RooftopStarColor);
+        }
+    }
+
+    // 嵐の上層をCube帯で表現する
     const bool aboveStorm = shooter.m_stage5.phase >= Stage5Phase::TayamaCommandCore;
-    const int cloudCount = aboveStorm ? 64 : 14;
+    const int cloudCount = rooftopClouds ?
+        ShooterStages::Stage5::RooftopStormCloudCount : (aboveStorm ? 64 : 14);
     for (int i = 0; i < cloudCount; ++i) {
-        const float x = transformationCinematic ?
-            -100.0f + static_cast<float>((i * 9) % cloudCount) /
-                static_cast<float>(cloudCount - 1) * 200.0f :
-            -34.0f + static_cast<float>((i * 47) % 680) / 10.0f;
+        const float x = -34.0f + static_cast<float>((i * 47) % 680) / 10.0f;
         const float z = 24.0f + static_cast<float>((i * 31 + shooter.m_frame / 3) % 760) / 10.0f;
-        const float y = transformationCinematic ?
-            24.0f + static_cast<float>((i * 5) % cloudCount) /
-                static_cast<float>(cloudCount - 1) * 110.0f :
-            (aboveStorm ? -5.8f + static_cast<float>(i % 3) * 0.32f :
-                12.0f + static_cast<float>(i % 4) * 1.1f);
+        const float y = aboveStorm ? -5.8f + static_cast<float>(i % 3) * 0.32f :
+            12.0f + static_cast<float>(i % 4) * 1.1f;
         const float cloudColor[] = {
             aboveStorm ? 0.32f : StormCloudColor[0],
             aboveStorm ? 0.38f : StormCloudColor[1],
@@ -1495,20 +1761,17 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
         };
         Vector3 cloudPosition {x, y, z};
         float cloudYaw = 0.0f;
-        if (tayamaBattle) {
-            // 円形アリーナでは巨大ボス内部を避け、現在カメラの左右へ雲帯を置く
-            const float depth = 68.0f +
-                static_cast<float>((i * 31 + shooter.m_frame / 3) % 420) / 10.0f;
-            const float lateral = (i % 2 == 0 ? -1.0f : 1.0f) *
-                (depth * 0.52f + static_cast<float>(i % 3) * 2.0f);
-            cloudPosition = WeatherPosition(camera, lateral, depth);
-            cloudPosition.y = 12.0f + static_cast<float>(i % 4) * 1.1f;
-            const Vector3 forward = camera.Forward();
-            cloudYaw = std::atan2(forward.x, forward.z);
+        if (rooftopClouds) {
+            // カメラ移動から独立した屋上上空の固定座標へ多層の雲を配置する
+            cloudPosition = RooftopCloudPosition(i);
         }
         shooter.DrawModelPrimitive(renderer, camera, 1, cloudPosition.x, cloudPosition.y,
-            cloudPosition.z, 8.0f + static_cast<float>(i % 4) * 2.0f,
-            0.75f, 3.5f, cloudColor, cloudYaw);
+            cloudPosition.z,
+            rooftopClouds ? 20.0f + static_cast<float>(i % 4) * 3.2f :
+                8.0f + static_cast<float>(i % 4) * 2.0f,
+            rooftopClouds ? 2.2f + static_cast<float>(i % 3) * 0.55f : 0.75f,
+            rooftopClouds ? 12.0f + static_cast<float>(i % 5) * 2.0f : 3.5f,
+            cloudColor, cloudYaw);
     }
 
     // 現フェーズのサーチライト基部と、追尾上限を持つ光軸を同じ座標で描画する
@@ -1517,7 +1780,7 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
     if (shooter.m_stage5.phase == Stage5Phase::WallClimbLower) activeLights = 1;
     if (shooter.m_stage5.phase == Stage5Phase::WallClimbMiddle) activeLights = 2;
     if (shooter.m_stage5.phase == Stage5Phase::WallClimbUpper) activeLights = 3;
-    if (shooter.m_stage5.phase == Stage5Phase::TayamaFireControl) {
+    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase)) {
         activeLights = 2;
         tayamaLights = true;
     }
@@ -1584,8 +1847,10 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
         }
     }
 
-    // 最終フェーズの胸部コアへ射撃予告と同期した収束光を重ねる
-    if (shooter.m_stage5.phase == Stage5Phase::TayamaCommandCore &&
+    // 生存中の胸部コアへ射撃予告と同期した収束光を重ねる
+    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase) &&
+        !shooter.m_stage5.tayamaWeakpoints[
+            static_cast<int>(TayamaWeakpoint::CommandCore)].destroyed &&
         shooter.m_stage5.phaseTimer > 75 &&
         shooter.m_stage5.attackTimer % 180 < 42) {
         const Stage5GroupBounds core = TayamaModelView::GroupBounds(transform,
@@ -1632,12 +1897,16 @@ void SideScrollingShooter::Stage5Module::DrawRain3D(const SideScrollingShooter& 
     Renderer& renderer, const Camera3D& camera, float railWeight) {
     const float intensity = RainIntensity(shooter.m_stage5.phase, shooter.m_chapterNumber,
         shooter.m_stage5.tayamaTransformation, shooter.m_stage5.phaseTimer);
-    const int rainCount = intensity > 0.0f ? static_cast<int>(32.0f + intensity * 64.0f) : 0;
+    const bool wallClimbCinematic =
+        shooter.m_stage5.phase == Stage5Phase::WallClimbTransition;
+    const int rainCount = intensity > 0.0f ?
+        (wallClimbCinematic ? 384 : static_cast<int>(96.0f + intensity * 160.0f)) : 0;
     const int frame = shooter.m_frame;
     const float weight = Math::Clamp01(railWeight);
     const bool transformationCinematic =
         shooter.m_stage5.phase == Stage5Phase::RooftopArrival ||
         shooter.m_stage5.phase == Stage5Phase::CarrierTransformation;
+    const bool part2Route = ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase);
     const bool tayamaBattle = shooter.IsTayamaBattle();
     const float cinematicAltitude = shooter.m_stage5.phase == Stage5Phase::WallClimbTransition ?
         SmoothStep(ShooterStages::Stage5::WallClimbProgress(shooter.m_stage5.phaseTimer)) *
@@ -1655,7 +1924,7 @@ void SideScrollingShooter::Stage5Module::DrawRain3D(const SideScrollingShooter& 
         const float sideZ = SidePlaneZ - 3.0f + static_cast<float>(index % 3) * 4.0f;
         const Vector3 sidePosition {
             -17.0f + static_cast<float>(sideColumn) * 0.1f,
-            SideGroundY + cinematicAltitude + streakLength * 0.5f + fallRate * 15.0f,
+            SideGroundY + cinematicAltitude + streakLength * 0.5f + fallRate * 18.0f,
             sideZ
         };
 
@@ -1670,7 +1939,22 @@ void SideScrollingShooter::Stage5Module::DrawRain3D(const SideScrollingShooter& 
                     TayamaModelView::TowerSize.y * ShooterStages::Stage5::TayamaBossScale : 24.0f),
             railZ
         };
-        if (tayamaBattle) {
+        if (part2Route) {
+            // 壁面上昇中は現在の視錐台上端外から下端外まで雨を通過させる
+            const float viewDepth = 18.0f +
+                static_cast<float>((index * 197) % 600) * 0.1f;
+            const float halfHeight = viewDepth * std::tan(camera.FieldOfView() * 0.5f);
+            const float lateral = (-1.0f + static_cast<float>(railColumn) / 200.0f) *
+                halfHeight * renderer.AspectRatio() * 1.12f;
+            const Vector3 topPosition = camera.Position() +
+                camera.Forward() * viewDepth + camera.Right() * lateral +
+                camera.Up() * (halfHeight * RainViewMargin + railStreakLength * 0.5f);
+            const float worldFallProjection = (std::max)(0.2f,
+                camera.Up().y + RainViewMargin *
+                    std::tan(camera.FieldOfView() * 0.5f) * camera.Forward().y);
+            railPosition = topPosition - Vector3::Up *
+                ((1.0f - fallRate) * halfHeight * RainViewTravel / worldFallProjection);
+        } else if (tayamaBattle) {
             // 円形アリーナでは原点付近でなく、現在カメラ前方の視錐台を雨で満たす
             const float lateral = -28.0f + static_cast<float>(railColumn) / 400.0f * 56.0f;
             const float depth = 8.0f + static_cast<float>((index * 197) % 640) * 0.1f;
@@ -1751,6 +2035,14 @@ void SideScrollingShooter::Stage5Module::DrawScreenEffects(
     const float intensity = RainIntensity(shooter.m_stage5.phase, shooter.m_chapterNumber,
         shooter.m_stage5.tayamaTransformation, shooter.m_stage5.phaseTimer);
 
+    // 第二形態は夜明け進行率に応じた暁色を重ね、2Dと3Dの色調を統一する
+    if (ShooterStages::Stage5::IsCloudSeaPhase(shooter.m_stage5.phase)) {
+        const float dawn = TayamaDragonDawnProgress(shooter.m_stage5.phase,
+            shooter.m_stage5.tayamaHp, shooter.m_stage5.tayamaMaxHp);
+        renderer.Draw(Rect {{0.0f, 0.0f}, {2.0f, 2.0f}},
+            {0.82f, 0.42f, 0.26f, dawn * 0.10f});
+    }
+
     // 稲光はTAYAMAの輪郭と警告灯を一瞬だけ強調する
     if (intensity > 0.30f && ((shooter.m_frame % 241) < 3 || ((shooter.m_frame + 73) % 389) < 2)) {
         const float alpha = (shooter.m_frame % 2 == 0 ? 0.30f : 0.16f) * intensity;
@@ -1786,19 +2078,28 @@ void SideScrollingShooter::Stage5Module::DrawScreenEffects(
         shooter.m_stage5.coreTargetY, shooter.m_stage5.coreTargetZ);
 
     // 胸部掃射、脚部斉射、コアレーザーは発射前だけ危険範囲を固定表示する
-    if (shooter.m_stage5.phase == Stage5Phase::TayamaFireControl &&
+    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase) &&
+        !shooter.m_stage5.tayamaWeakpoints[
+            static_cast<int>(TayamaWeakpoint::FireControlRadar)].destroyed &&
         shooter.m_stage5.phaseTimer > 75 && shooter.m_stage5.attackTimer % 210 < 36) {
         renderer.Draw(Rect {{0.0f, coreTarget.y}, {1.86f, 0.055f}},
             {1.0f, 0.12f, 0.08f, 0.36f});
     }
-    if (shooter.m_stage5.phase == Stage5Phase::TayamaLiftEngines &&
-        shooter.m_stage5.phaseTimer > 75 && shooter.m_stage5.attackTimer % 132 < 32) {
+    const bool liftEngineActive = !shooter.m_stage5.tayamaWeakpoints[
+        static_cast<int>(TayamaWeakpoint::LeftLiftEngine)].destroyed ||
+        !shooter.m_stage5.tayamaWeakpoints[
+            static_cast<int>(TayamaWeakpoint::RightLiftEngine)].destroyed;
+    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase) &&
+        liftEngineActive && shooter.m_stage5.phaseTimer > 75 &&
+        shooter.m_stage5.attackTimer % 132 < 32) {
         renderer.Draw(Rect {coreTarget, {0.38f, 0.075f}},
             {1.0f, 0.34f, 0.08f, 0.42f});
         renderer.Draw(Circle {coreTarget, 0.12f},
             {1.0f, 0.58f, 0.12f, 0.58f});
     }
-    if (shooter.m_stage5.phase == Stage5Phase::TayamaCommandCore &&
+    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase) &&
+        !shooter.m_stage5.tayamaWeakpoints[
+            static_cast<int>(TayamaWeakpoint::CommandCore)].destroyed &&
         shooter.m_stage5.phaseTimer > 75 && shooter.m_stage5.attackTimer % 180 < 42) {
         renderer.Draw(Circle {coreTarget, 0.11f}, {1.0f, 0.08f, 0.04f, 0.62f});
     }
@@ -1893,42 +2194,28 @@ void SideScrollingShooter::Stage5Module::DrawStage5Hud(const SideScrollingShoote
         return;
     }
 
-    // TAYAMA戦は全フェーズで共有する本体HPを表示する
+    // TAYAMA戦は第一形態全体で共有する本体HPを表示する
     const int maxHp = shooter.m_stage5.tayamaMaxHp;
     const float hpRate = maxHp > 0 ? Math::Clamp01(shooter.m_displayBossHp / static_cast<float>(maxHp)) : 0.0f;
     shooter.DrawShape(renderer, 0.0f, 0.74f, BarWidth, 0.025f, Back);
     shooter.DrawShape(renderer, BarWidth * (1.0f - hpRate), 0.74f,
         BarWidth * hpRate, 0.018f, Accent);
-    renderer.DrawText(shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle ?
-        "TRUE FINAL FORM" : "GIANT MECHA", TextAlign::Center, 0.011f,
-        {0.65f, 0.82f, 0.90f, 1.0f}, {0.0f, 0.88f});
-    renderer.DrawText(shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle ?
-        "TAYAMA DRAGON" : "TAYAMA", TextAlign::Center, 0.022f,
-        {0.20f, 0.88f, 1.0f, 1.0f}, {0.0f, 0.83f});
-    const char* phase = shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle ?
-        "PHASE: TRUE LAST BATTLE" :
-        (shooter.m_stage5.phase == Stage5Phase::TayamaFireControl ? "PHASE: TARGETING ARRAY" :
-        (shooter.m_stage5.phase == Stage5Phase::TayamaLiftEngines ?
-            "PHASE: SIEGE LIMBS" : "PHASE: CORE OVERDRIVE"));
-    renderer.DrawText(phase, {-BarWidth, 0.79f}, 0.012f,
-        {1.0f, 0.82f, 0.30f, 1.0f});
+    renderer.DrawText("TAYAMA", TextAlign::Center, 0.022f,
+        {0.20f, 0.88f, 1.0f, 1.0f}, {0.0f, 0.86f});
     char components[96];
     if (shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle) {
         std::snprintf(components, sizeof(components),
             "ALL BODY SECTIONS VULNERABLE");
-    } else if (shooter.m_stage5.phase == Stage5Phase::TayamaFireControl) {
-        std::snprintf(components, sizeof(components), "L-LIGHT[%c]  R-LIGHT[%c]  RADAR[%c]",
+    } else {
+        std::snprintf(components, sizeof(components),
+            "L-LIGHT[%c] R-LIGHT[%c] RADAR[%c] L-LEG[%c] R-LEG[%c] CORE[%c]",
             shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::LeftSearchlight)].destroyed ? 'X' : ' ',
             shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::RightSearchlight)].destroyed ? 'X' : ' ',
-            shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::FireControlRadar)].destroyed ? 'X' : ' ');
-    } else if (shooter.m_stage5.phase == Stage5Phase::TayamaLiftEngines) {
-        std::snprintf(components, sizeof(components), "L-LEG[%c]  R-LEG[%c]",
+            shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::FireControlRadar)].destroyed ? 'X' : ' ',
             shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::LeftLiftEngine)].destroyed ? 'X' : ' ',
-            shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::RightLiftEngine)].destroyed ? 'X' : ' ');
-    } else {
-        std::snprintf(components, sizeof(components), "COMMAND CORE[%c]",
+            shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::RightLiftEngine)].destroyed ? 'X' : ' ',
             shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::CommandCore)].destroyed ? 'X' : ' ');
     }
     renderer.DrawText(components, TextAlign::Center, 0.010f,
-        {0.72f, 0.86f, 0.92f, 1.0f}, {0.0f, 0.68f});
+        {0.72f, 0.86f, 0.92f, 1.0f}, {0.0f, 0.79f});
 }

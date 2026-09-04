@@ -54,6 +54,13 @@ void RunUITests() {
             "Button must play its configured cancel sound");
     Button::SetClickSoundHandler({});
 
+    // 解放イベントなしで入力が消えた押下は後続の解放でもクリックしない
+    button.Update({{0.0f, 0.0f}, true, true, false});
+    button.Update({{0.0f, 0.0f}, false, false, false});
+    Require(!button.IsPressed(), "Button must cancel a press when held input disappears");
+    button.Update({{0.0f, 0.0f}, false, false, true});
+    Require(clickCount == 2, "Cancelled button press must not click on a later release");
+
     Renderer renderer;
     renderer.BeginFrame();
     button.Render(renderer);
@@ -71,6 +78,11 @@ void RunUITests() {
     RequireNear(slider.Value(), 20.0f, "Slider dragging past its end must clamp to maximum");
     slider.Update({{1.0f, 0.0f}, false, false, true});
     Require(!slider.IsDragging() && changeCount == 2, "Slider must finish dragging and notify only when values change");
+
+    // 解放イベントなしで入力が消えたドラッグもその場で終了する
+    slider.Update({{0.0f, 0.0f}, true, true, false});
+    slider.Update({{0.0f, 0.0f}, false, false, false});
+    Require(!slider.IsDragging(), "Slider must cancel dragging when held input disappears");
     slider.SetRange(5.0f, -5.0f);
     RequireNear(slider.Minimum(), -5.0f, "Slider range must normalize its minimum");
     RequireNear(slider.Maximum(), 5.0f, "Slider range must normalize its maximum");

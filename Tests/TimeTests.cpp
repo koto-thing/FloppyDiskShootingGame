@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
 #include <stdexcept>
 
@@ -25,6 +26,7 @@ void RunStage4BossModelViewTests();
 void RunStage4WeaponDroneViewTests();
 void RunStage5ModelViewTests();
 void RunVoiceDpcmDecoderTests();
+void RunWavSamplesTests();
 #include <thread>
 
 namespace {
@@ -182,7 +184,11 @@ void QuaternionOperationsProduceExpectedResults()
 
 int main()
 {
+    // assert失敗時にWindowsエラー報告を起動せず、テストプロセスを直ちに終了する
+    _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+
     try {
+        RunWavSamplesTests();
         InitializeResetsState();
         BeginFrameUpdatesScaledAndUnscaledTime();
         PauseStopsScaledTimeButNotUnscaledTime();

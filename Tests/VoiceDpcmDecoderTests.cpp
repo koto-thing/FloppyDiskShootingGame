@@ -50,6 +50,18 @@ void RunVoiceDpcmDecoderTests() {
         VoiceSamples::suspect.sampleCount);
     assert(VoiceCodec::DecodeImaAdpcm(VoiceSamples::kotoDeath).size() ==
         VoiceSamples::kotoDeath.sampleCount);
+    assert(VoiceCodec::DecodeImaAdpcm(VoiceSamples::ryotaDeath).size() ==
+        VoiceSamples::ryotaDeath.sampleCount);
+    assert(VoiceCodec::DecodeImaAdpcm(VoiceSamples::lumiDeath).size() ==
+        VoiceSamples::lumiDeath.sampleCount);
+    assert(VoiceCodec::DecodeImaAdpcm(VoiceSamples::botamochiDeathBota).size() ==
+        VoiceSamples::botamochiDeathBota.sampleCount);
+    assert(VoiceCodec::DecodeImaAdpcm(VoiceSamples::botamochiDeathMochi).size() ==
+        VoiceSamples::botamochiDeathMochi.sampleCount);
+    assert(VoiceCodec::DecodeImaAdpcm(VoiceSamples::momijiDeathRattle2).size() ==
+        VoiceSamples::momijiDeathRattle2.sampleCount);
+    assert(VoiceCodec::DecodeImaAdpcm(VoiceSamples::momijiDeathRattle5).size() ==
+        VoiceSamples::momijiDeathRattle5.sampleCount);
 
     // 端部の無音と低レベルノイズが再混入していないことを確認する
     assert(HasAudibleEdges(VoiceCodec::DecodeImaAdpcm(VoiceSamples::tayamaDeath),
@@ -66,6 +78,18 @@ void RunVoiceDpcmDecoderTests() {
         VoiceSamples::arrested.sampleRate));
     assert(HasAudibleEdges(VoiceCodec::DecodeImaAdpcm(VoiceSamples::suspect),
         VoiceSamples::suspect.sampleRate));
+    assert(HasAudibleEdges(VoiceCodec::DecodeImaAdpcm(VoiceSamples::ryotaDeath),
+        VoiceSamples::ryotaDeath.sampleRate));
+    assert(HasAudibleEdges(VoiceCodec::DecodeImaAdpcm(VoiceSamples::lumiDeath),
+        VoiceSamples::lumiDeath.sampleRate));
+    assert(HasAudibleEdges(VoiceCodec::DecodeImaAdpcm(VoiceSamples::botamochiDeathBota),
+        VoiceSamples::botamochiDeathBota.sampleRate));
+    assert(HasAudibleEdges(VoiceCodec::DecodeImaAdpcm(VoiceSamples::botamochiDeathMochi),
+        VoiceSamples::botamochiDeathMochi.sampleRate));
+    assert(HasAudibleEdges(VoiceCodec::DecodeImaAdpcm(VoiceSamples::momijiDeathRattle2),
+        VoiceSamples::momijiDeathRattle2.sampleRate));
+    assert(HasAudibleEdges(VoiceCodec::DecodeImaAdpcm(VoiceSamples::momijiDeathRattle5),
+        VoiceSamples::momijiDeathRattle5.sampleRate));
 
     // 自機撃破音声は発声直前から始め、加工で再生時間を変えない
     assert(source.size() == VoiceSamples::momijiDeath.sampleCount);

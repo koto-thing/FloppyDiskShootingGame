@@ -71,6 +71,13 @@ public:
     static bool HandleBossDefeat(SideScrollingShooter& shooter, Enemy& boss);
 
     /**
+     * @brief Stage 4専用の撃破音声をランダムに再生する
+     * @param shooter 音声を再生するゲーム本体
+     * @return なし
+     */
+    static void PlayDefeatVoice(SideScrollingShooter& shooter);
+
+    /**
      * @brief Stage 4ボスの主砲再点火から車体分解までを一フレーム進める
      * @param shooter 更新するゲーム本体
      * @return なし

@@ -10,6 +10,7 @@
 #include "../../../../Infrastructure/ExternalServices/AudioService.h"
 #include "../../SideScrollingShooterEnemies.h"
 #include "../../SideScrollingShooterShared.h"
+#include "../../Voices/VoiceDpcmDecoder.h"
 #include "../Common/StageDefinition.h"
 #include "Stage3BossModelView.h"
 #include "Stage3BarrierCageView.h"
@@ -1790,6 +1791,11 @@ bool SideScrollingShooter::Stage3Module::HandleBossDefeat(
     shooter.m_clearTimer = BossDefeatSequenceFrames;
     shooter.m_viewToggleRequested = false;
     shooter.RequestViewMode(ViewMode::Side2D);
+
+    // RYOTAの撃破音声を圧縮データからPCMへ復号して再生する
+    static const auto ryotaDeathVoice =
+        VoiceCodec::DecodeForAudioService(VoiceSamples::ryotaDeath);
+    if (shooter.m_audio) shooter.m_audio->PlaySE(ryotaDeathVoice);
     return true;
 }
 
