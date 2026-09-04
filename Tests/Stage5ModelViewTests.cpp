@@ -46,6 +46,15 @@ void RunStage5ModelViewTests() {
     static_assert(ShooterStages::Stage5::IsTayamaReflectFunnelShotFrame(
         ShooterStages::Stage5::TayamaReflectFunnelLaunchFrames +
             ShooterStages::Stage5::TayamaReflectFunnelShotIntervalFrames));
+    static_assert(ShooterStages::Stage5::TayamaReflectFunnelOrbitAngle(
+        ShooterStages::Stage5::TayamaReflectFunnelLaunchFrames - 1) == 0.0f);
+    static_assert(ShooterStages::Stage5::TayamaReflectFunnelOrbitAngle(
+        ShooterStages::Stage5::TayamaReflectFunnelLaunchFrames) == 0.0f);
+    assert(ShooterStages::Stage5::TayamaReflectFunnelOrbitAngle(
+        ShooterStages::Stage5::TayamaReflectFunnelLaunchFrames + 1) < 0.0f);
+    assert(std::abs(ShooterStages::Stage5::TayamaReflectFunnelOrbitAngle(
+        ShooterStages::Stage5::TayamaReflectFunnelLaunchFrames +
+            ShooterStages::Stage5::TayamaReflectFunnelOrbitFrames) + Math::TwoPi) < 0.0001f);
 
     // 第2形態の突進は予告後だけ接触判定を持ち、復帰完了後に通常位置へ戻る
     constexpr int rushStart = ShooterStages::Stage5::TayamaDragonRushStartFrame;
@@ -78,6 +87,21 @@ void RunStage5ModelViewTests() {
         ShooterStages::Stage5::TayamaDragonSweepRecoveryFrames) == 0.0f);
     assert(ShooterStages::Stage5::TayamaDragonBarrageGlow(
         ShooterStages::Stage5::TayamaDragonBarrageFireFrame) == 1.0f);
+    static_assert(ShooterStages::Stage5::TayamaDragonBarrageSourceCount *
+        ShooterStages::Stage5::TayamaDragonBarrageShotsPerSource == 100);
+    static_assert(ShooterStages::Stage5::TayamaDragonBarrageShotIndex(
+        ShooterStages::Stage5::TayamaDragonBarrageFireFrame - 1) == -1);
+    static_assert(ShooterStages::Stage5::TayamaDragonBarrageShotIndex(
+        ShooterStages::Stage5::TayamaDragonBarrageFireFrame) == 0);
+    static_assert(ShooterStages::Stage5::TayamaDragonBarrageShotIndex(
+        ShooterStages::Stage5::TayamaDragonBarrageFireFrame +
+            ShooterStages::Stage5::TayamaDragonBarrageShotsPerSource - 1) == 24);
+    static_assert(ShooterStages::Stage5::TayamaDragonBarrageShotIndex(
+        ShooterStages::Stage5::TayamaDragonBarrageFireFrame +
+            ShooterStages::Stage5::TayamaDragonBarrageShotsPerSource) == -1);
+    static_assert(ShooterStages::Stage5::TayamaDragonAttackDuration(
+        DragonAttack::BodyBarrage) ==
+            ShooterStages::Stage5::TayamaDragonBarrageIntervalFrames * 4);
     assert(ShooterStages::Stage5::TayamaDragonLaserWidthProgress(
         ShooterStages::Stage5::TayamaHeadLaserWarningFrames) == 0.0f);
     assert(ShooterStages::Stage5::TayamaDragonLaserWidthProgress(
@@ -93,6 +117,8 @@ void RunStage5ModelViewTests() {
         ShooterStages::Stage5::TayamaDragonOrbitFrames / 2) - Math::Pi) < 0.0001f);
     assert(!ShooterStages::Stage5::IsTayamaDragonOrbitActive(orbitStart +
         ShooterStages::Stage5::TayamaDragonOrbitFrames));
+    static_assert(ShooterStages::Stage5::TayamaDragonSegmentCount *
+        ShooterStages::Stage5::TayamaDragonOrbitSegmentAngle >= Math::TwoPi);
     constexpr int romanceStart = ShooterStages::Stage5::TayamaDragonRomanceCannonIntervalFrames;
     static_assert(ShooterStages::Stage5::TayamaDragonRomanceCannonFrame(
         romanceStart - 1) == -1);

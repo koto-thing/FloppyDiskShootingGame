@@ -343,6 +343,7 @@ private:
     };
 
     static constexpr int ShotCapacity = 512;
+    static constexpr int Stage5ShotCapacity = 1024;
     static constexpr int EnemyCapacity = 12;
     static constexpr int ItemCapacity = 48;
     static constexpr int ExplosionCapacity = ShotCapacity + 32;
@@ -610,11 +611,11 @@ private:
     void SpawnShot(float x, float y, float vx, float vy, bool enemy,
         float z = -1.0f, float railSpeed = -1.0f, int damage = 1);
     /**
-     * @brief 全Stage共通の弾プール容量を取得する
-     * @return 弾プール容量
+     * @brief 現在のStageで利用できる弾プール容量を取得する
+     * @return Stage 5は1024、それ以外は512
      */
     constexpr int ActiveShotCapacity() const {
-        return ShotCapacity;
+        return m_stageNumber == 5 ? Stage5ShotCapacity : ShotCapacity;
     }
     /**
      * @brief XYZ速度を指定して固定長プールへ弾を生成する
@@ -964,7 +965,7 @@ private:
     /** @brief 文字表示領域へ共通の黒いHUD背景を描画する @param renderer 描画先 @return なし */
     void DrawHudBackground(Renderer& renderer) const;
 
-    std::array<Shot, ShotCapacity> m_shots {};
+    std::array<Shot, Stage5ShotCapacity> m_shots {};
     std::array<Enemy, EnemyCapacity> m_enemies {};
     std::array<Item, ItemCapacity> m_items {};
     std::array<Explosion, ExplosionCapacity> m_explosions {};

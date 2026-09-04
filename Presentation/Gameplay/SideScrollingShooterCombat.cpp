@@ -934,7 +934,8 @@ void SideScrollingShooter::SpawnScoreItem(float x, float y, float z, int value) 
 void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy,
     int barrageIndex, int barrageCount, bool firedByBoss) {
     Shot* available = nullptr;
-    for (auto& shot : m_shots) {
+    for (int shotIndex = 0; shotIndex < ActiveShotCapacity(); ++shotIndex) {
+        auto& shot = m_shots[shotIndex];
         if (!shot.active) {
             available = &shot;
             break;
@@ -943,7 +944,8 @@ void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, 
 
     // ステージ側が予約済み攻撃の欠落回避を要求した場合だけ古い自機弾を置換する
     if (!available && StageDispatch::CanReplacePlayerShot(*this, enemy)) {
-        for (auto& shot : m_shots) {
+        for (int shotIndex = 0; shotIndex < ActiveShotCapacity(); ++shotIndex) {
+            auto& shot = m_shots[shotIndex];
             if (!shot.enemy) {
                 available = &shot;
                 break;

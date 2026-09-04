@@ -22,6 +22,7 @@
 #include "../../Voices/VoiceDpcmDecoder.h"
 
 using ShooterStages::Stage4::ShotKind;
+using ShooterStages::Stage4::CrossedRangeEdge;
 using Stage4Logic = ShooterStages::Stage4::State;
 using Stage4BossPhase = ShooterStages::Stage4::BossPhase;
 using Stage4Weapon = ShooterStages::Stage4::MainWeaponType;
@@ -1189,11 +1190,13 @@ void SideScrollingShooter::Stage4Module::TickSpecialShotAfterMove(
         Stage4RailGroundGameY : Side2DPlayerMinY;
     const bool hitGround = previousY > groundY && shot.y <= groundY;
     const bool hitEdge = shooter.IsRailGameplayActive() ?
-        (shot.z <= 0.0f || shot.z >= 72.0f ||
-            std::abs(shot.x) >= 1.2f ||
-            (!shot.stage4.gravity && std::abs(shot.y) >= 1.24f)) :
-        (shot.x <= Side2DPlayerMinX || shot.x >= Side2DPlayerMaxX ||
-            (!shot.stage4.gravity && shot.y >= Side2DPlayerMaxY));
+        (CrossedRangeEdge(previousZ, shot.z, 0.0f, 72.0f) ||
+            CrossedRangeEdge(previousX, shot.x, -1.2f, 1.2f) ||
+            (!shot.stage4.gravity &&
+                CrossedRangeEdge(previousY, shot.y, -1.24f, 1.24f))) :
+        (CrossedRangeEdge(previousX, shot.x, Side2DPlayerMinX, Side2DPlayerMaxX) ||
+            (!shot.stage4.gravity &&
+                CrossedRangeEdge(previousY, shot.y, groundY, Side2DPlayerMaxY)));
     const bool hitPlayerZ = shot.stage4.detonateAtPlayerZ && shooter.IsRailGameplayActive() &&
         ((previousZ <= PlayerRailZ && shot.z >= PlayerRailZ) ||
             (previousZ >= PlayerRailZ && shot.z <= PlayerRailZ));

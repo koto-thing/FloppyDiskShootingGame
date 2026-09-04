@@ -59,7 +59,9 @@ constexpr int CloudSeaTravelCycleFrames = 720;
 constexpr float CloudSeaTravelSpeed = 0.28f;
 constexpr float CloudSeaDepth =
     static_cast<float>(CloudSeaTravelCycleFrames) * CloudSeaTravelSpeed;
+constexpr int CloudSeaStarCount = 96;
 constexpr int RooftopStarCount = 96;
+static_assert(CloudSeaStarCount > 0);
 static_assert(RooftopStarCount > 0);
 constexpr int Part2StarCount = 72;
 constexpr int Part2CloudCount = 18;
@@ -77,7 +79,7 @@ constexpr Vector3 RooftopCloudPosition(int index) {
         TayamaModelView::MechaHead.position.y * ShooterStages::Stage5::TayamaBossScale;
     return {
         -68.0f + static_cast<float>((index * 47) % 137),
-        TayamaHeadY + 18.0f + static_cast<float>(index % 4) * 1.1f,
+        TayamaHeadY + 28.0f + static_cast<float>(index % 4) * 1.1f,
         -24.0f + static_cast<float>((index * 31) % 149)
     };
 }
@@ -85,7 +87,7 @@ constexpr Vector3 RooftopCloudPosition(int index) {
 static_assert(RooftopCloudPosition(0).x == -68.0f);
 static_assert(RooftopCloudPosition(1).z != RooftopCloudPosition(0).z);
 static_assert(RooftopCloudPosition(137).x == RooftopCloudPosition(0).x);
-static_assert(RooftopCloudPosition(0).y > 220.0f);
+static_assert(RooftopCloudPosition(0).y > 230.0f);
 
 /**
  * @brief 雲海がカメラから奥へ進む循環移動量を取得する
@@ -1117,10 +1119,36 @@ void SideScrollingShooter::Stage5Module::DrawFinalEscapeDragon(
 void SideScrollingShooter::Stage5Module::DrawCloudSea(
     const SideScrollingShooter& shooter, Renderer& renderer, const Camera3D& camera) {
     constexpr int CloudCount = 240;
+    constexpr float StarColor[] = {0.72f, 0.82f, 1.0f, 1.0f};
     constexpr float CloudShadow[] = {0.20f, 0.20f, 0.32f, 1.0f};
     constexpr float CloudTop[] = {0.46f, 0.38f, 0.45f, 1.0f};
     constexpr float CloudLight[] = {0.78f, 0.62f, 0.45f, 1.0f};
     const float travel = CloudSeaTravelOffset(shooter.m_frame);
+    const float dawn = TayamaDragonDawnProgress(shooter.m_stage5.phase,
+        shooter.m_stage5.tayamaHp, shooter.m_stage5.tayamaMaxHp);
+
+    // 夜空の星を視錐台へ決定的に分散し、朝になるにつれて透明にする
+    if (dawn < 0.99f) {
+        float starColor[4] = {StarColor[0], StarColor[1], StarColor[2], 1.0f - dawn};
+        for (int index = 0; index < CloudSeaStarCount; ++index) {
+            const std::uint32_t depthHash = ShooterStages::Stage5::WallWaveHash(index, 719);
+            const std::uint32_t lateralHash = ShooterStages::Stage5::WallWaveHash(index, 823);
+            const std::uint32_t verticalHash = ShooterStages::Stage5::WallWaveHash(index, 929);
+            const float depth = 180.0f + static_cast<float>(depthHash % 71u);
+            const float halfHeight = depth * std::tan(camera.FieldOfView() * 0.5f);
+            const float halfWidth = halfHeight * renderer.AspectRatio();
+            const float lateral = (-0.96f + static_cast<float>(lateralHash & 0xffffu) /
+                65535.0f * 1.92f) * halfWidth;
+            const float vertical = (-0.18f + static_cast<float>(verticalHash & 0xffffu) /
+                65535.0f * 1.12f) * halfHeight;
+            const Vector3 position = camera.Position() + camera.Forward() * depth +
+                camera.Right() * lateral + camera.Up() * vertical;
+            const float size = index % 13 == 0 ? 0.38f : 0.19f;
+            shooter.DrawModelPrimitive(renderer, camera,
+                static_cast<int>(PrimitiveShape::Box), position,
+                {size, size, size * 0.32f}, {}, starColor);
+        }
+    }
 
     // 大型Cubeを重なる密度で散らし、循環させながらカメラから奥の+Z方向へ流す
     for (int index = 0; index < CloudCount; ++index) {
@@ -1769,7 +1797,7 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
             cloudPosition.z,
             rooftopClouds ? 20.0f + static_cast<float>(i % 4) * 3.2f :
                 8.0f + static_cast<float>(i % 4) * 2.0f,
-            rooftopClouds ? 2.2f + static_cast<float>(i % 3) * 0.55f : 0.75f,
+            rooftopClouds ? 4.4f + static_cast<float>(i % 3) * 0.8f : 0.75f,
             rooftopClouds ? 12.0f + static_cast<float>(i % 5) * 2.0f : 3.5f,
             cloudColor, cloudYaw);
     }
@@ -1783,10 +1811,6 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
     if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase)) {
         activeLights = 2;
         tayamaLights = true;
-    }
-    if (shooter.m_stage5.phase == Stage5Phase::EastsourceBattle && shooter.m_enemies[0].active &&
-        shooter.m_enemies[0].bossPhase >= BossNormalPhase2 && shooter.m_enemies[0].age % 180 < 90) {
-        activeLights = 1;
     }
     for (int index = 0; index < activeLights; ++index) {
         const SearchlightState& light = shooter.m_stage5.searchlights[index];
@@ -2104,11 +2128,8 @@ void SideScrollingShooter::Stage5Module::DrawScreenEffects(
         renderer.Draw(Circle {coreTarget, 0.11f}, {1.0f, 0.08f, 0.04f, 0.62f});
     }
 
-    // ラスボスはレーザー照準点、それ以外は検出円と固定ロック地点を表示する
-    const bool eastsourceSearchlight = shooter.m_stage5.phase == Stage5Phase::EastsourceBattle &&
-        shooter.m_enemies[0].active && shooter.m_enemies[0].bossPhase >= BossNormalPhase2 &&
-        shooter.m_enemies[0].age % 180 < 90;
-    const bool showSearchlights = eastsourceSearchlight ||
+    // TAYAMA戦はレーザー照準点、壁面区画は検出円と固定ロック地点を表示する
+    const bool showSearchlights =
         (shooter.m_stage5.phase >= Stage5Phase::WallClimbLower &&
             shooter.m_stage5.phase <= Stage5Phase::WallClimbUpper) ||
         shooter.m_stage5.phase == Stage5Phase::TayamaFireControl;

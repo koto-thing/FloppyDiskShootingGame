@@ -9,6 +9,12 @@
  * @return なし
  */
 void RunStage4BossModelViewTests() {
+    // 範囲外から内側へ飛ぶ砲弾を発射フレームで着弾扱いにしないことを確認する
+    static_assert(!ShooterStages::Stage4::CrossedRangeEdge(
+        108.0f, 107.0f, 0.0f, 72.0f));
+    static_assert(ShooterStages::Stage4::CrossedRangeEdge(
+        71.0f, 72.0f, 0.0f, 72.0f));
+
     // 登場時は接触車が順に飛散し、非接触車が演出前半で消えることを確認する
     static_assert(ShooterStages::Stage4::TrafficKickRate(10, 0) == 0.0f);
     static_assert(ShooterStages::Stage4::TrafficKickRate(58, 0) == 1.0f);

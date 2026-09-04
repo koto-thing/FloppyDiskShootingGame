@@ -22,8 +22,15 @@ namespace {
 using SideScrollingShooterShared::BossNameRevealFrames;
 using SideScrollingShooterShared::BossWarningSirenMml;
 
-constexpr float PowerAfterRestart(float power) {
-    return power > 0.05f ? power - 0.05f : 0.0f;
+/**
+ * @brief 難易度に応じた道中RESTART後のPowerを取得する
+ * @param power RESTART前のPower
+ * @param difficulty 選択中の難易度
+ * @return 減少後のPower
+ */
+constexpr float PowerAfterRestart(float power, DifficultyType difficulty) {
+    const float loss = difficulty == Easy ? 0.01f : (difficulty == Normal ? 0.5f : 1.0f);
+    return power > loss ? power - loss : 0.0f;
 }
 
 /**
@@ -66,17 +73,19 @@ constexpr int ChapterProgressPercentForFrame(int frame, int startFrame, int endF
     return elapsed * 100 / duration;
 }
 
-static_assert(PowerAfterRestart(3.25f) > 3.199f &&
-    PowerAfterRestart(3.25f) < 3.201f);
-static_assert(PowerAfterRestart(0.75f) > 0.699f &&
-    PowerAfterRestart(0.75f) < 0.701f);
-static_assert(PowerAfterRestart(0.05f) == 0.0f);
+static_assert(PowerAfterRestart(3.25f, Easy) > 3.239f &&
+    PowerAfterRestart(3.25f, Easy) < 3.241f);
+static_assert(PowerAfterRestart(3.25f, Normal) == 2.75f);
+static_assert(PowerAfterRestart(3.25f, Hard) == 2.25f);
+static_assert(PowerAfterRestart(0.5f, Normal) == 0.0f);
+static_assert(PowerAfterRestart(0.5f, Hard) == 0.0f);
 static_assert(PowerAfterDebugIncrease(2.25f, 4.0f) == 3.25f);
 static_assert(PowerAfterDebugIncrease(3.50f, 4.0f) == 4.0f);
 static_assert(EarnsChapterBombBonus(5, 6));
 static_assert(!EarnsChapterBombBonus(4, 5));
 static_assert(!EarnsChapterBombBonus(0, 0));
 static_assert(ScaleHpByPercent(10, 70) == 7);
+static_assert(ScaleHpByPercent(10, 50) == 5);
 static_assert(ScaleHpByPercent(10, 100) == 10);
 static_assert(ScaleHpByPercent(10, 150) == 15);
 static_assert(ScaleHpByPercent(1, 70) == 1);
@@ -144,7 +153,8 @@ constexpr int SideScrollingShooter::ScaleHpForDifficulty(int hp, DifficultyType 
 
 /** @brief 敵機HPへ難易度倍率を適用する */
 void SideScrollingShooter::ApplyDifficultyToEnemyHp(Enemy& enemy) const {
-    enemy.hp = ScaleHpForDifficulty(enemy.hp, m_difficulty);
+    enemy.hp = m_difficulty == Easy ? ScaleHpByPercent(enemy.hp, 50) :
+        ScaleHpForDifficulty(enemy.hp, m_difficulty);
     enemy.maxHp = enemy.hp;
 }
 
@@ -1317,8 +1327,8 @@ void SideScrollingShooter::RestartCurrentChapter() {
         return;
     }
 
-    // 通常戦では被弾時点のPowerから0.01だけ失い、0.0未満にはしない
-    m_power = PowerAfterRestart(m_power);
+    // 通常戦では被弾時点のPowerから難易度別の量を失い、0.0未満にはしない
+    m_power = PowerAfterRestart(m_power, m_difficulty);
     if (StageDispatch::TryRestartCheckpoint(*this)) return;
     ++m_chapterRetryCounts[m_chapterNumber - 1];
     m_shots = {};
