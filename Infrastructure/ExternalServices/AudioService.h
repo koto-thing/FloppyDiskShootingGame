@@ -86,8 +86,9 @@ public:
     /**
      * @brief MMLによるSEワンショット再生
      * @param mml MML文字列
+     * @param volume 個別音量 (0.0 ~ 2.0)
      */
-    void PlayMMLSE(const std::string& mml);
+    void PlayMMLSE(const std::string& mml, float volume = 1.0f);
 
     /**
      * @brief ファイルからのMML BGM再生
@@ -107,20 +108,49 @@ public:
     /**
      * @brief SFXR合成パラメータによるSEワンショット再生
      * @param params 合成パラメータ
+     * @param volume 個別音量 (0.0 ~ 1.0)
      */
-    void PlaySE(const Audio::SfxrParams& params);
+    void PlaySE(const Audio::SfxrParams& params, float volume = 1.0f);
 
     /**
      * @brief SFXRプリセットによるSEワンショット再生
      * @param preset プリセット種別
+     * @param volume 個別音量 (0.0 ~ 1.0)
      */
-    void PlaySE(Audio::SfxrPreset preset);
+    void PlaySE(Audio::SfxrPreset preset, float volume = 1.0f);
 
     /**
      * @brief Raw PCMバッファによるSEワンショット再生
      * @param pcmBuffer 16bit PCMデータ
+     * @param volume 個別音量 (0.0 ~ 1.0)
      */
-    void PlaySE(const std::vector<int16_t>& pcmBuffer);
+    void PlaySE(const std::vector<int16_t>& pcmBuffer, float volume = 1.0f);
+
+    /**
+     * @brief プリセットごとの基準音量を設定
+     * @param preset プリセット種別
+     * @param volume 音量 (0.0 ~ 2.0)
+     */
+    void SetPresetVolume(Audio::SfxrPreset preset, float volume);
+
+    /**
+     * @brief プリセットごとの基準音量を取得
+     * @param preset プリセット種別
+     * @return 音量 (0.0 ~ 2.0)
+     */
+    float GetPresetVolume(Audio::SfxrPreset preset) const;
+
+    /**
+     * @brief 同時発音リミッターの有効状態を設定
+     * @param enabled 有効にする場合true
+     */
+    void SetLimiterEnabled(bool enabled);
+
+    /**
+     * @brief 同時発音リミッターの有効状態を取得
+     * @return 有効な場合true
+     */
+    bool IsLimiterEnabled() const;
 
     /**
      * @brief すべてのSE発音を停止

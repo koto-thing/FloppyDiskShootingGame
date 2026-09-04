@@ -16,6 +16,8 @@
 #include "Stage4WeaponDroneView.h"
 #include "../Common/CityBackgroundModule.h"
 #include "../../GameplayRandom.h"
+#include "../../../../Infrastructure/ExternalServices/AudioService.h"
+#include "../../../../Infrastructure/ExternalServices/SfxrGenerator.h"
 
 using ShooterStages::Stage4::ShotKind;
 using Stage4Logic = ShooterStages::Stage4::State;
@@ -26,6 +28,159 @@ using Stage4SwapState = ShooterStages::Stage4::WeaponSwapState;
 using Stage4SwapConfig = ShooterStages::Stage4::WeaponSwapConfig;
 
 namespace {
+
+/**
+ * @brief Stage4ボス ロマン砲発砲音の生成
+ * @return 44.1kHzモノラルPCM波形
+ */
+const std::vector<int16_t>& RomanceCannonFireSound() {
+    static const std::vector<int16_t> pcm = [] {
+        // ノイズ成分の生成
+        Audio::SfxrParams blast;
+        blast.waveType = Audio::SfxrWaveType::Noise;
+        blast.attackTime = 0.0f;
+        blast.sustainTime = 0.080f;
+        blast.decayTime = 0.450f;
+        blast.startFrequency = 0.50f;
+        blast.minFrequency = 0.04f;
+        blast.slide = -0.62f;
+        blast.masterVolume = 0.78f;
+        const std::vector<int16_t> pcmBlast = Audio::SfxrGenerator::GeneratePCM(blast, 44100);
+
+        // 低域波形成分の生成
+        Audio::SfxrParams core;
+        core.waveType = Audio::SfxrWaveType::Sawtooth;
+        core.attackTime = 0.008f;
+        core.sustainTime = 0.120f;
+        core.decayTime = 0.380f;
+        core.startFrequency = 0.36f;
+        core.minFrequency = 0.04f;
+        core.slide = -0.55f;
+        core.masterVolume = 0.72f;
+        const std::vector<int16_t> pcmCore = Audio::SfxrGenerator::GeneratePCM(core, 44100);
+
+        // 2つの波形を加算合成
+        const size_t totalSamples = (std::max)(pcmBlast.size(), pcmCore.size());
+        std::vector<int16_t> mixed(totalSamples, 0);
+        for (size_t i = 0; i < totalSamples; ++i) {
+            int32_t sample = 0;
+            if (i < pcmBlast.size()) sample += pcmBlast[i];
+            if (i < pcmCore.size()) sample += pcmCore[i];
+            mixed[i] = static_cast<int16_t>(std::clamp(sample, -32760, 32760));
+        }
+        return mixed;
+    }();
+    return pcm;
+}
+
+/**
+ * @brief Stage4ボス ロマン砲着弾爆発音の生成
+ * @return 44.1kHzモノラルPCM波形
+ */
+const std::vector<int16_t>& RomanceCannonExplosionSound() {
+    static const std::vector<int16_t> pcm = [] {
+        // 爆発音パラメータの設定
+        Audio::SfxrParams params;
+        params.waveType = Audio::SfxrWaveType::Noise;
+        params.attackTime = 0.005f;
+        params.sustainTime = 0.22f;
+        params.decayTime = 0.65f;
+        params.startFrequency = 0.28f;
+        params.minFrequency = 0.0f;
+        params.slide = -0.55f;
+        params.masterVolume = 0.85f;
+        return Audio::SfxrGenerator::GeneratePCM(params, 44100);
+    }();
+    return pcm;
+}
+
+/**
+ * @brief Stage4ボス 主砲・榴弾砲発砲音の生成
+ * @return 44.1kHzモノラルPCM波形
+ */
+const std::vector<int16_t>& Stage4MainCannonFireSound() {
+    static const std::vector<int16_t> pcm = [] {
+        // ノイズ成分の生成
+        Audio::SfxrParams blast;
+        blast.waveType = Audio::SfxrWaveType::Noise;
+        blast.attackTime = 0.0f;
+        blast.sustainTime = 0.040f;
+        blast.decayTime = 0.280f;
+        blast.startFrequency = 0.40f;
+        blast.minFrequency = 0.05f;
+        blast.slide = -0.58f;
+        blast.masterVolume = 0.65f;
+        const std::vector<int16_t> pcmBlast = Audio::SfxrGenerator::GeneratePCM(blast, 44100);
+
+        // 低域波形成分の生成
+        Audio::SfxrParams body;
+        body.waveType = Audio::SfxrWaveType::Sawtooth;
+        body.attackTime = 0.005f;
+        body.sustainTime = 0.060f;
+        body.decayTime = 0.220f;
+        body.startFrequency = 0.30f;
+        body.minFrequency = 0.06f;
+        body.slide = -0.50f;
+        body.masterVolume = 0.60f;
+        const std::vector<int16_t> pcmBody = Audio::SfxrGenerator::GeneratePCM(body, 44100);
+
+        // 2つの波形を加算合成
+        const size_t totalSamples = (std::max)(pcmBlast.size(), pcmBody.size());
+        std::vector<int16_t> mixed(totalSamples, 0);
+        for (size_t i = 0; i < totalSamples; ++i) {
+            int32_t sample = 0;
+            if (i < pcmBlast.size()) sample += pcmBlast[i];
+            if (i < pcmBody.size()) sample += pcmBody[i];
+            mixed[i] = static_cast<int16_t>(std::clamp(sample, -32760, 32760));
+        }
+        return mixed;
+    }();
+    return pcm;
+}
+
+/**
+ * @brief Stage4ボス 副砲台発砲音の生成
+ * @return 44.1kHzモノラルPCM波形
+ */
+const std::vector<int16_t>& Stage4SecondaryGunFireSound() {
+    static const std::vector<int16_t> pcm = [] {
+        // アタックノイズ成分の生成
+        Audio::SfxrParams crack;
+        crack.waveType = Audio::SfxrWaveType::Noise;
+        crack.attackTime = 0.0f;
+        crack.sustainTime = 0.015f;
+        crack.decayTime = 0.045f;
+        crack.startFrequency = 0.55f;
+        crack.minFrequency = 0.15f;
+        crack.slide = -0.60f;
+        crack.masterVolume = 0.48f;
+        const std::vector<int16_t> pcmCrack = Audio::SfxrGenerator::GeneratePCM(crack, 44100);
+
+        // 鋸波成分の生成
+        Audio::SfxrParams slug;
+        slug.waveType = Audio::SfxrWaveType::Sawtooth;
+        slug.attackTime = 0.0f;
+        slug.sustainTime = 0.030f;
+        slug.decayTime = 0.090f;
+        slug.startFrequency = 0.42f;
+        slug.minFrequency = 0.10f;
+        slug.slide = -0.46f;
+        slug.masterVolume = 0.56f;
+        const std::vector<int16_t> pcmSlug = Audio::SfxrGenerator::GeneratePCM(slug, 44100);
+
+        // 2つの波形を加算合成
+        const size_t totalSamples = (std::max)(pcmCrack.size(), pcmSlug.size());
+        std::vector<int16_t> mixed(totalSamples, 0);
+        for (size_t i = 0; i < totalSamples; ++i) {
+            int32_t sample = 0;
+            if (i < pcmCrack.size()) sample += pcmCrack[i];
+            if (i < pcmSlug.size()) sample += pcmSlug[i];
+            mixed[i] = static_cast<int16_t>(std::clamp(sample, -32760, 32760));
+        }
+        return mixed;
+    }();
+    return pcm;
+}
 
 // Boss4の攻撃の調整値
 constexpr float Stage4BossScale = 1.00f;
@@ -967,7 +1122,12 @@ void SideScrollingShooter::Stage4Module::TickSecondaryGunAttacks(
             break;
         }
     }
-    if (fired) shooter.PlayEnemyShotSound();
+    if (fired) {
+        // 副砲台の発砲音
+        if (shooter.m_audio) {
+            shooter.m_audio->PlaySE(Stage4SecondaryGunFireSound(), 0.90f);
+        }
+    }
 }
 
 bool SideScrollingShooter::Stage4Module::HitsHazard(
@@ -1046,6 +1206,15 @@ void SideScrollingShooter::Stage4Module::TickSpecialShotAfterMove(
             impactAtPlayerZ = true;
             impactZ = PlayerRailZ;
         }
+    }
+
+    const bool isRomance = shot.stage4.fixedSideExplosionX;
+    if (isRomance) {
+        // ロマン砲の着弾爆発音と画面揺れ
+        if (shooter.m_audio) {
+            shooter.m_audio->PlaySE(RomanceCannonExplosionSound(), 1.30f);
+        }
+        shooter.ShakeScreen(0.40f, 36);
     }
 
     shooter.SpawnMortarExplosion(
@@ -1235,6 +1404,12 @@ void SideScrollingShooter::Stage4Module::SpawnMainCannonball(
     SpawnCannonballShot(shooter, muzzle,
         Phase1CannonVelocity(phase1Direction, shooter.IsRailGameplayActive()),
         Stage4CannonballSideRadius, 0.55f, false, true, 2);
+
+    // 主砲の発砲音と画面揺れ
+    if (shooter.m_audio) {
+        shooter.m_audio->PlaySE(Stage4MainCannonFireSound(), 1.10f);
+    }
+    shooter.ShakeScreen(0.20f, 14);
 }
 
 void SideScrollingShooter::Stage4Module::SpawnRomanceCannonShot(
@@ -1252,6 +1427,12 @@ void SideScrollingShooter::Stage4Module::SpawnRomanceCannonShot(
         Stage4RomanceCannonballSideRadius, explosionRadius,
         true, true, 4, true, Stage4RomanceSideExplosionX,
         Stage4RomanceCannonballGravityScale);
+
+    // ロマン砲の発砲音と画面揺れ
+    if (shooter.m_audio) {
+        shooter.m_audio->PlaySE(RomanceCannonFireSound(), 1.25f);
+    }
+    shooter.ShakeScreen(0.35f, 26);
 }
 
 void SideScrollingShooter::Stage4Module::SpawnSiegeMortarBarrage(
@@ -1281,6 +1462,12 @@ void SideScrollingShooter::Stage4Module::SpawnSiegeMortarBarrage(
             launchArc(spread, config.normalSpeed + std::abs(spread) * 0.025f),
             Stage4CannonballSideRadius, 0.55f, true, true, 2);
     }
+
+    // 榴弾砲の発砲音と画面揺れ
+    if (shooter.m_audio) {
+        shooter.m_audio->PlaySE(Stage4MainCannonFireSound(), 1.15f);
+    }
+    shooter.ShakeScreen(0.25f, 18);
 }
 
 void SideScrollingShooter::Stage4Module::ChooseNextSiegeMortarAim(

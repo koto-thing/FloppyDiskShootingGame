@@ -215,19 +215,43 @@ static_assert(BossLaserSoundCueAt(BossLaserChargeFrames + 1) == BossLaserSoundCu
  */
 const std::vector<int16_t>& BossLaserChargeSound() {
     static const std::vector<int16_t> pcm = [] {
-        // 2秒かけて上昇する矩形波で砲身へエネルギーが集まる音を作る
-        Audio::SfxrParams sound;
-        sound.waveType = Audio::SfxrWaveType::Square;
-        sound.attackTime = 0.10f;
-        sound.sustainTime = std::sqrt(
-            (BossSoundSampleRate * 2.0f - 2000.0f) / 100000.0f);
-        sound.decayTime = 0.10f;
-        sound.startFrequency = 0.36f;
-        sound.minFrequency = 0.0f;
-        sound.slide = 0.10f;
-        sound.squareDuty = 0.32f;
-        sound.masterVolume = 0.42f;
-        return Audio::SfxrGenerator::GeneratePCM(sound, BossSoundSampleRate);
+        // 2秒の長さに合わせたサステイン時間を算出
+        const float sustain = std::sqrt((BossSoundSampleRate * 2.0f - 2000.0f) / 100000.0f);
+
+        // 重低音から唸り声を上げて急上昇する磁場エネルギー層
+        Audio::SfxrParams bassSound;
+        bassSound.waveType = Audio::SfxrWaveType::Sine;
+        bassSound.attackTime = 0.12f;
+        bassSound.sustainTime = sustain;
+        bassSound.decayTime = 0.08f;
+        bassSound.startFrequency = 0.10f;
+        bassSound.minFrequency = 0.0f;
+        bassSound.slide = 0.18f;
+        bassSound.masterVolume = 0.58f;
+        const std::vector<int16_t> pcmBass = Audio::SfxrGenerator::GeneratePCM(bassSound, BossSoundSampleRate);
+
+        // 砲身へ極限まで集束していく高密度な粒子エネルギー層
+        Audio::SfxrParams highSound;
+        highSound.waveType = Audio::SfxrWaveType::Sawtooth;
+        highSound.attackTime = 0.25f;
+        highSound.sustainTime = sustain;
+        highSound.decayTime = 0.05f;
+        highSound.startFrequency = 0.24f;
+        highSound.minFrequency = 0.0f;
+        highSound.slide = 0.22f;
+        highSound.masterVolume = 0.42f;
+        const std::vector<int16_t> pcmHigh = Audio::SfxrGenerator::GeneratePCM(highSound, BossSoundSampleRate);
+
+        // 2つのレイヤーを加算合成
+        const size_t totalSamples = (std::max)(pcmBass.size(), pcmHigh.size());
+        std::vector<int16_t> mixed(totalSamples, 0);
+        for (size_t i = 0; i < totalSamples; ++i) {
+            int32_t sample = 0;
+            if (i < pcmBass.size()) sample += pcmBass[i];
+            if (i < pcmHigh.size()) sample += pcmHigh[i];
+            mixed[i] = static_cast<int16_t>(std::clamp(sample, -32760, 32760));
+        }
+        return mixed;
     }();
     return pcm;
 }
@@ -238,18 +262,150 @@ const std::vector<int16_t>& BossLaserChargeSound() {
  */
 const std::vector<int16_t>& BossLaserFireSound() {
     static const std::vector<int16_t> pcm = [] {
-        // 3秒間ほぼ一定の鋸波を保ち、照射終了だけ短く減衰させる
-        Audio::SfxrParams sound;
-        sound.waveType = Audio::SfxrWaveType::Sawtooth;
-        sound.attackTime = 0.08f;
-        sound.sustainTime = std::sqrt(
-            (BossSoundSampleRate * 3.0f - 3200.0f) / 100000.0f);
-        sound.decayTime = 0.16f;
-        sound.startFrequency = 0.48f;
-        sound.minFrequency = 0.48f;
-        sound.slide = 0.0f;
-        sound.masterVolume = 0.34f;
-        return Audio::SfxrGenerator::GeneratePCM(sound, BossSoundSampleRate);
+        // 3秒の長さに合わせたサステイン時間を算出
+        const float sustain = std::sqrt((BossSoundSampleRate * 3.0f - 3200.0f) / 100000.0f);
+
+        // レイヤー1: アタックノイズ成分の生成
+        Audio::SfxrParams blastSound;
+        blastSound.waveType = Audio::SfxrWaveType::Noise;
+        blastSound.attackTime = 0.0f;
+        blastSound.sustainTime = 0.12f;
+        blastSound.decayTime = 0.45f;
+        blastSound.startFrequency = 0.65f;
+        blastSound.minFrequency = 0.02f;
+        blastSound.slide = -0.55f;
+        blastSound.masterVolume = 0.85f;
+        const std::vector<int16_t> pcmBlast = Audio::SfxrGenerator::GeneratePCM(blastSound, BossSoundSampleRate);
+
+        // レイヤー2: 鋸波成分の生成
+        Audio::SfxrParams coreSound;
+        coreSound.waveType = Audio::SfxrWaveType::Sawtooth;
+        coreSound.attackTime = 0.02f;
+        coreSound.sustainTime = sustain;
+        coreSound.decayTime = 0.25f;
+        coreSound.startFrequency = 0.42f;
+        coreSound.minFrequency = 0.14f;
+        coreSound.slide = -0.08f;
+        coreSound.masterVolume = 0.68f;
+        const std::vector<int16_t> pcmCore = Audio::SfxrGenerator::GeneratePCM(coreSound, BossSoundSampleRate);
+
+        // レイヤー3: 矩形波成分の生成
+        Audio::SfxrParams pulseSound;
+        pulseSound.waveType = Audio::SfxrWaveType::Square;
+        pulseSound.squareDuty = 0.28f;
+        pulseSound.attackTime = 0.03f;
+        pulseSound.sustainTime = sustain;
+        pulseSound.decayTime = 0.20f;
+        pulseSound.startFrequency = 0.50f;
+        pulseSound.minFrequency = 0.18f;
+        pulseSound.slide = -0.06f;
+        pulseSound.masterVolume = 0.58f;
+        const std::vector<int16_t> pcmPulse = Audio::SfxrGenerator::GeneratePCM(pulseSound, BossSoundSampleRate);
+
+        // レイヤー4: 持続ノイズ成分の生成
+        Audio::SfxrParams noiseSound;
+        noiseSound.waveType = Audio::SfxrWaveType::Noise;
+        noiseSound.attackTime = 0.01f;
+        noiseSound.sustainTime = sustain;
+        noiseSound.decayTime = 0.30f;
+        noiseSound.startFrequency = 0.48f;
+        noiseSound.minFrequency = 0.06f;
+        noiseSound.slide = -0.15f;
+        noiseSound.masterVolume = 0.62f;
+        const std::vector<int16_t> pcmNoise = Audio::SfxrGenerator::GeneratePCM(noiseSound, BossSoundSampleRate);
+
+        // 4つのレイヤーを加算合成
+        const size_t totalSamples = (std::max)({pcmBlast.size(), pcmCore.size(), pcmPulse.size(), pcmNoise.size()});
+        std::vector<int16_t> mixed(totalSamples, 0);
+        for (size_t i = 0; i < totalSamples; ++i) {
+            int32_t sample = 0;
+            if (i < pcmBlast.size()) sample += pcmBlast[i];
+            if (i < pcmCore.size()) sample += pcmCore[i];
+            if (i < pcmPulse.size()) sample += pcmPulse[i];
+            if (i < pcmNoise.size()) sample += pcmNoise[i];
+            mixed[i] = static_cast<int16_t>(std::clamp(sample, -32760, 32760));
+        }
+        return mixed;
+    }();
+    return pcm;
+}
+
+/**
+ * @brief 3面ボス反射弾の打撃音生成
+ * @return 44.1kHzモノラルPCM波形
+ */
+const std::vector<int16_t>& BossBatHitSound() {
+    static const std::vector<int16_t> pcm = [] {
+        constexpr int SampleRate = 44100;
+        constexpr float Duration = 0.55f;
+        const size_t sampleCount = static_cast<size_t>(SampleRate * Duration);
+        std::vector<int16_t> buffer(sampleCount);
+
+        uint32_t seed = 123456789;
+        auto nextRandom = [&seed]() {
+            seed = seed * 1664525u + 1013904223u;
+            return static_cast<float>(seed >> 16) / 65535.0f * 2.0f - 1.0f;
+        };
+
+        // 共振周波数の設定
+        constexpr float FreqMain = 1920.0f;
+        constexpr float FreqH1 = 2480.0f;
+        constexpr float FreqH2 = 3950.0f;
+
+        float phaseMain = 0.0f;
+        float phaseH1 = 0.0f;
+        float phaseH2 = 0.0f;
+
+        for (size_t i = 0; i < sampleCount; ++i) {
+            const float t = static_cast<float>(i) / SampleRate;
+
+            // 打撃アタック成分の生成
+            float impact = 0.0f;
+            if (t < 0.008f) {
+                const float env = 1.0f - (t / 0.008f);
+                impact = (nextRandom() * 0.85f + (t < 0.003f ? 0.95f : -0.95f)) * env;
+            }
+
+            // 減衰共鳴成分の生成
+            const float ringEnv = std::exp(-t * 7.5f);
+            const float ringH2Env = std::exp(-t * 20.0f);
+
+            phaseMain += FreqMain / SampleRate;
+            phaseH1 += FreqH1 / SampleRate;
+            phaseH2 += FreqH2 / SampleRate;
+
+            const float batRing = (
+                std::sin(phaseMain * Math::TwoPi) * 0.60f +
+                std::sin(phaseH1 * Math::TwoPi) * 0.30f +
+                std::sin(phaseH2 * Math::TwoPi) * 0.15f * (ringH2Env / (std::max)(ringEnv, 0.0001f))
+            ) * ringEnv;
+
+            const float mixed = (impact * 0.85f + batRing * 0.85f) * 0.95f;
+            const int32_t val = static_cast<int32_t>(mixed * 32767.0f);
+            buffer[i] = static_cast<int16_t>(std::clamp(val, -32767, 32767));
+        }
+        return buffer;
+    }();
+    return pcm;
+}
+
+/**
+ * @brief 3面ボス反射パス音の生成
+ * @return 44.1kHzモノラルPCM波形
+ */
+const std::vector<int16_t>& BossPitchThrowSound() {
+    static const std::vector<int16_t> pcm = [] {
+        // 風切り音成分の生成
+        Audio::SfxrParams whoosh;
+        whoosh.waveType = Audio::SfxrWaveType::Noise;
+        whoosh.attackTime = 0.0f;
+        whoosh.sustainTime = 0.025f;
+        whoosh.decayTime = 0.080f;
+        whoosh.startFrequency = 0.70f;
+        whoosh.minFrequency = 0.15f;
+        whoosh.slide = -0.65f;
+        whoosh.masterVolume = 0.65f;
+        return Audio::SfxrGenerator::GeneratePCM(whoosh, 44100);
     }();
     return pcm;
 }
@@ -328,7 +484,8 @@ void PlayBossDestructionSound(AudioService* audio, bool finalImpact) {
 void PlayBossLaserSound(AudioService* audio, BossLaserSoundCue cue) {
     if (!audio || cue == BossLaserSoundCue::None) return;
     audio->PlaySE(cue == BossLaserSoundCue::Charge ?
-        BossLaserChargeSound() : BossLaserFireSound());
+        BossLaserChargeSound() : BossLaserFireSound(),
+        cue == BossLaserSoundCue::Charge ? 1.0f : 1.30f);
 }
 
 /**
@@ -876,7 +1033,12 @@ void SideScrollingShooter::Stage3Module::TickBoss(
                 break;
             }
         }
-        if (firedReflectPass) shooter.PlayEnemyShotSound();
+        if (firedReflectPass) {
+            // 投球音の再生
+            if (shooter.m_audio) {
+                shooter.m_audio->PlaySE(BossPitchThrowSound(), 0.95f);
+            }
+        }
 
         // 各ファンネル砲塔から10秒ごとに静止型の空中機雷を1基ずつ設置する
         for (int owner = 0; owner < ShooterStages::Stage3::ReflectFunnelCount; ++owner) {
@@ -1458,27 +1620,9 @@ void SideScrollingShooter::Stage3Module::TickSpecialShotBeforeMove(
         shot.stage2.kind = ShooterStages::Stage2::ShotKind::ReflectAttack;
         funnel.spinFrames = ReflectFunnelSpinFrames;
 
-        // 短い破裂音と高い余韻を重ねてバットの打球音を作る
+        // 金属バット打球音の再生
         if (shooter.m_audio) {
-            Audio::SfxrParams crack;
-            crack.waveType = Audio::SfxrWaveType::Noise;
-            crack.startFrequency = 0.85f;
-            crack.minFrequency = 0.20f;
-            crack.slide = -0.45f;
-            crack.sustainTime = 0.012f;
-            crack.decayTime = 0.055f;
-            crack.masterVolume = 0.72f;
-            shooter.m_audio->PlaySE(crack);
-
-            Audio::SfxrParams ring;
-            ring.waveType = Audio::SfxrWaveType::Sine;
-            ring.startFrequency = 1.15f;
-            ring.minFrequency = 0.82f;
-            ring.slide = -0.18f;
-            ring.sustainTime = 0.045f;
-            ring.decayTime = 0.20f;
-            ring.masterVolume = 0.58f;
-            shooter.m_audio->PlaySE(ring);
+            shooter.m_audio->PlaySE(BossBatHitSound(), 1.25f);
         }
         return;
     }
