@@ -10,6 +10,7 @@
 #include "../../SideScrollingShooterShared.h"
 #include "../../GameplayRandom.h"
 #include "../../Voices/VoiceDpcmDecoder.h"
+#include "../Stage4/Stage4State.h"
 
 /**
  * @brief 値を一フレームの最大移動量以内で目標へ近づける
@@ -400,6 +401,69 @@ void SideScrollingShooter::Stage5Module::TickBoss(
 }
 
 /**
+ * @brief ラスボス第一形態の低速追尾ミサイルを更新する
+ * @param shooter 更新対象
+ * @param shot 更新する弾
+ * @return なし
+ */
+void SideScrollingShooter::Stage5Module::TickSpecialShotBeforeMove(
+    SideScrollingShooter& shooter, Shot& shot) {
+    if (!shot.enemy || (!ShooterStages::Stage5::IsTayamaBattlePhase(
+        shooter.m_stage5.phase) && !ShooterStages::Stage5::IsTayamaDragonBattlePhase(
+            shooter.m_stage5.phase))) return;
+
+    // ステージ3と同じく次のファンネルへ到達した反射弾を現在の自機へ打ち返す
+    if (shot.stage2.kind == ShooterStages::Stage2::ShotKind::ReflectPass) {
+        ++shot.age;
+        const int target = shot.barrageCount;
+        if (target < 0 || target >= ShooterStages::Stage5::TayamaReflectFunnelCount ||
+            !shooter.m_stage5.tayamaReflectFunnels[target].active) {
+            shot.active = false;
+            return;
+        }
+        auto& funnel = shooter.m_stage5.tayamaReflectFunnels[target];
+        const float dx = ToWorldX(funnel.x - shot.x);
+        const float dy = ToWorldY(funnel.y - shot.y);
+        const float dz = shooter.IsRailGameplayActive() ? funnel.z - shot.z : 0.0f;
+        const float length = std::sqrt(dx * dx + dy * dy + dz * dz);
+        if (length > ShooterStages::Stage5::TayamaReflectShotSpeed) return;
+
+        shot.x = funnel.x;
+        shot.y = funnel.y;
+        shot.z = funnel.z;
+        const Vector3 player = shooter.PlayerWorldPosition();
+        const Vector3 direction = (player - Vector3 {
+            ToWorldX(shot.x), ToWorldY(shot.y), shot.z}).Normalized();
+        shot.vx = FromWorldX(direction.x * ShooterStages::Stage5::TayamaReflectShotSpeed);
+        shot.vy = FromWorldY(direction.y * ShooterStages::Stage5::TayamaReflectShotSpeed);
+        shot.vz = direction.z * ShooterStages::Stage5::TayamaReflectShotSpeed;
+        shot.stage2.kind = ShooterStages::Stage2::ShotKind::ReflectAttack;
+        funnel.spinFrames = 30;
+        shooter.PlayEnemyShotSound();
+        return;
+    }
+    if (shot.stage2.kind == ShooterStages::Stage2::ShotKind::ReflectAttack) {
+        ++shot.age;
+        return;
+    }
+    if (!shot.firedByBoss ||
+        shot.stage2.kind != ShooterStages::Stage2::ShotKind::Funnel) return;
+
+    // 現在の自機位置へ低速を保ったまま緩く旋回する
+    ++shot.age;
+    const Vector3 player = shooter.PlayerWorldPosition();
+    const float dx = player.x - ToWorldX(shot.x);
+    const float dy = player.y - ToWorldY(shot.y);
+    const float dz = player.z - shot.z;
+    const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
+    const float speed = ShooterStages::Stage5::TayamaRearMissileSpeed;
+    const float turnRate = ShooterStages::Stage5::TayamaRearMissileTurnRate;
+    shot.vx += (FromWorldX(dx / length * speed) - shot.vx) * turnRate;
+    shot.vy += (FromWorldY(dy / length * speed) - shot.vy) * turnRate;
+    shot.vz += (dz / length * speed - shot.vz) * turnRate;
+}
+
+/**
  * @brief ラスボス第一形態の弾と発射元機体の再接触を処理する
  * @param shooter 更新対象
  * @param shot 更新する弾
@@ -466,8 +530,9 @@ void SideScrollingShooter::Stage5Module::TickSpecialShotAfterMove(
  */
 bool SideScrollingShooter::Stage5Module::TryDamageStageTarget(
     SideScrollingShooter& shooter, Shot& shot) {
-    // 現行と同じくTAYAMAを壁面サーチライトより先に判定する
-    return TryDamageTayamaDragon(shooter, shot) || TryDamageTayama(shooter, shot) ||
+    // 反射ファンネルを龍本体より先に判定して背後の本体への貫通を防ぐ
+    return TryDamageTayamaReflectFunnel(shooter, shot) ||
+        TryDamageTayamaDragon(shooter, shot) || TryDamageTayama(shooter, shot) ||
         TryDamageWallSearchlight(shooter, shot);
 }
 
@@ -567,6 +632,9 @@ void SideScrollingShooter::Stage5Module::Reset(SideScrollingShooter& shooter) {
     shooter.m_stage5.soundCooldown = 0;
     shooter.m_stage5.attackTimer = 0;
     shooter.m_stage5.guardSpawnCooldown = 0;
+    shooter.m_stage5.tayamaStompTimer = 0;
+    shooter.m_stage5.tayamaStompCooldown = 0;
+    shooter.m_stage5.tayamaStompLeftFoot = true;
     shooter.m_stage5.tayamaHp = ShooterStages::Stage5::TayamaMaxHp;
     shooter.m_stage5.tayamaMaxHp = ShooterStages::Stage5::TayamaMaxHp;
     shooter.m_stage5.coreTargetX = 0.0f;
@@ -669,6 +737,7 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
     shooter.m_stage5.attackTimer = 0;
     shooter.m_stage5.headLaserArmed = false;
     shooter.m_stage5.tayamaDragonHitFlashFrames = 0;
+    shooter.m_stage5.tayamaReflectFunnels = {};
     shooter.m_stage5.tayamaCollisionBoundsFrame = -1;
     shooter.m_stage5.coreTargetX = shooter.m_playerX;
     shooter.m_stage5.coreTargetY = shooter.m_playerY;
@@ -748,6 +817,9 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
             shooter.m_playerY = 0.0f;
         } else if (phase == Stage5Phase::CarrierTransformation) {
             shooter.m_stage5.tayamaTransformation = 0.0f;
+            shooter.m_playerX = 0.0f;
+            shooter.m_playerY = FromWorldY(
+                TayamaModelView::EyeWorldCenter(TayamaTransform(shooter)).y);
             PlayCue(shooter, ShooterStages::Stage5::Transformation);
         }
         ResetWallSearchlights(shooter, lightCount);
@@ -1269,18 +1341,12 @@ Stage5ModelTransform SideScrollingShooter::Stage5Module::TayamaTransform(const S
         y += std::sin(static_cast<float>(shooter.m_stage5.phaseTimer) * 0.026f) * 0.14f;
         roll += std::sin(static_cast<float>(shooter.m_stage5.phaseTimer) * 0.017f) * 0.012f;
     }
-    if (shooter.m_stage5.phase == Stage5Phase::TayamaCommandCore) {
-        const float rooftopY = TayamaModelView::GroundedRootY(
-            ShooterStages::Stage5::RooftopSurfaceY,
-            ShooterStages::Stage5::TayamaBossScale);
-        y = rooftopY + Math::Lerp(0.0f, 1.8f, SmoothStep(Math::Clamp01(
-            static_cast<float>(shooter.m_stage5.phaseTimer) / 180.0f)));
-    } else if (shooter.m_stage5.phase == Stage5Phase::TayamaCollapse) {
+    if (shooter.m_stage5.phase == Stage5Phase::TayamaCollapse) {
         y += 1.8f - static_cast<float>((std::min)(shooter.m_stage5.phaseTimer, 450)) * 0.002f;
     }
 
     // 脚部機関の片側破壊を機体ロールへ反映するが入力軸は回転させない
-    if (shooter.m_stage5.phase >= Stage5Phase::TayamaLiftEngines) {
+    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase)) {
         const bool left = shooter.m_stage5.tayamaWeakpoints[
             static_cast<int>(TayamaWeakpoint::LeftLiftEngine)].destroyed;
         const bool right = shooter.m_stage5.tayamaWeakpoints[
@@ -1340,12 +1406,12 @@ TayamaModelState SideScrollingShooter::Stage5Module::TayamaState(const SideScrol
         }
     }
     state.visible[static_cast<std::size_t>(TayamaPartGroup::CommandCore)] =
-        shooter.m_stage5.phase >= Stage5Phase::TayamaCommandCore;
-    if (shooter.m_stage5.phase == Stage5Phase::TayamaLiftEngines) {
+        ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase);
+    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase)) {
         state.armSpinAngle = ShooterStages::Stage5::TayamaArmSpinAngle(
             ShooterStages::Stage5::TayamaArmAttackTimer(shooter.m_stage5.attackTimer));
     }
-    if (shooter.m_stage5.phase >= Stage5Phase::TayamaCommandCore) {
+    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase)) {
         state.visible[static_cast<std::size_t>(TayamaPartGroup::ArmorPanel)] = false;
     }
 
@@ -1524,17 +1590,13 @@ Vector3 SideScrollingShooter::Stage5Module::TayamaDragonSegmentPosition(
     const float lengthRate = segment /
         static_cast<float>(ShooterStages::Stage5::TayamaDragonSegmentCount - 1);
     const float wave = static_cast<float>(shooter.m_frame) * 0.025f - segment * 0.42f;
-    const int sweepFrame = shooter.m_stage5.attackTimer %
-        ShooterStages::Stage5::TayamaDragonSweepCycleFrames;
-    const bool sweeping = shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle &&
-        !ShooterStages::Stage5::IsTayamaDragonRushSequence(
-            shooter.m_stage5.attackTimer) &&
-        sweepFrame >= ShooterStages::Stage5::TayamaDragonSweepWarningFrames &&
-        sweepFrame < ShooterStages::Stage5::TayamaDragonSweepWarningFrames +
-            ShooterStages::Stage5::TayamaDragonSweepActiveFrames;
-    const float sweepScale = sweeping ? 1.55f : 1.0f;
+    const float sweepProgress = shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle ?
+        SmoothStep(ShooterStages::Stage5::TayamaDragonSweepProgress(
+            shooter.m_stage5.attackTimer)) : 0.0f;
+    const float sweepScale = Math::Lerp(1.0f, 1.55f, sweepProgress);
     const Vector3 side {
-        ToWorldX(0.62f + lengthRate * 0.14f + std::sin(wave) * 0.17f * sweepScale),
+        ToWorldX(ShooterStages::Stage5::TayamaDragonSideCenterX +
+            lengthRate * 0.14f + std::sin(wave) * 0.17f * sweepScale),
         ToWorldY(0.08f + std::cos(wave * 0.86f) * 0.72f),
         SidePlaneZ + segment * 0.025f
     };
@@ -1544,13 +1606,32 @@ Vector3 SideScrollingShooter::Stage5Module::TayamaDragonSegmentPosition(
         47.0f + segment * 2.05f
     };
     const float viewWeight = Math::Clamp01(railWeight);
+    const Vector3 basePosition = Vector3::Lerp(side, rail, viewWeight);
+    if (shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle &&
+        ShooterStages::Stage5::IsTayamaDragonOrbitActive(
+            shooter.m_stage5.attackTimer)) {
+        // 各節へ位相差を付け、自機を中心とする同一円周上へ連続配置する
+        const Vector3 player = shooter.PlayerWorldPosition();
+        const float angle = ShooterStages::Stage5::TayamaDragonOrbitAngle(
+            shooter.m_stage5.attackTimer) - segment *
+            ShooterStages::Stage5::TayamaDragonOrbitSegmentAngle;
+        const Vector3 orbitPosition {
+            player.x + std::cos(angle) * ShooterStages::Stage5::TayamaDragonOrbitRadius,
+            player.y + std::sin(angle) * ShooterStages::Stage5::TayamaDragonOrbitRadius,
+            Math::Lerp(SidePlaneZ + segment * 0.025f,
+                47.0f + segment * 2.05f, viewWeight)
+        };
+        const float blend = SmoothStep(ShooterStages::Stage5::TayamaDragonOrbitBlend(
+            shooter.m_stage5.attackTimer));
+        return Vector3::Lerp(basePosition, orbitPosition, blend);
+    }
     const Vector3 rushOffset = Vector3::Lerp(
         {-ToWorldX(ShooterStages::Stage5::TayamaDragonRushSideDistance), 0.0f, 0.0f},
         {0.0f, 0.0f, -ShooterStages::Stage5::TayamaDragonRushRailDistance},
         viewWeight) * (shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle ?
             ShooterStages::Stage5::TayamaDragonRushProgress(
                 shooter.m_stage5.attackTimer) : 0.0f);
-    return Vector3::Lerp(side, rail, viewWeight) + rushOffset;
+    return basePosition + rushOffset;
 }
 
 /**
@@ -1583,11 +1664,76 @@ Stage5ModelTransform SideScrollingShooter::Stage5Module::TayamaDragonHeadTransfo
         TayamaDragonSegmentRadius(0, railWeight) *
             TayamaModelView::DragonJointDiameterScale,
         headScale);
+    const float separation = SmoothStep(
+        ShooterStages::Stage5::TayamaDragonHeadSeparationRate(
+            shooter.m_stage5.attackTimer));
     return {
-        TayamaDragonSegmentPosition(shooter, 0, railWeight) + forward * offset -
+        TayamaDragonSegmentPosition(shooter, 0, railWeight) +
+            forward * (offset + separation * 10.0f) -
             Vector3 {0.0f, 12.85f * headScale, 0.0f},
         {0.0f, headYaw, 0.0f}, headScale
     };
+}
+
+/**
+ * @brief TAYAMA龍の胴体周囲に展開する反射ファンネル座標を取得する
+ * @param shooter 状態を参照するゲーム本体
+ * @param index 0以上TayamaReflectFunnelCount未満の番号
+ * @param railWeight 横視点からレール視点への補間率
+ * @return 反射ファンネルのワールド座標
+ */
+Vector3 SideScrollingShooter::Stage5Module::TayamaReflectFunnelTarget(
+    const SideScrollingShooter& shooter, int index, float railWeight) {
+    constexpr int BodySegments[ShooterStages::Stage5::TayamaReflectFunnelCount] = {
+        7, 14, 21
+    };
+    constexpr float HeightOffsets[ShooterStages::Stage5::TayamaReflectFunnelCount] = {
+        4.0f, -4.5f, 4.0f
+    };
+    return TayamaDragonSegmentPosition(shooter, BodySegments[index], railWeight) +
+        Vector3 {0.0f, HeightOffsets[index], 0.0f};
+}
+
+/**
+ * @brief 自機弾をTAYAMA龍第2形態の反射ファンネルへ適用する
+ * @param shooter 更新対象
+ * @param shot 判定する自機弾
+ * @return 反射ファンネルへ命中した場合true
+ */
+bool SideScrollingShooter::Stage5Module::TryDamageTayamaReflectFunnel(
+    SideScrollingShooter& shooter, Shot& shot) {
+    if (shot.enemy || shooter.m_stage5.phase != Stage5Phase::TayamaDragonBattle) return false;
+    for (int index = 0; index < ShooterStages::Stage5::TayamaReflectFunnelCount; ++index) {
+        auto& funnel = shooter.m_stage5.tayamaReflectFunnels[index];
+        if (!funnel.active) continue;
+        const bool hit = shooter.IsRailGameplayActive() ?
+            Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
+                shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
+                shot.hitRadius * WorldXScale, ToWorldX(funnel.x), ToWorldY(funnel.y),
+                funnel.z, 0.72f) :
+            Hit(shot.x, shot.y, shot.hitRadius, funnel.x, funnel.y, 0.11f);
+        if (!hit) continue;
+
+        shooter.SpawnExplosion(shot.x, shot.y, shot.z);
+        shot.RegisterHit();
+        funnel.hp -= shot.damage;
+        if (funnel.hp > 0) return true;
+
+        shooter.SpawnExplosion(funnel.x, funnel.y, funnel.z, true);
+        funnel.active = false;
+        for (auto& enemyShot : shooter.m_shots) {
+            const bool reflect = enemyShot.stage2.kind ==
+                    ShooterStages::Stage2::ShotKind::ReflectPass ||
+                enemyShot.stage2.kind == ShooterStages::Stage2::ShotKind::ReflectAttack;
+            if (enemyShot.active && enemyShot.enemy && reflect &&
+                (enemyShot.barrageIndex == index || enemyShot.barrageCount == index)) {
+                enemyShot.active = false;
+            }
+        }
+        shooter.PlayHitSound();
+        return true;
+    }
+    return false;
 }
 
 /**
@@ -1633,7 +1779,7 @@ bool SideScrollingShooter::Stage5Module::TryDamageTayamaDragon(
 }
 
 /**
- * @brief TAYAMA本体HPをHUDへ反映し、HP割合に応じて戦闘を進める
+ * @brief TAYAMA本体HPをHUDへ反映する
  * @param shooter 更新対象
  * @return なし
  */
@@ -1644,19 +1790,13 @@ void SideScrollingShooter::Stage5Module::UpdateTayamaBossHp(SideScrollingShooter
         shooter.m_displayBossHp = static_cast<float>(shooter.m_bossHp);
     }
 
-    // 部位破壊を必須にせず、本体HPの残量で攻撃フェーズを進める
+    // 第一形態は単一戦闘として扱い、本体HPが尽きた時だけ崩壊へ進む
     if (shooter.m_stage5.tayamaHp <= 0) {
         static const auto tayamaDeathVoice =
             VoiceCodec::DecodeForAudioService(VoiceSamples::tayamaDeath);
         if (shooter.m_audio) shooter.m_audio->PlaySE(tayamaDeathVoice);
         shooter.UnlockGallery(GalleryEntry::Tayama);
         StartPhase(shooter, Stage5Phase::TayamaCollapse, false);
-    } else if (shooter.m_stage5.phase == Stage5Phase::TayamaFireControl &&
-        shooter.m_stage5.tayamaHp * 3 <= shooter.m_stage5.tayamaMaxHp * 2) {
-        StartTayamaPhase(shooter, Stage5Phase::TayamaLiftEngines);
-    } else if (shooter.m_stage5.phase == Stage5Phase::TayamaLiftEngines &&
-        shooter.m_stage5.tayamaHp * 3 <= shooter.m_stage5.tayamaMaxHp) {
-        StartTayamaPhase(shooter, Stage5Phase::TayamaCommandCore);
     }
 }
 
@@ -1668,10 +1808,20 @@ void SideScrollingShooter::Stage5Module::UpdateTayamaBossHp(SideScrollingShooter
  * @return なし
  */
 void SideScrollingShooter::Stage5Module::StartTayamaPhase(SideScrollingShooter& shooter, Stage5Phase phase, bool resetCurrentHp) {
-    const bool enteringTayamaBattle = phase == Stage5Phase::TayamaFireControl;
     shooter.m_stage5.phase = phase;
     shooter.m_stage5.phaseTimer = 0;
     shooter.m_stage5.attackTimer = 0;
+    shooter.m_stage5.tayamaStompTimer = 0;
+    shooter.m_stage5.tayamaStompCooldown = 0;
+
+    // 初回開始とRESTARTでは正面周回位置と両目中央の高さへ戻す
+    if (ShooterStages::Stage5::ShouldResetTayamaPlayer(phase, resetCurrentHp)) {
+        shooter.m_stage5.tayamaOrbitAngle = 0.0f;
+        shooter.m_stage5.tayamaSideViewAngle = 0.0f;
+        shooter.m_playerX = 0.0f;
+        shooter.m_playerY = FromWorldY(
+            TayamaModelView::EyeWorldCenter(TayamaTransform(shooter)).y);
+    }
     const Vector3 player = shooter.PlayerWorldPosition();
     shooter.m_stage5.coreTargetX = FromWorldX(player.x);
     shooter.m_stage5.coreTargetY = FromWorldY(player.y);
@@ -1679,32 +1829,19 @@ void SideScrollingShooter::Stage5Module::StartTayamaPhase(SideScrollingShooter& 
     shooter.m_bossBattle = false;
     shooter.m_stage5.tayamaTransformation = 1.0f;
     shooter.PlayCurrentBossBgm(true); // Tayama
-    if (enteringTayamaBattle) {
-        // 変形演出の正面構図を初期周回位置として戦闘操作へ引き継ぐ
-        shooter.m_stage5.tayamaOrbitAngle = 0.0f;
-        shooter.m_stage5.tayamaSideViewAngle = 0.0f;
-        shooter.m_playerX = 0.0f;
-    }
     for (auto& enemy : shooter.m_enemies) enemy.active = false;
     for (auto& shot : shooter.m_shots) {
         if (shot.enemy) shot.active = false;
     }
 
-    // 前フェーズの破壊結果を維持し、現在フェーズだけを有効化する
+    // 第一形態の全弱点を同時に有効化する
     for (TayamaWeakpointState& weakpoint : shooter.m_stage5.tayamaWeakpoints) {
-        weakpoint.active = IsTayamaWeakpointActiveForPhase(weakpoint.type, phase) && !weakpoint.destroyed;
+        weakpoint.active = !weakpoint.destroyed;
         if (weakpoint.active && resetCurrentHp) weakpoint.hp = weakpoint.maxHp;
         weakpoint.hitFlashFrames = 0;
     }
-    if (phase == Stage5Phase::TayamaFireControl) {
-        ResetWallSearchlights(shooter, 2);
-        SaveCheckpoint(shooter, Stage5Checkpoint::TayamaFireControl);
-    } else if (phase == Stage5Phase::TayamaLiftEngines) {
-        SaveCheckpoint(shooter, Stage5Checkpoint::TayamaLiftEngines);
-    } else {
-        SaveCheckpoint(shooter, Stage5Checkpoint::TayamaCommandCore);
-        PlayCue(shooter, ShooterStages::Stage5::CoreWarning);
-    }
+    ResetWallSearchlights(shooter, 2);
+    SaveCheckpoint(shooter, Stage5Checkpoint::TayamaFireControl);
     UpdateTayamaBossHp(shooter);
     shooter.m_displayBossHp = static_cast<float>(shooter.m_bossHp);
     shooter.m_invincible = (std::max)(shooter.m_invincible, 75);
@@ -1754,6 +1891,84 @@ void SideScrollingShooter::Stage5Module::TickTayama(SideScrollingShooter& shoote
         return Vector3 {FromWorldX(target.x), FromWorldY(target.y) + verticalOffset, target.z};
     };
 
+    // 足元の低高度へ入った自機に対し、近い側の脚部を上げて踏みつける
+    shooter.m_stage5.tayamaStompCooldown = (std::max)(0,
+        shooter.m_stage5.tayamaStompCooldown - 1);
+    if (shooter.m_stage5.tayamaStompTimer == 0 &&
+        shooter.m_stage5.tayamaStompCooldown == 0 &&
+        ShooterStages::Stage5::IsTayamaStompRange(playerPosition.y)) {
+        const bool leftAvailable = modelState.IsVisible(TayamaPartGroup::LeftLiftEngine);
+        const bool rightAvailable = modelState.IsVisible(TayamaPartGroup::RightLiftEngine);
+        if (leftAvailable || rightAvailable) {
+            const Stage5GroupBounds left = TayamaModelView::GroupBounds(transform,
+                shooter.m_stage5.tayamaTransformation, modelState,
+                TayamaPartGroup::LeftLiftEngine);
+            const Stage5GroupBounds right = TayamaModelView::GroupBounds(transform,
+                shooter.m_stage5.tayamaTransformation, modelState,
+                TayamaPartGroup::RightLiftEngine);
+            const auto GroundDistanceSquared = [&](const Stage5GroupBounds& foot) {
+                const float dx = playerPosition.x - foot.center.x;
+                const float dz = playerPosition.z - foot.center.z;
+                return dx * dx + dz * dz;
+            };
+            shooter.m_stage5.tayamaStompLeftFoot = leftAvailable &&
+                (!rightAvailable || GroundDistanceSquared(left) <= GroundDistanceSquared(right));
+            shooter.m_stage5.tayamaStompTimer = 1;
+            shooter.m_stage5.tayamaStompCooldown =
+                ShooterStages::Stage5::TayamaStompCooldownFrames;
+            PlayCue(shooter, ShooterStages::Stage5::BarrageWarning);
+        }
+    } else if (shooter.m_stage5.tayamaStompTimer > 0) {
+        ++shooter.m_stage5.tayamaStompTimer;
+        if (shooter.m_stage5.tayamaStompTimer ==
+            ShooterStages::Stage5::TayamaStompImpactFrame) {
+            const TayamaPartGroup foot = shooter.m_stage5.tayamaStompLeftFoot ?
+                TayamaPartGroup::LeftLiftEngine : TayamaPartGroup::RightLiftEngine;
+            const Stage5GroupBounds bounds = TayamaModelView::GroupBounds(transform,
+                shooter.m_stage5.tayamaTransformation, modelState, foot);
+            Vector3 impact = bounds.valid ? bounds.center :
+                Vector3 {0.0f, ShooterStages::Stage5::RooftopSurfaceY,
+                    ShooterStages::Stage5::TayamaArenaCenterZ};
+            impact.y = ShooterStages::Stage5::RooftopSurfaceY;
+
+            // 大爆発は演出だけにし、飛び出すBox型がれきだけへ被弾判定を付ける
+            for (int burst = 0; burst < 7; ++burst) {
+                const float angle = static_cast<float>(burst) * Math::TwoPi / 7.0f;
+                shooter.SpawnExplosion(FromWorldX(impact.x + std::cos(angle) * 4.0f),
+                    FromWorldY(impact.y + std::sin(angle) * 2.0f), impact.z, true);
+            }
+            Vector3 outward {playerPosition.x - impact.x, 0.0f,
+                playerPosition.z - impact.z};
+            outward = outward.LengthSquared() > Math::Epsilon ?
+                outward.Normalized() : Vector3 {0.0f, 0.0f, -1.0f};
+            const Vector3 tangent {outward.z, 0.0f, -outward.x};
+            constexpr float DebrisColor[] = {0.30f, 0.27f, 0.24f, 1.0f};
+            for (int piece = 0;
+                piece < ShooterStages::Stage5::TayamaStompDebrisCount; ++piece) {
+                const float lane = static_cast<float>(piece -
+                    ShooterStages::Stage5::TayamaStompDebrisCount / 2);
+                const Vector3 direction = (outward + tangent * (lane * 0.055f)).Normalized();
+                const float speed = 1.28f + static_cast<float>(piece % 3) * 0.10f;
+                shooter.SpawnDebrisPiece(
+                    impact.x + tangent.x * lane * 1.15f,
+                    impact.y + 1.0f + static_cast<float>(piece % 2) * 0.7f,
+                    impact.z + tangent.z * lane * 1.15f,
+                    direction.x * speed,
+                    0.34f + static_cast<float>(piece % 3) * 0.025f,
+                    direction.z * speed,
+                    lane * 0.11f, (piece % 2 == 0 ? 0.13f : -0.13f),
+                    static_cast<int>(PrimitiveShape::Box),
+                    2.2f, 1.6f, 2.2f, DebrisColor, 180, 150, true, true);
+            }
+            shooter.ShakeScreen(0.22f, 36);
+            PlayCue(shooter, ShooterStages::Stage5::FinalExplosion);
+        }
+        if (shooter.m_stage5.tayamaStompTimer >=
+            ShooterStages::Stage5::TayamaStompSequenceFrames) {
+            shooter.m_stage5.tayamaStompTimer = 0;
+        }
+    }
+
     // 格納庫から既存の通常敵をランダムに射出する
     if (shooter.m_stage5.guardSpawnCooldown == 0 && shooter.m_stage5.phaseTimer > 150) {
         constexpr int EnemyTypes[] = {
@@ -1782,25 +1997,91 @@ void SideScrollingShooter::Stage5Module::TickTayama(SideScrollingShooter& shoote
         if (shooter.m_stage5.headLaserArmed) {
             shooter.m_stage5.headLaserTarget = playerPosition;
             PlayCue(shooter, ShooterStages::Stage5::CoreWarning);
+        } else if (TayamaModelView::IsBehindHead(transform, playerPosition,
+            ShooterStages::Stage5::TayamaRearMissileBackDot)) {
+            // 背面の主推進器上へ二段五列で配置し、同時発射後は現在の自機を追尾する
+            const Vector3 rear = PartSource(TayamaPartGroup::MainThruster,
+                {0.0f, 0.24f, 59.8f});
+            const Vector3 rearWorld {ToWorldX(rear.x), ToWorldY(rear.y), rear.z};
+            const Vector3 backward = -TayamaModelView::HeadForward(transform);
+            const Vector3 right {backward.z, 0.0f, -backward.x};
+            bool fired = false;
+            for (int missile = 0;
+                missile < ShooterStages::Stage5::TayamaRearMissileCount; ++missile) {
+                const Vector3 source = rearWorld +
+                    right * (static_cast<float>(missile % 5) - 2.0f) * 1.5f +
+                    Vector3 {0.0f, (missile / 5 == 0 ? -1.0f : 1.0f) * 1.4f, 0.0f};
+                const Vector3 direction = (playerPosition - source).Normalized();
+                for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+                    auto& shot = shooter.m_shots[shotIndex];
+                    if (shot.active) continue;
+                    shot = {};
+                    shot.x = FromWorldX(source.x);
+                    shot.y = FromWorldY(source.y);
+                    shot.z = source.z;
+                    shot.transitionSideX = shot.x;
+                    shot.transitionSideY = shot.y;
+                    shot.vx = FromWorldX(direction.x *
+                        ShooterStages::Stage5::TayamaRearMissileSpeed);
+                    shot.vy = FromWorldY(direction.y *
+                        ShooterStages::Stage5::TayamaRearMissileSpeed);
+                    shot.vz = direction.z * ShooterStages::Stage5::TayamaRearMissileSpeed;
+                    shot.hitRadius = 0.055f;
+                    shot.damage = 2;
+                    shot.enemy = true;
+                    shot.firedByBoss = true;
+                    shot.stage2.kind = ShooterStages::Stage2::ShotKind::Funnel;
+                    shot.active = true;
+                    fired = true;
+                    break;
+                }
+            }
+            if (fired) shooter.PlayMissileLaunchSound();
         }
     }
     if (shooter.m_stage5.headLaserArmed &&
         ShooterStages::Stage5::IsTayamaHeadLaserActive(commonAttackTimer)) {
-        const Vector3 eye = TayamaModelView::EyeWorldCenter(transform);
-        const Vector3 direction = (shooter.m_stage5.headLaserTarget - eye).Normalized();
-        const Vector3 laserEnd = eye + direction * ShooterStages::Stage5::TayamaHeadLaserLength;
-        if (shooter.m_invincible == 0 &&
-            shooter.DistancePointToSegment3D(playerPosition, eye, laserEnd) <=
-                ShooterStages::Stage5::TayamaHeadLaserHitRadius + 0.38f) {
-            shooter.DamagePlayer();
+        for (const Vector3& eye : TayamaModelView::EyeWorldPositions(transform)) {
+            const Vector3 direction =
+                (shooter.m_stage5.headLaserTarget - eye).Normalized();
+            const Vector3 laserEnd = eye + direction *
+                ShooterStages::Stage5::TayamaHeadLaserLength;
+            if (shooter.m_invincible == 0 &&
+                shooter.DistancePointToSegment3D(playerPosition, eye, laserEnd) <=
+                    ShooterStages::Stage5::TayamaHeadLaserHitRadius + 0.38f) {
+                shooter.DamagePlayer();
+                break;
+            }
         }
     }
 
-    if (shooter.m_stage5.phase == Stage5Phase::TayamaFireControl) {
+    // 第一形態の全攻略フェーズで両腕を振り回し、描画と同じ線分で接触判定する
+    const int armCycle = commonAttackTimer %
+        ShooterStages::Stage5::TayamaArmSpinCycleFrames;
+    if (armCycle == 0) PlayCue(shooter, ShooterStages::Stage5::BarrageWarning);
+    if (ShooterStages::Stage5::IsTayamaArmSpinActive(commonAttackTimer)) {
+        const float angle = ShooterStages::Stage5::TayamaArmSpinAngle(commonAttackTimer);
+        for (bool left : {true, false}) {
+            Vector3 shoulder;
+            Vector3 tip;
+            TayamaModelView::ArmWorldSegment(transform, left, angle, shoulder, tip);
+            if (shooter.m_invincible == 0 &&
+                shooter.DistancePointToSegment3D(playerPosition, shoulder, tip) <=
+                    ShooterStages::Stage5::TayamaArmSpinHitRadius + 0.38f) {
+                shooter.DamagePlayer();
+                break;
+            }
+        }
+    }
+
+    {
         const Vector3 radar = PartSource(TayamaPartGroup::FireControlRadar,
             {0.0f, 0.62f, 56.0f});
         TickSearchlights(shooter, 2, true);
-        if (commonAttackTimer % ShooterStages::Stage5::TayamaRadarBurstIntervalFrames == 72) {
+        const bool radarActive = !shooter.m_stage5.tayamaWeakpoints[
+            static_cast<int>(TayamaWeakpoint::FireControlRadar)].destroyed;
+        if (radarActive && commonAttackTimer %
+            ShooterStages::Stage5::TayamaRadarBurstIntervalFrames == 72) {
             const Vector3 radarWorld {ToWorldX(radar.x), ToWorldY(radar.y), radar.z};
             for (int ray = 0; ray < ShooterStages::Stage5::TayamaRadarBurstBulletCount; ++ray) {
                 const float angle = static_cast<float>(ray) * Math::TwoPi /
@@ -1815,13 +2096,13 @@ void SideScrollingShooter::Stage5Module::TickTayama(SideScrollingShooter& shoote
             shooter.PlayEnemyShotSound();
         }
         const int sweepCycle = shooter.m_stage5.attackTimer % 210;
-        if (sweepCycle == 0) {
+        if (radarActive && sweepCycle == 0) {
             shooter.m_stage5.coreTargetX = FromWorldX(playerPosition.x);
             shooter.m_stage5.coreTargetY = FromWorldY(playerPosition.y);
             shooter.m_stage5.coreTargetZ = playerPosition.z;
             PlayCue(shooter, ShooterStages::Stage5::BarrageWarning);
         }
-        if (sweepCycle == 36) {
+        if (radarActive && sweepCycle == 36) {
             shooter.ShakeScreen(0.055f, 12);
             for (int lane = -4; lane <= 4; ++lane) {
                 const Vector3 target = PlayerTarget(static_cast<float>(lane) * 0.27f, 0.0f);
@@ -1830,31 +2111,9 @@ void SideScrollingShooter::Stage5Module::TickTayama(SideScrollingShooter& shoote
             }
             shooter.PlayEnemyShotSound();
         }
-        return;
     }
 
-    if (shooter.m_stage5.phase == Stage5Phase::TayamaLiftEngines) {
-        const int armAttackTimer = ShooterStages::Stage5::TayamaArmAttackTimer(
-            shooter.m_stage5.attackTimer);
-        const int armCycle = armAttackTimer %
-            ShooterStages::Stage5::TayamaArmSpinCycleFrames;
-        if (armCycle == 0) PlayCue(shooter, ShooterStages::Stage5::BarrageWarning);
-        if (ShooterStages::Stage5::IsTayamaArmSpinActive(armAttackTimer)) {
-            const float angle = ShooterStages::Stage5::TayamaArmSpinAngle(
-                armAttackTimer);
-            const Stage5ModelTransform bossTransform = TayamaTransform(shooter);
-            for (bool left : {true, false}) {
-                Vector3 shoulder;
-                Vector3 tip;
-                TayamaModelView::ArmWorldSegment(bossTransform, left, angle, shoulder, tip);
-                if (shooter.m_invincible == 0 &&
-                    shooter.DistancePointToSegment3D(playerPosition, shoulder, tip) <=
-                        ShooterStages::Stage5::TayamaArmSpinHitRadius + 0.38f) {
-                    shooter.DamagePlayer();
-                    break;
-                }
-            }
-        }
+    {
         const int cycle = shooter.m_stage5.attackTimer % 132;
         if (cycle == 0) {
             shooter.m_stage5.coreTargetX = FromWorldX(playerPosition.x);
@@ -1883,27 +2142,28 @@ void SideScrollingShooter::Stage5Module::TickTayama(SideScrollingShooter& shoote
             }
             if (fired) shooter.PlayEnemyShotSound();
         }
-        return;
     }
 
-    if (shooter.m_stage5.phase == Stage5Phase::TayamaCommandCore) {
+    {
         const Vector3 core = PartSource(TayamaPartGroup::CommandCore,
             {0.0f, 0.35f, 55.0f});
         const int cycle = shooter.m_stage5.attackTimer % 180;
-        if (cycle == 0) {
+        const bool coreActive = !shooter.m_stage5.tayamaWeakpoints[
+            static_cast<int>(TayamaWeakpoint::CommandCore)].destroyed;
+        if (coreActive && cycle == 0) {
             shooter.m_stage5.coreTargetX = FromWorldX(playerPosition.x);
             shooter.m_stage5.coreTargetY = FromWorldY(playerPosition.y);
             shooter.m_stage5.coreTargetZ = playerPosition.z;
             PlayCue(shooter, ShooterStages::Stage5::CoreWarning);
         }
-        if (cycle == 42 || cycle == 52 || cycle == 62) {
+        if (coreActive && (cycle == 42 || cycle == 52 || cycle == 62)) {
             if (cycle == 42) shooter.ShakeScreen(0.10f, 24);
             SpawnEnemyShotAt(shooter, core.x, core.y, core.z,
                 shooter.m_stage5.coreTargetX, shooter.m_stage5.coreTargetY,
                 shooter.m_stage5.coreTargetZ, 0.92f);
             shooter.PlayEnemyShotSound();
         }
-        if (cycle == 104) {
+        if (coreActive && cycle == 104) {
             for (int ray = 0; ray < 12; ++ray) {
                 const float angle = static_cast<float>(ray) * Math::TwoPi / 12.0f;
                 const Vector3 target = PlayerTarget(
@@ -1913,7 +2173,7 @@ void SideScrollingShooter::Stage5Module::TickTayama(SideScrollingShooter& shoote
             }
             shooter.PlayEnemyShotSound();
         }
-        if (cycle == 138) {
+        if (coreActive && cycle == 138) {
             for (int lane = -4; lane <= 4; ++lane) {
                 const Vector3 target = PlayerTarget(static_cast<float>(lane) * 0.22f,
                     -0.52f + std::abs(static_cast<float>(lane)) * 0.10f -
@@ -1927,7 +2187,7 @@ void SideScrollingShooter::Stage5Module::TickTayama(SideScrollingShooter& shoote
 }
 
 /**
- * @brief 雲海のTAYAMA龍第2形態のレーザー、胴体弾幕、薙ぎ払い、突進を更新する
+ * @brief 雲海のTAYAMA龍第2形態のレーザー、胴体弾幕、旋回、薙ぎ払い、突進を更新する
  * @param shooter 更新対象
  * @return なし
  */
@@ -1939,12 +2199,95 @@ void SideScrollingShooter::Stage5Module::TickTayamaDragon(
     const float railWeight = shooter.RailBlend();
     const Vector3 player = shooter.PlayerWorldPosition();
 
+    // 胴体中央から5秒ごとに3基を補充し、所定の胴体周囲へ展開する
+    for (int index = 0; index < ShooterStages::Stage5::TayamaReflectFunnelCount; ++index) {
+        auto& funnel = shooter.m_stage5.tayamaReflectFunnels[index];
+        if (!funnel.active) continue;
+        ++funnel.age;
+        if (funnel.spinFrames > 0) --funnel.spinFrames;
+        const Vector3 target = TayamaReflectFunnelTarget(shooter, index, railWeight);
+        funnel.x += (FromWorldX(target.x) - funnel.x) * 0.08f;
+        funnel.y += (FromWorldY(target.y) - funnel.y) * 0.08f;
+        funnel.z += (target.z - funnel.z) * 0.08f;
+    }
+    if (ShooterStages::Stage5::IsTayamaReflectFunnelLaunchFrame(
+        shooter.m_stage5.attackTimer)) {
+        const Vector3 launch = TayamaDragonSegmentPosition(shooter, 14, railWeight);
+        bool launched = false;
+        for (auto& funnel : shooter.m_stage5.tayamaReflectFunnels) {
+            if (funnel.active) continue;
+            funnel = {FromWorldX(launch.x), FromWorldY(launch.y), launch.z,
+                ShooterStages::Stage5::TayamaReflectFunnelHp, 0, 0, true};
+            launched = true;
+        }
+        if (launched) shooter.PlayMissileLaunchSound();
+    }
+
+    // 配置完了した各ファンネルが一発ずつ次のファンネルへ渡す
+    bool firedReflectPass = false;
+    for (int owner = 0; owner < ShooterStages::Stage5::TayamaReflectFunnelCount; ++owner) {
+        const auto& source = shooter.m_stage5.tayamaReflectFunnels[owner];
+        if (!source.active || source.age <
+            ShooterStages::Stage5::TayamaReflectFunnelLaunchFrames) continue;
+        bool alreadyHasShot = false;
+        for (const auto& shot : shooter.m_shots) {
+            if (shot.active && shot.enemy &&
+                (shot.stage2.kind == ShooterStages::Stage2::ShotKind::ReflectPass ||
+                    shot.stage2.kind == ShooterStages::Stage2::ShotKind::ReflectAttack) &&
+                shot.barrageIndex == owner) alreadyHasShot = true;
+        }
+        if (alreadyHasShot) continue;
+        int target = -1;
+        for (int offset = 1; offset < ShooterStages::Stage5::TayamaReflectFunnelCount;
+            ++offset) {
+            const int candidate = (owner + offset) %
+                ShooterStages::Stage5::TayamaReflectFunnelCount;
+            if (shooter.m_stage5.tayamaReflectFunnels[candidate].active) {
+                target = candidate;
+                break;
+            }
+        }
+        if (target < 0) continue;
+        const auto& destination = shooter.m_stage5.tayamaReflectFunnels[target];
+        const Vector3 direction = (Vector3 {ToWorldX(destination.x),
+            ToWorldY(destination.y), destination.z} - Vector3 {ToWorldX(source.x),
+                ToWorldY(source.y), source.z}).Normalized();
+        for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+            auto& shot = shooter.m_shots[shotIndex];
+            if (shot.active) continue;
+            shot = {};
+            shot.x = source.x;
+            shot.y = source.y;
+            shot.z = source.z;
+            shot.transitionSideX = shot.x;
+            shot.transitionSideY = shot.y;
+            shot.vx = FromWorldX(direction.x * ShooterStages::Stage5::TayamaReflectShotSpeed);
+            shot.vy = FromWorldY(direction.y * ShooterStages::Stage5::TayamaReflectShotSpeed);
+            shot.vz = direction.z * ShooterStages::Stage5::TayamaReflectShotSpeed;
+            shot.hitRadius = 0.045f;
+            shot.damage = 2;
+            shot.enemy = true;
+            shot.special = true;
+            shot.barrageIndex = owner;
+            shot.barrageCount = target;
+            shot.stage2.kind = ShooterStages::Stage2::ShotKind::ReflectPass;
+            shot.active = true;
+            firedReflectPass = true;
+            break;
+        }
+    }
+    if (firedReflectPass) shooter.PlayEnemyShotSound();
+
     // 大きく後退して予告した後、画面を横切る突進へ移行する
     const int rushFrame = ShooterStages::Stage5::TayamaDragonRushFrame(
         shooter.m_stage5.attackTimer);
     const bool rushSequence = ShooterStages::Stage5::IsTayamaDragonRushSequence(
         shooter.m_stage5.attackTimer);
     const bool rushing = ShooterStages::Stage5::IsTayamaDragonRushActive(
+        shooter.m_stage5.attackTimer);
+    const bool orbiting = ShooterStages::Stage5::IsTayamaDragonOrbitActive(
+        shooter.m_stage5.attackTimer);
+    const int romanceFrame = ShooterStages::Stage5::TayamaDragonRomanceCannonFrame(
         shooter.m_stage5.attackTimer);
     if (rushFrame == 0) {
         shooter.m_stage5.headLaserArmed = false;
@@ -1954,30 +2297,70 @@ void SideScrollingShooter::Stage5Module::TickTayamaDragon(
         shooter.ShakeScreen(0.14f, 24);
     }
 
+    // 15秒ごとに頭部を退避し、露出した首先端からStage4ロマン砲弾を発射する
+    if (romanceFrame == 0) PlayCue(shooter, ShooterStages::Stage5::CoreWarning);
+    if (romanceFrame == ShooterStages::Stage5::TayamaDragonRomanceCannonFireFrame) {
+        const Vector3 muzzle = TayamaDragonSegmentPosition(shooter, 0, railWeight);
+        const Vector3 direction = (player - muzzle).Normalized();
+        for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+            auto& shot = shooter.m_shots[shotIndex];
+            if (shot.active) continue;
+            shot = {};
+            shot.x = FromWorldX(muzzle.x);
+            shot.y = FromWorldY(muzzle.y);
+            shot.z = muzzle.z;
+            shot.transitionSideX = shot.x;
+            shot.transitionSideY = shot.y;
+            shot.vx = FromWorldX(direction.x);
+            shot.vy = FromWorldY(direction.y);
+            shot.vz = shooter.IsRailGameplayActive() ? direction.z : 0.0f;
+            shot.hitRadius = 0.32f;
+            shot.damage = 4;
+            shot.enemy = true;
+            shot.stage4.kind = ShooterStages::Stage4::ShotKind::Cannonball;
+            shot.stage4.detonateAtPlayerZ = true;
+            shot.stage4.fixedSideExplosionX = true;
+            shot.stage4.explosionRadius = shooter.IsRailGameplayActive() ? 1.15f : 1.85f;
+            shot.stage4.sideExplosionX = -1.5f;
+            shot.active = true;
+            shooter.ShakeScreen(0.24f, 30);
+            shooter.PlayEnemyShotSound();
+            break;
+        }
+    }
+    if (romanceFrame >= 0) return;
+
     // 頭部レーザーは予告開始時の自機位置を固定し、2Dと3Dで同じ線分を使う
     const int laserFrame = shooter.m_stage5.attackTimer %
         ShooterStages::Stage5::TayamaHeadLaserCycleFrames;
-    if (!rushSequence && laserFrame == 1) {
+    if (!rushSequence && !orbiting && laserFrame == 1) {
         shooter.m_stage5.headLaserArmed = true;
         shooter.m_stage5.headLaserTarget = player;
         PlayCue(shooter, ShooterStages::Stage5::CoreWarning);
     }
-    if (!rushSequence && shooter.m_stage5.headLaserArmed &&
+    if (!rushSequence && !orbiting && shooter.m_stage5.headLaserArmed &&
         ShooterStages::Stage5::IsTayamaHeadLaserActive(shooter.m_stage5.attackTimer)) {
-        const Vector3 eye = TayamaModelView::EyeWorldCenter(
-            TayamaDragonHeadTransform(shooter, railWeight));
-        const Vector3 direction = (shooter.m_stage5.headLaserTarget - eye).Normalized();
-        const Vector3 end = eye + direction * ShooterStages::Stage5::TayamaHeadLaserLength;
-        if (shooter.m_invincible == 0 &&
-            shooter.DistancePointToSegment3D(player, eye, end) <=
-                ShooterStages::Stage5::TayamaHeadLaserHitRadius + 0.38f) {
-            shooter.DamagePlayer();
+        const auto eyes = TayamaModelView::EyeWorldPositions(
+            TayamaDragonHeadTransform(shooter, railWeight),
+            TayamaModelView::DragonHeadScale);
+        for (const Vector3& eye : eyes) {
+            const Vector3 direction =
+                (shooter.m_stage5.headLaserTarget - eye).Normalized();
+            const Vector3 end = eye + direction *
+                ShooterStages::Stage5::TayamaHeadLaserLength;
+            if (shooter.m_invincible == 0 &&
+                shooter.DistancePointToSegment3D(player, eye, end) <=
+                    ShooterStages::Stage5::TayamaHeadLaserHitRadius + 0.38f) {
+                shooter.DamagePlayer();
+                break;
+            }
         }
     }
 
     // 胴体の異なる節から自機周辺へ三方向弾を順番に撃つ
-    if (!rushSequence && shooter.m_stage5.attackTimer %
-        ShooterStages::Stage5::TayamaDragonBarrageIntervalFrames == 45) {
+    if (!rushSequence && !orbiting && shooter.m_stage5.attackTimer %
+        ShooterStages::Stage5::TayamaDragonBarrageIntervalFrames ==
+            ShooterStages::Stage5::TayamaDragonBarrageFireFrame) {
         constexpr int Sources[] = {4, 10, 16, 22};
         const int volley = shooter.m_stage5.attackTimer /
             ShooterStages::Stage5::TayamaDragonBarrageIntervalFrames;
@@ -1992,13 +2375,29 @@ void SideScrollingShooter::Stage5Module::TickTayamaDragon(
         shooter.PlayEnemyShotSound();
     }
 
+    // 旋回中は移動する胴体の節を順に発射元として自機へ撃ち込む
+    const int orbitFrame = ShooterStages::Stage5::TayamaDragonOrbitFrame(
+        shooter.m_stage5.attackTimer);
+    if (ShooterStages::Stage5::IsTayamaDragonOrbitAttacking(
+        shooter.m_stage5.attackTimer) && orbitFrame %
+        ShooterStages::Stage5::TayamaDragonOrbitShotIntervalFrames == 0) {
+        const int sourceIndex = 2 + orbitFrame /
+            ShooterStages::Stage5::TayamaDragonOrbitShotIntervalFrames * 3 %
+            (ShooterStages::Stage5::TayamaDragonSegmentCount - 2);
+        const Vector3 source = TayamaDragonSegmentPosition(shooter,
+            sourceIndex, railWeight);
+        SpawnEnemyShotAt(shooter, FromWorldX(source.x), FromWorldY(source.y),
+            source.z, FromWorldX(player.x), FromWorldY(player.y), player.z, 0.64f);
+        shooter.PlayEnemyShotSound();
+    }
+
     // 大きく振れる時間帯だけ胴体の全節へ接触ダメージを持たせる
     const int sweepFrame = shooter.m_stage5.attackTimer %
         ShooterStages::Stage5::TayamaDragonSweepCycleFrames;
     if (!rushSequence && sweepFrame == 1) {
         PlayCue(shooter, ShooterStages::Stage5::BarrageWarning);
     }
-    const bool sweeping = !rushSequence &&
+    const bool sweeping = !rushSequence && !orbiting &&
         sweepFrame >= ShooterStages::Stage5::TayamaDragonSweepWarningFrames &&
         sweepFrame < ShooterStages::Stage5::TayamaDragonSweepWarningFrames +
             ShooterStages::Stage5::TayamaDragonSweepActiveFrames;
@@ -2160,7 +2559,7 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
     }
     if (shooter.m_stage5.phase == Stage5Phase::WallClimbLower) {
         shooter.m_stage5.tayamaTransformation = 0.0f;
-        TickWallEnemyWave(shooter, 96, 240);
+        TickWallEnemyWave(shooter, 48, 120);
         if (shooter.m_stage5.phaseTimer >= WallClimbLowerFrames) {
             shooter.FinishChapter();
         }
@@ -2168,7 +2567,7 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
     }
     if (shooter.m_stage5.phase == Stage5Phase::WallClimbMiddle) {
         shooter.m_stage5.tayamaTransformation = 0.0f;
-        TickWallEnemyWave(shooter, 78, 210);
+        TickWallEnemyWave(shooter, 39, 105);
         if (shooter.m_stage5.phaseTimer >= WallClimbMiddleFrames) {
             shooter.FinishChapter();
         }
@@ -2179,9 +2578,13 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
         // 道中クリア後は暗転より先に自機を上空へ高速退避させる
         if (ShooterStages::Stage5::IsPart2PlayerFlyingAway(
             shooter.m_stage5.phase, shooter.m_stage5.phaseTimer)) {
+            // 最終ムービーへ入るフレームで敵弾をすべて消去する
+            for (auto& shot : shooter.m_shots) {
+                if (shot.enemy) shot.active = false;
+            }
             shooter.m_playerY += ShooterStages::Stage5::Part2PlayerFlyAwaySpeed;
         } else {
-            TickWallEnemyWave(shooter, 64, 180);
+            TickWallEnemyWave(shooter, 32, 90);
         }
         if (shooter.m_stage5.phaseTimer >= WallClimbUpperFrames) {
             shooter.FinishChapter();
@@ -2254,6 +2657,26 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
             shooter.SpawnExplosion(FromWorldX(center.x), FromWorldY(center.y),
                 center.z, true);
             PlayCue(shooter, ShooterStages::Stage5::ChainExplosion);
+        }
+
+        // 頭部外装を一枚ずつ剥がし、脱落位置の小爆発で長い最期を刻む
+        if (shooter.m_stage5.phaseTimer >=
+                ShooterStages::Stage5::TayamaDragonHeadBreakStartFrame &&
+            shooter.m_stage5.phaseTimer <
+                ShooterStages::Stage5::TayamaDragonCollapseHeadExplosionFrame &&
+            (shooter.m_stage5.phaseTimer -
+                ShooterStages::Stage5::TayamaDragonHeadBreakStartFrame) %
+                ShooterStages::Stage5::TayamaDragonHeadPartIntervalFrames == 0) {
+            const int removed = ShooterStages::Stage5::TayamaDragonDestroyedHeadPartCount(
+                shooter.m_stage5.phaseTimer);
+            const std::size_t partIndex =
+                TayamaModelView::HeadRemovalOrder[static_cast<std::size_t>(removed - 1)];
+            const Vector3 center = TayamaModelView::HeadPartWorldPosition(
+                TayamaDragonHeadTransform(shooter, shooter.RailBlend()), partIndex,
+                TayamaModelView::DragonHeadScale);
+            shooter.SpawnExplosion(FromWorldX(center.x), FromWorldY(center.y),
+                center.z, false);
+            if (removed % 4 == 0) PlayCue(shooter, ShooterStages::Stage5::ChainExplosion);
         }
         if (shooter.m_stage5.phaseTimer ==
             ShooterStages::Stage5::TayamaDragonCollapseHeadExplosionFrame) {
@@ -2329,26 +2752,13 @@ void SideScrollingShooter::Stage5Module::RestartCheckpoint(SideScrollingShooter&
         return;
     }
 
-    // TAYAMAは前フェーズを破壊済みとし、現在フェーズのHPだけを戻す
-    const Stage5Phase phase = shooter.m_stage5.checkpoint == Stage5Checkpoint::TayamaFireControl ?
-        Stage5Phase::TayamaFireControl :
-        (shooter.m_stage5.checkpoint == Stage5Checkpoint::TayamaLiftEngines ?
-            Stage5Phase::TayamaLiftEngines : Stage5Phase::TayamaCommandCore);
+    // TAYAMA第一形態は全弱点と全HPをまとめて復帰する
     for (TayamaWeakpointState& weakpoint : shooter.m_stage5.tayamaWeakpoints) {
-        const bool previousPhase =
-            (phase >= Stage5Phase::TayamaLiftEngines &&
-                static_cast<int>(weakpoint.type) <= static_cast<int>(TayamaWeakpoint::FireControlRadar)) ||
-            (phase >= Stage5Phase::TayamaCommandCore &&
-                (weakpoint.type == TayamaWeakpoint::LeftLiftEngine ||
-                    weakpoint.type == TayamaWeakpoint::RightLiftEngine));
-        weakpoint.destroyed = previousPhase;
-        weakpoint.hp = previousPhase ? 0 : weakpoint.maxHp;
+        weakpoint.destroyed = false;
+        weakpoint.hp = weakpoint.maxHp;
     }
-    shooter.m_stage5.tayamaHp = phase == Stage5Phase::TayamaFireControl ?
-        shooter.m_stage5.tayamaMaxHp :
-        (phase == Stage5Phase::TayamaLiftEngines ?
-            shooter.m_stage5.tayamaMaxHp * 2 / 3 : shooter.m_stage5.tayamaMaxHp / 3);
-    StartTayamaPhase(shooter, phase, true);
+    shooter.m_stage5.tayamaHp = shooter.m_stage5.tayamaMaxHp;
+    StartTayamaPhase(shooter, Stage5Phase::TayamaFireControl, true);
 }
 
 /**

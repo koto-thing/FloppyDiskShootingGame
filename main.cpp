@@ -180,10 +180,12 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
 
         app.ProcessInput();
 
+#ifdef _DEBUG
         // デバッグ確認用に現在位置を問わずチュートリアルへ移動する
         if (Input::GetKeyDown(KeyCode::F7)) {
             app.RequestTransition(SceneType::TutorialStage);
         }
+#endif
 
         constexpr int maxFixedStepsPerFrame = 8;
         int fixedStepCount = 0;

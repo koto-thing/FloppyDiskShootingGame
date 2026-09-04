@@ -18,6 +18,14 @@ void RunStage5ModelViewTests() {
     static_assert(TayamaPartGroupCount == ShooterStages::Stage5::TayamaCollisionGroupCount);
     assert(ShooterStages::Stage5::State {}.tayamaCollisionBoundsFrame == -1);
 
+    // 反射ファンネルは第2形態開始5秒後から5秒間隔で3基を射出する
+    static_assert(ShooterStages::Stage5::TayamaReflectFunnelCount == 3);
+    static_assert(!ShooterStages::Stage5::IsTayamaReflectFunnelLaunchFrame(0));
+    static_assert(!ShooterStages::Stage5::IsTayamaReflectFunnelLaunchFrame(
+        ShooterStages::Stage5::TayamaReflectFunnelLaunchIntervalFrames - 1));
+    static_assert(ShooterStages::Stage5::IsTayamaReflectFunnelLaunchFrame(
+        ShooterStages::Stage5::TayamaReflectFunnelLaunchIntervalFrames));
+
     // 第2形態の突進は予告後だけ接触判定を持ち、復帰完了後に通常位置へ戻る
     constexpr int rushStart = ShooterStages::Stage5::TayamaDragonRushStartFrame;
     constexpr int rushActive = rushStart +
@@ -30,6 +38,46 @@ void RunStage5ModelViewTests() {
     assert(ShooterStages::Stage5::TayamaDragonRushProgress(rushActive +
         ShooterStages::Stage5::TayamaDragonRushActiveFrames - 1) == 1.0f);
     assert(ShooterStages::Stage5::TayamaDragonRushProgress(rushRecoveryEnd) == 0.0f);
+    const float rushWindupStep = std::abs(
+        ShooterStages::Stage5::TayamaDragonRushProgress(rushActive) -
+        ShooterStages::Stage5::TayamaDragonRushProgress(rushActive - 1));
+    const float rushRecoveryStep = std::abs(
+        ShooterStages::Stage5::TayamaDragonRushProgress(rushRecoveryEnd) -
+        ShooterStages::Stage5::TayamaDragonRushProgress(rushRecoveryEnd - 1));
+    assert(rushWindupStep < 0.001f);
+    assert(rushRecoveryStep < 0.001f);
+
+    // 薙ぎ払い、胴体弾幕、レーザーは開始と終了で補間値を連続させる
+    assert(ShooterStages::Stage5::TayamaDragonSweepProgress(0) == 0.0f);
+    assert(ShooterStages::Stage5::TayamaDragonSweepProgress(
+        ShooterStages::Stage5::TayamaDragonSweepWarningFrames) == 1.0f);
+    assert(ShooterStages::Stage5::TayamaDragonSweepProgress(
+        ShooterStages::Stage5::TayamaDragonSweepWarningFrames +
+        ShooterStages::Stage5::TayamaDragonSweepActiveFrames +
+        ShooterStages::Stage5::TayamaDragonSweepRecoveryFrames) == 0.0f);
+    assert(ShooterStages::Stage5::TayamaDragonBarrageGlow(
+        ShooterStages::Stage5::TayamaDragonBarrageFireFrame) == 1.0f);
+    assert(ShooterStages::Stage5::TayamaDragonLaserWidthProgress(
+        ShooterStages::Stage5::TayamaHeadLaserWarningFrames) == 0.0f);
+    assert(ShooterStages::Stage5::TayamaDragonLaserWidthProgress(
+        ShooterStages::Stage5::TayamaHeadLaserWarningFrames +
+        ShooterStages::Stage5::TayamaHeadLaserFadeFrames) == 1.0f);
+
+    // 旋回は突進後の専用区間だけ有効になり、一周して終了する
+    constexpr int orbitStart = rushStart +
+        ShooterStages::Stage5::TayamaDragonOrbitStartFrame;
+    assert(ShooterStages::Stage5::TayamaDragonOrbitFrame(orbitStart) == 0);
+    assert(ShooterStages::Stage5::IsTayamaDragonOrbitActive(orbitStart));
+    assert(std::fabs(ShooterStages::Stage5::TayamaDragonOrbitAngle(orbitStart +
+        ShooterStages::Stage5::TayamaDragonOrbitFrames / 2) - Math::Pi) < 0.0001f);
+    assert(!ShooterStages::Stage5::IsTayamaDragonOrbitActive(orbitStart +
+        ShooterStages::Stage5::TayamaDragonOrbitFrames));
+    constexpr int romanceStart = ShooterStages::Stage5::TayamaDragonRomanceCannonIntervalFrames;
+    static_assert(ShooterStages::Stage5::TayamaDragonRomanceCannonFrame(
+        romanceStart - 1) == -1);
+    static_assert(ShooterStages::Stage5::TayamaDragonRomanceCannonFrame(romanceStart) == 0);
+    static_assert(ShooterStages::Stage5::TayamaDragonHeadSeparationRate(
+        romanceStart + ShooterStages::Stage5::TayamaDragonRomanceCannonMoveFrames) == 1.0f);
 
     // 正規遷移を許可し、TAYAMA攻略順の飛び越しを拒否する
     assert(SideScrollingShooter::IsValidStage5Transition(
@@ -40,8 +88,8 @@ void RunStage5ModelViewTests() {
         Phase::TayamaFireControl, Phase::TayamaCommandCore));
     assert(SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
         Weakpoint::FireControlRadar, Phase::TayamaFireControl));
-    assert(!SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
-        Weakpoint::CommandCore, Phase::TayamaLiftEngines));
+    assert(SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
+        Weakpoint::CommandCore, Phase::TayamaFireControl));
 
     // 正面、右側、背面の周回座標が同じ半径でTAYAMAを囲むことを確認する
     const Vector2 front = SideScrollingShooter::TayamaOrbitXZ(0.0f, 0.0f);
@@ -56,7 +104,64 @@ void RunStage5ModelViewTests() {
     assert(std::abs(back.y - (ShooterStages::Stage5::TayamaArenaCenterZ +
         ShooterStages::Stage5::TayamaOrbitRadius)) < 0.0001f);
     assert(ShooterStages::Stage5::IsTayamaBattlePhase(Phase::TayamaFireControl));
+    assert(ShooterStages::Stage5::IsTayamaBattlePhase(Phase::TayamaLiftEngines));
+    assert(ShooterStages::Stage5::IsTayamaBattlePhase(Phase::TayamaCommandCore));
     assert(!ShooterStages::Stage5::IsTayamaBattlePhase(Phase::CarrierTransformation));
+    assert(ShooterStages::Stage5::ShouldResetTayamaPlayer(
+        Phase::TayamaFireControl, false));
+    assert(ShooterStages::Stage5::ShouldResetTayamaPlayer(
+        Phase::TayamaLiftEngines, true));
+    assert(ShooterStages::Stage5::ShouldResetTayamaPlayer(
+        Phase::TayamaCommandCore, true));
+    assert(!ShooterStages::Stage5::ShouldResetTayamaPlayer(
+        Phase::TayamaLiftEngines, false));
+    assert(ShooterStages::Stage5::TayamaCameraFarClip >
+        ShooterStages::Stage5::TayamaOrbitRadius * 2.0f);
+    assert(ShooterStages::Stage5::IsTayamaStompRange(
+        ShooterStages::Stage5::TayamaStompTriggerMaxWorldY));
+    assert(!ShooterStages::Stage5::IsTayamaStompRange(
+        ShooterStages::Stage5::TayamaStompTriggerMaxWorldY + 0.01f));
+    assert(ShooterStages::Stage5::TayamaStompLiftOffset(
+        ShooterStages::Stage5::TayamaStompRaiseFrames) ==
+        ShooterStages::Stage5::TayamaStompLiftLocalY);
+    assert(ShooterStages::Stage5::TayamaStompLiftOffset(
+        ShooterStages::Stage5::TayamaStompImpactFrame) == 0.0f);
+
+    // 第一形態の初期周回位置をTAYAMAの両目中央の正面へ揃える
+    const Stage5ModelTransform battleTransform {
+        {0.0f, TayamaModelView::GroundedRootY(
+            ShooterStages::Stage5::RooftopSurfaceY,
+            ShooterStages::Stage5::TayamaBossScale),
+            ShooterStages::Stage5::TayamaArenaCenterZ},
+        {}, ShooterStages::Stage5::TayamaBossScale
+    };
+    const Vector3 battleEye = TayamaModelView::EyeWorldCenter(battleTransform);
+    const Vector3 battleStart {front.x, battleEye.y, front.y};
+    const Vector3 battleBack {back.x, battleEye.y, back.y};
+    const Vector3 battleRight {right.x, battleEye.y, right.y};
+    assert(std::abs(battleStart.y - battleEye.y) < 0.0001f);
+    assert(TayamaModelView::IsInFrontOfHead(battleTransform, battleStart, 0.9999f));
+    assert(TayamaModelView::IsBehindHead(battleTransform, battleBack, 0.9999f));
+    assert(!TayamaModelView::IsBehindHead(battleTransform, battleStart, 0.0f));
+    assert(!TayamaModelView::IsBehindHead(battleTransform, battleRight, 0.1f));
+
+    // 踏みつけ中は選択した脚部だけが上がり、反対側は接地位置を保つ
+    TayamaModelState groundedState;
+    TayamaModelState raisedState;
+    raisedState.collapseOffsets[static_cast<std::size_t>(
+        TayamaPartGroup::LeftLiftEngine)].position.y =
+        ShooterStages::Stage5::TayamaStompLiftOffset(
+            ShooterStages::Stage5::TayamaStompRaiseFrames);
+    const Stage5GroupBounds groundedLeft = TayamaModelView::GroupBounds(
+        battleTransform, 1.0f, groundedState, TayamaPartGroup::LeftLiftEngine);
+    const Stage5GroupBounds raisedLeft = TayamaModelView::GroupBounds(
+        battleTransform, 1.0f, raisedState, TayamaPartGroup::LeftLiftEngine);
+    const Stage5GroupBounds groundedRight = TayamaModelView::GroupBounds(
+        battleTransform, 1.0f, groundedState, TayamaPartGroup::RightLiftEngine);
+    const Stage5GroupBounds raisedRight = TayamaModelView::GroupBounds(
+        battleTransform, 1.0f, raisedState, TayamaPartGroup::RightLiftEngine);
+    assert(raisedLeft.center.y > groundedLeft.center.y + 20.0f);
+    assert(std::abs(raisedRight.center.y - groundedRight.center.y) < 0.0001f);
 
     // 発射元の内側接触だけを除外し、外へ出た後は同じ部位も判定する
     std::uint16_t ignoredBossGroups = 1;
@@ -121,6 +226,7 @@ void RunStage5ModelViewTests() {
     assert(ShooterStages::Stage5::IsRooftopPhase(Phase::RooftopArrival));
     assert(ShooterStages::Stage5::IsRooftopPhase(Phase::CarrierTransformation));
     assert(!ShooterStages::Stage5::IsRooftopPhase(Phase::WallClimbUpper));
+    assert(ShooterStages::Stage5::RooftopStormCloudCount == 192);
     assert(ShooterStages::Stage5::TayamaBossScale >
         ShooterStages::Stage5::PandDBuildingCapScale);
     const Vector3 tayamaWorldSize = TayamaModelView::TowerSize *
@@ -152,6 +258,9 @@ void RunStage5ModelViewTests() {
         ShooterStages::Stage5::Phase::WallClimbMiddle) == 2);
     assert(ShooterStages::Stage5::Part2ChapterNumber(
         ShooterStages::Stage5::Phase::WallClimbUpper) == 3);
+    assert(ShooterStages::Stage5::WallClimbLowerFrames == 900);
+    assert(ShooterStages::Stage5::WallClimbMiddleFrames == 900);
+    assert(ShooterStages::Stage5::WallClimbUpperFrames == 900);
     assert(ShooterStages::Stage5::Part2RouteElapsedFrames(
         ShooterStages::Stage5::Phase::WallClimbMiddle, 0) ==
         ShooterStages::Stage5::WallClimbLowerFrames);
@@ -218,6 +327,8 @@ void RunStage5ModelViewTests() {
         ShooterStages::Stage5::WallClimbUpperFrames -
             ShooterStages::Stage5::WallClimbExitFadeFrames -
             ShooterStages::Stage5::Part2PlayerFlyAwayFrames));
+    assert(ShooterStages::Stage5::Part2EnemyExitY(10.0f, true) <
+        ShooterStages::Stage5::Part2EnemyExitY(10.0f, false));
     assert(ShooterStages::Stage5::CinematicFadeAlpha(
         ShooterStages::Stage5::Phase::WallClimbUpper,
         ShooterStages::Stage5::WallClimbUpperFrames -
@@ -275,9 +386,56 @@ void RunStage5ModelViewTests() {
         });
     assert(tayamaParts == static_cast<int>(TayamaModelView::PrimitiveCount));
 
-    // 巨大メカ形態の顔を3倍化し、レーザーの発射点を拡大後の両目へ揃える
+    // 両腕は肩を通る水平X軸を中心に同じ時計回り方向へ回る
+    Vector3 restingShoulder;
+    Vector3 restingTip;
+    Vector3 sweptShoulder;
+    Vector3 sweptTip;
+    Vector3 rightRestingShoulder;
+    Vector3 rightRestingTip;
+    Vector3 rightSweptShoulder;
+    Vector3 rightSweptTip;
+    TayamaModelView::ArmWorldSegment(
+        tayamaTransform, true, 0.0f, restingShoulder, restingTip);
+    TayamaModelView::ArmWorldSegment(
+        tayamaTransform, true, Math::HalfPi, sweptShoulder, sweptTip);
+    TayamaModelView::ArmWorldSegment(
+        tayamaTransform, false, 0.0f, rightRestingShoulder, rightRestingTip);
+    TayamaModelView::ArmWorldSegment(
+        tayamaTransform, false, Math::HalfPi, rightSweptShoulder, rightSweptTip);
+    assert((sweptShoulder - restingShoulder).LengthSquared() < 0.0001f);
+    assert((rightSweptShoulder - rightRestingShoulder).LengthSquared() < 0.0001f);
+    assert(std::abs(sweptTip.x - restingTip.x) < 0.0001f);
+    assert(std::abs(rightSweptTip.x - rightRestingTip.x) < 0.0001f);
+    assert(sweptTip.z < restingTip.z);
+    assert(rightSweptTip.z < rightRestingTip.z);
+
+    // 第一形態の眉毛は髪と同じ暗色、第二形態の髪と眉毛は発光金色へ切り替える
+    constexpr ColorF Phase1Eyebrow = TayamaModelView::HeadPartColor(9);
+    constexpr ColorF Phase1Hair = TayamaModelView::HeadPartColor(14);
+    constexpr ColorF Phase2Eyebrow = TayamaModelView::HeadPartColor(9, true);
+    constexpr ColorF Phase2Hair = TayamaModelView::HeadPartColor(14, true);
+    static_assert(Phase1Eyebrow.r == TayamaModelView::Dark.r &&
+        Phase1Eyebrow.g == TayamaModelView::Dark.g &&
+        Phase1Eyebrow.b == TayamaModelView::Dark.b);
+    static_assert(Phase1Hair.r == TayamaModelView::Hull.r &&
+        Phase1Hair.g == TayamaModelView::Hull.g &&
+        Phase1Hair.b == TayamaModelView::Hull.b);
+    static_assert(Phase2Eyebrow.r == TayamaModelView::HeadGold.r &&
+        Phase2Eyebrow.g == TayamaModelView::HeadGold.g &&
+        Phase2Eyebrow.b == TayamaModelView::HeadGold.b);
+    static_assert(Phase2Hair.r == TayamaModelView::HeadGold.r &&
+        Phase2Hair.g == TayamaModelView::HeadGold.g &&
+        Phase2Hair.b == TayamaModelView::HeadGold.b);
+
+    // 第一形態の顔を従来の3分の1にし、レーザーの発射点を両目へ揃える
     static_assert(TayamaModelView::HeadScale(0.0f) == 1.0f);
-    static_assert(TayamaModelView::HeadScale(1.0f) == 3.0f);
+    static_assert(TayamaModelView::HeadScale(1.0f) == 1.0f);
+    static_assert(TayamaModelView::HeadRemovalOrder.size() ==
+        ShooterStages::Stage5::TayamaDragonHeadPartCount);
+    static_assert(TayamaModelView::IsHeadPartVisibleAfterRemoval(0, 33));
+    static_assert(!TayamaModelView::IsHeadPartVisibleAfterRemoval(0, 34));
+    static_assert(!TayamaModelView::IsHeadPartVisibleAfterRemoval(28, 1));
     std::array<Vector3, 2> tayamaEyeCenters {};
     int tayamaHeadPart = 0;
     float tayamaFaceWidth = 0.0f;
@@ -296,8 +454,12 @@ void RunStage5ModelViewTests() {
         });
     assert(std::abs(tayamaFaceWidth - 4.0f * TayamaModelView::MechaHeadScale *
         tayamaTransform.scale) < 0.0001f);
+    const std::array<Vector3, 2> laserEyes =
+        TayamaModelView::EyeWorldPositions(tayamaTransform);
+    assert((laserEyes[0] - tayamaEyeCenters[0]).LengthSquared() < 0.0001f);
+    assert((laserEyes[1] - tayamaEyeCenters[1]).LengthSquared() < 0.0001f);
     assert((TayamaModelView::EyeWorldCenter(tayamaTransform) -
-        (tayamaEyeCenters[0] + tayamaEyeCenters[1]) * 0.5f).LengthSquared() < 0.0001f);
+        (laserEyes[0] + laserEyes[1]) * 0.5f).LengthSquared() < 0.0001f);
 
     // 第一形態のサーチライト灯体は支点を保ったまま照射目標へ正面を向ける
     const Vector3 searchlightTarget {12.0f, -6.0f, -24.0f};
@@ -318,7 +480,7 @@ void RunStage5ModelViewTests() {
     constexpr float DragonHeadOffset = TayamaModelView::DragonHeadForwardOffset(
         DragonJointDiameter, DragonHeadScale);
     static_assert(DragonHeadOffset - TayamaModelView::HeadRearExtent *
-        TayamaModelView::MechaHeadScale * DragonHeadScale >=
+        TayamaModelView::DragonHeadScale * DragonHeadScale >=
         DragonJointDiameter * 0.5f);
 
     const auto allBounds = TayamaModelView::AllGroupBounds(tayamaTransform, 1.0f, tayamaState);

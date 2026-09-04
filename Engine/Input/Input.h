@@ -44,6 +44,12 @@ public:
     static void PollGamepad();
 
     /**
+     * @brief XInputゲームパッドが接続されているか取得する
+     * @return 接続中の場合はtrue
+     */
+    static bool IsGamepadConnected();
+
+    /**
      * @brief 指定したキーが押されているかを取得する
      * @param key 確認するキー
      * @return 押されている場合はtrue
@@ -125,6 +131,7 @@ private:
     static std::array<unsigned char, static_cast<std::size_t>(MouseButton::Count)> m_frameStartMouseButtonSources;
     static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_mouseButtonDown;
     static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_mouseButtonUp;
+    static bool m_gamepadConnected;
     static Vector2 m_mousePosition;
     static Vector2 m_mouseDelta;
     static float m_mouseWheelDelta;

@@ -12,6 +12,7 @@ std::array<bool, static_cast<std::size_t>(MouseButton::Count)> Input::m_currentG
 std::array<unsigned char, static_cast<std::size_t>(MouseButton::Count)> Input::m_frameStartMouseButtonSources{};
 std::array<bool, static_cast<std::size_t>(MouseButton::Count)> Input::m_mouseButtonDown{};
 std::array<bool, static_cast<std::size_t>(MouseButton::Count)> Input::m_mouseButtonUp{};
+bool Input::m_gamepadConnected = false;
 Vector2 Input::m_mousePosition{};
 Vector2 Input::m_mouseDelta{};
 float Input::m_mouseWheelDelta = 0.0f;
@@ -33,6 +34,7 @@ bool Input::Initialize(HWND hwnd) {
     m_frameStartMouseButtonSources.fill(0);
     m_mouseButtonDown.fill(false);
     m_mouseButtonUp.fill(false);
+    m_gamepadConnected = false;
 
     // フレーム内に蓄積するアナログ入力を初期化する
     m_mousePosition = {};
@@ -95,6 +97,14 @@ void Input::PollGamepad() {
             m_mouseButtonUp[i] = false;
         }
     }
+}
+
+/**
+ * @brief XInputゲームパッドが接続されているか取得する
+ * @return 接続中の場合はtrue
+ */
+bool Input::IsGamepadConnected() {
+    return m_gamepadConnected;
 }
 
 /**

@@ -434,15 +434,18 @@ void SideScrollingShooter::ProcessInput() {
     m_bombRequested = Input::GetKeyDown(KeyCode::C);
     m_viewToggleRequested = Input::GetKeyDown(KeyCode::X) && CanToggleView();
 
+#ifdef _DEBUG
     // デバッグ用に任意の進行地点へ移動する
     if (Input::GetKeyDown(KeyCode::F1)) StartDebugCheckpoint(1, 1, false);
     if (Input::GetKeyDown(KeyCode::F2)) StartDebugCheckpoint(2, 1, false);
     if (Input::GetKeyDown(KeyCode::F3)) StartDebugCheckpoint(3, 1, false);
     if (Input::GetKeyDown(KeyCode::F4)) StartDebugCheckpoint(4, 1, false);
     if (Input::GetKeyDown(KeyCode::F5)) StartDebugCheckpoint(5, 1, false);
+#endif
     if (Input::GetKeyDown(KeyCode::Alpha1)) StartDebugCheckpoint(m_stageNumber, 1, false);
     if (Input::GetKeyDown(KeyCode::Alpha2)) StartDebugCheckpoint(m_stageNumber, 2, false);
     if (Input::GetKeyDown(KeyCode::Alpha3)) StartDebugCheckpoint(m_stageNumber, 3, false);
+#ifdef _DEBUG
     if (Input::GetKeyDown(KeyCode::P)) {
         const int previousPowerLevel = PowerLevel();
         m_power = PowerAfterDebugIncrease(m_power, MaxPower);
@@ -451,6 +454,7 @@ void SideScrollingShooter::ProcessInput() {
     if (Input::GetKeyDown(KeyCode::B) && !StageDispatch::HandleDebugBossInput(*this)) {
         StartDebugCheckpoint(m_stageNumber, 3, true);
     }
+#endif
     StageDispatch::ProcessDebugInput(*this);
 
     if (m_clear && Input::GetKeyDown(KeyCode::R)) {
@@ -655,11 +659,25 @@ void SideScrollingShooter::TickChapterExitEnemies() {
     constexpr float SideExitSpeed = 0.10f;
     constexpr float RailExitSpeed = 1.4f;
     static_assert(SideExitSpeed > 0.0f && RailExitSpeed > 0.0f);
+    const bool exitsDownward = m_stageNumber == 5 &&
+        m_stage5.phase == ShooterStages::Stage5::Phase::WallClimbUpper;
+    const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
 
-    // 敵AIと射撃を止めたまま進行方向へ高速移動させる
+    // 敵AIと射撃を止めたまま画面外へ高速移動させる
     for (auto& enemy : m_enemies) {
         if (!enemy.active || enemy.type == 2) continue;
         enemy.collisionEnabled = false;
+        if (exitsDownward) {
+            // 第2部最終区間は屋上ムービー前に全敵を画面下へ高速退避させる
+            enemy.y = ShooterStages::Stage5::Part2EnemyExitY(
+                enemy.y, IsRailGameplayActive());
+            enemy.baseY = enemy.y;
+            const float exitY = IsRailGameplayActive() ?
+                ShooterStages::Stage5::Part2RailEnemyExitY :
+                sideYRange.x - Side2DShotCullMargin;
+            if (enemy.y < exitY) enemy.active = false;
+            continue;
+        }
         if (IsRailGameplayActive()) {
             enemy.z -= RailExitSpeed;
             if (enemy.z < 2.0f) enemy.active = false;
@@ -1041,9 +1059,15 @@ void SideScrollingShooter::TickBossIntroduction() {
     const int entranceFrames = StageDispatch::BossIntroductionFrames(*this);
     if (m_bossIntroductionPhase == BossIntroductionPhase::Entrance &&
         m_bossIntroductionTimer >= entranceFrames) {
-        // 定位置を既存ステージ定義へ戻して会話へ移行する
-        if (IsRailGameplayActive()) m_stage->ConfigureBossRailAnchor(boss);
-        else m_stage->ConfigureBossSideAnchor(boss);
+        // TAYAMAはムービー状態を抜けてから、その他は定位置へ戻して会話へ移行する
+        if (m_stageNumber == 5 &&
+            m_stage5.phase == ShooterStages::Stage5::Phase::CarrierTransformation) {
+            Stage5Module::CompleteTayamaIntroduction(*this);
+        } else if (IsRailGameplayActive()) {
+            m_stage->ConfigureBossRailAnchor(boss);
+        } else {
+            m_stage->ConfigureBossSideAnchor(boss);
+        }
         m_bossIntroductionPhase = BossIntroductionPhase::Dialogue;
         m_bossIntroductionTimer = 0;
         m_bossStoryActive = true;

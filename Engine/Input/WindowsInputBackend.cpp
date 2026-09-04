@@ -284,6 +284,8 @@ UINT WindowsInputBackend::NormalizeVirtualKey(const RAWKEYBOARD& keyboard) {
  */
 void WindowsInputBackend::ProcessPolledGamepad(
     const XINPUT_GAMEPAD* gamepad, float elapsedSeconds) {
+    // HUD案内が物理的な接続状態へ追従できるよう保存する
+    Input::m_gamepadConnected = gamepad != nullptr;
     if (gamepad == nullptr) {
         gamepadNeedsNeutral = true;
         ProcessGamepad(nullptr, elapsedSeconds);

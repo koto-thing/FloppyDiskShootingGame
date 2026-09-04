@@ -205,9 +205,13 @@ void RunInputTests() {
     // 復帰時に保持されていたパッド入力はニュートラルになるまで抑止する
     Input::BeginFrame();
     WindowsInputBackendTestAccess::SetPolledGamepad(nullptr);
+    Require(!Input::IsGamepadConnected(),
+        "Disconnected gamepad must select keyboard UI hints");
     gamepad = {};
     gamepad.wButtons = XINPUT_GAMEPAD_X;
     WindowsInputBackendTestAccess::SetPolledGamepad(&gamepad);
+    Require(Input::IsGamepadConnected(),
+        "Connected gamepad must select gamepad UI hints");
     Require(!Input::GetKey(KeyCode::X) && !Input::GetKeyDown(KeyCode::X),
         "Held button on reconnect must not create an input edge");
     gamepad = {};
@@ -218,6 +222,8 @@ void RunInputTests() {
     Require(Input::GetKeyDown(KeyCode::X),
         "Button press after reconnect neutral must be reported");
     WindowsInputBackendTestAccess::SetPolledGamepad(nullptr);
+    Require(!Input::IsGamepadConnected(),
+        "Gamepad disconnect must restore keyboard UI hints");
 
     // メッセージ入力を先に処理すれば入力元の持ち替えで偽エッジを作らない
     Input::BeginFrame();
