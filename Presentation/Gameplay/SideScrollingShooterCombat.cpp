@@ -171,7 +171,7 @@ void SideScrollingShooter::DetonateBomb() {
     for (auto& enemy : m_enemies) {
         if (!enemy.active || enemy.type == 2) continue;
         const bool visible = IsRailGameplayActive() ?
-            enemy.z >= PlayerRailZ - 2.0f && enemy.z <= EnemyRailFarZ &&
+            enemy.z >= PlayerRailDepth() - 2.0f && enemy.z <= EnemyRailFarZ &&
                 std::abs(enemy.x) <= 1.4f && std::abs(enemy.y) <= 1.4f :
             enemy.x >= Side2DPlayerMinX - Side2DShotCullMargin &&
                 enemy.x <= Side2DPlayerMaxX + Side2DShotCullMargin &&
@@ -390,6 +390,8 @@ void SideScrollingShooter::TickShots() {
         // 端から出る円形弾幕が生成直後に欠けないよう、弾のY消滅範囲だけ少し広げる
         const bool verticalRouteShot = !shot.enemy &&
             UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+        const bool part2RailNormalShot = verticalRouteShot &&
+            IsRailGameplayActive() && !shot.special;
         const bool part2RailShot = IsRailGameplayActive() && m_stageNumber == 5 &&
             ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase);
         const float railShotMinY = part2RailShot ?
@@ -505,19 +507,22 @@ void SideScrollingShooter::TickShots() {
                 railTargetRadius *= ShooterStages::Stage5::Part2EnemyScaleMultiplier(RailBlend());
             }
             if (verticalRouteShot && m_viewTransitionTimer > 0) continue;
-            if (verticalRouteShot) {
+            if (verticalRouteShot && shot.special) {
                 // 敵を自機弾の奥行き平面へ透視投影し、画面上で重なった場合だけ命中させる
                 const Vector3 cameraPosition {
                     ToWorldX(m_playerX) * 0.18f,
                     ToWorldY(m_playerY) * 0.12f + 1.72f,
-                    PlayerRailZ - 21.5f
+                    PlayerRailDepth() - 21.5f
                 };
                 const float projectionScale = PerspectiveDepthScale(
                     cameraPosition.z, enemy.z, shot.z);
                 railTarget = cameraPosition + (railTarget - cameraPosition) * projectionScale;
                 railTargetRadius *= projectionScale;
             }
-            const bool enemyHit = IsRailGameplayActive() ?
+            // 第2部3Dの通常ショットは敵の演出用奥行きに依存せず縦画面座標で判定する
+            const bool enemyHit = part2RailNormalShot ?
+                Hit(shot.x, shot.y, shot.hitRadius, enemy.x, enemy.y, enemyRadius) :
+                IsRailGameplayActive() ?
                 Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
                     ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
                     railTarget.x, railTarget.y, railTarget.z, railTargetRadius) :
@@ -570,7 +575,7 @@ void SideScrollingShooter::TickItems() {
             item.y += FromWorldY(velocity.y);
             item.z += velocity.z;
         } else if (IsRailGameplayActive()) {
-            item.z = part2Route ? (std::max)(item.z - 0.28f, PlayerRailZ) : item.z - 0.28f;
+            item.z = part2Route ? (std::max)(item.z - 0.28f, PlayerRailDepth()) : item.z - 0.28f;
             if (part2Route) item.y -= ShooterStages::Stage5::Part2RailItemFallSpeed;
         } else {
             if (part2Route) {
@@ -822,7 +827,7 @@ void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool 
         shot.y = y;
         const bool verticalRoute = !enemy &&
             UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
-        shot.z = IsRailGameplayActive() ? (z >= 0.0f ? z : PlayerRailZ + 2.0f) :
+        shot.z = IsRailGameplayActive() ? (z >= 0.0f ? z : PlayerRailDepth() + 2.0f) :
             ToRailZFromSideX(x);
         shot.transitionSideX = x;
         shot.transitionSideY = y;
@@ -850,7 +855,7 @@ void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool 
                 const Vector3 player = PlayerWorldPosition();
                 const float targetX = IsTayamaBattle() ? FromWorldX(player.x) : m_playerX + vx * 12.0f;
                 const float targetY = IsTayamaBattle() ? FromWorldY(player.y) : m_playerY + vy * 12.0f;
-                const float targetZ = IsTayamaBattle() ? player.z : PlayerRailZ;
+                const float targetZ = player.z;
                 const float dx = ToWorldX(targetX) - ToWorldX(x);
                 const float dy = ToWorldY(targetY) - ToWorldY(y);
                 const float dz = targetZ - shot.z;
@@ -1032,7 +1037,7 @@ void SideScrollingShooter::FireSpecialShots() {
                     (railGameplay ? m_playerX + centeredIndex * railSpawnOffsetX :
                         m_playerX + config.spawnOffsetX);
                 shot.y = spawnY;
-                shot.z = railGameplay ? PlayerRailZ + 2.0f : ToRailZFromSideX(shot.x);
+                shot.z = railGameplay ? PlayerRailDepth() + 2.0f : ToRailZFromSideX(shot.x);
                 shot.transitionSideX = shot.x;
                 shot.transitionSideY = shot.y;
                 if (verticalRoute) {

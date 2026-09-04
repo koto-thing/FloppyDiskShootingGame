@@ -175,7 +175,7 @@ void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, Renderer& rende
     const Vector2 shake = ScreenShakeOffset();
     const float sideCameraY = StageDispatch::SideCameraY(*this);
 
-    const Vector3 playerPosition{ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ};
+    const Vector3 playerPosition{ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailDepth()};
     // 2Dモードと同じカメラ状態から、3Dレールの追従カメラへ補間する
     Vector3 sidePosition{0.0f, sideCameraY, SideCameraZ};
     Vector3 sideTarget{0.0f, sideCameraY, SidePlaneZ};

@@ -230,7 +230,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
         (cinematic || m_tutorialMode || m_invincible == 0 || (m_invincible / 5) % 2 == 0);
     Vector3 playerPosition = IsTayamaBattle() ? gameplayPlayerPosition :
         Vector3 {ToWorldX(m_playerX), ToWorldY(m_playerY),
-            Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight)};
+            Math::Lerp(SidePlaneZ, PlayerRailDepth(), railWeight)};
     float playerPitch = 0.0f;
     StageDispatch::ApplyPlayerRenderCorrection(*this, playerPosition, playerPitch);
     if (!cinematic && railWeight > 0.01f && playerVisible) {

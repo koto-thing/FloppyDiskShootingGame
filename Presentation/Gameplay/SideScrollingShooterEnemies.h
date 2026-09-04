@@ -1045,7 +1045,7 @@ private:
         // 3Dではゲーム座標のXYをワールド比率へ変換して固定地点へ飛ばす
         const float worldDx = ToWorldX(enemy.attackWarningTargetX) - ToWorldX(enemy.x);
         const float worldDy = ToWorldY(enemy.attackWarningTargetY) - ToWorldY(enemy.y);
-        const float worldDz = SideScrollingShooter::PlayerRailZ - enemy.z;
+        const float worldDz = shooter.PlayerRailDepth() - enemy.z;
         const float length = (std::max)(0.001f,
             std::sqrt(worldDx * worldDx + worldDy * worldDy + worldDz * worldDz));
         shooter.SpawnShotDirect(enemy.x, enemy.y, enemy.z,
@@ -1062,7 +1062,7 @@ private:
     static constexpr float PatrolHeight = 0.22f;
     static constexpr float SideShotSpeed = 0.022f;
     static constexpr float RailShotSpeed = 0.68f;
-    static_assert(WallPatrolZ > SideScrollingShooter::PlayerRailZ);
+    static_assert(WallPatrolZ > ShooterStages::Stage5::Part2PlayerRailZ);
     static_assert(SideWallX > 0.0f);
     static_assert(PatrolWidth > 0.0f && PatrolHeight > 0.0f);
 };
