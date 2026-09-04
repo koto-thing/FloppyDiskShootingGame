@@ -16,6 +16,23 @@ namespace {
 constexpr float MortarExplosionDepthHitRadius = 0.85f;
 
 /**
+ * @brief 3D距離が敵発射体の接近禁止範囲外か判定する
+ * @param dx 発射元と自機のX距離
+ * @param dy 発射元と自機のY距離
+ * @param dz 発射元と自機のZ距離
+ * @return 指定した接近禁止距離より離れている場合true
+ */
+constexpr bool IsOutsideEnemyProjectileNoFireRange(
+    float dx, float dy, float dz, float noFireDistance) {
+    return dx * dx + dy * dy + dz * dz >
+        noFireDistance * noFireDistance;
+}
+
+static_assert(!IsOutsideEnemyProjectileNoFireRange(0.0f, 0.0f, 0.0f, 12.0f));
+static_assert(!IsOutsideEnemyProjectileNoFireRange(0.0f, 0.0f, 12.0f, 12.0f));
+static_assert(IsOutsideEnemyProjectileNoFireRange(0.0f, 0.0f, 12.01f, 12.0f));
+
+/**
  * @brief 追尾対象として現在の候補より優先するか判定する
  * @param candidateHp 候補のHP
  * @param candidateDistanceSquared 候補と自機の距離の二乗
@@ -261,14 +278,17 @@ void SideScrollingShooter::TickEnemies() {
         const int aimedShotInterval = enemy.shotInterval;
         const bool canUseAimedShot = !(enemy.type == 2 &&
             StageDispatch::IsBossSpecialAttackActive(*this, enemy));
-        if (aimedShotInterval > AttackWarningFrames && canUseAimedShot &&
+        const bool canSpawnAimedProjectile = CanSpawnEnemyProjectile(
+            enemy.x, enemy.y, enemy.z);
+        if (aimedShotInterval > AttackWarningFrames && canUseAimedShot && canSpawnAimedProjectile &&
             enemy.age % aimedShotInterval == aimedShotInterval - AttackWarningFrames) {
             // 発射時の追尾を防ぐため、予告した地点を狙い弾の目標として固定する
             enemy.attackWarningTargetX = m_playerX;
             enemy.attackWarningTargetY = m_playerY;
             enemy.attackWarningFrames = AttackWarningFrames;
         }
-        if (aimedShotInterval > 0 && enemy.age % aimedShotInterval == 0 && canUseAimedShot) {
+        if (aimedShotInterval > 0 && enemy.age % aimedShotInterval == 0 &&
+            canUseAimedShot && canSpawnAimedProjectile) {
             const float dxToPlayer = enemy.attackWarningTargetX - enemy.x;
             const float dyToPlayer = enemy.attackWarningTargetY - enemy.y;
             const float length = std::sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
@@ -435,6 +455,16 @@ void SideScrollingShooter::TickShots() {
             if (!playerHit && grazed && !shot.grazed) {
                 shot.grazed = true;
                 ++m_chapterResult.grazeCount;
+
+                // 自機の内側方向へ交互に飛ばし、グレイズ直後も見える時間を確保する
+                constexpr float GrazeScoreSpeedX = 0.040f;
+                constexpr float GrazeScoreSpeedY = 0.045f;
+                constexpr int GrazeScorePickupDelay = 12;
+                const float scoreVx = (m_chapterResult.grazeCount & 1) != 0 ?
+                    GrazeScoreSpeedX : -GrazeScoreSpeedX;
+                const float scoreVy = m_playerY <= 0.0f ? GrazeScoreSpeedY : -GrazeScoreSpeedY;
+                SpawnScoreItem(m_playerX, m_playerY, playerPosition.z, 100,
+                    scoreVx, scoreVy, GrazeScorePickupDelay);
             }
             if (m_invincible == 0 && playerHit) {
                 DeactivateShot(shot);
@@ -564,6 +594,13 @@ void SideScrollingShooter::TickItems() {
     for (auto& item : m_items) {
         if (!item.active) continue;
 
+        // 生成時の飛び出し速度を減衰させながら反映する
+        item.x += item.vx;
+        item.y += item.vy;
+        item.vx *= 0.88f;
+        item.vy *= 0.88f;
+        if (item.pickupDelay > 0) --item.pickupDelay;
+
         // 第2部は両視点で地面側へ落とし、3Dだけ取得可能な手前方向の移動も維持する
         if (IsTayamaBattle()) {
             // 全周回で取得できるようボス中心のドロップを自機へ送る
@@ -612,7 +649,7 @@ void SideScrollingShooter::TickItems() {
             Hit3D(playerPosition.x, playerPosition.y, playerPosition.z, 3.5f,
                 ToWorldX(item.x), ToWorldY(item.y), item.z, 0.0f) :
             Hit(m_playerX, m_playerY, 0.45f, item.x, item.y, 0.0f);
-        if (followsPlayer) {
+        if (followsPlayer && item.pickupDelay == 0) {
             item.x += dx * 0.45f;
             item.y += dy * 0.45f;
             if (IsRailGameplayActive()) {
@@ -623,7 +660,7 @@ void SideScrollingShooter::TickItems() {
             Hit3D(playerPosition.x, playerPosition.y, playerPosition.z, 0.52f,
                 ToWorldX(item.x), ToWorldY(item.y), item.z, 0.38f) :
             Hit(m_playerX, m_playerY, 0.075f, item.x, item.y, 0.045f);
-        if (!collected) continue;
+        if (!collected || item.pickupDelay > 0) continue;
 
         if (item.type == ItemType::Power) {
             const int previousPowerLevel = PowerLevel();
@@ -819,6 +856,10 @@ void SideScrollingShooter::DefeatBoss(Enemy& boss) {
 
 void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool enemy,
     float z, float railSpeed, int damage) {
+    const float spawnZ = IsRailGameplayActive() ?
+        (z >= 0.0f ? z : PlayerRailDepth() + 2.0f) : ToRailZFromSideX(x);
+    if (enemy && !CanSpawnEnemyProjectile(x, y, spawnZ)) return;
+
     for (int shotIndex = 0; shotIndex < ActiveShotCapacity(); ++shotIndex) {
         auto& shot = m_shots[shotIndex];
         if (shot.active) continue;
@@ -827,8 +868,7 @@ void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool 
         shot.y = y;
         const bool verticalRoute = !enemy &&
             UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
-        shot.z = IsRailGameplayActive() ? (z >= 0.0f ? z : PlayerRailDepth() + 2.0f) :
-            ToRailZFromSideX(x);
+        shot.z = spawnZ;
         shot.transitionSideX = x;
         shot.transitionSideY = y;
         shot.vx = vx;
@@ -880,6 +920,16 @@ void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool 
     }
 }
 
+bool SideScrollingShooter::CanSpawnEnemyProjectile(float x, float y, float z) const {
+    if (!IsRailGameplayActive()) return true;
+
+    // ゲーム座標のXYをワールド座標へ揃えて自機との3D距離を判定する
+    const Vector3 player = PlayerWorldPosition();
+    return IsOutsideEnemyProjectileNoFireRange(
+        ToWorldX(x) - player.x, ToWorldY(y) - player.y, z - player.z,
+        EnemyProjectileNoFireDistance3D);
+}
+
 /**
  * @brief 指定座標にPowerアイテムを生成する
  * @param x 2D座標系のX座標
@@ -907,15 +957,23 @@ void SideScrollingShooter::SpawnPowerItem(float x, float y, float z, float value
  * @param y 2D座標系のY座標
  * @param z 3Dレール座標系のZ座標
  * @param value 取得時に加算するScore
+ * @param vx 生成直後のX方向速度
+ * @param vy 生成直後のY方向速度
+ * @param pickupDelay 取得を開始するまでのフレーム数
+ * @return なし
  */
-void SideScrollingShooter::SpawnScoreItem(float x, float y, float z, int value) {
+void SideScrollingShooter::SpawnScoreItem(float x, float y, float z, int value,
+    float vx, float vy, int pickupDelay) {
     for (auto& item : m_items) {
         if (item.active) continue;
         item = {};
         item.x = x;
         item.y = y;
         item.z = IsRailGameplayActive() ? z : ToRailZFromSideX(x);
+        item.vx = vx;
+        item.vy = vy;
         item.score = value;
+        item.pickupDelay = pickupDelay;
         item.type = ItemType::Score;
         item.active = true;
         return;
@@ -938,6 +996,8 @@ void SideScrollingShooter::SpawnScoreItem(float x, float y, float z, int value) 
  */
 void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy,
     int barrageIndex, int barrageCount, bool firedByBoss) {
+    if (enemy && !CanSpawnEnemyProjectile(x, y, z)) return;
+
     Shot* available = nullptr;
     for (int shotIndex = 0; shotIndex < ActiveShotCapacity(); ++shotIndex) {
         auto& shot = m_shots[shotIndex];

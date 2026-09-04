@@ -129,6 +129,17 @@ bool Input::GetKeyDown(KeyCode key) {
 }
 
 /**
+ * @brief いずれかのキーがこのフレームで押されたかを取得する
+ * @return このフレームでいずれかのキーが押された場合はtrue
+ */
+bool Input::GetAnyKeyDown() {
+    for (bool keyDown : m_keyDown) {
+        if (keyDown) return true;
+    }
+    return false;
+}
+
+/**
  * @brief 指定したキーがこのフレームで離されたかを取得する
  * @param key 確認するキー
  * @return このフレームで離された場合はtrue

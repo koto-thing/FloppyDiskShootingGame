@@ -76,12 +76,14 @@ void RunInputTests() {
     InputTestAccess::SetKey('X', false);
     Require(Input::GetKey(KeyCode::Z), "Held fire key must remain pressed");
     Require(Input::GetKeyDown(KeyCode::X), "X tap must not be lost while fire is held");
+    Require(Input::GetAnyKeyDown(), "Any-key event must report a new key press");
     Require(Input::GetKeyUp(KeyCode::X), "X release must be reported in the same frame");
 
     // 次フレームでは一時イベントだけを消去する
     Input::BeginFrame();
     Require(Input::GetKey(KeyCode::Z), "BeginFrame must preserve held keys");
     Require(!Input::GetKeyDown(KeyCode::X), "Key-down event must last for one frame");
+    Require(!Input::GetAnyKeyDown(), "Held keys must not repeat the any-key event");
     Require(!Input::GetKeyUp(KeyCode::X), "Key-up event must last for one frame");
     InputTestAccess::SetKey('Z', false);
 

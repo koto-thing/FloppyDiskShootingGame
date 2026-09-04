@@ -40,7 +40,7 @@ public:
     /** @brief 機体タイプ別の自機弾パラメータ */
     inline static constexpr std::array<PlayerShotParameters, 3> PlayerShotConfigs {{
         // HOMING
-        { 10, 2, 0.038f, 5.0f, 0.08f, 0.20f, 0.025f, 1, 0.100f, false },
+        { 10, 2, 0.038f, 5.0f, 0.08f, 0.20f, 0.025f, 1, 0.150f, false },
         // PIERCING
         { 18, 2, 0.052f, 0.0f, 0.12f, 0.09f, 0.032f, 1, 0.000f, true },
         // SPREAD
@@ -325,8 +325,11 @@ private:
         float x = 0.0f;
         float y = 0.0f;
         float z = 0.0f;
+        float vx = 0.0f;
+        float vy = 0.0f;
         float power = 0.25f;
         int score = 0;
+        int pickupDelay = 0;
         ItemType type = ItemType::Power;
         bool active = false;
     };
@@ -392,6 +395,8 @@ private:
     static constexpr float PlayerRailZ = 8.0f;
     static constexpr float SidePlaneZ = 10.0f;
     static constexpr float EnemyRailFarZ = 60.0f;
+    /** @brief 3D時に敵発射体を生成しない自機中心の球半径 */
+    static constexpr float EnemyProjectileNoFireDistance3D = 16.0f;
 
     enum class ViewMode {
         Side2D,
@@ -581,8 +586,19 @@ private:
     void UnlockGallery(GalleryEntry entry);
     /** @brief 指定座標にPowerアイテムを生成する */
     void SpawnPowerItem(float x, float y, float z, float value);
-    /** @brief 指定座標にScoreアイテムを生成する */
-    void SpawnScoreItem(float x, float y, float z, int value);
+    /**
+     * @brief 指定座標にScoreアイテムを生成する
+     * @param x 2D座標系のX座標
+     * @param y 2D座標系のY座標
+     * @param z 3Dレール座標系のZ座標
+     * @param value 取得時に加算するScore
+     * @param vx 生成直後のX方向速度
+     * @param vy 生成直後のY方向速度
+     * @param pickupDelay 取得を開始するまでのフレーム数
+     * @return なし
+     */
+    void SpawnScoreItem(float x, float y, float z, int value,
+        float vx = 0.0f, float vy = 0.0f, int pickupDelay = 0);
     /**
      * @brief ボス戦開始状態を構築する
      * @param playWarningSound ボス登場警報を再生する場合true
@@ -610,6 +626,14 @@ private:
     void StartNextStage();
     void SpawnShot(float x, float y, float vx, float vy, bool enemy,
         float z = -1.0f, float railSpeed = -1.0f, int damage = 1);
+    /**
+     * @brief 敵発射体の生成位置が3D時の自機接近禁止範囲外か判定する
+     * @param x 発射元ゲーム座標X
+     * @param y 発射元ゲーム座標Y
+     * @param z 発射元レール座標Z
+     * @return 2D時または自機から12ユニットより離れている場合true
+     */
+    bool CanSpawnEnemyProjectile(float x, float y, float z) const;
     /**
      * @brief 現在のStageで利用できる弾プール容量を取得する
      * @return Stage 5は1024、それ以外は512

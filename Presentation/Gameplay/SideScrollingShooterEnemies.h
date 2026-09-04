@@ -586,6 +586,7 @@ public:
         if (enemy.age < 36 || enemy.age % 72 != 0) {
             return;
         }
+        if (!shooter.CanSpawnEnemyProjectile(enemy.x, enemy.y, enemy.z)) return;
 
         constexpr int BulletCount = 8;
         if (shooter.IsRailGameplayActive()) {
@@ -683,6 +684,7 @@ public:
         if (enemy.age < 36 || enemy.age % 72 != 0) {
             return;
         }
+        if (!shooter.CanSpawnEnemyProjectile(enemy.x, enemy.y, enemy.z)) return;
 
         if (shooter.IsRailGameplayActive()) {
             // 3Dでは同一点から5x5の格子へ徐々に拡散させる
@@ -791,6 +793,8 @@ private:
      */
     static void SpawnStage2DelayedMissile(
         SideScrollingShooter& shooter, float x, float y, float z) {
+        if (!shooter.CanSpawnEnemyProjectile(x, y, z)) return;
+
         for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
             auto& shot = shooter.m_shots[shotIndex];
             if (shot.active) continue;
@@ -1029,6 +1033,8 @@ private:
      * @return なし
      */
     static void FireMachineGun(SideScrollingShooter& shooter, const Enemy& enemy) {
+        if (!shooter.CanSpawnEnemyProjectile(enemy.x, enemy.y, enemy.z)) return;
+
         const float dx = enemy.attackWarningTargetX - enemy.x;
         const float dy = enemy.attackWarningTargetY - enemy.y;
         const int shotIndex = (ShooterStages::Stage5::DroneMachineGunBurstFrames -

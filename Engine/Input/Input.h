@@ -64,6 +64,12 @@ public:
     static bool GetKeyDown(KeyCode key);
 
     /**
+     * @brief いずれかのキーがこのフレームで押されたかを取得する
+     * @return このフレームでいずれかのキーが押された場合はtrue
+     */
+    static bool GetAnyKeyDown();
+
+    /**
      * @brief 指定したキーがこのフレームで離されたかを取得する
      * @param key 確認するキー
      * @return このフレームで離された場合はtrue

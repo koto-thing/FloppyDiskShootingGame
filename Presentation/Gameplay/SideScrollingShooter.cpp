@@ -451,6 +451,9 @@ void SideScrollingShooter::StartDebugCheckpoint(
 }
 
 void SideScrollingShooter::ProcessInput() {
+    // リスタート表示中の新しいキー入力でカウントダウンを終了する
+    if (m_restartTimer > 0 && Input::GetAnyKeyDown()) m_restartTimer = 0;
+
     m_moveLeft = Input::GetKey(KeyCode::LeftArrow) || Input::GetKey(KeyCode::A);
     m_moveRight = Input::GetKey(KeyCode::RightArrow) || Input::GetKey(KeyCode::D);
     m_moveUp = Input::GetKey(KeyCode::UpArrow) || Input::GetKey(KeyCode::W);

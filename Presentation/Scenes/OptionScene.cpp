@@ -129,11 +129,9 @@ void OptionScene::Render(Renderer& renderer) {
     // オプション画面の見出しを描画する
     renderer.DrawText(
         "OPTIONS",
-        TextAlign::Center,
+        { -0.18f, 0.65f },
         0.04f,
-        { 1.0f, 1.0f, 1.0f, 1.0f },
-        { 0.0f, 0.65f },
-        0.008f
+        { 1.0f, 1.0f, 1.0f, 1.0f }
     );
 
     // 各音量の現在値をラベルとして描画する
