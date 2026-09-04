@@ -724,7 +724,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 20;
+        return 25;
     }
 
     int Score(const Enemy&) const override {
@@ -825,7 +825,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 50;
+        return 100;
     }
 
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
@@ -876,8 +876,8 @@ public:
     }
 
 private:
-    static constexpr float UpperYValue = 1.40f;
-    static constexpr float LowerYValue = -1.46f;
+    static constexpr float UpperYValue = 1.50f;
+    static constexpr float LowerYValue = -1.55f;
     static constexpr float LeftRailXValue = -1.0f;
     static constexpr float RightRailXValue = 1.0f;
     static constexpr float LaserRadius2DValue = 0.035f;
