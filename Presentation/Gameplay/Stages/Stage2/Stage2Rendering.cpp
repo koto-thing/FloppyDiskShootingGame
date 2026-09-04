@@ -379,8 +379,8 @@ bool SideScrollingShooter::Stage2Module::DrawBossModel(
     const bool introducing =
         shooter.m_bossIntroductionPhase == BossIntroductionPhase::Entrance;
 
-    // 登場中とPhase 2以降は潜砂艦の移動位置へ砂埃を連続発生させる
-    if (separated || introducing) {
+    // 登場中と全Phaseで潜砂艦の接地面から砂埃を連続発生させる
+    if (boss.phase >= 1.0f || introducing) {
         constexpr float SideGroundTopY = -6.0f;
         constexpr float RailGroundTopY = -3.65f;
         constexpr float EdgeLocalX[] = {-4.2f, 0.0f, 4.2f};
