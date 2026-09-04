@@ -319,7 +319,8 @@ bool SideScrollingShooter::Stage5Module::IsViewLocked(const SideScrollingShooter
         return shooter.m_stage5.phase == Stage5Phase::WallClimbLower &&
             shooter.m_stage5.phaseTimer < ShooterStages::Stage5::WallClimbFadeFrames;
     }
-    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase) ||
+    if (shooter.m_stage5.phase == Stage5Phase::EastsourceBattle ||
+        ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase) ||
         ShooterStages::Stage5::IsTayamaDragonBattlePhase(shooter.m_stage5.phase)) return false;
     return shooter.m_stage5.phase != Stage5Phase::Approach;
 }
@@ -927,7 +928,6 @@ void SideScrollingShooter::Stage5Module::StartEastsourceBattle(SideScrollingShoo
     shooter.m_bossHp = eastsource.hp;
     shooter.m_displayBossHp = static_cast<float>(shooter.m_bossHp);
     shooter.m_invincible = (std::max)(shooter.m_invincible, 60);
-    ResetWallSearchlights(shooter, 1);
     shooter.PlayCurrentBossBgm(true);
 }
 
@@ -1709,7 +1709,7 @@ Stage5ModelTransform SideScrollingShooter::Stage5Module::TayamaDragonHeadTransfo
                 shooter.m_stage5.tayamaDragonAttackTimer)));
     return {
         TayamaDragonSegmentPosition(shooter, 0, railWeight) +
-            forward * (offset + separation * 10.0f) -
+            forward * offset + Vector3 {0.0f, separation * 18.0f, 0.0f} -
             Vector3 {0.0f, 12.85f * headScale, 0.0f},
         {0.0f, headYaw, 0.0f}, headScale
     };
@@ -1719,17 +1719,22 @@ Stage5ModelTransform SideScrollingShooter::Stage5Module::TayamaDragonHeadTransfo
  * @brief 自機周囲に展開するTAYAMA龍の反射ファンネル座標を取得する
  * @param shooter 状態を参照するゲーム本体
  * @param index 0以上TayamaReflectFunnelCount未満の番号
+ * @param age ファンネル生成後の経過フレーム数
  * @param railWeight 横視点からレール視点への補間率
  * @return 反射ファンネルのワールド座標
  */
 Vector3 SideScrollingShooter::Stage5Module::TayamaReflectFunnelTarget(
-    const SideScrollingShooter& shooter, int index, float railWeight) {
+    const SideScrollingShooter& shooter, int index, int age, float railWeight) {
     constexpr Vector3 Offsets[ShooterStages::Stage5::TayamaReflectFunnelCount] = {
         {-4.0f, 3.0f, -2.0f},
         {4.0f, 3.0f, 2.0f},
         {0.0f, -4.0f, 0.0f}
     };
     Vector3 offset = Offsets[index];
+    const float angle = ShooterStages::Stage5::TayamaReflectFunnelOrbitAngle(age);
+    const float x = offset.x * std::cos(angle) - offset.y * std::sin(angle);
+    offset.y = offset.x * std::sin(angle) + offset.y * std::cos(angle);
+    offset.x = x;
     offset.z *= railWeight;
     return shooter.PlayerWorldPosition() + offset;
 }
@@ -2271,7 +2276,8 @@ void SideScrollingShooter::Stage5Module::TickTayamaDragon(
         if (!funnel.active) continue;
         ++funnel.age;
         if (funnel.spinFrames > 0) --funnel.spinFrames;
-        const Vector3 target = TayamaReflectFunnelTarget(shooter, index, railWeight);
+        const Vector3 target = TayamaReflectFunnelTarget(
+            shooter, index, funnel.age, railWeight);
         funnel.x += (FromWorldX(target.x) - funnel.x) * 0.08f;
         funnel.y += (FromWorldY(target.y) - funnel.y) * 0.08f;
         funnel.z += (target.z - funnel.z) * 0.08f;
@@ -2422,21 +2428,24 @@ void SideScrollingShooter::Stage5Module::TickTayamaDragon(
         }
     }
 
-    // 胴体の異なる節から自機周辺へ三方向弾を順番に撃つ
-    if (attack == ShooterStages::Stage5::TayamaDragonAttack::BodyBarrage && attackTimer %
-        ShooterStages::Stage5::TayamaDragonBarrageIntervalFrames ==
-            ShooterStages::Stage5::TayamaDragonBarrageFireFrame) {
-        constexpr int Sources[] = {4, 10, 16, 22};
+    // 胴体の4節から自機周辺へ25発ずつ順番に撃つ
+    const int barrageShot = ShooterStages::Stage5::TayamaDragonBarrageShotIndex(attackTimer);
+    if (attack == ShooterStages::Stage5::TayamaDragonAttack::BodyBarrage &&
+        barrageShot >= 0) {
+        constexpr std::array<int, ShooterStages::Stage5::TayamaDragonBarrageSourceCount>
+            Sources {4, 10, 16, 22};
         const int volley = shooter.m_stage5.attackTimer /
             ShooterStages::Stage5::TayamaDragonBarrageIntervalFrames;
         const Vector3 sourceWorld = TayamaDragonSegmentPosition(shooter,
             Sources[volley % static_cast<int>(std::size(Sources))], railWeight);
-        for (int lane = -1; lane <= 1; ++lane) {
-            SpawnEnemyShotAt(shooter, FromWorldX(sourceWorld.x), FromWorldY(sourceWorld.y),
-                sourceWorld.z, FromWorldX(player.x) + static_cast<float>(lane) * 0.16f,
-                FromWorldY(player.y) + static_cast<float>(lane) * 0.07f,
-                player.z, 0.68f);
-        }
+        constexpr int HalfShotCount =
+            ShooterStages::Stage5::TayamaDragonBarrageShotsPerSource / 2;
+        const float offset = static_cast<float>(barrageShot - HalfShotCount) /
+            static_cast<float>(HalfShotCount);
+        SpawnEnemyShotAt(shooter, FromWorldX(sourceWorld.x), FromWorldY(sourceWorld.y),
+            sourceWorld.z, FromWorldX(player.x) + offset * 0.16f,
+            FromWorldY(player.y) + offset * 0.07f,
+            player.z, 0.68f);
         shooter.PlayEnemyShotSound();
     }
 
@@ -2595,16 +2604,7 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
         }
         return;
     }
-    if (shooter.m_stage5.phase == Stage5Phase::EastsourceBattle) {
-        const Enemy& eastsource = shooter.m_enemies[0];
-        const int phase = eastsource.bossPhase;
-        const int pursuitCycle = eastsource.age % 180;
-        if ((phase == BossNormalPhase2 || phase == BossSpecialPhase2) && pursuitCycle < 90) {
-            TickSearchlights(shooter, 1, false);
-        }
-        if (pursuitCycle == 90) ResetWallSearchlights(shooter, 1);
-        return;
-    }
+    if (shooter.m_stage5.phase == Stage5Phase::EastsourceBattle) return;
     if (shooter.m_stage5.phase == Stage5Phase::EastsourceFall) {
         if (shooter.m_stage5.phaseTimer >= ShooterStages::Stage5::EastsourceFallFrames) {
             shooter.m_enemies[0].active = false;

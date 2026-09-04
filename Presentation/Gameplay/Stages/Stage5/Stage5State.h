@@ -194,12 +194,26 @@ inline constexpr int CloudSeaFadeFrames = 90;
 inline constexpr int CloudSeaAssemblyFrames = 240;
 inline constexpr int RooftopStormCloudCount = 192;
 inline constexpr int TayamaDragonMaxHp = 4000;
-inline constexpr int TayamaDragonSegmentCount = 26;
+inline constexpr int TayamaDragonSegmentCount = 40;
 inline constexpr float TayamaDragonShotFarZ = 108.0f;
 inline constexpr int TayamaDragonBarrageIntervalFrames = 90;
 inline constexpr int TayamaDragonBarrageFireFrame = 45;
 inline constexpr int TayamaDragonBarrageChargeFrames = 30;
 inline constexpr int TayamaDragonBarrageRecoveryFrames = 15;
+inline constexpr int TayamaDragonBarrageSourceCount = 4;
+inline constexpr int TayamaDragonBarrageShotsPerSource = 25;
+
+/**
+ * @brief 胴体弾幕の現在フレームに発射する弾番号を取得する
+ * @param attackTimer 胴体弾幕開始後の経過フレーム数
+ * @return 0以上24以下の弾番号、発射しないフレームは-1
+ */
+constexpr int TayamaDragonBarrageShotIndex(int attackTimer) {
+    const int frame = attackTimer % TayamaDragonBarrageIntervalFrames;
+    return frame >= TayamaDragonBarrageFireFrame &&
+        frame < TayamaDragonBarrageFireFrame + TayamaDragonBarrageShotsPerSource ?
+        frame - TayamaDragonBarrageFireFrame : -1;
+}
 inline constexpr int TayamaDragonSweepCycleFrames = 300;
 inline constexpr int TayamaDragonSweepWarningFrames = 45;
 inline constexpr int TayamaDragonSweepActiveFrames = 105;
@@ -214,7 +228,7 @@ inline constexpr float TayamaDragonRushSideDistance = 1.35f;
 inline constexpr float TayamaDragonRushRailDistance = 48.0f;
 inline constexpr int TayamaDragonOrbitStartFrame = 330;
 inline constexpr int TayamaDragonOrbitFrames = 120;
-inline constexpr float TayamaDragonOrbitRadius = 7.0f;
+inline constexpr float TayamaDragonOrbitRadius = 10.5f;
 inline constexpr float TayamaDragonOrbitSegmentAngle = 0.16f;
 inline constexpr int TayamaDragonOrbitShotIntervalFrames = 12;
 inline constexpr int TayamaDragonOrbitMoveFrames = 30;
@@ -262,8 +276,20 @@ inline constexpr int TayamaReflectFunnelCount = 3;
 inline constexpr int TayamaReflectFunnelLaunchIntervalFrames = 5 * 60;
 inline constexpr int TayamaReflectFunnelLaunchFrames = 60;
 inline constexpr int TayamaReflectFunnelShotIntervalFrames = 5 * 60;
+inline constexpr int TayamaReflectFunnelOrbitFrames = 10 * 60;
 inline constexpr int TayamaReflectFunnelHp = 30;
 inline constexpr float TayamaReflectShotSpeed = 0.11f;
+
+/**
+ * @brief TAYAMA龍第2形態の反射ファンネル旋回角度を取得する
+ * @param age ファンネル生成後の経過フレーム数
+ * @return 配置完了位置を0とする時計回りの角度
+ */
+constexpr float TayamaReflectFunnelOrbitAngle(int age) {
+    return age < TayamaReflectFunnelLaunchFrames ? 0.0f :
+        -static_cast<float>(age - TayamaReflectFunnelLaunchFrames) /
+            static_cast<float>(TayamaReflectFunnelOrbitFrames) * Math::TwoPi;
+}
 
 /** @brief TAYAMA龍第2形態の排他的な攻撃 */
 enum class TayamaDragonAttack {
@@ -305,7 +331,9 @@ constexpr int TayamaDragonAttackDuration(TayamaDragonAttack attack) {
     if (attack == TayamaDragonAttack::HeadLaser) {
         return TayamaHeadLaserWarningFrames + TayamaHeadLaserActiveFrames;
     }
-    if (attack == TayamaDragonAttack::BodyBarrage) return TayamaDragonBarrageIntervalFrames;
+    if (attack == TayamaDragonAttack::BodyBarrage) {
+        return TayamaDragonBarrageIntervalFrames * TayamaDragonBarrageSourceCount;
+    }
     if (attack == TayamaDragonAttack::BodySweep) return TayamaDragonSweepWarningFrames +
         TayamaDragonSweepActiveFrames + TayamaDragonSweepRecoveryFrames;
     if (attack == TayamaDragonAttack::Rush) return TayamaDragonRushWarningFrames +

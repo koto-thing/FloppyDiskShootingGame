@@ -419,7 +419,7 @@ private:
     static Vector3 TayamaDragonSegmentPosition(const SideScrollingShooter& shooter,
         int index, float railWeight);
     static Vector3 TayamaReflectFunnelTarget(const SideScrollingShooter& shooter,
-        int index, float railWeight);
+        int index, int age, float railWeight);
     static float TayamaDragonSegmentRadius(int index, float railWeight);
     static Stage5ModelTransform TayamaDragonHeadTransform(
         const SideScrollingShooter& shooter, float railWeight);
