@@ -101,6 +101,29 @@ inline constexpr int EastsourceWingHp = 240;
 inline constexpr int EastsourceEngineHp = 210;
 inline constexpr int EastsourceIntroFrames = 210;
 inline constexpr int EastsourceFallFrames = 180;
+inline constexpr int EastsourceNoseAttackCycleFrames = 72;
+inline constexpr int EastsourceDamagedNoseAttackCycleFrames = 96;
+inline constexpr int EastsourceNoseWarningFrames = 24;
+inline constexpr int EastsourceDamagedNoseWarningFrames = 36;
+inline constexpr int EastsourceNoseShotCount = 7;
+inline constexpr int EastsourceDamagedNoseShotCount = 3;
+inline constexpr int EastsourceNoseShotIntervalFrames = 5;
+inline constexpr int EastsourceWingBarrageCycleFrames = 60;
+inline constexpr int EastsourcePursuitCycleFrames = 120;
+inline constexpr int EastsourcePursuitRetreatFrames = 48;
+inline constexpr int EastsourcePursuitWarningEndFrame = 66;
+inline constexpr int EastsourcePursuitPoweredPassFrames = 24;
+inline constexpr int EastsourcePursuitDamagedPassFrames = 34;
+inline constexpr int EastsourcePursuitAimFrame = 52;
+inline constexpr int EastsourcePursuitShotStartFrame = 72;
+inline constexpr int EastsourcePursuitShotEndFrame = 96;
+static_assert(EastsourceNoseWarningFrames +
+    (EastsourceNoseShotCount - 1) * EastsourceNoseShotIntervalFrames <
+    EastsourceNoseAttackCycleFrames);
+static_assert(EastsourcePursuitWarningEndFrame +
+    EastsourcePursuitDamagedPassFrames < EastsourcePursuitCycleFrames);
+static_assert(EastsourcePursuitAimFrame < EastsourcePursuitShotStartFrame &&
+    EastsourcePursuitShotStartFrame < EastsourcePursuitShotEndFrame);
 inline constexpr int WallClimbTransitionFrames = 660;
 inline constexpr int WallClimbFadeFrames = 60;
 inline constexpr int WallClimbApproachFrames = 210;

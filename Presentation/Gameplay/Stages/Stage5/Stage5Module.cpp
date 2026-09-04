@@ -964,34 +964,43 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
     const bool nose = eastsource.bossPartHp[BossNose] > 0;
     const int phase = eastsource.bossPhase;
     if (phase == BossNormalPhase2 || phase == BossSpecialPhase2) {
-        const int pursuitCycle = eastsource.age % 180;
-        const bool fromLeft = (eastsource.age / 180) % 2 == 0;
+        const int pursuitCycle = eastsource.age %
+            ShooterStages::Stage5::EastsourcePursuitCycleFrames;
+        const bool fromLeft = (eastsource.age /
+            ShooterStages::Stage5::EastsourcePursuitCycleFrames) % 2 == 0;
         const BossPart wingPart = fromLeft ? BossLeftWing : BossRightWing;
         const BossPart enginePart = fromLeft ? BossLeftEngine : BossRightEngine;
         const bool wing = eastsource.bossPartHp[wingPart] > 0;
         const bool engine = eastsource.bossPartHp[enginePart] > 0;
         const float side = fromLeft ? -1.0f : 1.0f;
-        const int passEnd = 112 + (engine ? 36 : 52);
+        const int passEnd = ShooterStages::Stage5::EastsourcePursuitWarningEndFrame +
+            (engine ? ShooterStages::Stage5::EastsourcePursuitPoweredPassFrames :
+                ShooterStages::Stage5::EastsourcePursuitDamagedPassFrames);
 
         // 索敵中は遠ざかり、予告後だけ画面外から固定方向へ高速再進入する
         if (!wing) {
             eastsource.collisionEnabled = true;
-        } else if (pursuitCycle < 82) {
+        } else if (pursuitCycle < ShooterStages::Stage5::EastsourcePursuitRetreatFrames) {
             eastsource.z = Math::Lerp(43.0f, 59.0f,
-                SmoothStep(static_cast<float>(pursuitCycle) / 82.0f));
-        } else if (pursuitCycle < 112) {
+                SmoothStep(static_cast<float>(pursuitCycle) /
+                    ShooterStages::Stage5::EastsourcePursuitRetreatFrames));
+        } else if (pursuitCycle < ShooterStages::Stage5::EastsourcePursuitWarningEndFrame) {
             eastsource.x = side * 1.48f;
             eastsource.z = 59.0f;
             eastsource.collisionEnabled = false;
         } else if (pursuitCycle < passEnd) {
-            const float pass = SmoothStep(static_cast<float>(pursuitCycle - 112) / (engine ? 36.0f : 52.0f));
+            const float pass = SmoothStep(static_cast<float>(pursuitCycle -
+                ShooterStages::Stage5::EastsourcePursuitWarningEndFrame) /
+                static_cast<float>(engine ?
+                    ShooterStages::Stage5::EastsourcePursuitPoweredPassFrames :
+                    ShooterStages::Stage5::EastsourcePursuitDamagedPassFrames));
             eastsource.x = Math::Lerp(side * 1.48f, -side * 1.48f, pass);
             eastsource.y = eastsource.attackWarningTargetY;
             eastsource.z = Math::Lerp(31.0f, 19.0f, std::sin(pass * Math::Pi));
             eastsource.collisionEnabled = false;
         } else {
             const float settle = SmoothStep(static_cast<float>(pursuitCycle - passEnd) /
-                static_cast<float>(180 - passEnd));
+                static_cast<float>(ShooterStages::Stage5::EastsourcePursuitCycleFrames - passEnd));
             eastsource.x = Math::Lerp(-side * 1.48f, 0.0f, settle);
             eastsource.z = Math::Lerp(28.0f, 43.0f, settle);
             eastsource.collisionEnabled = settle > 0.55f;
@@ -1000,9 +1009,13 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
         eastsource.collisionEnabled = true;
     }
     if (phase == BossNormalPhase1 || phase == BossSpecialPhase2) {
-        const int cycleLength = nose ? 118 : 148;
+        const int cycleLength = nose ?
+            ShooterStages::Stage5::EastsourceNoseAttackCycleFrames :
+            ShooterStages::Stage5::EastsourceDamagedNoseAttackCycleFrames;
         const int cycle = eastsource.age % cycleLength;
-        const int warningFrames = nose ? 34 : 54;
+        const int warningFrames = nose ?
+            ShooterStages::Stage5::EastsourceNoseWarningFrames :
+            ShooterStages::Stage5::EastsourceDamagedNoseWarningFrames;
         if (cycle == 0) {
             const float error = nose ? 0.0f : std::sin(static_cast<float>(eastsource.age) * 0.37f) * 0.24f;
             eastsource.attackWarningTargetX = shooter.m_playerX + error;
@@ -1010,9 +1023,11 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
             eastsource.attackWarningFrames = warningFrames;
             PlayCue(shooter, ShooterStages::Stage5::BarrageWarning);
         }
-        const int shotCount = nose ? 3 : 1;
+        const int shotCount = nose ? ShooterStages::Stage5::EastsourceNoseShotCount :
+            ShooterStages::Stage5::EastsourceDamagedNoseShotCount;
         for (int shotIndex = 0; shotIndex < shotCount; ++shotIndex) {
-            if (cycle == warningFrames + shotIndex * 10) {
+            if (cycle == warningFrames + shotIndex *
+                ShooterStages::Stage5::EastsourceNoseShotIntervalFrames) {
                 SpawnEnemyShotAt(shooter, eastsource.x, eastsource.y, eastsource.z,
                     eastsource.attackWarningTargetX, eastsource.attackWarningTargetY,
                     PlayerRailZ, 0.72f);
@@ -1022,37 +1037,41 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
     }
 
     if (phase == BossSpecialPhase1 || phase == BossSpecialPhase2) {
-        const int cycle = eastsource.age % 96;
-        if (cycle == 22 && eastsource.bossPartHp[BossLeftWing] > 0) {
-            for (int lane = -2; lane <= 2; ++lane) {
+        const int cycle = eastsource.age %
+            ShooterStages::Stage5::EastsourceWingBarrageCycleFrames;
+        if (cycle == 14 && eastsource.bossPartHp[BossLeftWing] > 0) {
+            for (int lane = -4; lane <= 4; ++lane) {
                 if (lane == 0) continue;
                 SpawnEnemyShotAt(shooter, eastsource.x - 0.42f, eastsource.y + 0.12f, eastsource.z,
-                    shooter.m_playerX + 0.25f, static_cast<float>(lane) * 0.25f, PlayerRailZ, 0.64f);
+                    shooter.m_playerX + 0.25f, static_cast<float>(lane) * 0.16f, PlayerRailZ, 0.68f);
             }
             shooter.PlayEnemyShotSound();
         }
-        if (cycle == 48 && eastsource.bossPartHp[BossRightWing] > 0) {
-            for (int lane = -2; lane <= 2; ++lane) {
+        if (cycle == 34 && eastsource.bossPartHp[BossRightWing] > 0) {
+            for (int lane = -4; lane <= 4; ++lane) {
                 if (lane == 0) continue;
                 SpawnEnemyShotAt(shooter, eastsource.x + 0.42f, eastsource.y - 0.12f, eastsource.z,
-                    shooter.m_playerX - 0.25f, static_cast<float>(lane) * 0.25f, PlayerRailZ, 0.64f);
+                    shooter.m_playerX - 0.25f, static_cast<float>(lane) * 0.16f, PlayerRailZ, 0.68f);
             }
             shooter.PlayEnemyShotSound();
         }
     }
 
     if (phase == BossNormalPhase2 || phase == BossSpecialPhase2) {
-        const int cycle = eastsource.age % 180;
-        if (cycle == 92) {
+        const int cycle = eastsource.age %
+            ShooterStages::Stage5::EastsourcePursuitCycleFrames;
+        if (cycle == ShooterStages::Stage5::EastsourcePursuitAimFrame) {
             eastsource.attackWarningTargetX = shooter.m_playerX;
             eastsource.attackWarningTargetY = shooter.m_playerY;
             eastsource.attackWarningFrames = 30;
         }
-        if (cycle >= 120 && cycle < 138) {
-            const bool fromLeft = (eastsource.age / 180) % 2 == 0;
+        if (cycle >= ShooterStages::Stage5::EastsourcePursuitShotStartFrame &&
+            cycle < ShooterStages::Stage5::EastsourcePursuitShotEndFrame) {
+            const bool fromLeft = (eastsource.age /
+                ShooterStages::Stage5::EastsourcePursuitCycleFrames) % 2 == 0;
             const bool wing = eastsource.bossPartHp[fromLeft ? BossLeftWing : BossRightWing] > 0;
             const bool engine = eastsource.bossPartHp[fromLeft ? BossLeftEngine : BossRightEngine] > 0;
-            if (wing && cycle % (engine ? 4 : 7) == 0) {
+            if (wing && cycle % (engine ? 3 : 5) == 0) {
                 const float sourceX = fromLeft ? -1.25f : 1.25f;
                 SpawnEnemyShotAt(shooter, sourceX, eastsource.attackWarningTargetY, 18.0f,
                     eastsource.attackWarningTargetX, eastsource.attackWarningTargetY,

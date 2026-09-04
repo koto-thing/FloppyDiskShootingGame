@@ -8,10 +8,16 @@
 class SideScrollingShooter::Stage5EnemySheet {
 public:
     using EnemySpawnRule = SideScrollingShooter::Stage::EnemySpawnRule;
+    static constexpr int BasicEnemy = SideScrollingShooter::Stage::BasicEnemy;
     static constexpr int HeavyEnemy = SideScrollingShooter::Stage::HeavyEnemy;
     static constexpr int StraightShooterEnemy = SideScrollingShooter::Stage::StraightShooterEnemy;
     static constexpr int ArmoredEnemy = SideScrollingShooter::Stage::ArmoredEnemy;
     static constexpr int CircleShooterEnemy = SideScrollingShooter::Stage::CircleShooterEnemy;
+    static constexpr int SquareShooterEnemy = SideScrollingShooter::Stage::SquareShooterEnemy;
+    static constexpr int DiveRusherEnemy = SideScrollingShooter::Stage::DiveRusherEnemy;
+    static constexpr int MissileShooterEnemy = SideScrollingShooter::Stage::MissileShooterEnemy;
+    static constexpr int LinkedLaserEnemy = SideScrollingShooter::Stage::LinkedLaserEnemy;
+    static constexpr int WallSecurityDroneEnemy = SideScrollingShooter::Stage::WallSecurityDroneEnemy;
 
     struct Chapter {
         const EnemySpawnRule* spawnRules = nullptr;
