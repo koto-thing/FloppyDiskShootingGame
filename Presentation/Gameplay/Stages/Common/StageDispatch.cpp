@@ -257,6 +257,7 @@ void SideScrollingShooter::StageDispatch::TickSpecialShotBeforeMove(
         break;
     case 4:
         Stage4Module::TickSpecialShotBeforeMove(shooter, shot);
+    case 5:
     case 3:
         Stage3Module::TickSpecialShotBeforeMove(shooter, shot);
         break;
@@ -285,6 +286,7 @@ bool SideScrollingShooter::StageDispatch::IsShotCullProtected(
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::IsShotCullProtected(shot);
     case 4: return Stage4Module::IsShotCullProtected(shot);
+    case 5:
     case 3: return Stage3Module::IsShotCullProtected(shot);
     default: return false;
     }
@@ -295,6 +297,7 @@ float SideScrollingShooter::StageDispatch::EnemyShotHitRadius(
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::EnemyShotHitRadius(shot, shooter.IsRailGameplayActive());
     case 4: return Stage4Module::EnemyShotHitRadius(shot, shooter.IsRailGameplayActive());
+    case 5:
     case 3: return Stage3Module::EnemyShotHitRadius(shot, shooter.IsRailGameplayActive());
     default: return shooter.IsRailGameplayActive() ? 0.28f : 0.022f;
     }
@@ -531,6 +534,8 @@ bool SideScrollingShooter::StageDispatch::DrawSpecialShot(
         return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
     case 3:
         if (Stage3Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw)) return true;
+        return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
+    case 5:
         return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
     default: return false;
     }

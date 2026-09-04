@@ -337,9 +337,9 @@ void SideScrollingShooter::TickLinkedEnemyLasers() {
 }
 
 void SideScrollingShooter::TickShots() {
-    // Stage3とStage4の遅延点火ミサイルは画面外到達または命中時に爆発へ変換する
+    // Stage3以降の遅延点火ミサイルは画面外到達または命中時に爆発へ変換する
     auto DeactivateShot = [this](Shot& shot) {
-        if ((m_stageNumber == 3 || m_stageNumber == 4) && shot.enemy &&
+        if ((m_stageNumber == 3 || m_stageNumber == 4 || m_stageNumber == 5) && shot.enemy &&
             shot.stage2.kind == ShooterStages::Stage2::ShotKind::Funnel &&
             shot.stage2.delayedEngine) {
             SpawnExplosion(shot.x, shot.y, shot.z);
