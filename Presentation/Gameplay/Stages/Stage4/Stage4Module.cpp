@@ -568,11 +568,25 @@ void SideScrollingShooter::Stage4Module::PlayDefeatVoice(
     SideScrollingShooter& shooter) {
     if (!shooter.m_audio) return;
 
-    // 二種類のBOTAMOCHI撃破音声を一度だけPCMへ復号してランダムに選ぶ
-    static const auto botaVoice =
-        VoiceCodec::DecodeForAudioService(VoiceSamples::botamochiDeathBota);
-    static const auto mochiVoice =
-        VoiceCodec::DecodeForAudioService(VoiceSamples::botamochiDeathMochi);
+    // 二種類のBOTAMOCHI音声を一度だけ復号し1.8倍に増幅して保持する
+    static const auto botaVoice = [] {
+        auto pcm = VoiceCodec::DecodeForAudioService(VoiceSamples::botamochiDeathBota);
+        for (auto& s : pcm) {
+            const int32_t amplified = static_cast<int32_t>(s * 1.8f);
+            s = static_cast<int16_t>(std::clamp(amplified, -32760, 32760));
+        }
+        return pcm;
+    }();
+    static const auto mochiVoice = [] {
+        auto pcm = VoiceCodec::DecodeForAudioService(VoiceSamples::botamochiDeathMochi);
+        for (auto& s : pcm) {
+            const int32_t amplified = static_cast<int32_t>(s * 1.8f);
+            s = static_cast<int16_t>(std::clamp(amplified, -32760, 32760));
+        }
+        return pcm;
+    }();
+
+    // ランダムに選んだ音声を再生する
     shooter.m_audio->PlaySE(GameplayRandom::Range(0.0f, 1.0f) < 0.5f ?
         botaVoice : mochiVoice);
 }
