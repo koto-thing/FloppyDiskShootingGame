@@ -170,7 +170,7 @@ public:
     }
 
     int BossMaxHp() const override {
-        return 3000;
+        return 2100;
     }
 
     /** @brief Stage 4ボスの砲部位HPを設定する @param boss 設定するボス @return なし */
@@ -200,7 +200,7 @@ public:
      * @return 本体へ与えるダメージ
      */
     int BossPartBreakDamage(BossPart part) const override {
-        return part == BossNose || part == BossLeftWing || part == BossRightWing ? 200 : 70;
+        return part == BossNose || part == BossLeftWing || part == BossRightWing ? 300 : 100;
     }
 
     /**
@@ -212,7 +212,10 @@ public:
     void TickBoss(SideScrollingShooter& shooter, Enemy& boss) const override {
         constexpr float TurretTrackingRate = 0.06f;
 
-        // 交換中は戦車を基準位置へ止めて攻撃用の移動処理を行わない
+        // 副砲は主砲交換中も独立した周期で攻撃を継続する
+        Stage4Module::TickSecondaryGunAttacks(shooter, boss);
+
+        // 交換中は戦車を基準位置へ止めて主砲用の移動処理を行わない
         if (Stage4Module::TickWeaponSwap(shooter, boss)) {
             boss.motionAge = 0;
             boss.phase = 0.0f;
@@ -334,12 +337,22 @@ public:
         return (railMode ? RailPattern : SidePattern)[index % 7];
     }
 
+    /**
+     * @brief Stage 4ボスが突進開始フレームを含む突進動作中か取得する
+     * @param boss 判定するボス
+     * @return 突進動作中の場合true
+     */
+    static constexpr bool IsRushAttackActive(const Enemy& boss) {
+        return IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) &&
+            (boss.phase > 0.0f || boss.age % RushIntervalFrames == 0);
+    }
+
 private:
-    static constexpr int Phase1MainCannonHp = 1000;
-    static constexpr int SiegeMortarHp = 1000;
-    static constexpr int RomanceCannonHp = 1000;
-    static constexpr int SecondaryGunHp = 500;
-    inline static constexpr int RushIntervalFrames = 700;
+    static constexpr int Phase1MainCannonHp = 500;
+    static constexpr int SiegeMortarHp = 500;
+    static constexpr int RomanceCannonHp = 600;
+    static constexpr int SecondaryGunHp = 200;
+    inline static constexpr int RushIntervalFrames = 1000;
     inline static constexpr int RushWindupFrames = 42;
     inline static constexpr int RushChargeFrames = 61;
     inline static constexpr int RushWaitFrames = 48;

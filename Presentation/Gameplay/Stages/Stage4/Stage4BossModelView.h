@@ -17,6 +17,8 @@ struct Stage4BossModelState {
     bool frontRam = true;
     bool mainCannonHit = false;
     bool secondaryGunsHit[6] = {};
+    bool secondaryGunTracksTarget[6] = {};
+    Vector3 secondaryGunAimTargets[6] = {};
 };
 
 /** @brief Stage4ボスへ装着または単体運搬する主砲の種類 */
@@ -941,12 +943,14 @@ private:
             const float* color = state.secondaryGunsHit[gun] ? Hit : MainBlack;
             Part(transform, drawPart, PrimitiveShape::Cylinder, position, {0.78f, 0.38f, 0.78f}, color);
             const Vector3 pivot {position.x, position.y + 0.28f, position.z};
-            GunPart(transform, drawPart, transform.secondaryGunsTrackTarget,
-                transform.secondaryAimTarget, pivot,
+            const bool tracksTarget = state.secondaryGunTracksTarget[gun] ||
+                transform.secondaryGunsTrackTarget;
+            const Vector3 aimTarget = state.secondaryGunTracksTarget[gun] ?
+                state.secondaryGunAimTargets[gun] : transform.secondaryAimTarget;
+            GunPart(transform, drawPart, tracksTarget, aimTarget, pivot,
                 PrimitiveShape::Box, 0.18f, {0.88f, 0.42f, 0.68f},
                 state.secondaryGunsHit[gun] ? Hit : ArmorBlack);
-            GunPart(transform, drawPart, transform.secondaryGunsTrackTarget,
-                transform.secondaryAimTarget, pivot,
+            GunPart(transform, drawPart, tracksTarget, aimTarget, pivot,
                 PrimitiveShape::Cylinder, 0.92f, {1.25f, 0.24f, 0.24f},
                 state.secondaryGunsHit[gun] ? Hit : HighlightBlack);
         }

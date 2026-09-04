@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 #include "../../../../Engine/Graphics/Renderer.h"
 #include "../../../../Engine/Input/Input.h"
@@ -61,6 +62,16 @@ constexpr Vector3 Stage4SecondaryGunLocal[] = {
 };
 constexpr float Stage4MainCannonHitRadius = 1.45f;
 constexpr float Stage4SecondaryGunHitRadius = 0.82f;
+constexpr float Stage4SecondaryShotSpeed = 0.19f;
+constexpr float Stage4SecondaryMissileLaunchVelocity = 0.09f;
+constexpr int Stage4AimedBurstCount = 5;
+constexpr int Stage4SpreadShotCount = 8;
+constexpr int Stage4SpreadAttackInterval = 240;
+constexpr int Stage4SpreadAttackStartFrame = 40;
+constexpr int Stage4SpreadShotInterval = 5;
+constexpr int Stage4AimedAttackInterval = 180;
+constexpr int Stage4AimedAttackStartFrame = 100;
+constexpr int Stage4AimedShotInterval = 6;
 constexpr int Stage4WeaponSwapReturnFrames = 42;
 constexpr int Stage4BossDefeatSequenceFrames = 360;
 constexpr int Stage4BossDefeatChargeStartFrame = 72;
@@ -137,6 +148,14 @@ Stage4MainWeaponPose WeaponPose(const Stage4Logic& state, Stage4Weapon weapon, b
     return pose;
 }
 
+/** @brief Stage3機銃と同じ決定的な散射量を取得する @param seed 散射Seed @return -1から1の散射量 */
+constexpr float SecondaryGunSpread(std::uint32_t seed) {
+    seed ^= seed >> 16;
+    seed *= 0x7FEB352Du;
+    seed ^= seed >> 15;
+    return static_cast<float>(seed & 1023u) / 511.5f - 1.0f;
+}
+
 /** @brief 迫撃砲の姿勢から発射速度を作る @param baseYaw 車体基準Yaw @param yawOffset 主砲左右角 @param pitch 主砲仰角 @param speed 発射速度 @return ワールド弾速 */
 Vector3 SiegeMortarVelocity(float baseYaw, float yawOffset, float pitch, float speed) {
     const float horizontalSpeed = speed * std::cos(pitch);
@@ -201,6 +220,12 @@ float SwapProgress(const Stage4Logic& state, const Stage4SwapConfig& config) {
 
 static_assert(sizeof(Stage4SecondaryGunLocal) / sizeof(Stage4SecondaryGunLocal[0]) == 6);
 static_assert(sizeof(Stage4BodyHitLocal) / sizeof(Stage4BodyHitLocal[0]) == 12);
+static_assert(Stage4AimedBurstCount == 5);
+static_assert(Stage4SpreadAttackStartFrame +
+    (Stage4SpreadShotCount - 1) * Stage4SpreadShotInterval < Stage4SpreadAttackInterval);
+static_assert(Stage4AimedAttackStartFrame +
+    (Stage4AimedBurstCount - 1) * Stage4AimedShotInterval < Stage4AimedAttackInterval);
+static_assert(SecondaryGunSpread(1u) >= -1.0f && SecondaryGunSpread(1u) <= 1.0f);
 
 }
 
@@ -550,6 +575,17 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
         state.secondaryGuns[i] = enemy.bossPartHp[part] > 0;
         state.secondaryGunsHit[i] = enemy.bossPartHitFlashFrames[part] > 0 &&
             (enemy.bossPartHitFlashFrames[part] / 2) % 2 != 0;
+        state.secondaryGunTracksTarget[i] = true;
+        if (i >= 4) {
+            const Vector3 mount = LocalToWorld(shooter, enemy, Stage4SecondaryGunLocal[i]);
+            state.secondaryGunAimTargets[i] = mount + Vector3 {0.0f, 8.0f, 0.0f};
+        } else if (i >= 2) {
+            const float sweep = std::sin(static_cast<float>(enemy.age) * 0.035f +
+                static_cast<float>(i) * Math::Pi) * 3.2f;
+            state.secondaryGunAimTargets[i] = aimTarget + Vector3 {0.0f, sweep, 0.0f};
+        } else {
+            state.secondaryGunAimTargets[i] = aimTarget;
+        }
     }
     const bool phase1MainCannonActive = swap.currentWeapon == Stage4Weapon::Phase1Cannon &&
         (swap.swapState == Stage4SwapState::None ||
@@ -749,9 +785,9 @@ bool SideScrollingShooter::Stage4Module::TryHitBossPart(
     const Enemy& boss, BossPart& part) {
     if (boss.type != 2) return false;
 
-    // 現在装着中の主砲に割り当てた部位枠で判定する
+    // 主砲交換中は主砲へのダメージを無効化し、副砲だけを破壊可能にする
     const BossPart mainCannonPart = MainCannonPart(shooter.m_stage4.currentWeapon);
-    if (boss.bossPartHp[mainCannonPart] > 0) {
+    if (!IsWeaponSwapActive(shooter) && boss.bossPartHp[mainCannonPart] > 0) {
         const Vector3 world = LocalToWorld(shooter, boss, BossPartLocalPosition(mainCannonPart));
         const bool hit = shooter.IsRailGameplayActive() ?
             Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
@@ -787,12 +823,31 @@ bool SideScrollingShooter::Stage4Module::TryHitBossPart(
     return false;
 }
 
+bool SideScrollingShooter::Stage4Module::BlocksPlayerShot(
+    const SideScrollingShooter& shooter, const Shot& shot, const Enemy& boss) {
+    if (!IsWeaponSwapActive(shooter) || boss.type != 2) return false;
+
+    // 副砲判定を通過した弾が交換中の車体へ当たった場合はHPを減らさず遮断する
+    for (const Vector3& local : Stage4BodyHitLocal) {
+        const Vector3 world = LocalToWorld(shooter, boss, local);
+        const bool hit = shooter.IsRailGameplayActive() ?
+            Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
+                shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
+                shot.hitRadius * WorldXScale, world.x, world.y, world.z,
+                Stage4BodyHitRadius) :
+            Hit(shot.x, shot.y, shot.hitRadius,
+                FromWorldX(world.x), FromWorldY(world.y),
+                Stage4BodyHitRadius / WorldXScale);
+        if (hit) return true;
+    }
+    return false;
+}
+
 void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
     SideScrollingShooter& shooter, Enemy& boss) {
     if (boss.type != 2 || IsWeaponSwapActive(shooter)) return;
 
-    // 現在の主砲が生存している場合は主砲弾を発射する
-    bool fired = false;
+    // 主砲周期では現在装着中の主砲だけを発射する
     const BossPart mainCannonPart = MainCannonPart(shooter.m_stage4.currentWeapon);
     if (boss.bossPartHp[mainCannonPart] > 0) {
         SpawnMainCannonball(shooter, boss);
@@ -800,44 +855,116 @@ void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
         boss.recoilAge = Stage4EnemySheet::MainCannonRecoilFramesForWeapon(
             shooter.m_stage4.currentWeapon);
     }
+}
 
-    // 生存中の副砲6基から現在の自機位置へ直接撃つ
+void SideScrollingShooter::Stage4Module::TickSecondaryGunAttacks(
+    SideScrollingShooter& shooter, const Enemy& boss) {
+    if (boss.type != 2) return;
+
+    // 突進開始フレームも含め、突進中はミサイル以外の副砲を停止する
+    const bool rushActive = Stage4EnemySheet::IsRushAttackActive(boss);
+    const int spreadFrame = boss.age % Stage4SpreadAttackInterval;
+    const int aimedFrame = boss.age % Stage4AimedAttackInterval;
+    const int mainAttackInterval = shooter.m_stage->BossAttackInterval(
+        static_cast<BossPhase>(boss.bossPhase));
+    const bool firesMissile = mainAttackInterval > 0 &&
+        boss.age % mainAttackInterval == 0;
+    const bool firesSpread = !rushActive &&
+        spreadFrame >= Stage4SpreadAttackStartFrame &&
+        spreadFrame <= Stage4SpreadAttackStartFrame +
+            (Stage4SpreadShotCount - 1) * Stage4SpreadShotInterval &&
+        (spreadFrame - Stage4SpreadAttackStartFrame) % Stage4SpreadShotInterval == 0;
+    const bool firesAimed = !rushActive &&
+        aimedFrame >= Stage4AimedAttackStartFrame &&
+        aimedFrame <= Stage4AimedAttackStartFrame +
+            (Stage4AimedBurstCount - 1) * Stage4AimedShotInterval &&
+        (aimedFrame - Stage4AimedAttackStartFrame) % Stage4AimedShotInterval == 0;
+    if (!firesMissile && !firesSpread && !firesAimed) return;
+
+    const Vector3 player {
+        ToWorldX(shooter.m_playerX), ToWorldY(shooter.m_playerY),
+        shooter.IsRailGameplayActive() ? PlayerRailZ : SidePlaneZ
+    };
+    auto DirectionTo = [&](const Vector3& source, const Vector3& target) {
+        Vector3 delta = target - source;
+        if (!shooter.IsRailGameplayActive()) delta.z = 0.0f;
+        return delta / (std::max)(0.001f, delta.Length());
+    };
+    auto SpawnBullet = [&](const Vector3& source, const Vector3& direction,
+        float hitRadius, int damage) {
+        for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+            auto& shot = shooter.m_shots[shotIndex];
+            if (shot.active) continue;
+            shot = {};
+            shot.x = FromWorldX(source.x);
+            shot.y = FromWorldY(source.y);
+            shot.z = source.z;
+            shot.transitionSideX = shot.x;
+            shot.transitionSideY = shot.y;
+            shot.vx = FromWorldX(direction.x * Stage4SecondaryShotSpeed);
+            shot.vy = FromWorldY(direction.y * Stage4SecondaryShotSpeed);
+            shot.vz = direction.z * Stage4SecondaryShotSpeed;
+            shot.hitRadius = hitRadius;
+            shot.damage = damage;
+            shot.enemy = true;
+            shot.active = true;
+            return true;
+        }
+        return false;
+    };
+
+    bool fired = false;
     for (int gun = 0; gun < 6; ++gun) {
         const BossPart part = static_cast<BossPart>(BossFunnelHatch0 + gun);
         if (boss.bossPartHp[part] <= 0) continue;
-        const Vector3 world = LocalToWorld(shooter, boss, BossPartLocalPosition(part));
-        const int bulletCount = shooter.m_stage->BossPartBulletCount(
-            part, static_cast<BossPhase>(boss.bossPhase), shooter.IsRailGameplayActive());
-        for (int index = 0; index < bulletCount; ++index) {
-            const float spread = static_cast<float>(index) -
-                static_cast<float>(bulletCount - 1) * 0.5f;
-            const float sourceX = FromWorldX(world.x);
-            const float sourceY = FromWorldY(world.y);
-            const float targetY = shooter.m_playerY + spread * 0.08f;
-            if (shooter.IsRailGameplayActive()) {
-                const float dx = ToWorldX(shooter.m_playerX) - world.x;
-                const float dy = ToWorldY(targetY) - world.y;
-                const float dz = PlayerRailZ - world.z;
-                const float length = (std::max)(
-                    0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
-                const float speed = boss.behavior != nullptr ?
-                    boss.behavior->RailAimedShotSpeed() : 0.62f;
-                shooter.SpawnShotDirect(sourceX, sourceY, world.z,
-                    FromWorldX(dx / length * speed),
-                    FromWorldY(dy / length * speed),
-                    dz / length * speed, true, index, bulletCount);
-            } else {
-                const float dx = shooter.m_playerX - sourceX;
-                const float dy = targetY - sourceY;
-                const float length = (std::max)(
-                    0.001f, std::sqrt(dx * dx + dy * dy));
-                const float speed = boss.behavior != nullptr ?
-                    boss.behavior->AimedShotSpeed() : 0.018f;
-                shooter.SpawnShot(sourceX, sourceY,
-                    dx / length * speed, dy / length * speed, true, world.z,
-                    boss.behavior != nullptr ? boss.behavior->RailAimedShotSpeed() : 0.62f);
+        const Vector3 source = LocalToWorld(shooter, boss, BossPartLocalPosition(part));
+
+        // 中央二基は独立周期の一回につき自機方向へ一発ずつ撃つ
+        if (gun < 2) {
+            if (firesAimed) {
+                fired |= SpawnBullet(source, DirectionTo(source, player), 0.022f, 1);
             }
+            continue;
+        }
+
+        // 手前二基はバースト中に一発ずつStage3と同じ散射式でばらまく
+        if (gun < 4) {
+            if (!firesSpread) continue;
+            const Vector3 aimed = DirectionTo(source, player);
+            const std::uint32_t seed = static_cast<std::uint32_t>(boss.age) * 17u +
+                static_cast<std::uint32_t>(gun) * 131u;
+            Vector3 direction = aimed;
+            direction.x += SecondaryGunSpread(seed) * 0.62f;
+            direction.y += SecondaryGunSpread(seed + 53u) * 0.48f;
+            if (shooter.IsRailGameplayActive()) {
+                direction.z += SecondaryGunSpread(seed + 101u) * 0.10f;
+            }
+            direction = direction / (std::max)(0.001f, direction.Length());
+            fired |= SpawnBullet(source, direction, 0.022f, 1);
+            continue;
+        }
+
+        // 後方二基は主砲と同じ周期でStage3と同じ遅延点火追尾ミサイルを撃つ
+        if (!firesMissile) continue;
+        for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+            auto& shot = shooter.m_shots[shotIndex];
+            if (shot.active) continue;
+            shot = {};
+            shot.x = FromWorldX(source.x);
+            shot.y = FromWorldY(source.y);
+            shot.z = source.z;
+            shot.transitionSideX = shot.x;
+            shot.transitionSideY = shot.y;
+            shot.vy = Stage4SecondaryMissileLaunchVelocity;
+            shot.hitRadius = 0.055f;
+            shot.damage = 2;
+            shot.enemy = true;
+            shot.stage2.kind = ShooterStages::Stage2::ShotKind::Funnel;
+            shot.stage2.delayedEngine = true;
+            shot.active = true;
+            shooter.PlayMissileLaunchSound();
             fired = true;
+            break;
         }
     }
     if (fired) shooter.PlayEnemyShotSound();
@@ -930,12 +1057,17 @@ void SideScrollingShooter::Stage4Module::TickSpecialShotAfterMove(
 }
 
 bool SideScrollingShooter::Stage4Module::IsShotCullProtected(const Shot& shot) {
-    return shot.stage4.kind == ShotKind::Cannonball;
+    return shot.stage4.kind == ShotKind::Cannonball ||
+        (shot.stage2.kind == ShooterStages::Stage2::ShotKind::Funnel &&
+            shot.stage2.delayedEngine);
 }
 
 float SideScrollingShooter::Stage4Module::EnemyShotHitRadius(
     const Shot& shot, bool railMode) {
     if (shot.stage4.kind != ShotKind::Cannonball) {
+        if (shot.stage2.kind == ShooterStages::Stage2::ShotKind::Funnel) {
+            return railMode ? 0.42f : 0.055f;
+        }
         return railMode ? 0.28f : 0.022f;
     }
     return railMode ? shot.hitRadius * WorldXScale : shot.hitRadius;
