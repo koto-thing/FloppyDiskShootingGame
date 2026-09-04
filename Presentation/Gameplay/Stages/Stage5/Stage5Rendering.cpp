@@ -274,13 +274,10 @@ void SideScrollingShooter::Stage5Module::ApplyCameraCorrection(
         return;
     }
 
-    // 第2部道中は自機後方から壁面に沿って上方を見上げる
+    // 第2部道中は自機を画面内に保ちつつ、後方から壁面の進行方向を見る
     if (ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) {
-        const float section = shooter.m_stage5.phase == Stage5Phase::WallClimbLower ? 0.0f :
-            (shooter.m_stage5.phase == Stage5Phase::WallClimbMiddle ? 0.5f : 1.0f);
         railPosition.y += 0.72f;
         railPosition.z -= 6.0f;
-        railTarget.y += Math::Lerp(42.0f, 48.0f, section);
         railTarget.z += 8.0f;
         return;
     }
@@ -1206,6 +1203,9 @@ void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
     const int romanceFrame = shooter.m_stage5.tayamaDragonAttack ==
         ShooterStages::Stage5::TayamaDragonAttack::RomanceCannon ?
         ShooterStages::Stage5::TayamaDragonRomanceCannonFrame(attackTimeline) : -1;
+    const float rushWarning = shooter.m_stage5.tayamaDragonAttack ==
+        ShooterStages::Stage5::TayamaDragonAttack::Rush ?
+        ShooterStages::Stage5::TayamaDragonRushWarningProgress(attackTimeline) : 0.0f;
 
     // ステージ3と同じ反射ファンネルモデルを自機周囲へ描画する
     for (const auto& state : shooter.m_stage5.tayamaReflectFunnels) {
@@ -1349,6 +1349,31 @@ void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
                     static_cast<int>(shape), world,
                     hitFlash ? HitColor : &color.r);
             });
+
+        // 突進前は両目を黄金色に発光させ、進行方向へ攻撃範囲を予告する
+        if (rushWarning > 0.0f) {
+            constexpr float EyeGold[] = {1.0f, 0.72f, 0.08f, 1.0f};
+            const float pulse = 0.82f + 0.18f * std::sin(
+                static_cast<float>(shooter.m_frame) * 0.32f);
+            const float eyeRadius = Math::Lerp(0.16f, 0.52f,
+                rushWarning) * pulse * headTransform.scale;
+            const auto eyes = TayamaModelView::EyeWorldPositions(
+                headTransform, TayamaModelView::DragonHeadScale);
+            for (const Vector3& eye : eyes) {
+                shooter.DrawModelPrimitive(renderer, camera,
+                    static_cast<int>(PrimitiveShape::Sphere), eye,
+                    {eyeRadius, eyeRadius, eyeRadius}, {}, EyeGold);
+            }
+
+            const Vector3 warningStart = (eyes[0] + eyes[1]) * 0.5f;
+            const Vector3 warningOffset = Vector3::Lerp(
+                {-ToWorldX(ShooterStages::Stage5::TayamaDragonRushSideDistance), 0.0f, 0.0f},
+                {0.0f, 0.0f, -ShooterStages::Stage5::TayamaDragonRushRailDistance},
+                Math::Clamp01(railWeight));
+            shooter.DrawRailgunBeamBetween(renderer, camera, warningStart,
+                warningStart + warningOffset, Math::Lerp(0.06f, 0.18f, rushWarning),
+                pulse, 3);
+        }
     }
 
     // 合体後の頭部レーザーを予告線と照射本体で描き分ける

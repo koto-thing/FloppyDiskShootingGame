@@ -40,7 +40,8 @@ enum class Checkpoint {
     WallClimbUpper,
     TayamaFireControl,
     TayamaLiftEngines,
-    TayamaCommandCore
+    TayamaCommandCore,
+    TayamaDragonBattle
 };
 
 /** @brief サーチライトの索敵状態 */
@@ -523,6 +524,18 @@ constexpr bool IsTayamaDragonRushActive(int attackTimer) {
     const int frame = TayamaDragonRushFrame(attackTimer);
     return frame >= TayamaDragonRushWarningFrames &&
         frame < TayamaDragonRushWarningFrames + TayamaDragonRushActiveFrames;
+}
+
+/**
+ * @brief TAYAMA龍突進の予備動作進行率を取得する
+ * @param attackTimer 第2形態開始からの攻撃タイマー
+ * @return 予備動作開始を0、突進直前を1とする進行率、予備動作外は0
+ */
+constexpr float TayamaDragonRushWarningProgress(int attackTimer) {
+    const int frame = TayamaDragonRushFrame(attackTimer);
+    return frame < TayamaDragonRushWarningFrames ?
+        TayamaDragonSmoothProgress(static_cast<float>(frame) /
+            static_cast<float>(TayamaDragonRushWarningFrames - 1)) : 0.0f;
 }
 
 /**

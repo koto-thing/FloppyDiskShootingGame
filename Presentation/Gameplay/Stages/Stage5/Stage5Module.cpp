@@ -212,10 +212,21 @@ void SideScrollingShooter::Stage5Module::ProcessDebugInput(SideScrollingShooter&
     if (Input::GetKeyDown(KeyCode::F6)) StartDebugPhase(shooter, Stage5Phase::WallClimbTransition);
     if (Input::GetKeyDown(KeyCode::F7)) StartDebugPhase(shooter, Stage5Phase::WallClimbMiddle);
     if (Input::GetKeyDown(KeyCode::F8)) StartDebugPhase(shooter, Stage5Phase::CloudSea);
-    if (Input::GetKeyDown(KeyCode::F9)) StartDebugPhase(shooter, Stage5Phase::TayamaFireControl);
     if (Input::GetKeyDown(KeyCode::F10)) StartDebugPhase(shooter, Stage5Phase::TayamaLiftEngines);
     if (Input::GetKeyDown(KeyCode::F11)) StartDebugPhase(shooter, Stage5Phase::TayamaCommandCore);
     if (Input::GetKeyDown(KeyCode::F12)) StartDebugPhase(shooter, Stage5Phase::TayamaCollapse);
+
+    // Mは現在のラスボス形態を撃破状態へ進める
+    if (Input::GetKeyDown(KeyCode::M)) {
+        if (shooter.m_stage5.phase >= Stage5Phase::TayamaFireControl &&
+            shooter.m_stage5.phase <= Stage5Phase::TayamaCommandCore) {
+            shooter.m_stage5.tayamaHp = 0;
+            UpdateTayamaBossHp(shooter);
+        } else if (shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle) {
+            shooter.m_stage5.tayamaHp = 0;
+            StartPhase(shooter, Stage5Phase::TayamaDragonCollapse, false);
+        }
+    }
 #else
     (void)shooter;
 #endif
@@ -877,6 +888,7 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
         shooter.m_stage5.tayamaMaxHp = ShooterStages::Stage5::TayamaDragonMaxHp;
         shooter.m_bossHp = shooter.m_stage5.tayamaHp;
         shooter.m_displayBossHp = static_cast<float>(shooter.m_bossHp);
+        if (saveCheckpoint) SaveCheckpoint(shooter, Stage5Checkpoint::TayamaDragonBattle);
         shooter.m_invincible = (std::max)(shooter.m_invincible, 75);
         PlayCue(shooter, ShooterStages::Stage5::CoreWarning);
         shooter.ShakeScreen(0.12f, 36);
@@ -1614,6 +1626,10 @@ Vector3 SideScrollingShooter::Stage5Module::TayamaDragonSegmentPosition(
     const float wave = static_cast<float>(shooter.m_frame) * 0.025f - segment * 0.42f;
     const int attackTimeline = ShooterStages::Stage5::TayamaDragonAttackTimeline(
         shooter.m_stage5.tayamaDragonAttack, shooter.m_stage5.tayamaDragonAttackTimer);
+    const float rushWarning = shooter.m_stage5.tayamaDragonAttack ==
+        ShooterStages::Stage5::TayamaDragonAttack::Rush ?
+        ShooterStages::Stage5::TayamaDragonRushWarningProgress(attackTimeline) : 0.0f;
+    const float coil = std::sin(lengthRate * Math::Pi) * rushWarning;
     const float sweepProgress = shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle &&
         shooter.m_stage5.tayamaDragonAttack == ShooterStages::Stage5::TayamaDragonAttack::BodySweep ?
         SmoothStep(ShooterStages::Stage5::TayamaDragonSweepProgress(
@@ -1621,13 +1637,13 @@ Vector3 SideScrollingShooter::Stage5Module::TayamaDragonSegmentPosition(
     const float sweepScale = Math::Lerp(1.0f, 1.55f, sweepProgress);
     const Vector3 side {
         ToWorldX(ShooterStages::Stage5::TayamaDragonSideCenterX +
-            lengthRate * 0.14f + std::sin(wave) * 0.17f * sweepScale),
-        ToWorldY(0.08f + std::cos(wave * 0.86f) * 0.72f),
+            lengthRate * 0.14f + std::sin(wave) * 0.17f * sweepScale + coil * 0.08f),
+        ToWorldY(0.08f + std::cos(wave * 0.86f) * 0.72f - coil * 0.10f),
         SidePlaneZ + segment * 0.025f
     };
     const Vector3 rail {
-        std::sin(wave) * 7.0f * sweepScale,
-        8.5f + std::cos(wave * 0.86f) * 5.2f,
+        std::sin(wave) * 7.0f * sweepScale + coil * 6.0f,
+        8.5f + std::cos(wave * 0.86f) * 5.2f - coil * 3.0f,
         47.0f + segment * 2.05f
     };
     const float viewWeight = Math::Clamp01(railWeight);
@@ -1726,9 +1742,9 @@ Stage5ModelTransform SideScrollingShooter::Stage5Module::TayamaDragonHeadTransfo
 Vector3 SideScrollingShooter::Stage5Module::TayamaReflectFunnelTarget(
     const SideScrollingShooter& shooter, int index, int age, float railWeight) {
     constexpr Vector3 Offsets[ShooterStages::Stage5::TayamaReflectFunnelCount] = {
-        {-4.0f, 3.0f, -2.0f},
-        {4.0f, 3.0f, 2.0f},
-        {0.0f, -4.0f, 0.0f}
+        {-6.0f, 4.5f, -3.0f},
+        {6.0f, 4.5f, 3.0f},
+        {0.0f, -6.0f, 0.0f}
     };
     Vector3 offset = Offsets[index];
     const float angle = ShooterStages::Stage5::TayamaReflectFunnelOrbitAngle(age);
@@ -2461,7 +2477,7 @@ void SideScrollingShooter::Stage5Module::TickTayamaDragon(
         const Vector3 source = TayamaDragonSegmentPosition(shooter,
             sourceIndex, railWeight);
         SpawnEnemyShotAt(shooter, FromWorldX(source.x), FromWorldY(source.y),
-            source.z, FromWorldX(player.x), FromWorldY(player.y), player.z, 0.64f);
+            source.z, FromWorldX(player.x), FromWorldY(player.y), player.z, 0.21f);
         shooter.PlayEnemyShotSound();
     }
 
@@ -2701,7 +2717,7 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
     }
     if (shooter.m_stage5.phase == Stage5Phase::CloudSea) {
         if (shooter.m_stage5.phaseTimer >= ShooterStages::Stage5::CloudSeaAssemblyFrames) {
-            StartPhase(shooter, Stage5Phase::TayamaDragonBattle, false);
+            StartPhase(shooter, Stage5Phase::TayamaDragonBattle);
         }
         return;
     }
@@ -2790,6 +2806,7 @@ void SideScrollingShooter::Stage5Module::RestartCheckpoint(SideScrollingShooter&
     shooter.m_debris = {};
     shooter.m_score = shooter.m_stage5.checkpointScore;
     shooter.m_kills = shooter.m_stage5.checkpointKills;
+    shooter.m_power = shooter.m_stage5.checkpointPower;
     shooter.m_chapterResult = {};
     shooter.m_chapterStartScore = shooter.m_score;
     shooter.m_chapterStartKills = shooter.m_kills;
@@ -2816,6 +2833,12 @@ void SideScrollingShooter::Stage5Module::RestartCheckpoint(SideScrollingShooter&
             (shooter.m_stage5.checkpoint == Stage5Checkpoint::WallClimbMiddle ?
                 Stage5Phase::WallClimbMiddle : Stage5Phase::WallClimbUpper);
         StartPhase(shooter, phase, false);
+        return;
+    }
+
+    // 第二形態は龍形態の初期HPと演出状態へ戻す
+    if (shooter.m_stage5.checkpoint == Stage5Checkpoint::TayamaDragonBattle) {
+        StartPhase(shooter, Stage5Phase::TayamaDragonBattle, false);
         return;
     }
 
