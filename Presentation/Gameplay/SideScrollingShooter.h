@@ -761,6 +761,11 @@ private:
      * @return 自機中心のワールド座標
      */
     Vector3 PlayerWorldPosition() const;
+    /**
+     * @brief 現在のステージ進行に対応する自機のレール奥行きを取得する
+     * @return 自機のレール座標Z
+     */
+    float PlayerRailDepth() const;
     bool IsRailGameplayActive() const;
     bool IsRailRenderActive() const;
     /**

@@ -78,16 +78,20 @@ constexpr Vector3 RooftopCloudPosition(int index) {
         ShooterStages::Stage5::TayamaBossScale) +
         TayamaModelView::MechaHead.position.y * ShooterStages::Stage5::TayamaBossScale;
     return {
-        -68.0f + static_cast<float>((index * 47) % 137),
-        TayamaHeadY + 28.0f + static_cast<float>(index % 4) * 1.1f,
+        -204.0f + static_cast<float>((index * 47) % 411),
+        TayamaHeadY + 28.0f +
+            (TayamaModelView::HeadParts[18].position.y +
+                TayamaModelView::HeadParts[18].scale.y * 0.5f) *
+                ShooterStages::Stage5::TayamaBossScale +
+            static_cast<float>(index % 4) * 1.1f,
         -24.0f + static_cast<float>((index * 31) % 149)
     };
 }
 
-static_assert(RooftopCloudPosition(0).x == -68.0f);
+static_assert(RooftopCloudPosition(0).x == -204.0f);
 static_assert(RooftopCloudPosition(1).z != RooftopCloudPosition(0).z);
-static_assert(RooftopCloudPosition(137).x == RooftopCloudPosition(0).x);
-static_assert(RooftopCloudPosition(0).y > 230.0f);
+static_assert(RooftopCloudPosition(411).x == RooftopCloudPosition(0).x);
+static_assert(RooftopCloudPosition(0).y > 250.0f);
 
 /**
  * @brief 雲海がカメラから奥へ進む循環移動量を取得する
@@ -274,11 +278,12 @@ void SideScrollingShooter::Stage5Module::ApplyCameraCorrection(
         return;
     }
 
-    // 第2部道中は自機を画面内に保ちつつ、後方から壁面の進行方向を見る
+    // 第2部道中は自機を画面中央付近に保ちつつ、壁面へ約45度の角度で上空側を見る
     if (ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) {
-        railPosition.y += 0.72f;
-        railPosition.z -= 6.0f;
+        railPosition.y -= 16.5f;
+        railPosition.z -= 9.0f;
         railTarget.z += 8.0f;
+        railTarget.y = railPosition.y + railTarget.z - railPosition.z;
         return;
     }
 
@@ -538,7 +543,7 @@ bool SideScrollingShooter::Stage5Module::DrawSpecialAttackWarning3D(
     constexpr float FlashColor[] = { 1.0f, 0.08f, 0.08f, 1.0f };
     shooter.DrawModelPrimitive(renderer, camera, 1,
         ToWorldX(enemy.attackWarningTargetX), ToWorldY(enemy.attackWarningTargetY),
-        PlayerRailZ + 0.3f, size, size, size, FlashColor);
+        shooter.PlayerRailDepth() + 0.3f, size, size, size, FlashColor);
     return true;
 }
 
@@ -605,7 +610,7 @@ bool SideScrollingShooter::Stage5Module::DrawBossModel(
             WallSecurityDroneModelView::SearchLightOriginLocalPosition(
                 pose.searchLightYaw, pose.searchLightPitch));
         const Vector3 target {ToWorldX(enemy.turretAimX), ToWorldY(enemy.turretAimY),
-            shooter.IsRailGameplayActive() ? PlayerRailZ : SidePlaneZ};
+            shooter.IsRailGameplayActive() ? shooter.PlayerRailDepth() : SidePlaneZ};
         const Vector3 delta = target - source;
         const float length = (std::max)(0.001f, delta.Length());
         const Vector3 direction = delta / length;
@@ -1866,11 +1871,13 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
         const float pitch = -std::asin(direction.y);
         const float* beamColor = tayamaLights ? DronePointerColor :
             (locked ? SearchlightLockedColor : SearchlightColor);
-        const float beamWidth = tayamaLights ? 0.025f : (locked ? 0.12f : 0.18f);
+        const float beamWidth = locked ? 0.12f : SearchlightDetectionRadius * WorldXScale;
         const Matrix4x4 beamWorld = Matrix4x4::Translation(source + direction * (length * 0.5f)) *
             Matrix4x4::RotationY(yaw) * Matrix4x4::RotationZ(pitch) *
-            Matrix4x4::Scale({length, beamWidth, beamWidth});
-        shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box), beamWorld, beamColor);
+            (tayamaLights ? Matrix4x4::Scale({length, 0.025f, 0.025f}) :
+                Matrix4x4::RotationZ(Math::HalfPi) * Matrix4x4::Scale({beamWidth, length, beamWidth}));
+        shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(
+            tayamaLights ? PrimitiveShape::Box : PrimitiveShape::Cone), beamWorld, beamColor);
         shooter.DrawModelPrimitive(renderer, camera, 2, source.x, source.y, source.z,
             0.72f, 0.42f, 0.72f, locked ? SearchlightLockedColor : SatelliteLightColor);
     }
@@ -2004,12 +2011,15 @@ void SideScrollingShooter::Stage5Module::DrawRain3D(const SideScrollingShooter& 
             railPosition = topPosition - Vector3::Up *
                 ((1.0f - fallRate) * halfHeight * RainViewTravel / worldFallProjection);
         } else if (tayamaBattle) {
-            // 円形アリーナでは原点付近でなく、現在カメラ前方の視錐台を雨で満たす
-            const float lateral = -28.0f + static_cast<float>(railColumn) / 400.0f * 56.0f;
+            constexpr float RainHeight =
+                TayamaModelView::TowerSize.y * ShooterStages::Stage5::TayamaBossScale + 32.0f;
+            const float lateral = -72.0f + static_cast<float>(railColumn) / 400.0f * 144.0f;
             const float depth = 8.0f + static_cast<float>((index * 197) % 640) * 0.1f;
+
+            // 第一形態の周囲に奥行きを持つ降雨域を作り、ワールドY方向へ落下させる
             railPosition = WeatherPosition(camera, lateral, depth);
             railPosition.y = ShooterStages::Stage5::RooftopSurfaceY +
-                railStreakLength * 0.5f + fallRate * 24.0f;
+                railStreakLength * 0.5f + fallRate * RainHeight;
         }
 
         const float thickness = 0.045f + intensity * 0.025f;

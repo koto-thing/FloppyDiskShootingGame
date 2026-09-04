@@ -73,6 +73,19 @@ constexpr int ChapterProgressPercentForFrame(int frame, int startFrame, int endF
     return elapsed * 100 / duration;
 }
 
+/**
+ * @brief Stage 5第2部の現在区画に対応する進行フレーム数を取得する
+ * @param phase 現在のStage 5状態
+ * @return 第2部道中外は0、道中内は区画の総フレーム数
+ */
+constexpr int Stage5Part2ChapterFrames(ShooterStages::Stage5::Phase phase) {
+    using Phase = ShooterStages::Stage5::Phase;
+    if (phase == Phase::WallClimbLower) return ShooterStages::Stage5::WallClimbLowerFrames;
+    if (phase == Phase::WallClimbMiddle) return ShooterStages::Stage5::WallClimbMiddleFrames;
+    if (phase == Phase::WallClimbUpper) return ShooterStages::Stage5::WallClimbUpperFrames;
+    return 0;
+}
+
 static_assert(PowerAfterRestart(3.25f, Easy) > 3.239f &&
     PowerAfterRestart(3.25f, Easy) < 3.241f);
 static_assert(PowerAfterRestart(3.25f, Normal) == 2.75f);
@@ -93,6 +106,9 @@ static_assert(ChapterProgressPercentForFrame(0, 0, 1000, false) == 0);
 static_assert(ChapterProgressPercentForFrame(500, 0, 1000, false) == 50);
 static_assert(ChapterProgressPercentForFrame(1000, 0, 1000, false) == 100);
 static_assert(ChapterProgressPercentForFrame(1200, 1000, 2000, true) == 100);
+static_assert(Stage5Part2ChapterFrames(ShooterStages::Stage5::Phase::WallClimbLower) ==
+    ShooterStages::Stage5::WallClimbLowerFrames);
+static_assert(Stage5Part2ChapterFrames(ShooterStages::Stage5::Phase::Approach) == 0);
 
 /** @brief 無線風に加工した自機撃破音声群を取得する @return 44100Hz PCMデータ群 */
 const std::array<std::vector<std::int16_t>, 3>& MomijiDeathVoices() {
@@ -884,7 +900,7 @@ void SideScrollingShooter::InitializeRailObjects() {
         }
         if (!shot.enemy && UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase)) {
             // 第2部の自機弾は3Dへ切り替えても壁面上方向の速度を維持する
-            shot.z = PlayerRailZ + 2.0f;
+            shot.z = PlayerRailDepth() + 2.0f;
             shot.vz = 0.0f;
             continue;
         }
@@ -1472,6 +1488,13 @@ int SideScrollingShooter::PowerLevel() const {
 int SideScrollingShooter::ChapterProgressPercent() const {
     if (m_stage == nullptr) return 0;
 
+    // Stage 5第2部は通常時間軸から独立しているため現在区画の専用タイマーを使う
+    const int stage5Part2Frames = Stage5Part2ChapterFrames(m_stage5.phase);
+    if (m_stageNumber == 5 && stage5Part2Frames > 0) {
+        return ChapterProgressPercentForFrame(
+            m_stage5.phaseTimer, 0, stage5Part2Frames, false);
+    }
+
     // 現在チャプターの開始/終了フレームから進行率を求める
     const int startFrame = m_stage->ChapterEndFrame(m_chapterNumber - 1);
     const int endFrame = m_stage->ChapterEndFrame(m_chapterNumber);
@@ -1511,7 +1534,7 @@ bool SideScrollingShooter::IsTayamaOrbitViewActive() const {
 
 Vector3 SideScrollingShooter::PlayerWorldPosition() const {
     if (!IsTayamaBattle()) {
-        return {ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ};
+        return {ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailDepth()};
     }
 
     // 3Dは周回角、2Dは切替時に固定した角と画面横位置から同じ円形アリーナへ配置する
@@ -1520,6 +1543,11 @@ Vector3 SideScrollingShooter::PlayerWorldPosition() const {
     const float sideOffset = IsTayamaOrbitViewActive() ? 0.0f : m_playerX;
     const Vector2 orbit = TayamaOrbitXZ(angle, sideOffset);
     return {orbit.x, ToWorldY(m_playerY), orbit.y};
+}
+
+float SideScrollingShooter::PlayerRailDepth() const {
+    return m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase) ?
+        ShooterStages::Stage5::Part2PlayerRailZ : PlayerRailZ;
 }
 
 bool SideScrollingShooter::IsRailGameplayActive() const {

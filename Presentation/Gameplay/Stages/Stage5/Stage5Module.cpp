@@ -1134,7 +1134,7 @@ void SideScrollingShooter::Stage5Module::ResetWallSearchlights(SideScrollingShoo
         SearchlightState& light = shooter.m_stage5.searchlights[i];
         light.beamX = (static_cast<float>(i) - 1.0f) * 0.62f;
         light.beamY = i % 2 == 0 ? 0.34f : -0.28f;
-        light.beamZ = PlayerRailZ;
+        light.beamZ = shooter.PlayerRailDepth();
         light.hp = i < activeCount ? 90 : 0;
         light.destroyed = i >= activeCount;
         light.timer = i * 27;
@@ -1163,7 +1163,8 @@ void SideScrollingShooter::Stage5Module::FireSearchlightVolley(SideScrollingShoo
             sourceZ = bounds.center.z;
         }
     }
-    for (int bullet = -2; bullet <= 2; ++bullet) {
+    const int spreadCount = shooter.m_stage5.phase == Stage5Phase::TayamaFireControl ? 0 : 2;
+    for (int bullet = -spreadCount; bullet <= spreadCount; ++bullet) {
         const float spread = static_cast<float>(bullet) * 0.065f;
         SpawnEnemyShotAt(shooter, sourceX, sourceY, sourceZ,
             light.lockedX + spread, light.lockedY + std::abs(spread) * 0.35f,
@@ -1199,13 +1200,10 @@ void SideScrollingShooter::Stage5Module::TickSearchlights(SideScrollingShooter& 
             (0.018f + static_cast<float>(i) * 0.002f));
         const float scanWaveY = std::sin(static_cast<float>(shooter.m_stage5.phaseTimer + i * 43) *
             (0.013f + static_cast<float>(i) * 0.003f));
-        const float scanTargetX = tayamaWeakpoints ?
-            FromWorldX(player.x) + scanWaveX * 0.92f : scanWaveX * 0.92f;
-        const float scanTargetY = tayamaWeakpoints ?
-            FromWorldY(player.y) + scanWaveY * 0.66f : scanWaveY * 0.66f;
-        const float scanTargetZ = tayamaWeakpoints ?
-            player.z + std::cos(static_cast<float>(shooter.m_stage5.phaseTimer + i * 59) * 0.015f) * 6.0f :
-            PlayerRailZ;
+        const bool bossAiming = tayamaWeakpoints && light.phase == SearchlightPhase::Detecting;
+        const float scanTargetX = bossAiming ? FromWorldX(player.x) : scanWaveX * 0.92f;
+        const float scanTargetY = bossAiming ? FromWorldY(player.y) : scanWaveY * 0.66f;
+        const float scanTargetZ = player.z;
         if (light.phase == SearchlightPhase::Searching || light.phase == SearchlightPhase::Detecting) {
             const float trackingLimit = tayamaWeakpoints ?
                 (radarDestroyed ? 0.10f : 0.16f) :
@@ -1237,7 +1235,7 @@ void SideScrollingShooter::Stage5Module::TickSearchlights(SideScrollingShooter& 
             } else if (light.detectionFrames >= lockFrames) {
                 light.lockedX = tayamaWeakpoints ? FromWorldX(player.x) : shooter.m_playerX;
                 light.lockedY = tayamaWeakpoints ? FromWorldY(player.y) : shooter.m_playerY;
-                light.lockedZ = tayamaWeakpoints ? player.z : PlayerRailZ;
+                light.lockedZ = player.z;
                 light.phase = SearchlightPhase::Locked;
                 light.timer = SearchlightWarningFrames;
                 PlayCue(shooter, ShooterStages::Stage5::SearchlightLocked);
@@ -2642,7 +2640,7 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
     }
     if (shooter.m_stage5.phase == Stage5Phase::WallClimbLower) {
         shooter.m_stage5.tayamaTransformation = 0.0f;
-        TickWallEnemyWave(shooter, 48, 120);
+        TickWallEnemyWave(shooter, 96, 240);
         if (shooter.m_stage5.phaseTimer >= WallClimbLowerFrames) {
             shooter.FinishChapter();
         }
@@ -2650,7 +2648,7 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
     }
     if (shooter.m_stage5.phase == Stage5Phase::WallClimbMiddle) {
         shooter.m_stage5.tayamaTransformation = 0.0f;
-        TickWallEnemyWave(shooter, 39, 105);
+        TickWallEnemyWave(shooter, 78, 210);
         if (shooter.m_stage5.phaseTimer >= WallClimbMiddleFrames) {
             shooter.FinishChapter();
         }
@@ -2667,7 +2665,7 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
             }
             shooter.m_playerY += ShooterStages::Stage5::Part2PlayerFlyAwaySpeed;
         } else {
-            TickWallEnemyWave(shooter, 32, 90);
+            TickWallEnemyWave(shooter, 64, 180);
         }
         if (shooter.m_stage5.phaseTimer >= WallClimbUpperFrames) {
             shooter.FinishChapter();
