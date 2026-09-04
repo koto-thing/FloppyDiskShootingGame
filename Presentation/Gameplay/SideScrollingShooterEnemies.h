@@ -876,8 +876,8 @@ public:
     }
 
 private:
-    static constexpr float UpperYValue = 1.10f;
-    static constexpr float LowerYValue = -1.26f;
+    static constexpr float UpperYValue = 1.40f;
+    static constexpr float LowerYValue = -1.46f;
     static constexpr float LeftRailXValue = -1.0f;
     static constexpr float RightRailXValue = 1.0f;
     static constexpr float LaserRadius2DValue = 0.035f;
