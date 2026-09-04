@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <array>
 #include <cstdint>
@@ -60,6 +60,8 @@ public:
     void Initialize(AudioService* audio, PlayerType playerType, DifficultyType difficulty);
     /** @brief チュートリアル用のゲーム状態を初期化する @param audio 効果音サービス @param playerType 使用機体 @param difficulty 難易度 @return なし */
     void InitializeTutorial(AudioService* audio, PlayerType playerType, DifficultyType difficulty);
+    void PlayCurrentStageBgm(bool force = false);
+    void PlayCurrentBossBgm(bool force = false);
     void ProcessInput();
     void Tick();
     void Render(Renderer& renderer) const;
@@ -930,6 +932,9 @@ private:
     ShooterStages::Stage4::State m_stage4 {};
     ShooterStages::Stage5::State m_stage5 {};
     AudioService* m_audio = nullptr;
+    int m_currentBgmStage = 0;
+    bool m_currentBgmIsBoss = false;
+    bool m_isRestartingChapter = false;
     const Stage* m_stage = nullptr;
     PlayerType m_playerType = Homing;
     DifficultyType m_difficulty = Easy;

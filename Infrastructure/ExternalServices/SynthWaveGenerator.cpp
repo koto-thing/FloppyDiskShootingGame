@@ -1,4 +1,5 @@
 #include "SynthWaveGenerator.h"
+#include "WavSamples.h"
 #include <algorithm>
 #include <cmath>
 #include <cstring>
@@ -154,6 +155,16 @@ public:
         }
 
         WavSample sample;
+        // 1. コード埋め込みサンプルから優先読み込み
+        const auto* wav = WavSamples::Find(baseName);
+        if (wav && ReadWavFromMemory(wav->data, wav->size, sample)) {
+            sample.rootMidi = GetGmRootMidi(baseName);
+            sample.isOneShot = IsOneShotSample(baseName);
+            cache_[baseName] = std::move(sample);
+            return &(cache_[baseName]);
+        }
+
+        // 2. 外部ファイルから読み込み (フォールバック)
         if (LoadSampleFile(baseName, sample)) {
             sample.rootMidi = GetGmRootMidi(baseName);
             sample.isOneShot = IsOneShotSample(baseName);
@@ -162,6 +173,95 @@ public:
         }
 
         return nullptr;
+    }
+
+    bool ReadWavFromMemory(const uint8_t* data, size_t size, WavSample& outSample) {
+        if (!data || size < 12) return false;
+        if (std::memcmp(data, "RIFF", 4) != 0) return false;
+        if (std::memcmp(data + 8, "WAVE", 4) != 0) return false;
+
+        uint16_t audioFormat = 1;
+        uint16_t numChannels = 1;
+        uint32_t sampleRate = 8000;
+        uint16_t bitsPerSample = 8;
+        const uint8_t* rawData = nullptr;
+        size_t rawDataSize = 0;
+        int smplLoopStart = -1;
+        int smplLoopEnd = -1;
+
+        size_t offset = 12;
+        while (offset + 8 <= size) {
+            const char* chunkId = reinterpret_cast<const char*>(data + offset);
+            uint32_t chunkSize = 0;
+            std::memcpy(&chunkSize, data + offset + 4, 4);
+            offset += 8;
+
+            if (offset + chunkSize > size) break;
+
+            if (std::memcmp(chunkId, "fmt ", 4) == 0 && chunkSize >= 16) {
+                std::memcpy(&audioFormat, data + offset, 2);
+                std::memcpy(&numChannels, data + offset + 2, 2);
+                std::memcpy(&sampleRate, data + offset + 4, 4);
+                std::memcpy(&bitsPerSample, data + offset + 14, 2);
+            } else if (std::memcmp(chunkId, "data", 4) == 0) {
+                rawData = data + offset;
+                rawDataSize = chunkSize;
+            } else if (std::memcmp(chunkId, "smpl", 4) == 0 && chunkSize >= 36) {
+                if (chunkSize >= 36 + 24) {
+                    uint32_t numLoops = 0;
+                    std::memcpy(&numLoops, data + offset + 28, 4);
+                    if (numLoops > 0) {
+                        uint32_t lStart = 0, lEnd = 0;
+                        std::memcpy(&lStart, data + offset + 44, 4);
+                        std::memcpy(&lEnd, data + offset + 48, 4);
+                        smplLoopStart = static_cast<int>(lStart);
+                        smplLoopEnd = static_cast<int>(lEnd);
+                    }
+                }
+            }
+
+            offset += chunkSize + (chunkSize & 1);
+        }
+
+        if (!rawData || rawDataSize == 0 || numChannels == 0) return false;
+
+        outSample.sampleRate = static_cast<int>(sampleRate);
+        if (bitsPerSample == 8) {
+            size_t numFrames = rawDataSize / numChannels;
+            outSample.data.resize(numFrames);
+            for (size_t i = 0; i < numFrames; ++i) {
+                float sum = 0.0f;
+                for (size_t c = 0; c < numChannels; ++c) {
+                    uint8_t u = rawData[i * numChannels + c];
+                    sum += (static_cast<float>(u) - 128.0f) / 128.0f;
+                }
+                outSample.data[i] = sum / numChannels;
+            }
+        } else if (bitsPerSample == 16) {
+            size_t numFrames = rawDataSize / (numChannels * 2);
+            const int16_t* p16 = reinterpret_cast<const int16_t*>(rawData);
+            outSample.data.resize(numFrames);
+            for (size_t i = 0; i < numFrames; ++i) {
+                float sum = 0.0f;
+                for (size_t c = 0; c < numChannels; ++c) {
+                    int16_t s = p16[i * numChannels + c];
+                    sum += static_cast<float>(s) / 32768.0f;
+                }
+                outSample.data[i] = sum / numChannels;
+            }
+        } else {
+            return false;
+        }
+
+        if (smplLoopStart >= 0 && smplLoopEnd > smplLoopStart && smplLoopEnd <= static_cast<int>(outSample.data.size())) {
+            outSample.loopStart = smplLoopStart;
+            outSample.loopEnd = smplLoopEnd;
+        } else {
+            outSample.loopStart = static_cast<int>(0.06f * outSample.sampleRate);
+            outSample.loopEnd = static_cast<int>(std::min(outSample.data.size(), static_cast<size_t>(0.45f * outSample.sampleRate)));
+        }
+
+        return true;
     }
 
 private:

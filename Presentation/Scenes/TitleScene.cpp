@@ -1,4 +1,6 @@
 #include "TitleScene.h"
+#include "../../Infrastructure/ExternalServices/MMLData.h"
+#include "../../Infrastructure/ExternalServices/AudioService.h"
 #include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
 #include <windows.h>
 #include "../../Engine/Graphics/Renderer.h"
@@ -13,6 +15,9 @@
  * @brief タイトルシーンの初期化処理
  */
 void TitleScene::Initialize() {
+    if (getData().audio) {
+        getData().audio->PlayMMLBGM(std::string(MMLData::title), true);
+    }
     /** @brief 画面中央の少し上にゲーム開始ボタンを配置する */
     m_startButton = std::make_unique<Button>(
         Vector2 { 0.35f, 0.10f },

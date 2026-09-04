@@ -1,4 +1,4 @@
-#include "Stage5Module.h"
+﻿#include "Stage5Module.h"
 
 #include <algorithm>
 #include <cmath>
@@ -222,6 +222,7 @@ bool SideScrollingShooter::Stage5Module::StartDebugBoss(SideScrollingShooter& sh
     shooter.m_viewMode = ViewMode::Rail3D;
     shooter.m_nextViewMode = ViewMode::Rail3D;
     StartPhase(shooter, Stage5Phase::EastsourceBattle);
+    shooter.PlayCurrentBossBgm(true);
     return true;
 }
 
@@ -662,6 +663,7 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
         }
         ResetWallSearchlights(shooter, lightCount);
         if (phase == Stage5Phase::WallClimbTransition) {
+            shooter.PlayCurrentStageBgm(true);
             shooter.m_playerX = 0.0f;
             shooter.m_playerY = 0.0f;
             shooter.m_bomb = {};
@@ -727,6 +729,7 @@ void SideScrollingShooter::Stage5Module::StartEastsourceBattle(SideScrollingShoo
     shooter.m_displayBossHp = static_cast<float>(shooter.m_bossHp);
     shooter.m_invincible = (std::max)(shooter.m_invincible, 60);
     ResetWallSearchlights(shooter, 1);
+    shooter.PlayCurrentBossBgm(true);
 }
 
 /**
@@ -1378,6 +1381,7 @@ void SideScrollingShooter::Stage5Module::StartTayamaPhase(SideScrollingShooter& 
     shooter.m_stage5.coreTargetY = shooter.m_playerY;
     shooter.m_bossBattle = false;
     shooter.m_stage5.tayamaTransformation = 1.0f;
+    shooter.PlayCurrentBossBgm(true); // Tayama
     for (auto& enemy : shooter.m_enemies) enemy.active = false;
     for (auto& shot : shooter.m_shots) {
         if (shot.enemy) shot.active = false;
@@ -1737,6 +1741,16 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
  * @return なし
  */
 void SideScrollingShooter::Stage5Module::RestartCheckpoint(SideScrollingShooter& shooter) {
+    // RestartCheckpoint Stage5 BGM
+    if (shooter.m_stage5.phase >= Stage5Phase::CarrierTransformation) {
+        shooter.PlayCurrentBossBgm(false);
+    } else if (shooter.m_stage5.phase >= Stage5Phase::WallClimbTransition) {
+        shooter.PlayCurrentStageBgm(false);
+    } else if (shooter.m_stage5.phase >= Stage5Phase::EastsourceIntro) {
+        shooter.PlayCurrentBossBgm(false);
+    } else {
+        shooter.PlayCurrentStageBgm(false);
+    }
     ++shooter.m_chapterRetryCounts[shooter.m_chapterNumber - 1];
     shooter.m_shots = {};
     shooter.m_enemies = {};
