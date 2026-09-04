@@ -502,7 +502,7 @@ bool SideScrollingShooter::CityBackgroundModule::HitsTruck(
     float x, float y, float z, float radius) {
     if (shooter.m_stageNumber != 4 || shooter.m_bossBattle) return false;
 
-    // 描画と同じ循環座標と車体寸法で横視点とレール視点を判定する
+    // 3Dレール視点は道路上の自機レーンにおける楕円体判定を行う
     if (shooter.IsRailGameplayActive()) {
         constexpr float RailX = 2.8f;
         constexpr float RailY = -3.55f + TruckRailHeight * 0.5f;
@@ -515,11 +515,23 @@ bool SideScrollingShooter::CityBackgroundModule::HitsTruck(
             TruckRailDepth * 0.5f + radius * WorldXScale);
     }
 
+    // 2D横視点は奥の道路を走るトラックの見かけの画面投影位置に合わせて判定する
+    constexpr float SideRoadZ = SidePlaneZ + 13.55f;
+    constexpr float TruckZ = SideRoadZ - 0.18f;
+    constexpr float PerspectiveScale = (SidePlaneZ - SideCameraZ) / (TruckZ - SideCameraZ);
+
     const float sideX = WrapNdcX(0.47f - shooter.m_scroll * 0.72f) * 18.0f;
     constexpr float SideY = -6.0f + TruckSideHeight * 0.5f;
-    const float dx = (ToWorldX(x) - sideX) /
-        (TruckSideWidth * 0.5f + radius * WorldXScale);
-    const float dy = (ToWorldY(y) - SideY) /
-        (TruckSideHeight * 0.5f + radius * WorldYScale);
+
+    const float visualSideX = sideX * PerspectiveScale;
+    const float visualSideY = SideY * PerspectiveScale;
+    const float visualWidth = TruckSideWidth * PerspectiveScale;
+    const float visualHeight = TruckSideHeight * PerspectiveScale;
+
+    const float dx = (ToWorldX(x) - visualSideX) /
+        (visualWidth * 0.5f + radius * WorldXScale);
+    const float dy = (ToWorldY(y) - visualSideY) /
+        (visualHeight * 0.5f + radius * WorldYScale);
     return dx * dx + dy * dy <= 1.0f;
 }
+
