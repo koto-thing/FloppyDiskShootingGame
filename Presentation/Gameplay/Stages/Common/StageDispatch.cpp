@@ -26,12 +26,14 @@ const SideScrollingShooter::Stage& SideScrollingShooter::StageDispatch::Definiti
     }
 }
 
-BossStory SideScrollingShooter::StageDispatch::Story(int stageNumber) {
-    switch (stageNumber) {
+BossStory SideScrollingShooter::StageDispatch::Story(const SideScrollingShooter& shooter) {
+    switch (shooter.m_stageNumber) {
     case 2: return ShooterStages::Stage2::Story();
     case 3: return ShooterStages::Stage3::Story();
     case 4: return ShooterStages::Stage4::Story();
-    case 5: return ShooterStages::Stage5::Story();
+    case 5:
+        return shooter.m_stage5.phase >= ShooterStages::Stage5::Phase::CarrierTransformation ?
+            ShooterStages::Stage5::TayamaStory() : ShooterStages::Stage5::EastsourceStory();
     default: return ShooterStages::Stage1::Story();
     }
 }
@@ -175,7 +177,7 @@ void SideScrollingShooter::StageDispatch::DrawSky(
         CityBackgroundModule::DrawSky(renderer);
         break;
     case 5:
-        CityBackgroundModule::DrawSky(renderer);
+        Stage5Module::DrawSky(shooter, renderer);
         break;
     }
 }
@@ -269,6 +271,9 @@ void SideScrollingShooter::StageDispatch::TickSpecialShotAfterMove(
         Stage4Module::TickSpecialShotAfterMove(
             shooter, shot, previousX, previousY, previousZ);
         break;
+    case 5:
+        Stage5Module::TickSpecialShotAfterMove(shooter, shot);
+        break;
     }
 }
 
@@ -358,7 +363,10 @@ void SideScrollingShooter::StageDispatch::DrawBackground2D(
     case 5:
         if (Stage5Module::IsPart2Route(shooter)) {
             Stage5Module::DrawPart2Background(shooter, renderer, camera, 0.0f);
-        } else if (!ShooterStages::Stage5::IsRooftopPhase(shooter.m_stage5.phase)) {
+        } else if (ShooterStages::Stage5::IsCloudSeaPhase(shooter.m_stage5.phase)) {
+            Stage5Module::DrawCloudSeaWorld(shooter, renderer, camera, 0.0f);
+        } else if (!ShooterStages::Stage5::IsRooftopPhase(shooter.m_stage5.phase) &&
+            !ShooterStages::Stage5::IsCloudSeaPhase(shooter.m_stage5.phase)) {
             CityBackgroundModule::DrawBackground2D(shooter, renderer, camera);
             Stage5Module::DrawCityBuildings(shooter, renderer, camera, 0.0f);
         }
@@ -386,7 +394,10 @@ void SideScrollingShooter::StageDispatch::DrawBackground3D(
     case 5:
         if (Stage5Module::IsPart2Route(shooter)) {
             Stage5Module::DrawPart2Background(shooter, renderer, camera, railWeight);
-        } else if (!ShooterStages::Stage5::IsRooftopPhase(shooter.m_stage5.phase)) {
+        } else if (ShooterStages::Stage5::IsCloudSeaPhase(shooter.m_stage5.phase)) {
+            Stage5Module::DrawCloudSeaWorld(shooter, renderer, camera, railWeight);
+        } else if (!ShooterStages::Stage5::IsRooftopPhase(shooter.m_stage5.phase) &&
+            !ShooterStages::Stage5::IsCloudSeaPhase(shooter.m_stage5.phase)) {
             CityBackgroundModule::DrawBackground3D(shooter, renderer, camera, railWeight);
             Stage5Module::DrawCityBuildings(shooter, renderer, camera, railWeight);
         }
@@ -473,10 +484,10 @@ void SideScrollingShooter::StageDispatch::DrawOverlay2D(
 }
 
 void SideScrollingShooter::StageDispatch::DrawOverlay3D(
-    const SideScrollingShooter& shooter, Renderer& renderer) {
+    const SideScrollingShooter& shooter, Renderer& renderer, const Camera3D& camera) {
     switch (shooter.m_stageNumber) {
     case 5:
-        Stage5Module::DrawOverlay3D(shooter, renderer);
+        Stage5Module::DrawOverlay3D(shooter, renderer, camera);
         break;
     }
 }
@@ -623,6 +634,7 @@ int SideScrollingShooter::StageDispatch::BossIntroductionFrames(
     case 2: return Stage2Module::BossIntroductionFrames();
     case 3: return Stage3Module::BossIntroductionFrames();
     case 4: return ShooterStages::Stage4::BossEntranceFrames;
+    case 5: return ShooterStages::Stage5::TayamaIntroductionWarningFrames;
     default: return 1;
     }
 }

@@ -1024,6 +1024,19 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
+    // 通常敵弾は不透明3D形状に遮られるが、半透明同士の描画順を壊さないよう深度を書き込まない
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC enemyShotPsoDesc = playerShotPsoDesc;
+    enemyShotPsoDesc.DepthStencilState.DepthEnable = TRUE;
+    enemyShotPsoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+    enemyShotPsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+    enemyShotPsoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+    if (FAILED(m_device->CreateGraphicsPipelineState(
+        &enemyShotPsoDesc, IID_PPV_ARGS(&m_pipelineStateEnemyShot)))) {
+        MessageBoxA(NULL, "CreateGraphicsPipelineState (EnemyShot) Failed",
+            "PSO Creation Error", MB_OK);
+        return false;
+    }
+
     /** @brief C++文字列から命中爆発用シェーダーをコンパイルする */
     ComPtr<ID3DBlob> explosionVertexShader;
     ComPtr<ID3DBlob> explosionPixelShader;
@@ -1063,6 +1076,19 @@ bool D3D12RenderingService::InitPipeline() {
     if (FAILED(m_device->CreateGraphicsPipelineState(
         &explosionPsoDesc, IID_PPV_ARGS(&m_pipelineStateExplosion)))) {
         MessageBoxA(NULL, "CreateGraphicsPipelineState (Explosion) Failed",
+            "PSO Creation Error", MB_OK);
+        return false;
+    }
+
+    // エンジン炎は既存の3D形状に遮られるが、半透明同士の描画順を壊さないよう深度を書き込まない
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC engineFlamePsoDesc = explosionPsoDesc;
+    engineFlamePsoDesc.DepthStencilState.DepthEnable = TRUE;
+    engineFlamePsoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+    engineFlamePsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+    engineFlamePsoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+    if (FAILED(m_device->CreateGraphicsPipelineState(
+        &engineFlamePsoDesc, IID_PPV_ARGS(&m_pipelineStateEngineFlame)))) {
+        MessageBoxA(NULL, "CreateGraphicsPipelineState (Engine Flame) Failed",
             "PSO Creation Error", MB_OK);
         return false;
     }
@@ -1465,7 +1491,7 @@ void D3D12RenderingService::DrawPrimitive3D(const Primitive3D& primitive) {
     ++m_constantBufferCursor;
 }
 
-/** @brief 埋め込みHLSLを使用して自機弾を描画する */
+/** @brief 埋め込みHLSLを使用して弾を描画する */
 void D3D12RenderingService::DrawPlayerShot(const PlayerShotVisual& shot) {
     if (m_constantBufferCursor >= MAX_CONSTANT_BUFFER_ELEMENTS) return;
 
@@ -1474,16 +1500,17 @@ void D3D12RenderingService::DrawPlayerShot(const PlayerShotVisual& shot) {
         reinterpret_cast<char*>(m_cbvCpuData) + static_cast<size_t>(m_constantBufferCursor) * 256);
     const DirectX::XMMATRIX matrix = DirectX::XMMatrixScaling(shot.size.x, shot.size.y, 1.0f) *
         DirectX::XMMatrixRotationZ(shot.direction) *
-        DirectX::XMMatrixTranslation(shot.position.x, shot.position.y, 0.0f);
+        DirectX::XMMatrixTranslation(shot.position.x, shot.position.y, shot.depth);
     DirectX::XMStoreFloat4x4(&cbData->u_wvpMatrix, DirectX::XMMatrixTranspose(matrix));
     cbData->u_Color = {1.0f, 1.0f, 1.0f, 1.0f};
     cbData->u_time = shot.time;
     cbData->u_shapeType = static_cast<float>(shot.type);
     cbData->u_rotAngle = shot.direction;
 
-    /** @brief 自機弾専用PSOで4頂点の矩形を描画する */
+    // 通常敵弾だけ深度テスト有効PSOを使い、3D形状の深度バッファを参照する
     const int previousPipelineType = m_currentPipelineType;
-    m_commandList->SetPipelineState(m_pipelineStatePlayerShot.Get());
+    m_commandList->SetPipelineState(
+        shot.depthTest ? m_pipelineStateEnemyShot.Get() : m_pipelineStatePlayerShot.Get());
     m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     const D3D12_GPU_VIRTUAL_ADDRESS address = m_constantBuffer->GetGPUVirtualAddress() +
@@ -1513,9 +1540,11 @@ void D3D12RenderingService::DrawExplosion(const ExplosionVisual& explosion) {
 
     // 爆発専用PSOで画面正対クアッドを発行する
     const int previousPipelineType = m_currentPipelineType;
-    m_commandList->SetPipelineState((explosion.effectType == 0 || explosion.effectType == 3 ||
-        explosion.effectType == 4 || explosion.effectType == 5) ?
-        m_pipelineStateExplosion.Get() : m_pipelineStateExplosionSmoke.Get());
+    ID3D12PipelineState* pipelineState = explosion.effectType == 3 ?
+        m_pipelineStateEngineFlame.Get() :
+        ((explosion.effectType == 0 || explosion.effectType == 4 || explosion.effectType == 5) ?
+            m_pipelineStateExplosion.Get() : m_pipelineStateExplosionSmoke.Get());
+    m_commandList->SetPipelineState(pipelineState);
     m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     const D3D12_GPU_VIRTUAL_ADDRESS address = m_constantBuffer->GetGPUVirtualAddress() +

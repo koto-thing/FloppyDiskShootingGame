@@ -45,13 +45,15 @@ struct Primitive3D {
     float rotationAngle = 0.0f;
 };
 
-/** @brief プロシージャル自機弾の描画情報 */
+/** @brief プロシージャル弾の描画情報 */
 struct PlayerShotVisual {
     Vector2 position {};
     Vector2 size {};
     float direction = 0.0f;
     float time = 0.0f;
     int type = 0;
+    float depth = 0.0f;
+    bool depthTest = false;
 };
 
 /** @brief HLSLで描画する爆発エフェクトの描画情報 */
@@ -85,7 +87,7 @@ public:
     virtual void DrawRect(const Rect& rect, const ColorF& color) = 0;
     /** @brief 型付き3Dプリミティブを描画する */
     virtual void DrawPrimitive3D(const Primitive3D& primitive) { (void)primitive; }
-    /** @brief HLSLで生成する自機弾を描画する */
+    /** @brief HLSLで生成する弾を描画する */
     virtual void DrawPlayerShot(const PlayerShotVisual& shot) { (void)shot; }
     /** @brief HLSLで生成する爆発エフェクトを描画する */
     virtual void DrawExplosion(const ExplosionVisual& explosion) { (void)explosion; }

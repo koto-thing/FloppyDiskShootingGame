@@ -176,12 +176,42 @@ void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, Renderer& rende
 
     const Vector3 playerPosition{ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ};
     // 2Dモードと同じカメラ状態から、3Dレールの追従カメラへ補間する
-    const Vector3 sidePosition{0.0f, sideCameraY, SideCameraZ};
-    const Vector3 sideTarget{0.0f, sideCameraY, SidePlaneZ};
+    Vector3 sidePosition{0.0f, sideCameraY, SideCameraZ};
+    Vector3 sideTarget{0.0f, sideCameraY, SidePlaneZ};
     Vector3 railPosition{playerPosition.x * 0.18f, playerPosition.y * 0.12f + 1.0f, PlayerRailZ - 15.5f};
     Vector3 railTarget{playerPosition.x * 0.28f, playerPosition.y * 0.18f, PlayerRailZ + 22.0f};
 
     StageDispatch::ApplyCameraCorrection(*this, railPosition, railTarget);
+    if (IsTayamaBattle()) {
+        // 2Dは切替角を固定し、3Dは自機の後方かつ上方へカメラを追従させる
+        const Vector2 sideOrbit = TayamaOrbitXZ(m_stage5.tayamaSideViewAngle, 0.0f);
+        const Vector3 sideRadial {
+            std::sin(m_stage5.tayamaSideViewAngle), 0.0f,
+            -std::cos(m_stage5.tayamaSideViewAngle)
+        };
+        const Vector3 tayamaPlayer = PlayerWorldPosition();
+        Vector3 orbitRadial {
+            tayamaPlayer.x, 0.0f,
+            tayamaPlayer.z - ShooterStages::Stage5::TayamaArenaCenterZ
+        };
+        const float radialLength = (std::max)(0.001f, orbitRadial.Length());
+        orbitRadial = orbitRadial / radialLength;
+        sidePosition = {
+            sideOrbit.x + sideRadial.x * ShooterStages::Stage5::TayamaCameraDistance,
+            tayamaPlayer.y + ShooterStages::Stage5::TayamaCameraHeight,
+            sideOrbit.y + sideRadial.z * ShooterStages::Stage5::TayamaCameraDistance
+        };
+        sideTarget = {
+            sideOrbit.x - sideRadial.x * ShooterStages::Stage5::TayamaCameraLookAhead,
+            tayamaPlayer.y,
+            sideOrbit.y - sideRadial.z * ShooterStages::Stage5::TayamaCameraLookAhead
+        };
+        railPosition = tayamaPlayer +
+            orbitRadial * ShooterStages::Stage5::TayamaCameraDistance;
+        railPosition.y += ShooterStages::Stage5::TayamaCameraHeight;
+        railTarget = tayamaPlayer -
+            orbitRadial * ShooterStages::Stage5::TayamaCameraLookAhead;
+    }
     camera.SetViewport({0, 0, renderer.Width(), renderer.Height()});
     camera.SetProjectionMode(ProjectionMode::Perspective);
     camera.SetFieldOfView(Math::ToRadians(StageDispatch::CameraFieldOfView(
@@ -500,8 +530,9 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
             renderer.Draw({shape, viewProjection * groundwardRotation * world,
                 Vector3::One, color});
         };
-        StageEnemyModelView::Draw(enemyModelStage,
-            {x, y, z}, modelYaw, scale, drawPart);
+        StageEnemyModelView::Draw(enemyModelStage, {x, y, z}, modelYaw,
+            scale * (stage5Part2 ?
+                ShooterStages::Stage5::Part2EnemyScaleMultiplier(railWeight) : 1.0f), drawPart);
         return;
     }
 
@@ -592,7 +623,8 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
         // 全ショットは画面座標と進行方向を埋め込みHLSLへ渡して描画する
         const Vector3 worldPosition {ToWorldX(shot.x), ToWorldY(shot.y), shot.z};
         Vector2 screenPosition;
-        if (!camera.TryWorldToScreen(worldPosition, screenPosition)) return;
+        float depth = 0.0f;
+        if (!camera.TryWorldToScreen(worldPosition, screenPosition, &depth)) return;
 
         // 弾速ベクトルを画面へ投影して、専用シェーダーの弾頭方向へ反映する
         const Vector3 worldNextPosition {
@@ -626,9 +658,10 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
 
         // 既存のグレイズ範囲へ入った通常敵弾を反転させ、弾ごとに位相をずらして小刻みに震わせる
         if (shot.enemy) {
-            const float dx = IsRailGameplayActive() ? ToWorldX(shot.x - m_playerX) : shot.x - m_playerX;
-            const float dy = IsRailGameplayActive() ? ToWorldY(shot.y - m_playerY) : shot.y - m_playerY;
-            const float dz = IsRailGameplayActive() ? shot.z - PlayerRailZ : 0.0f;
+            const Vector3 player = PlayerWorldPosition();
+            const float dx = IsRailGameplayActive() ? ToWorldX(shot.x) - player.x : shot.x - m_playerX;
+            const float dy = IsRailGameplayActive() ? ToWorldY(shot.y) - player.y : shot.y - m_playerY;
+            const float dz = IsRailGameplayActive() ? shot.z - player.z : 0.0f;
             const float warningRadius = IsRailGameplayActive() ? 1.46f : 0.222f;
             if (dx * dx + dy * dy + dz * dz <= warningRadius * warningRadius) {
                 const float phase = static_cast<float>(m_frame) * 2.73f +
@@ -639,7 +672,7 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
             }
         }
         renderer.DrawPlayerShot({drawPosition, size, std::atan2(direction.y, direction.x),
-            static_cast<float>(m_frame), type});
+            static_cast<float>(m_frame), type, depth, shot.enemy});
         return;
     }
 }
@@ -893,8 +926,10 @@ void SideScrollingShooter::DrawPowerUp(
 
     // 自機上方のワールド座標を画面座標へ投影する
     Vector2 screenPosition;
+    Vector3 player = PlayerWorldPosition();
+    if (!IsTayamaBattle()) player.z = playerZ;
     if (!camera.TryWorldToScreen(
-            {ToWorldX(m_playerX), ToWorldY(m_playerY) + 0.85f, playerZ}, screenPosition)) return;
+            {player.x, player.y + 0.85f, player.z}, screenPosition)) return;
     const Viewport& viewport = camera.GetViewport();
     const Vector2 position {
         (screenPosition.x - static_cast<float>(viewport.x)) /
@@ -1011,8 +1046,10 @@ void SideScrollingShooter::DrawTutorialControlHint(
         "MOVE WASD", "SLOW SHIFT", "Z ATTACK", "C BOMB", "X SHIFT"
     };
     Vector2 screenPosition;
+    Vector3 player = PlayerWorldPosition();
+    if (!IsTayamaBattle()) player.z = playerZ;
     if (!camera.TryWorldToScreen(
-            {ToWorldX(m_playerX), ToWorldY(m_playerY) + 0.95f, playerZ}, screenPosition)) return;
+            {player.x, player.y + 0.95f, player.z}, screenPosition)) return;
     const Viewport& viewport = camera.GetViewport();
     const Vector2 position {
         (screenPosition.x - static_cast<float>(viewport.x)) /
@@ -1041,7 +1078,7 @@ void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
         BossBarWidth * hpRate, 0.018f, BossBarFill);
     // 実際のフェーズ判定が切り替わるHPへ黄色い区切り線を重ねる
     DrawBossPhaseDividers(renderer, 0.755f, BossBarWidth, bossMaxHp, BossBarDivider);
-    const BossStory story = StageDispatch::Story(m_stageNumber);
+    const BossStory story = StageDispatch::Story(*this);
     renderer.DrawText(story.bossName, TextAlign::Center, 0.014f,
         { 1.0f, 0.45f, 0.65f, 1.0f }, { 0.0f, 0.86f });
     const char* phaseLabel = "NORMAL 1";
@@ -1123,8 +1160,10 @@ void SideScrollingShooter::DrawViewToggleCooldownHud(
 
     // 自機下方のワールド座標を画面座標へ投影してメーターを追従させる
     Vector2 screenPosition;
+    Vector3 player = PlayerWorldPosition();
+    if (!IsTayamaBattle()) player.z = playerZ;
     if (!camera.TryWorldToScreen(
-            {ToWorldX(m_playerX), ToWorldY(m_playerY) - 0.70f, playerZ}, screenPosition)) return;
+            {player.x, player.y - 0.70f, player.z}, screenPosition)) return;
     const Viewport& viewport = camera.GetViewport();
     const Vector2 position {
         (screenPosition.x - static_cast<float>(viewport.x)) /
@@ -1224,7 +1263,7 @@ void SideScrollingShooter::SpawnEnemyDebris(const Enemy& enemy, int bossPart) {
 void SideScrollingShooter::DrawBossStory(Renderer& renderer) const {
     if (!m_bossStoryActive) return;
 
-    const BossStory story = StageDispatch::Story(m_stageNumber);
+    const BossStory story = StageDispatch::Story(*this);
     if (m_bossStoryLine >= story.lineCount) return;
 
     // 戦闘画面を少し暗くして会話を前面へ表示する
@@ -1298,7 +1337,7 @@ void SideScrollingShooter::DrawBossNameReveal(Renderer& renderer) const {
 
     // 墨が広がった後にボス名を打ち込み、短い朱色の見得線を添える
     const float nameAlpha = SmoothStep(Math::Clamp01((age - 24.0f) / 18.0f)) * fadeOut;
-    const BossStory story = StageDispatch::Story(m_stageNumber);
+    const BossStory story = StageDispatch::Story(*this);
     renderer.DrawText(story.bossName, TextAlign::Center, 0.064f,
         {0.94f, 0.92f, 0.84f, nameAlpha}, {0.0f, -0.015f}, 0.008f);
     const float redLine[4] = {0.72f, 0.04f, 0.025f, nameAlpha};

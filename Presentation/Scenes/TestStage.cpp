@@ -83,6 +83,7 @@ void TestStage::Render(Renderer& renderer) {
 void TestStage::InitializePauseMenu() {
     m_returnToTitleButton = std::make_unique<Button>(Vector2 {0.42f, 0.10f}, RectAlign::Center,
         "RETURN TO TITLE", Vector2 {0.0f, 0.12f});
+    m_returnToTitleButton->SetClickSound(Button::ClickSound::Cancel);
     m_returnToTitleButton->SetOnClick([this]() { changeScene(SceneType::Title); });
 
     m_openOptionsButton = std::make_unique<Button>(Vector2 {0.42f, 0.10f}, RectAlign::Center,
@@ -91,10 +92,12 @@ void TestStage::InitializePauseMenu() {
 
     m_closeMenuButton = std::make_unique<Button>(Vector2 {0.42f, 0.10f}, RectAlign::Center,
         "CLOSE MENU", Vector2 {0.0f, -0.20f});
+    m_closeMenuButton->SetClickSound(Button::ClickSound::Cancel);
     m_closeMenuButton->SetOnClick([this]() { m_pauseMenuOpen = false; });
 
     m_backToMenuButton = std::make_unique<Button>(Vector2 {0.42f, 0.10f}, RectAlign::Center,
         "BACK TO MENU", Vector2 {0.0f, -0.38f});
+    m_backToMenuButton->SetClickSound(Button::ClickSound::Cancel);
     m_backToMenuButton->SetOnClick([this]() { m_optionsOpen = false; });
 
     // 既存のオプション画面と同じ音量設定をゲームを止めたまま変更できるようにする

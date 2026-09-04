@@ -33,6 +33,6 @@ inline constexpr BossStoryLine StoryLines[] = {
  * @return Stage 4の台詞とボス名を含む会話定義
  */
 inline constexpr BossStory Story() {
-    return BossStories::Create(StoryLines, "BOSS");
+    return BossStories::Create(StoryLines, "BOTAMOCHI");
 }
 }

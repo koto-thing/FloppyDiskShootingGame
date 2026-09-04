@@ -19,7 +19,11 @@ void Button::Update(const UIInputState& input) {
     if (input.primaryReleased) {
         const bool clicked = m_pressed && m_hovered;
         m_pressed = false;
-        if (clicked && m_onClick) m_onClick();
+        if (clicked) {
+            // シーン遷移でボタンが破棄される前に効果音を再生する
+            if (s_clickSoundHandler) s_clickSoundHandler(m_clickSound);
+            if (m_onClick) m_onClick();
+        }
     }
 }
 

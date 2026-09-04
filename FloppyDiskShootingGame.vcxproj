@@ -290,6 +290,9 @@
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>
+    <ResourceCompile Include="AppIcon.rc" />
+  </ItemGroup>
+  <ItemGroup>
     <None Include="Shaders\ObjectShader.hlsl">
       <ExcludedFromBuild>true</ExcludedFromBuild>
     </None>

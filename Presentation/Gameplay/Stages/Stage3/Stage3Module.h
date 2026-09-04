@@ -11,6 +11,18 @@ public:
     static constexpr int Phase2SurvivalFrames = 30 * 60;
     static constexpr int Phase3SurvivalFrames = 60 * 60;
 
+    /**
+     * @brief Phase2開始時HPからPhase3用に残すHPを取得する
+     * @param startHp Phase2開始時HP
+     * @return Phase2とPhase3の時間比で配分したPhase3開始時HP
+     */
+    static constexpr int Phase3StartHp(int startHp) {
+        if (startHp <= 0) return 0;
+        return (startHp * Phase3SurvivalFrames +
+            Phase2SurvivalFrames + Phase3SurvivalFrames - 1) /
+            (Phase2SurvivalFrames + Phase3SurvivalFrames);
+    }
+
     Stage3Module() = delete;
 
     /**
@@ -20,22 +32,25 @@ public:
      * @return 残り時間に比例して減少するHP
      */
     static constexpr int Phase2HpForRemainingFrames(int startHp, int remainingFrames) {
-        if (startHp <= 0 || remainingFrames <= 0) return 0;
+        const int phase3Hp = Phase3StartHp(startHp);
+        if (startHp <= 0 || remainingFrames <= 0) return phase3Hp;
         if (remainingFrames >= Phase2SurvivalFrames) return startHp;
-        return (startHp * remainingFrames + Phase2SurvivalFrames - 1) /
-            Phase2SurvivalFrames;
+        return phase3Hp + ((startHp - phase3Hp) * remainingFrames +
+            Phase2SurvivalFrames - 1) / Phase2SurvivalFrames;
     }
 
     /**
      * @brief Phase3耐久戦の残り時間からボスHPを取得する
-     * @param startHp Phase3開始時HP
+     * @param startHp Phase2開始時HP
      * @param remainingFrames 耐久戦の残りフレーム数
      * @return 残り時間に比例して減少するHP
      */
     static constexpr int Phase3HpForRemainingFrames(int startHp, int remainingFrames) {
-        if (startHp <= 0 || remainingFrames <= 0) return 0;
-        if (remainingFrames >= Phase3SurvivalFrames) return startHp;
-        return (startHp * remainingFrames + Phase3SurvivalFrames - 1) / Phase3SurvivalFrames;
+        const int phase3Hp = Phase3StartHp(startHp);
+        if (phase3Hp <= 0 || remainingFrames <= 0) return 0;
+        if (remainingFrames >= Phase3SurvivalFrames) return phase3Hp;
+        return (phase3Hp * remainingFrames + Phase3SurvivalFrames - 1) /
+            Phase3SurvivalFrames;
     }
 
     /**

@@ -151,6 +151,7 @@ enum class TayamaPartGroup {
 
 inline constexpr std::size_t TayamaPartGroupCount =
     static_cast<std::size_t>(TayamaPartGroup::Count);
+static_assert(TayamaPartGroupCount == ShooterStages::Stage5::TayamaCollisionGroupCount);
 
 /** @brief TAYAMAの表示、破壊、被弾表示、グループ崩壊Transform */
 struct TayamaModelState {
@@ -161,6 +162,8 @@ struct TayamaModelState {
     std::array<bool, TayamaPartGroupCount> destroyed {};
     std::array<bool, TayamaPartGroupCount> hitFlash {};
     std::array<Stage5PartTransform, TayamaPartGroupCount> collapseOffsets {};
+    std::array<Vector2, 2> searchlightAimRotations {};
+    float armSpinAngle = 0.0f;
 
     /**
      * @brief 指定グループを描画および当たり判定へ含めるか判定する
@@ -199,6 +202,76 @@ public:
     inline static constexpr ColorF Hull {0.15f, 0.17f, 0.21f, 1.0f};
     inline static constexpr ColorF Armor {0.24f, 0.27f, 0.32f, 1.0f};
     inline static constexpr ColorF LightArmor {0.36f, 0.40f, 0.46f, 1.0f};
+    inline static constexpr Vector3 LeftArmShoulder {4.2f, 10.1f, 0.0f};
+    inline static constexpr Vector3 RightArmShoulder {-4.2f, 10.1f, 0.0f};
+    inline static constexpr Vector3 LeftArmTip {12.8f, -2.8f, 0.0f};
+    inline static constexpr Vector3 RightArmTip {-12.8f, -2.8f, 0.0f};
+    inline static constexpr Vector3 LeftSearchlightPivot {4.8f, 10.7f, -2.5f};
+    inline static constexpr Vector3 RightSearchlightPivot {-4.8f, 10.7f, -2.5f};
+
+    /**
+     * @brief 左右腕へ肩支点の回転行列を生成する
+     * @param group 判定するパーツグループ
+     * @param angle 左腕のZ軸回転角度
+     * @return 腕グループなら肩支点回転、それ以外なら単位行列
+     */
+    static Matrix4x4 ArmMotion(TayamaPartGroup group, float angle) {
+        const bool left = group == TayamaPartGroup::LeftFlightDeck;
+        if (!left && group != TayamaPartGroup::RightFlightDeck) return Matrix4x4::Identity;
+        const Vector3 pivot = left ? LeftArmShoulder : RightArmShoulder;
+        return Matrix4x4::Translation(pivot) *
+            Matrix4x4::RotationZ(left ? angle : -angle) *
+            Matrix4x4::Translation(-pivot);
+    }
+
+    /**
+     * @brief サーチライト灯体をローカル目標へ向ける回転角を取得する
+     * @param left 左サーチライトの場合true
+     * @param targetLocal モデルローカル空間の照射目標
+     * @return XにY軸回転、YにX軸回転を格納した角度
+     */
+    static Vector2 SearchlightAimRotation(bool left, const Vector3& targetLocal) {
+        const Vector3 pivot = left ? LeftSearchlightPivot : RightSearchlightPivot;
+        const Vector3 direction = (targetLocal - pivot).Normalized();
+        return {std::atan2(-direction.x, -direction.z),
+            std::asin((std::clamp)(direction.y, -1.0f, 1.0f))};
+    }
+
+    /**
+     * @brief サーチライトグループへ灯体支点回転を生成する
+     * @param group 判定するパーツグループ
+     * @param aimRotations 左右灯体のY軸およびX軸回転
+     * @return サーチライトなら支点回転、それ以外なら単位行列
+     */
+    static Matrix4x4 SearchlightMotion(TayamaPartGroup group,
+        const std::array<Vector2, 2>& aimRotations) {
+        const bool left = group == TayamaPartGroup::LeftSearchlight;
+        if (!left && group != TayamaPartGroup::RightSearchlight) {
+            return Matrix4x4::Identity;
+        }
+        const Vector3 pivot = left ? LeftSearchlightPivot : RightSearchlightPivot;
+        const Vector2 aim = aimRotations[left ? 0 : 1];
+        return Matrix4x4::Translation(pivot) * Matrix4x4::RotationY(aim.x) *
+            Matrix4x4::RotationX(aim.y) * Matrix4x4::Translation(-pivot);
+    }
+
+    /**
+     * @brief 腕の肩と先端を描画と同じ変換でワールド座標へ解決する
+     * @param transform モデル全体のTransform
+     * @param left 左腕を取得する場合true
+     * @param angle 左腕のZ軸回転角度
+     * @param shoulder 肩のワールド座標格納先
+     * @param tip 先端のワールド座標格納先
+     * @return なし
+     */
+    static void ArmWorldSegment(const Stage5ModelTransform& transform, bool left,
+        float angle, Vector3& shoulder, Vector3& tip) {
+        const TayamaPartGroup group = left ?
+            TayamaPartGroup::LeftFlightDeck : TayamaPartGroup::RightFlightDeck;
+        const Matrix4x4 world = Stage5ModelDetail::Matrix(transform) * ArmMotion(group, angle);
+        shoulder = world.TransformPoint(left ? LeftArmShoulder : RightArmShoulder);
+        tip = world.TransformPoint(left ? LeftArmTip : RightArmTip);
+    }
     inline static constexpr ColorF Dark {0.055f, 0.065f, 0.085f, 1.0f};
     inline static constexpr ColorF Window {0.06f, 0.30f, 0.42f, 1.0f};
     inline static constexpr ColorF Warning {1.0f, 0.30f, 0.035f, 1.0f};
@@ -286,6 +359,82 @@ public:
         {0.0f, 2.1055f, 0.2291f}};
     inline static constexpr Stage5PartTransform MechaHead {
         {0.0f, 16.0f, 0.0f}};
+    inline static constexpr float MechaHeadScale = 3.0f;
+    inline static constexpr float DragonJointDiameterScale = 1.12f;
+    inline static constexpr float HeadRearExtent = 1.6909f;
+
+    /**
+     * @brief 変形率に応じた頭部倍率を取得する
+     * @param progress 0がビル、1が巨大メカとなる変形率
+     * @return ビル形態の等倍から巨大メカ形態の3倍までの倍率
+     */
+    static constexpr float HeadScale(float progress) {
+        return Math::LerpClamped(1.0f, MechaHeadScale, progress);
+    }
+
+    /**
+     * @brief 頭部配置へ変形率に応じた拡縮を加える
+     * @param root モデル全体と崩壊Offsetを含む親行列
+     * @param local 補間済み頭部Transform
+     * @param progress 0がビル、1が巨大メカとなる変形率
+     * @return 全頭部パーツで共有する行列
+     */
+    static Matrix4x4 HeadRoot(const Matrix4x4& root,
+        const Stage5PartTransform& local, float progress) {
+        const float scale = HeadScale(progress);
+        return root * Stage5ModelDetail::Matrix(local) *
+            Matrix4x4::Scale({scale, scale, scale});
+    }
+
+    /**
+     * @brief 龍の球形首装甲から頭部を正面へ出す距離を取得する
+     * @param jointDiameter 首装甲の正面方向の直径
+     * @param headScale 頭部の均一倍率
+     * @return 頭部背面が首装甲表面へ接する正面方向の距離
+     */
+    static constexpr float DragonHeadForwardOffset(float jointDiameter, float headScale) {
+        return jointDiameter * 0.5f + HeadRearExtent * MechaHeadScale * headScale;
+    }
+
+    /**
+     * @brief 巨大メカ形態の両目中央をワールド座標で取得する
+     * @param transform モデル全体のTransform
+     * @return 両目中央のワールド座標
+     */
+    static Vector3 EyeWorldCenter(const Stage5ModelTransform& transform) {
+        const Matrix4x4 head = HeadRoot(
+            Stage5ModelDetail::Matrix(transform), MechaHead, 1.0f);
+        const Vector3 left = head.TransformPoint(HeadParts[11].position);
+        const Vector3 right = head.TransformPoint(HeadParts[12].position);
+        return (left + right) * 0.5f;
+    }
+
+    /**
+     * @brief 巨大メカ頭部の正面方向をワールド座標で取得する
+     * @param transform モデル全体のTransform
+     * @return 正規化済み正面方向
+     */
+    static Vector3 HeadForward(const Stage5ModelTransform& transform) {
+        return Stage5ModelDetail::Matrix(transform).TransformVector({0.0f, 0.0f, -1.0f}).Normalized();
+    }
+
+    /**
+     * @brief 対象が巨大メカ頭部の正面扇形内にいるか判定する
+     * @param transform モデル全体のTransform
+     * @param target 判定するワールド座標
+     * @param minimumDot 正面方向との内積下限
+     * @return 正面扇形内の場合true
+     */
+    static bool IsInFrontOfHead(const Stage5ModelTransform& transform,
+        const Vector3& target, float minimumDot) {
+        const Vector3 eye = EyeWorldCenter(transform);
+        Vector3 toTarget {target.x - eye.x, 0.0f, target.z - eye.z};
+        Vector3 forward = HeadForward(transform);
+        forward.y = 0.0f;
+        if (toTarget.LengthSquared() <= Math::Epsilon ||
+            forward.LengthSquared() <= Math::Epsilon) return false;
+        return Vector3::Dot(toTarget.Normalized(), forward.Normalized()) >= minimumDot;
+    }
 
     // FBXにないドリル、攻略用弱点、開閉装甲、発光部だけを追加Primitiveで補う
     inline static constexpr std::array<TayamaPart, 35> Parts {{
@@ -410,6 +559,7 @@ public:
             const Stage5PartTransform local =
                 Stage5ModelDetail::Lerp(building.tower, building.mecha, progress);
             const Matrix4x4 buildingRoot = root *
+                ArmMotion(building.group, state.armSpinAngle) *
                 Stage5ModelDetail::Matrix(state.collapseOffsets[group]) *
                 Stage5ModelDetail::Matrix(local);
             const bool hit = state.hitFlash[group];
@@ -425,9 +575,8 @@ public:
             const std::size_t group = static_cast<std::size_t>(HeadGroup);
             const Stage5PartTransform local =
                 Stage5ModelDetail::Lerp(TowerHead, MechaHead, progress);
-            const Matrix4x4 headRoot = root *
-                Stage5ModelDetail::Matrix(state.collapseOffsets[group]) *
-                Stage5ModelDetail::Matrix(local);
+            const Matrix4x4 headRoot = HeadRoot(root *
+                Stage5ModelDetail::Matrix(state.collapseOffsets[group]), local, progress);
             for (std::size_t index = 0; index < HeadParts.size(); ++index) {
                 const ColorF color = state.hitFlash[group] ? Hit : HeadPartColor(index);
                 drawPart(PrimitiveShape::Box,
@@ -440,7 +589,9 @@ public:
             if (!state.IsVisible(part.group)) continue;
             const std::size_t group = static_cast<std::size_t>(part.group);
             const Stage5PartTransform local = InterpolatePart(part, progress);
-            const Matrix4x4 world = root * Stage5ModelDetail::Matrix(state.collapseOffsets[group]) *
+            const Matrix4x4 world = root * ArmMotion(part.group, state.armSpinAngle) *
+                SearchlightMotion(part.group, state.searchlightAimRotations) *
+                Stage5ModelDetail::Matrix(state.collapseOffsets[group]) *
                 Stage5ModelDetail::Matrix(local);
             const ColorF color = state.hitFlash[group] ? Hit : part.color;
             drawPart(part.shape, world, color, part.group);
@@ -460,6 +611,26 @@ public:
         const TayamaModelState& state, DrawPart&& drawPart) {
         VisitParts(Stage5ModelDetail::Matrix(transform), progress, state,
             drawPart);
+    }
+
+    /**
+     * @brief 描画パーツを一度だけ列挙して全グループの境界を求める
+     * @param transform モデル全体のTransform
+     * @param progress 0がビル、1が巨大メカとなる変形率
+     * @param state グループの表示、破壊、崩壊状態
+     * @return グループ番号で参照できる球形境界配列
+     */
+    static std::array<Stage5GroupBounds, TayamaPartGroupCount> AllGroupBounds(
+        const Stage5ModelTransform& transform, float progress, const TayamaModelState& state) {
+        std::array<Stage5GroupBounds, TayamaPartGroupCount> bounds {};
+
+        // 各パーツを所属グループの境界へ一度だけ集約する
+        VisitParts(transform, progress, state,
+            [&](PrimitiveShape, const Matrix4x4& world, const ColorF&, TayamaPartGroup group) {
+                Stage5ModelDetail::Include(bounds[static_cast<std::size_t>(group)],
+                    world.TransformPoint(Vector3::Zero), Stage5ModelDetail::WorldPartRadius(world));
+            });
+        return bounds;
     }
 
     /**

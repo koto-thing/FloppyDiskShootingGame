@@ -18,6 +18,7 @@
 #include "Infrastructure/Repositories/SettingsRepository.h"
 #include "Infrastructure/ExternalServices/D3D12RenderingService.h"
 #include "Engine/Graphics/Renderer.h"
+#include "Engine/UI/Button.h"
 #include "Presentation/Scenes/TitleScene.h"
 #include "Presentation/Scenes/TestStage.h"
 #include "Presentation/Scenes/TutorialStage.h"
@@ -27,6 +28,8 @@
 #include "Presentation/Scenes/StoryScene.h"
 #include "Presentation/Scenes/EndingScene.h"
 #include "Presentation/Scenes/RankingScene.h"
+
+constexpr WORD APP_ICON_RESOURCE_ID = 101;
 
 /**
  * ウィンドウプロシージャ
@@ -78,6 +81,11 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         return 0;
     }
 
+    // 埋め込みアイコンをウィンドウへ反映する
+    const HICON appIcon = LoadIcon(hInstance, MAKEINTRESOURCE(APP_ICON_RESOURCE_ID));
+    SendMessage(hwnd, WM_SETICON, ICON_BIG, reinterpret_cast<LPARAM>(appIcon));
+    SendMessage(hwnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(appIcon));
+
     // ウィンドウへキーボードとマウスのRaw Inputを登録する
     if (!Input::Initialize(hwnd)) {
         Debug::LogError("Input initialization failed");
@@ -110,6 +118,13 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         MessageBox(NULL, L"Audio Initializing Failed", L"Error", MB_OK);
         return 0;
     }
+
+    // 通常決定音は高く、キャンセル音は低く鳴らす
+    Button::SetClickSoundHandler([&audio](Button::ClickSound sound) {
+        Audio::SfxrParams params = Audio::SfxrParams::CreatePreset(Audio::SfxrPreset::BlipSelect);
+        params.startFrequency = sound == Button::ClickSound::Confirm ? 0.65f : 0.18f;
+        audio.PlaySE(params);
+    });
 
     if (!audio.PlayMMLBGMFromFile("mml/test.mml", true) && 
         !audio.PlayMMLBGMFromFile("Sound/mml/test.mml", true) &&
