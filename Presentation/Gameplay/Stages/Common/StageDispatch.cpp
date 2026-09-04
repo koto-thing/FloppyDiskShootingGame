@@ -257,7 +257,6 @@ void SideScrollingShooter::StageDispatch::TickSpecialShotBeforeMove(
         break;
     case 4:
         Stage4Module::TickSpecialShotBeforeMove(shooter, shot);
-    case 5:
     case 3:
         Stage3Module::TickSpecialShotBeforeMove(shooter, shot);
         break;
