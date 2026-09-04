@@ -16,6 +16,20 @@ namespace {
 constexpr float MortarExplosionDepthHitRadius = 0.85f;
 
 /**
+ * @brief 追尾対象として現在の候補より優先するか判定する
+ * @param candidateHp 候補のHP
+ * @param candidateDistanceSquared 候補と自機の距離の二乗
+ * @param targetHp 現在の対象のHP
+ * @param targetDistanceSquared 現在の対象と自機の距離の二乗
+ * @return HPが低いか、同じHPで自機に近い場合true
+ */
+constexpr bool IsPreferredHomingTarget(int candidateHp, float candidateDistanceSquared,
+    int targetHp, float targetDistanceSquared) {
+    return candidateHp < targetHp ||
+        (candidateHp == targetHp && candidateDistanceSquared < targetDistanceSquared);
+}
+
+/**
  * @brief ボムの発射位置から画面中央までの座標を求める
  * @param start 発射位置
  * @param age 発射後の経過フレーム
@@ -55,6 +69,9 @@ static_assert(BombTravelCoordinate(-0.8f, 0, 24) == -0.8f);
 static_assert(BombTravelCoordinate(-0.8f, 24, 24) == 0.0f);
 static_assert(PerspectiveDepthScale(-13.5f, 35.0f, 10.0f) > 0.0f);
 static_assert(PerspectiveDepthScale(-13.5f, 35.0f, 10.0f) < 1.0f);
+static_assert(IsPreferredHomingTarget(1, 9.0f, 2, 1.0f));
+static_assert(!IsPreferredHomingTarget(2, 1.0f, 1, 9.0f));
+static_assert(IsPreferredHomingTarget(1, 1.0f, 1, 9.0f));
 }
 
 void SideScrollingShooter::TickPlayer() {
@@ -1027,30 +1044,44 @@ void SideScrollingShooter::FireSpecialShots() {
     }
 }
 
-/** @brief 追尾弾の進行方向を最寄りの前方敵へ近づける */
+/**
+ * @brief 追尾弾をHPが最低で同HPなら自機に近い前方敵へ向ける
+ * @param shot 更新する追尾弾
+ * @return なし
+ */
 void SideScrollingShooter::UpdateHomingShot(Shot& shot) {
     const bool verticalRoute = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
     if (IsRailGameplayActive() && !verticalRoute) {
         const Enemy* target = nullptr;
-        float nearestDistanceSquared = 10000.0f;
+        float targetDistanceSquared = 0.0f;
+        float targetPlayerDistanceSquared = 0.0f;
+        const Vector3 player = PlayerWorldPosition();
 
-        // 3Dレールでは奥行き方向の前方にいる最寄りの敵を追尾する
+        // 3Dレールでは奥行き方向の前方からHP最低、同HPなら自機に近い敵を選ぶ
         for (const auto& enemy : m_enemies) {
-            if (!enemy.active || enemy.z <= shot.z) continue;
+            if (!enemy.active || enemy.hp <= 0 || enemy.z <= shot.z) continue;
             const float dx = ToWorldX(enemy.x - shot.x);
             const float dy = ToWorldY(enemy.y - shot.y);
             const float dz = enemy.z - shot.z;
             const float distanceSquared = dx * dx + dy * dy + dz * dz;
-            if (distanceSquared < nearestDistanceSquared) {
-                nearestDistanceSquared = distanceSquared;
+            if (distanceSquared >= 10000.0f) continue;
+            const float playerDx = ToWorldX(enemy.x) - player.x;
+            const float playerDy = ToWorldY(enemy.y) - player.y;
+            const float playerDz = enemy.z - player.z;
+            const float playerDistanceSquared =
+                playerDx * playerDx + playerDy * playerDy + playerDz * playerDz;
+            if (target == nullptr || IsPreferredHomingTarget(
+                enemy.hp, playerDistanceSquared, target->hp, targetPlayerDistanceSquared)) {
+                targetDistanceSquared = distanceSquared;
+                targetPlayerDistanceSquared = playerDistanceSquared;
                 target = &enemy;
             }
         }
-        if (target == nullptr || nearestDistanceSquared <= 0.000001f) return;
+        if (target == nullptr || targetDistanceSquared <= 0.000001f) return;
 
         // ワールド空間で旋回量を補間して、レール弾速を維持する
         const auto& config = PlayerShotConfigs[static_cast<size_t>(Homing)];
-        const float inverseDistance = 1.0f / std::sqrt(nearestDistanceSquared);
+        const float inverseDistance = 1.0f / std::sqrt(targetDistanceSquared);
         const float speed = 1.45f;
         float vx = ToWorldX(shot.vx);
         float vy = ToWorldY(shot.vy);
@@ -1068,24 +1099,32 @@ void SideScrollingShooter::UpdateHomingShot(Shot& shot) {
     }
 
     const Enemy* target = nullptr;
-    float nearestDistanceSquared = 100.0f;
+    float targetDistanceSquared = 0.0f;
+    float targetPlayerDistanceSquared = 0.0f;
 
-    /** @brief 現在の2D進行方向にいる最寄りの敵を追尾対象として検索する */
+    // 現在の2D進行方向からHP最低、同HPなら自機に近い敵を選ぶ
     for (const auto& enemy : m_enemies) {
-        if (!enemy.active || (verticalRoute ? enemy.y <= shot.y : enemy.x <= shot.x)) continue;
+        if (!enemy.active || enemy.hp <= 0 ||
+            (verticalRoute ? enemy.y <= shot.y : enemy.x <= shot.x)) continue;
         const float dx = enemy.x - shot.x;
         const float dy = enemy.y - shot.y;
         const float distanceSquared = dx * dx + dy * dy;
-        if (distanceSquared < nearestDistanceSquared) {
-            nearestDistanceSquared = distanceSquared;
+        if (distanceSquared >= 100.0f) continue;
+        const float playerDx = enemy.x - m_playerX;
+        const float playerDy = enemy.y - m_playerY;
+        const float playerDistanceSquared = playerDx * playerDx + playerDy * playerDy;
+        if (target == nullptr || IsPreferredHomingTarget(
+            enemy.hp, playerDistanceSquared, target->hp, targetPlayerDistanceSquared)) {
+            targetDistanceSquared = distanceSquared;
+            targetPlayerDistanceSquared = playerDistanceSquared;
             target = &enemy;
         }
     }
-    if (target == nullptr || nearestDistanceSquared <= 0.000001f) return;
+    if (target == nullptr || targetDistanceSquared <= 0.000001f) return;
 
     /** @brief 現在速度と目標方向を補間して速度を一定に保つ */
     const auto& config = PlayerShotConfigs[static_cast<size_t>(Homing)];
-    const float inverseDistance = 1.0f / std::sqrt(nearestDistanceSquared);
+    const float inverseDistance = 1.0f / std::sqrt(targetDistanceSquared);
     const float desiredVx = (target->x - shot.x) * inverseDistance * config.speed;
     const float desiredVy = (target->y - shot.y) * inverseDistance * config.speed;
     shot.vx += (desiredVx - shot.vx) * config.homingStrength;
