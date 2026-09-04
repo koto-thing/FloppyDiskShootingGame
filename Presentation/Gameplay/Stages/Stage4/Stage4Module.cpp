@@ -529,9 +529,10 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
     BossModelTransform transform {
         {ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z},
         aimTarget, yaw + Stage4ModelYawOffset, Stage4BossScale,
-        enemy.bossPartHp[BossNose] > 0, true
+        enemy.bossPartHp[MainCannonPart(shooter.m_stage4.currentWeapon)] > 0, true
     };
     const Stage4Logic& swap = shooter.m_stage4;
+    const BossPart currentMainCannonPart = MainCannonPart(swap.currentWeapon);
     const Stage4SwapConfig swapConfig = ShooterStages::Stage4::SwapConfig(swap.incomingWeapon);
 
     // Romance Cannon装着時だけ車体全体を沈ませ重量を受ける動きを作る
@@ -542,8 +543,8 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
     }
     Stage4BossModelState state;
     state.mainCannon = false;
-    state.mainCannonHit = enemy.bossPartHitFlashFrames[BossNose] > 0 &&
-        (enemy.bossPartHitFlashFrames[BossNose] / 2) % 2 != 0;
+    state.mainCannonHit = enemy.bossPartHitFlashFrames[currentMainCannonPart] > 0 &&
+        (enemy.bossPartHitFlashFrames[currentMainCannonPart] / 2) % 2 != 0;
     for (int i = 0; i < 6; ++i) {
         const int part = BossFunnelHatch0 + i;
         state.secondaryGuns[i] = enemy.bossPartHp[part] > 0;
@@ -615,7 +616,9 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
 
     // 装着主砲またはパージ中の旧主砲を独立Transformで描画する
     const BossModelTransform mount = Stage4BossModelView::MainWeaponMount(aimedTransform);
-    if (swap.outgoingVisual != Stage4WeaponVisual::Hidden) {
+    const BossPart outgoingMainCannonPart = MainCannonPart(swap.outgoingWeapon);
+    if (swap.outgoingVisual != Stage4WeaponVisual::Hidden &&
+        enemy.bossPartHp[outgoingMainCannonPart] > 0) {
         BossModelTransform outgoingTransform = mount;
         if (swap.swapState == Stage4SwapState::Unlock) {
             const float progress = SmoothStep(SwapProgress(swap, swapConfig));
@@ -633,7 +636,9 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
         const Stage4MainWeaponPose outgoingPose =
             WeaponPose(swap, swap.outgoingWeapon, shooter.IsRailGameplayActive());
         Stage4BossModelView::DrawMainWeapon(outgoingType, outgoingTransform,
-            outgoingPose, DrawBossPart, state.mainCannonHit);
+            outgoingPose, DrawBossPart,
+            enemy.bossPartHitFlashFrames[outgoingMainCannonPart] > 0 &&
+            (enemy.bossPartHitFlashFrames[outgoingMainCannonPart] / 2) % 2 != 0);
 
         if (swap.swapState == Stage4SwapState::Purge) {
             // 旧主砲下面の補助エンジンへ既存の噴射煙と炎を重ねる
@@ -656,7 +661,9 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
 
     // 搬入主砲はSpawn、Approach、Carry、Align、Mountの各点を滑らかに結ぶ
     BossModelTransform incomingTransform = mount;
-    if (swap.incomingVisual != Stage4WeaponVisual::Hidden) {
+    const BossPart incomingMainCannonPart = MainCannonPart(swap.incomingWeapon);
+    if (swap.incomingVisual != Stage4WeaponVisual::Hidden &&
+        enemy.bossPartHp[incomingMainCannonPart] > 0) {
         const bool romance = swap.incomingWeapon == Stage4Weapon::RomanceCannon;
         const Vector3 spawnOffset = romance ? Vector3 {15.0f, 13.0f, 0.0f} :
             Vector3 {11.0f, 10.0f, 0.0f};
@@ -691,7 +698,9 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
         const Stage4MainWeaponPose incomingPose =
             WeaponPose(swap, swap.incomingWeapon, shooter.IsRailGameplayActive());
         Stage4BossModelView::DrawMainWeapon(
-            incomingType, incomingTransform, incomingPose, DrawBossPart);
+            incomingType, incomingTransform, incomingPose, DrawBossPart,
+            enemy.bossPartHitFlashFrames[incomingMainCannonPart] > 0 &&
+            (enemy.bossPartHitFlashFrames[incomingMainCannonPart] / 2) % 2 != 0);
 
         // 主砲側CarryPointへ各ドローンのLiftPointを一致させて編隊を作る
         if (swap.swapState >= Stage4SwapState::DroneApproach &&
@@ -740,9 +749,10 @@ bool SideScrollingShooter::Stage4Module::TryHitBossPart(
     const Enemy& boss, BossPart& part) {
     if (boss.type != 2) return false;
 
-    // 主砲身をBossNose枠として判定する
-    if (boss.bossPartHp[BossNose] > 0) {
-        const Vector3 world = LocalToWorld(shooter, boss, BossPartLocalPosition(BossNose));
+    // 現在装着中の主砲に割り当てた部位枠で判定する
+    const BossPart mainCannonPart = MainCannonPart(shooter.m_stage4.currentWeapon);
+    if (boss.bossPartHp[mainCannonPart] > 0) {
+        const Vector3 world = LocalToWorld(shooter, boss, BossPartLocalPosition(mainCannonPart));
         const bool hit = shooter.IsRailGameplayActive() ?
             Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
                 shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
@@ -752,7 +762,7 @@ bool SideScrollingShooter::Stage4Module::TryHitBossPart(
                 FromWorldX(world.x), FromWorldY(world.y),
                 Stage4MainCannonHitRadius / WorldXScale);
         if (hit) {
-            part = BossNose;
+            part = mainCannonPart;
             return true;
         }
     }
@@ -781,21 +791,20 @@ void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
     SideScrollingShooter& shooter, Enemy& boss) {
     if (boss.type != 2 || IsWeaponSwapActive(shooter)) return;
 
-    // 生存中の主砲身と副砲6基から、現在の自機位置へ直接撃つ
+    // 現在の主砲が生存している場合は主砲弾を発射する
     bool fired = false;
-    for (int partIndex = 0; partIndex < BossPartCount; ++partIndex) {
-        const BossPart part = static_cast<BossPart>(partIndex);
+    const BossPart mainCannonPart = MainCannonPart(shooter.m_stage4.currentWeapon);
+    if (boss.bossPartHp[mainCannonPart] > 0) {
+        SpawnMainCannonball(shooter, boss);
+        boss.recoilType = shooter.m_stage4.currentWeapon == Stage4Weapon::RomanceCannon ? 1 : 0;
+        boss.recoilAge = Stage4EnemySheet::MainCannonRecoilFramesForWeapon(
+            shooter.m_stage4.currentWeapon);
+    }
+
+    // 生存中の副砲6基から現在の自機位置へ直接撃つ
+    for (int gun = 0; gun < 6; ++gun) {
+        const BossPart part = static_cast<BossPart>(BossFunnelHatch0 + gun);
         if (boss.bossPartHp[part] <= 0) continue;
-        if (part != BossNose && SecondaryGunIndex(part) < 0) continue;
-
-        if (part == BossNose) {
-            SpawnMainCannonball(shooter, boss);
-            boss.recoilType = shooter.m_stage4.currentWeapon == Stage4Weapon::RomanceCannon ? 1 : 0;
-            boss.recoilAge = Stage4EnemySheet::MainCannonRecoilFramesForWeapon(
-                shooter.m_stage4.currentWeapon);
-            continue;
-        }
-
         const Vector3 world = LocalToWorld(shooter, boss, BossPartLocalPosition(part));
         const int bulletCount = shooter.m_stage->BossPartBulletCount(
             part, static_cast<BossPhase>(boss.bossPhase), shooter.IsRailGameplayActive());
@@ -936,7 +945,7 @@ bool SideScrollingShooter::Stage4Module::SpawnBossDebris(
     SideScrollingShooter& shooter, const Enemy& boss, int bossPart) {
     if (boss.type != 2) return false;
     const BossPart part = static_cast<BossPart>(bossPart);
-    if (bossPart >= 0 && part != BossNose && SecondaryGunIndex(part) < 0) return false;
+    if (bossPart >= 0 && !IsMainCannonPart(part) && SecondaryGunIndex(part) < 0) return false;
 
     constexpr float ArmorBlack[] = {0.060f, 0.065f, 0.075f, 1.0f};
     constexpr float HighlightBlack[] = {0.10f, 0.10f, 0.12f, 1.0f};
@@ -971,7 +980,7 @@ bool SideScrollingShooter::Stage4Module::SpawnBossDebris(
     }
 
     // 破壊された砲の主要プリミティブだけを飛散させる
-    if (part == BossNose) {
+    if (IsMainCannonPart(part)) {
         if (shooter.m_stage4.currentWeapon == Stage4Weapon::RomanceCannon) {
             AddPiece(2, {-4.2f, 5.0f, 0.0f}, {3.2f, 1.55f, 1.55f}, HighlightBlack);
             AddPiece(2, {-7.0f, 5.0f, 0.0f}, {2.6f, 1.35f, 1.35f}, ArmorBlack);
@@ -1029,6 +1038,19 @@ Vector3 SideScrollingShooter::Stage4Module::LocalToWorld(
 int SideScrollingShooter::Stage4Module::SecondaryGunIndex(BossPart part) {
     const int index = static_cast<int>(part) - BossFunnelHatch0;
     return index >= 0 && index < 6 ? index : -1;
+}
+
+SideScrollingShooter::BossPart SideScrollingShooter::Stage4Module::MainCannonPart(
+    ShooterStages::Stage4::MainWeaponType weapon) {
+    switch (weapon) {
+    case Stage4Weapon::SiegeMortar: return BossLeftWing;
+    case Stage4Weapon::RomanceCannon: return BossRightWing;
+    default: return BossNose;
+    }
+}
+
+bool SideScrollingShooter::Stage4Module::IsMainCannonPart(BossPart part) {
+    return part == BossNose || part == BossLeftWing || part == BossRightWing;
 }
 
 Vector3 SideScrollingShooter::Stage4Module::BossPartLocalPosition(BossPart part) {

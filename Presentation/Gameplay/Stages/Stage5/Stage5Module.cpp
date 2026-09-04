@@ -45,6 +45,14 @@ public:
     int StageIndex() const override { return 5; }
 
     /**
+     * @brief Stage5の1チャプターの長さを取得する
+     * @return 難易度別シートのチャプターフレーム数
+     */
+    int ChapterFrameLength() const override {
+        return m_enemySheet.ChapterFrameLength();
+    }
+
+    /**
      * @brief EASTSOURCEの最大HPを取得する
      * @return EASTSOURCEの最大HP
      */

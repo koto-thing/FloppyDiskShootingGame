@@ -33,6 +33,6 @@ public:
         constexpr Chapter Chapters[] = {
             MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)
         };
-        return TrySelectByChapters(Chapters, 3, frame, spawnIndex, spawn, chapterNumber);
+        return TrySelectByChapters(Chapters, 3, ChapterFrameLength(), frame, spawnIndex, spawn, chapterNumber);
     }
 };

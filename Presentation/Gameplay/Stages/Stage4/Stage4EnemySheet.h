@@ -169,11 +169,19 @@ public:
         }
     }
 
+    int BossMaxHp() const override {
+        return 3000;
+    }
+
     /** @brief Stage 4ボスの砲部位HPを設定する @param boss 設定するボス @return なし */
     void ConfigureBossPartHp(Enemy& boss) const override {
-        boss.bossPartHp = {260, 0, 0, 0, 0,
-            90, 90, 90, 90, 90, 90,
-            0, 0, 0, 0, 0, 0};
+        boss.bossPartHp = {};
+        boss.bossPartHp[BossNose] = Phase1MainCannonHp;
+        boss.bossPartHp[BossLeftWing] = SiegeMortarHp;
+        boss.bossPartHp[BossRightWing] = RomanceCannonHp;
+        for (int gun = 0; gun < 6; ++gun) {
+            boss.bossPartHp[BossFunnelHatch0 + gun] = SecondaryGunHp;
+        }
     }
 
     /**
@@ -192,7 +200,7 @@ public:
      * @return 本体へ与えるダメージ
      */
     int BossPartBreakDamage(BossPart part) const override {
-        return part == BossNose ? 140 : 70;
+        return part == BossNose || part == BossLeftWing || part == BossRightWing ? 200 : 70;
     }
 
     /**
@@ -327,6 +335,10 @@ public:
     }
 
 private:
+    static constexpr int Phase1MainCannonHp = 1000;
+    static constexpr int SiegeMortarHp = 1000;
+    static constexpr int RomanceCannonHp = 1000;
+    static constexpr int SecondaryGunHp = 500;
     inline static constexpr int RushIntervalFrames = 700;
     inline static constexpr int RushWindupFrames = 42;
     inline static constexpr int RushChargeFrames = 61;

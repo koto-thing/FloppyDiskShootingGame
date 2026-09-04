@@ -186,6 +186,20 @@ public:
 
 private:
     /**
+     * @brief 主砲種別に対応する破壊可能部位を取得する
+     * @param weapon 主砲種別
+     * @return 主砲ごとに割り当てたボス部位
+     */
+    static BossPart MainCannonPart(ShooterStages::Stage4::MainWeaponType weapon);
+
+    /**
+     * @brief 指定部位がStage 4主砲用の部位か判定する
+     * @param part 判定する部位
+     * @return 主砲用部位の場合true
+     */
+    static bool IsMainCannonPart(BossPart part);
+
+    /**
      * @brief 現在主砲から指定主砲への交換を開始する
      * @param shooter 更新するゲーム本体
      * @param boss Stage 4ボス
