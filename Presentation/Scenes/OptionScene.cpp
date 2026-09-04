@@ -129,22 +129,24 @@ void OptionScene::Render(Renderer& renderer) {
     // オプション画面の見出しを描画する
     renderer.DrawText(
         "OPTIONS",
-        { -0.18f, 0.65f },
+        TextAlign::Center,
         0.04f,
-        { 1.0f, 1.0f, 1.0f, 1.0f }
+        { 1.0f, 1.0f, 1.0f, 1.0f },
+        { 0.0f, 0.65f },
+        0.008f
     );
 
     // 各音量の現在値をラベルとして描画する
     char buf[64];
 
     snprintf(buf, sizeof(buf), "MST %3d%%", static_cast<int>(m_masterVolumeSlider.Value() * 100.0f + 0.5f));
-    renderer.DrawText(buf, { -0.65f, 0.17f }, 0.016f, ColorF(0.7f, 0.7f, 0.7f, 0.8f));
+    renderer.DrawText(buf, { -0.50f, 0.17f }, 0.016f, ColorF(0.7f, 0.7f, 0.7f, 0.8f));
 
     snprintf(buf, sizeof(buf), "BGM %3d%%", static_cast<int>(m_bgmVolumeSlider.Value() * 100.0f + 0.5f));
-    renderer.DrawText(buf, { -0.65f, 0.02f }, 0.016f, ColorF(0.7f, 0.7f, 0.7f, 0.8f));
+    renderer.DrawText(buf, { -0.50f, 0.02f }, 0.016f, ColorF(0.7f, 0.7f, 0.7f, 0.8f));
 
     snprintf(buf, sizeof(buf), "SE  %3d%%", static_cast<int>(m_seVolumeSlider.Value() * 100.0f + 0.5f));
-    renderer.DrawText(buf, { -0.65f, -0.13f }, 0.016f, ColorF(0.7f, 0.7f, 0.7f, 0.8f));
+    renderer.DrawText(buf, { -0.50f, -0.13f }, 0.016f, ColorF(0.7f, 0.7f, 0.7f, 0.8f));
 
     // 音量スライダーを描画する
     m_masterVolumeSlider.Render(renderer);

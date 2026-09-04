@@ -152,12 +152,13 @@ void TitleScene::Render(Renderer& renderer) {
     // ゆっくり明滅する星空をUIの背面へ描画する
     SpaceBackground::Render(renderer, Time::unscaledTime);
 
-    // 画面上部に "TITLE" と表示
+    // 画面上部中央にタイトルを表示
     renderer.DrawText(
         "SPACE YAKUZA",
-        { -0.4f, 0.6f },
+        TextAlign::TopCenter,
         0.04f,
         { 1.0f, 1.0f, 1.0f, 1.0f },
+        { 0.0f, -0.36f },
         0.005f
     );
 
