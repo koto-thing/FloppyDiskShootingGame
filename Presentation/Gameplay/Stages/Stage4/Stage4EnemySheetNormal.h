@@ -43,7 +43,7 @@ public:
             {LinkedLaserEnemy, 10, 400, 1.12f, -0.45f, 0.0f, 60.0f },
             {BasicEnemy, 50, 100, 2.6f, -0.72f, -0.54f, 60.0f},
             {DiveRusherEnemy, 50, 50, 1.6f, 0.00f, 1.10f, 40.0f},
-            {StraightShooterEnemy, 50, 50, 2.6f, 0.00f, -1.00f, 40.0f},
+            {StraightShooterEnemy, 50, 50, 2.6f, 0.00f, -0.80f, 40.0f},
             {MissileShooterEnemy, 300, 300, 1.14f, -0.40f, -0.92f, 60.0f},
             {MissileShooterEnemy, 300, 300, 1.14f, 0.40f, -0.92f, 60.0f},
             {MissileShooterEnemy, 300, 300, 1.14f, -0.80f, -0.92f, 60.0f},
