@@ -316,9 +316,6 @@
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
-  <Target Name="CopyShaders" AfterTargets="AfterBuild">
-    <Copy SourceFiles="Shaders\ObjectShader.hlsl;Shaders\BackgroundShader.hlsl;Shaders\SpellCircleShader.hlsl;Shaders\PixelUpscaleShader.hlsl" DestinationFolder="$(OutDir)Shaders" SkipUnchangedFiles="true" />
-  </Target>
   <Target Name="CopyMML" AfterTargets="AfterBuild">
     <Copy SourceFiles="mml\test.mml" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('mml\test.mml')" />
     <Copy SourceFiles="test.mml" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('test.mml')" />

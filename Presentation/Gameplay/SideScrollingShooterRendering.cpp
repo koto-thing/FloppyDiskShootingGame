@@ -399,7 +399,8 @@ void SideScrollingShooter::DrawPlayerModel(Renderer& renderer, const Camera3D& c
                 Matrix4x4::RotationZ(roll) * Matrix4x4::RotationY(partYaw) *
                 Matrix4x4::RotationX(pitch) *
                 Matrix4x4::RotationZ(partPitch) * Matrix4x4::Scale(partScale);
-            DrawModelPrimitive(renderer, camera, shape, world, partColor);
+            DrawModelPrimitive(renderer, camera,
+                static_cast<int>(PrimitiveShapeFromLegacyIndex(shape)), world, partColor);
         }
         if (!canToggleView || !isNose) return;
 
@@ -415,7 +416,8 @@ void SideScrollingShooter::DrawPlayerModel(Renderer& renderer, const Camera3D& c
                 Matrix4x4::RotationZ(roll) * Matrix4x4::RotationY(partYaw) *
                 Matrix4x4::RotationX(pitch) * Matrix4x4::RotationZ(partPitch) *
                 Matrix4x4::Scale(partScale * glowScale);
-            DrawModelPrimitive(renderer, camera, shape, glowWorld, glowColor);
+            DrawModelPrimitive(renderer, camera,
+                static_cast<int>(PrimitiveShapeFromLegacyIndex(shape)), glowWorld, glowColor);
         }
     };
     AircraftModelView::DrawPlayer({x, y, z}, yaw, 1.0f, drawPart);

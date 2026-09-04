@@ -3,6 +3,7 @@
 #include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
 #include "../../Infrastructure/ExternalServices/AudioService.h"
 #include "../../Infrastructure/Repositories/ScoreRepository.h"
+#include "../../Infrastructure/Repositories/SettingsRepository.h"
 #include "../../Engine/Input/Input.h"
 #include "../../Engine/Input/KeyCode.h"
 #include "../../Engine/Graphics/Renderer.h"
@@ -71,10 +72,14 @@ void TestStage::Dispose() {
     m_openOptionsButton.reset();
     m_closeMenuButton.reset();
     m_backToMenuButton.reset();
+    m_retroEffectButton.reset();
     m_game.reset();
 }
 
 void TestStage::Render(Renderer& renderer) {
+    // ゲーム中の映像設定を次の描画フレームへ反映する
+    renderer.SetRetroEffectEnabled(m_retroEffectEnabled);
+
     // ステージ本体が背景、3Dオブジェクト、UIを一つのRenderer経路へ登録する
     m_game->Render(renderer);
     if (m_pauseMenuOpen) RenderPauseMenu(renderer);
@@ -96,9 +101,24 @@ void TestStage::InitializePauseMenu() {
     m_closeMenuButton->SetOnClick([this]() { m_pauseMenuOpen = false; });
 
     m_backToMenuButton = std::make_unique<Button>(Vector2 {0.42f, 0.10f}, RectAlign::Center,
-        "BACK TO MENU", Vector2 {0.0f, -0.38f});
+        "BACK TO MENU", Vector2 {0.0f, -0.45f});
     m_backToMenuButton->SetClickSound(Button::ClickSound::Cancel);
     m_backToMenuButton->SetOnClick([this]() { m_optionsOpen = false; });
+
+    // 保存済みのレトロ映像効果設定を切替ボタンへ反映する
+    m_retroEffectEnabled = SettingsRepository {}.Load().retroEffectEnabled;
+    m_retroEffectButton = std::make_unique<Button>(Vector2 {0.42f, 0.10f}, RectAlign::Center,
+        m_retroEffectEnabled ? "RETRO EFFECT  ON" : "RETRO EFFECT OFF", Vector2 {0.0f, -0.30f});
+    m_retroEffectButton->SetOnClick([this]() {
+        m_retroEffectEnabled = !m_retroEffectEnabled;
+        m_retroEffectButton->SetText(m_retroEffectEnabled ? "RETRO EFFECT  ON" : "RETRO EFFECT OFF");
+
+        // 他の設定値を維持したまま切替結果を保存する
+        SettingsRepository repository;
+        GameSettings settings = repository.Load();
+        settings.retroEffectEnabled = m_retroEffectEnabled;
+        repository.Save(settings);
+    });
 
     // 既存のオプション画面と同じ音量設定をゲームを止めたまま変更できるようにする
     m_masterVolumeSlider = Slider(Rect {{0.0f, 0.15f}, {0.55f, 0.04f}}, 0.0f, 1.0f,
@@ -119,6 +139,7 @@ void TestStage::ProcessPauseMenuInput() {
         m_masterVolumeSlider.Update(input);
         m_bgmVolumeSlider.Update(input);
         m_seVolumeSlider.Update(input);
+        m_retroEffectButton->Update(input);
         return;
     }
 
@@ -149,5 +170,6 @@ void TestStage::RenderPauseMenu(Renderer& renderer) const {
     m_masterVolumeSlider.Render(renderer);
     m_bgmVolumeSlider.Render(renderer);
     m_seVolumeSlider.Render(renderer);
+    m_retroEffectButton->Render(renderer);
     m_backToMenuButton->Render(renderer);
 }

@@ -1,1 +1,5 @@
 101 ICON "AppIcon.ico"
+201 RCDATA "Shaders\\ObjectShader.hlsl"
+202 RCDATA "Shaders\\BackgroundShader.hlsl"
+203 RCDATA "Shaders\\SpellCircleShader.hlsl"
+204 RCDATA "Shaders\\PixelUpscaleShader.hlsl"
