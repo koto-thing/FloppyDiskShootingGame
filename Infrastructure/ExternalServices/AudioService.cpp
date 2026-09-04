@@ -10,6 +10,9 @@
 #include <fstream>
 #include <vector>
 #include <algorithm>
+#include <chrono>
+#include <map>
+#include <unordered_map>
 
 #pragma comment(lib, "xaudio2.lib")
 
@@ -45,6 +48,10 @@ struct AudioService::Impl {
     float masterVolume = 1.0f;
     float bgmVolume = 1.0f;
     float seVolume = 1.0f;
+
+    // リミッターおよび個別音量設定
+    bool limiterEnabled = true;
+    std::map<Audio::SfxrPreset, float> presetVolumes;
 
     WAVEFORMATEX waveFormat = {};
 
@@ -140,6 +147,7 @@ void AudioService::Shutdown() {
     }
     impl->seVoicePool.clear();
     impl->presetCache.clear();
+    impl->presetVolumes.clear();
 
     // サブミックスボイスの破棄
     if (impl->seSubmixVoice) {
@@ -220,6 +228,30 @@ float AudioService::GetSEVolume() const {
     return impl->seVolume;
 }
 
+void AudioService::SetPresetVolume(Audio::SfxrPreset preset, float volume) {
+    // プリセット音量の設定
+    impl->presetVolumes[preset] = std::clamp(volume, 0.0f, 2.0f);
+}
+
+float AudioService::GetPresetVolume(Audio::SfxrPreset preset) const {
+    // プリセット音量の取得
+    auto it = impl->presetVolumes.find(preset);
+    if (it != impl->presetVolumes.end()) {
+        return it->second;
+    }
+    return 1.0f;
+}
+
+void AudioService::SetLimiterEnabled(bool enabled) {
+    // リミッター有効状態の設定
+    impl->limiterEnabled = enabled;
+}
+
+bool AudioService::IsLimiterEnabled() const {
+    // リミッター有効状態の取得
+    return impl->limiterEnabled;
+}
+
 // --- BGM再生 ---
 
 void AudioService::StopBGM() {
@@ -294,32 +326,42 @@ bool AudioService::PlayMMLBGMFromFile(const std::string& filePath, bool loop) {
 
 // --- SEワンショット再生 ---
 
-void AudioService::PlaySE(const Audio::SfxrParams& params) {
+void AudioService::PlaySE(const Audio::SfxrParams& params, float volume) {
+    // パラメータからPCM波形を生成して再生
     std::vector<int16_t> pcm = Audio::SfxrGenerator::GeneratePCM(params, 44100);
-    PlaySE(pcm);
+    PlaySE(pcm, volume);
 }
 
-void AudioService::PlaySE(Audio::SfxrPreset preset) {
+void AudioService::PlaySE(Audio::SfxrPreset preset, float volume) {
+    // プリセット基準音量の乗算
+    float baseVolume = GetPresetVolume(preset);
+    float finalRequestedVolume = volume * baseVolume;
+
+    // キャッシュ確認と再生
     auto it = impl->presetCache.find(preset);
     if (it != impl->presetCache.end()) {
-        PlaySE(it->second);
+        PlaySE(it->second, finalRequestedVolume);
     } else {
         Audio::SfxrParams params = Audio::SfxrParams::CreatePreset(preset);
         std::vector<int16_t> pcm = Audio::SfxrGenerator::GeneratePCM(params, 44100);
         impl->presetCache[preset] = pcm;
-        PlaySE(pcm);
+        PlaySE(pcm, finalRequestedVolume);
     }
 }
 
-void AudioService::PlaySE(const std::vector<int16_t>& pcmBuffer) {
+void AudioService::PlaySE(const std::vector<int16_t>& pcmBuffer, float volume) {
     if (!impl->xAudio2 || !impl->seSubmixVoice || pcmBuffer.empty()) return;
 
-    // 空きボイスの検索
+    // 空きボイスの検索および再生中ボイス数の計測
     SEVoiceInstance* targetInstance = nullptr;
+    size_t activeCount = 0;
     for (auto& instance : impl->seVoicePool) {
         if (!instance.inUse) {
-            targetInstance = &instance;
-            break;
+            if (!targetInstance) {
+                targetInstance = &instance;
+            }
+        } else {
+            ++activeCount;
         }
     }
 
@@ -336,6 +378,17 @@ void AudioService::PlaySE(const std::vector<int16_t>& pcmBuffer) {
 
     if (!targetInstance || !targetInstance->voice) return;
 
+    // 同時発音数に応じた動的ソフトリミッター計算（最大音量制限・音割れ防止）
+    float limiterGain = 1.0f;
+    if (impl->limiterEnabled && activeCount > 0) {
+        limiterGain = 1.0f / std::sqrt(1.0f + 0.35f * static_cast<float>(activeCount));
+    }
+    float finalVolume = std::clamp(volume * limiterGain, 0.0f, 1.0f);
+
+    // ボイス音量の適用
+    targetInstance->voice->SetVolume(finalVolume);
+
+    // バッファの登録と再生開始
     targetInstance->pcmBuffer = pcmBuffer;
     targetInstance->inUse = true;
 
@@ -350,6 +403,7 @@ void AudioService::PlaySE(const std::vector<int16_t>& pcmBuffer) {
 }
 
 void AudioService::StopAllSE() {
+    // 全SEボイスの再生停止とバッファ破棄
     for (auto& instance : impl->seVoicePool) {
         if (instance.inUse && instance.voice) {
             instance.voice->Stop(0, XAUDIO2_COMMIT_NOW);
@@ -360,10 +414,10 @@ void AudioService::StopAllSE() {
     }
 }
 
-void AudioService::PlayMMLSE(const std::string& mml) {
-    // MMLを一度だけPCMへ合成してSEボイスプールから再生する
+void AudioService::PlayMMLSE(const std::string& mml, float volume) {
+    // MMLを一度だけPCMへ合成してSEボイスプールから再生
     Audio::MMLParser parser;
     const Audio::MMLSequence sequence = parser.Parse(mml);
     Audio::SynthWaveGenerator generator;
-    PlaySE(generator.GeneratePCM(sequence, 44100));
+    PlaySE(generator.GeneratePCM(sequence, 44100), volume);
 }

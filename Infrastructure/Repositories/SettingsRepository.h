@@ -8,7 +8,7 @@
 struct GameSettings {
     float masterVolume = 1.0f;
     float bgmVolume = 1.0f;
-    float seVolume = 1.0f;
+    float seVolume = 0.5f;
     bool retroEffectEnabled = true;
     std::uint32_t galleryUnlocks = DefaultGalleryUnlocks;
     bool tutorialCompleted = false;
