@@ -914,11 +914,25 @@ public:
                 std::cos(enemy.phase + static_cast<float>(enemy.age) * PatrolSpeed) * PatrolHeight;
             enemy.z = ToRailZFromSideX(enemy.x);
         } else {
-            // 3Dでは生成直後からビル前面へ固定し、外壁区画内だけを楕円巡回する
+            // 3Dではビル上空から壁面を伝って降下し、到着後に楕円巡回へ移る
             enemy.z = WallPatrolZ;
             const float patrolAge = static_cast<float>(enemy.age);
-            enemy.x = enemy.baseX + std::sin(enemy.phase + patrolAge * PatrolSpeed) * PatrolWidth;
-            enemy.y = enemy.baseY + std::cos(enemy.phase + patrolAge * PatrolSpeed * 1.35f) * PatrolHeight;
+            const float patrolX = enemy.baseX +
+                std::sin(enemy.phase + patrolAge * PatrolSpeed) * PatrolWidth;
+            const float patrolY = enemy.baseY +
+                std::cos(enemy.phase + patrolAge * PatrolSpeed * 1.35f) * PatrolHeight;
+            if (enemy.entersWallFromTop) {
+                const float progress =
+                    ShooterStages::Stage5::Part2RailDroneEntryProgress(enemy.age);
+                enemy.x = Math::Lerp(enemy.baseX, patrolX, progress);
+                enemy.y = Math::Lerp(
+                    ShooterStages::Stage5::Part2RailDroneEntryY, patrolY, progress);
+                if (progress < 1.0f) return;
+                enemy.entersWallFromTop = false;
+            } else {
+                enemy.x = patrolX;
+                enemy.y = patrolY;
+            }
         }
 
         // 接触時の照準を連射終了まで固定し、終了後は走査へ戻す
@@ -989,7 +1003,9 @@ private:
         // 画面内を巡回するレーザーポインターの照射地点を更新する
         const float scanAge = static_cast<float>(enemy.age);
         enemy.turretAimX = std::sin(enemy.phase + scanAge * 0.031f) * 0.88f;
-        enemy.turretAimY = std::sin(enemy.phase * 1.7f + scanAge * 0.023f) * 0.70f;
+        const float aimWave = std::sin(enemy.phase * 1.7f + scanAge * 0.023f);
+        enemy.turretAimY = shooter.IsRailGameplayActive() ?
+            Part2RailDroneAimY(aimWave) : aimWave * 0.70f;
         if (enemy.recoilAge > 0) {
             --enemy.recoilAge;
             return;

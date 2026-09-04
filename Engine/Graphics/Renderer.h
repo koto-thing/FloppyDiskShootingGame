@@ -110,7 +110,7 @@ public:
                                   const Vector2& offset = Vector2::Zero);
     /** @brief 型付き3Dプリミティブを描画コマンドとして記録する */
     void Draw(const Primitive3D& primitive);
-    /** @brief プロシージャル自機弾を描画コマンドとして記録する */
+    /** @brief プロシージャル弾を描画コマンドとして記録する */
     void DrawPlayerShot(const PlayerShotVisual& shot);
     /** @brief プロシージャル爆発エフェクトを描画コマンドとして記録する */
     void DrawExplosion(const ExplosionVisual& explosion);

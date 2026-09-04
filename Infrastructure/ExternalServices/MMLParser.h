@@ -27,6 +27,8 @@ struct MMLNoteEvent {
     float volume = 1.0f;
     WaveformType waveType = WaveformType::Square;
     uint8_t customWaveId = 0;
+    bool isDrum = false;
+    uint8_t drumMidiNote = 0;
 };
 
 // トラック情報

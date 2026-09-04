@@ -273,6 +273,12 @@ bool AudioService::PlayMMLBGMFromFile(const std::string& filePath, bool loop) {
         file.open("mml/" + filePath);
     }
     if (!file.is_open()) {
+        file.open("Sound/" + filePath);
+    }
+    if (!file.is_open()) {
+        file.open("Sound/mml/" + filePath);
+    }
+    if (!file.is_open()) {
         return false;
     }
     std::string mml((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());

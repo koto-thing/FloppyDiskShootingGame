@@ -1,6 +1,7 @@
 #include "SideScrollingShooter.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdio>
 
 #include "../../Engine/Graphics/Renderer.h"
@@ -132,8 +133,12 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
 
     Camera3D camera;
     ConfigureRailCamera(camera, renderer);
-    const float railWeight = RailBlend();
-    const float playerYaw = Math::Lerp(Math::HalfPi, 0.0f, railWeight);
+    const float railWeight = IsTayamaBattle() ? 1.0f : RailBlend();
+    const Vector3 gameplayPlayerPosition = PlayerWorldPosition();
+    const float playerYaw = IsTayamaBattle() ?
+        std::atan2(-gameplayPlayerPosition.x,
+            ShooterStages::Stage5::TayamaArenaCenterZ - gameplayPlayerPosition.z) :
+        Math::Lerp(Math::HalfPi, 0.0f, railWeight);
     const float enemyYaw = Math::Lerp(Math::HalfPi, 0.0f, railWeight);
     const bool verticalSide = m_stageNumber == 5 &&
         ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase);
@@ -207,8 +212,9 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     const bool cinematic = StageDispatch::IsCinematic(*this);
     const bool playerVisible = m_playerDestructionTimer == 0 &&
         (cinematic || m_tutorialMode || m_invincible == 0 || (m_invincible / 5) % 2 == 0);
-    Vector3 playerPosition {ToWorldX(m_playerX), ToWorldY(m_playerY),
-        Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight)};
+    Vector3 playerPosition = IsTayamaBattle() ? gameplayPlayerPosition :
+        Vector3 {ToWorldX(m_playerX), ToWorldY(m_playerY),
+            Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight)};
     float playerPitch = 0.0f;
     StageDispatch::ApplyPlayerRenderCorrection(*this, playerPosition, playerPitch);
     if (!cinematic && railWeight > 0.01f && playerVisible) {
@@ -225,15 +231,15 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
             PlayerHitRadius2D * WorldXScale * 2.0f, PlayerHitRadius3D * 2.0f, railWeight);
         const float hitboxHeight = Math::Lerp(
             PlayerHitRadius2D * WorldYScale * 2.0f, PlayerHitRadius3D * 2.0f, railWeight);
-        DrawModelPrimitive(renderer, camera, 5, ToWorldX(m_playerX), ToWorldY(m_playerY),
-            Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight),
+        DrawModelPrimitive(renderer, camera, 5, playerPosition.x, playerPosition.y,
+            playerPosition.z,
             hitboxWidth, hitboxHeight, hitboxHeight, PlayerHitboxColor);
     }
     renderer.ResetCamera();
     DrawHudBackground(renderer);
-    StageDispatch::DrawOverlay3D(*this, renderer);
+    StageDispatch::DrawOverlay3D(*this, renderer, camera);
     if (StageDispatch::IsCinematic(*this)) return;
-    const float playerZ = Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight);
+    const float playerZ = playerPosition.z;
     DrawPowerUp(renderer, camera, playerZ);
     DrawTutorialControlHint(renderer, camera, playerZ);
     DrawViewToggleCooldownHud(renderer, camera, playerZ);

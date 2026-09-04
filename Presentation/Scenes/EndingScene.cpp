@@ -1,11 +1,18 @@
 #include "EndingScene.h"
 
+/** @brief エンディングシーンを初期化する */
+void EndingScene::Initialize() {
+    // クレジット終了後にランキングへ進むことを共有する
+    getData().showRankingAfterCredits = true;
+    StoryScene::Initialize();
+}
+
 /**
  * @brief エンディング終了後に遷移するシーンを取得する
- * @return ランキングシーン
+ * @return クレジットシーン
  */
 SceneType EndingScene::NextScene() const {
-    return SceneType::Ranking;
+    return SceneType::Credit;
 }
 
 /**

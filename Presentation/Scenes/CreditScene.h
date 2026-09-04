@@ -62,5 +62,7 @@ private:
     CreditContentPresenter m_creditPresenter;
     std::unique_ptr<Button> m_backButton;
     std::array<Meteor, 3> m_meteors {};
+    unsigned int m_score = 0;
     unsigned int m_meteorRandomState = 0x4D455445u;
+    SceneType m_nextScene = SceneType::Title;
 };

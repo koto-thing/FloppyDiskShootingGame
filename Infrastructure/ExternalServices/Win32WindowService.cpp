@@ -14,6 +14,7 @@ HWND Win32WindowService::Create(HINSTANCE hInstance, int width, int height, cons
     WNDCLASS wc = { };
     wc.lpfnWndProc = wndProc;
     wc.hInstance = hInstance;
+    wc.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wc.lpszClassName = CLASS_NAME;
     RegisterClass(&wc);
 

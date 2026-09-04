@@ -1,5 +1,6 @@
 #include "CreditScene.h"
 
+#include <string>
 #include <windows.h>
 
 #include "../../Engine/Graphics/Renderer.h"
@@ -11,19 +12,20 @@ namespace {
 constexpr float MeteorGravity = -0.55f;
 constexpr float MeteorBounceSpeed = 0.43f;
 constexpr float DefaultMeteorRadius = 0.12f;
-constexpr unsigned int MeteorMaximumShrinkLevel = 4;
+constexpr unsigned int MeteorMaximumShrinkLevel = 8;
+constexpr unsigned int MeteorHitScore = 100;
 
 /**
  * @brief 縮小段階に対応する隕石半径を取得する
- * @param shrinkLevel 0から4までの縮小段階
+ * @param shrinkLevel 0から8までの縮小段階
  * @return 指定段階まで縮小した半径
  */
 constexpr float MeteorRadius(unsigned int shrinkLevel) {
-    return DefaultMeteorRadius * (1.0f - static_cast<float>(shrinkLevel) * 0.12f);
+    return DefaultMeteorRadius * (1.0f - static_cast<float>(shrinkLevel) * 0.10f);
 }
 
 static_assert(MeteorRadius(0) == DefaultMeteorRadius &&
-    MeteorRadius(MeteorMaximumShrinkLevel) < DefaultMeteorRadius * 0.53f);
+    MeteorRadius(MeteorMaximumShrinkLevel) < DefaultMeteorRadius * 0.21f);
 
 /**
  * @brief 現在のクライアント領域に対応するUI入力を取得する
@@ -50,11 +52,18 @@ CreditScene::~CreditScene() {
  * @brief クレジット用GameObjectとスクロールコンポーネントを生成する
  */
 void CreditScene::Initialize() {
+    m_score = 0;
+
+    // エンディング経由の場合だけクレジット終了後にランキングへ進む
+    m_nextScene = getData().showRankingAfterCredits ? SceneType::Ranking : SceneType::Title;
+    getData().showRankingAfterCredits = false;
+
     // 左下にタイトルシーンへ戻るボタンを配置する
     m_backButton = std::make_unique<Button>(
         Rect { { -0.95f, -0.90f }, { 0.35f, 0.10f } },
         "BACK TO TITLE"
     );
+    m_backButton->SetClickSound(Button::ClickSound::Cancel);
     m_backButton->SetOnClick([this]() { changeScene(SceneType::Title); });
 
     // クレジット全体を移動させるGameObjectを生成する
@@ -110,9 +119,9 @@ void CreditScene::Tick() {
     // 隕石を重力で落下させる
     UpdateMeteors();
 
-    // 最後まで流れたらタイトル画面へ戻る
+    // 最後まで流れたら呼び出し元に応じた画面へ進む
     if (m_creditController != nullptr && m_creditController->IsCreditEnd()) {
-        changeScene(SceneType::Title);
+        changeScene(m_nextScene);
     }
 }
 
@@ -147,6 +156,10 @@ void CreditScene::Render(Renderer& renderer) {
     // クレジットの描画は専用プレゼンターへ委譲する
     m_creditPresenter.Render(renderer, *m_creditObject, m_creditController->GetCreditContent());
 
+    // ミニゲームの得点を右上へ小さく描画する
+    renderer.DrawText("SCORE " + std::to_string(m_score), TextAlign::TopRight, 0.012f,
+        ColorF::White(), {-0.04f, -0.04f});
+
     // 左下のタイトルへ戻るボタンを描画する
     if (m_backButton != nullptr) {
         m_backButton->Render(renderer);
@@ -170,7 +183,8 @@ void CreditScene::ResetMeteor(std::size_t index, bool initial) {
     meteor.position.y = 1.15f + random01() * 0.35f +
         (initial ? static_cast<float>(index) * 0.85f : 0.0f);
     meteor.velocity = { -0.025f + random01() * 0.05f, -0.12f - random01() * 0.12f };
-    const unsigned int randomShrinkLevel = static_cast<unsigned int>(random01() * 5.0f);
+    const unsigned int randomShrinkLevel = static_cast<unsigned int>(
+        random01() * static_cast<float>(MeteorMaximumShrinkLevel + 1));
     meteor.shrinkLevel = randomShrinkLevel > MeteorMaximumShrinkLevel ?
         MeteorMaximumShrinkLevel : randomShrinkLevel;
     meteor.radius = MeteorRadius(meteor.shrinkLevel);
@@ -197,7 +211,10 @@ void CreditScene::HitMeteor(const Vector2& position) {
         Meteor& meteor = m_meteors[i];
         if (!Circle { meteor.position, meteor.radius }.Contains(position)) continue;
 
-        // 4段階まで縮んだ隕石は消滅させ、画面外から次の隕石を待機させる
+        // 命中したクリック1回につき100点を加算する
+        m_score += MeteorHitScore;
+
+        // 最大段階まで縮んだ隕石は消滅させ、画面外から次の隕石を待機させる
         if (meteor.shrinkLevel >= MeteorMaximumShrinkLevel) {
             ResetMeteor(i, false);
             return;

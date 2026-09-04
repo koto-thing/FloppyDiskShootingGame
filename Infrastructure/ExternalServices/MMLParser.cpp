@@ -13,7 +13,7 @@ MMLParser::MMLParser() = default;
 static std::string ExpandMMLLoops(const std::string& input) {
     std::string result = input;
     bool changed = true;
-    int maxDepth = 20;
+    int maxDepth = 500;
     while (changed && maxDepth-- > 0) {
         changed = false;
         size_t closePos = result.find(']');
@@ -175,8 +175,14 @@ MMLSequence MMLParser::Parse(const std::string& mml) {
 
         while (i < len) {
             char ch = segment[i];
-            if (std::isspace(static_cast<unsigned char>(ch)) || ch == '&') {
+            if (std::isspace(static_cast<unsigned char>(ch))) {
                 i++;
+                continue;
+            }
+            else if (ch == '&' || ch == '^') {
+                i++;
+                double tieBeats = parseLengthInBeats(segment, i, defaultLengthBeats);
+                currentBeat += tieBeats;
                 continue;
             }
             char lowerCh = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
@@ -210,8 +216,42 @@ MMLSequence MMLParser::Parse(const std::string& mml) {
             else if (lowerCh == 'l') {
                 i++;
                 defaultLengthBeats = parseLengthInBeats(segment, i, defaultLengthBeats);
+                while (i < len && segment[i] == '&') {
+                    i++;
+                    defaultLengthBeats += parseLengthInBeats(segment, i, 0.0);
+                }
             }
-            else if (lowerCh == 'o' || lowerCh == 'v' || ch == '@') {
+            else if (ch == '@') {
+                i++;
+                if (i < len && (segment[i] == 'd' || segment[i] == 'D')) {
+                    i++;
+                } else if (i < len && (segment[i] == 'v' || segment[i] == 'V')) {
+                    i++;
+                    parseNumberInString(segment, i);
+                } else if (i < len && (segment[i] == 'w' || segment[i] == 'W')) {
+                    i++;
+                    while (i < len && !std::isspace(static_cast<unsigned char>(segment[i])) &&
+                           segment[i] != ',' && segment[i] != ';' && !std::isdigit(static_cast<unsigned char>(segment[i]))) {
+                        i++;
+                    }
+                    parseNumberInString(segment, i);
+                } else {
+                    parseNumberInString(segment, i);
+                }
+            }
+            else if (lowerCh == 'u' || lowerCh == '~') {
+                i++;
+                parseNumberInString(segment, i);
+            }
+            else if (ch == '_') {
+                i++;
+                while (i < len && (segment[i] == '-' || segment[i] == '+' || std::isdigit(static_cast<unsigned char>(segment[i])) || segment[i] == '.')) {
+                    i++;
+                }
+                continue;
+            }
+
+            else if (lowerCh == 'o' || lowerCh == 'v') {
                 i++;
                 parseNumberInString(segment, i);
             }
@@ -245,14 +285,27 @@ MMLTrack MMLParser::ParseTrack(const std::string& rawTrackMml, const std::map<do
     int octave = 4;
     double defaultLengthBeats = 0.25;
     int volumeInt = 15;
+    int fineVol = 127;
+    int velocity = 127;
+    bool isDrumKit = false;
 
-    WaveformType waveType = WaveformType::Square;
-    if (trackIndex == 1) {
-        waveType = WaveformType::Pulse25;
-    } else if (trackIndex == 2) {
-        waveType = WaveformType::Triangle;
-    } else if (trackIndex >= 3) {
-        waveType = WaveformType::Pulse12_5;
+    // トラック文字列全体に @d が含まれているか（大小問わず）初期判定
+    for (size_t k = 0; k + 1 < trackMml.length(); ++k) {
+        if (trackMml[k] == '@' && (trackMml[k + 1] == 'd' || trackMml[k + 1] == 'D')) {
+            isDrumKit = true;
+            break;
+        }
+    }
+
+    WaveformType waveType = isDrumKit ? WaveformType::Custom : WaveformType::Square;
+    if (!isDrumKit) {
+        if (trackIndex == 1) {
+            waveType = WaveformType::Pulse25;
+        } else if (trackIndex == 2) {
+            waveType = WaveformType::Triangle;
+        } else if (trackIndex >= 3) {
+            waveType = WaveformType::Pulse12_5;
+        }
     }
 
     uint8_t customWaveId = 0;
@@ -346,12 +399,12 @@ MMLTrack MMLParser::ParseTrack(const std::string& rawTrackMml, const std::map<do
         if ((lowerCh >= 'a' && lowerCh <= 'g') || lowerCh == 'n') {
             i++;
             float freq = 0.0f;
+            int midiNote = 60;
 
             if (lowerCh == 'n') {
-                int midiNote = parseNumber(i);
-                if (midiNote >= 0) {
-                    freq = static_cast<float>(440.0 * std::pow(2.0, (midiNote - 69) / 12.0));
-                }
+                int parsed = parseNumber(i);
+                if (parsed >= 0) midiNote = parsed;
+                freq = static_cast<float>(440.0 * std::pow(2.0, (midiNote - 69) / 12.0));
             } else {
                 int accidentals = 0;
                 while (i < len) {
@@ -367,18 +420,31 @@ MMLTrack MMLParser::ParseTrack(const std::string& rawTrackMml, const std::map<do
                         break;
                     }
                 }
-                freq = NoteToFrequency(lowerCh, accidentals, octave);
+                int baseOffset = 0;
+                switch (lowerCh) {
+                    case 'c': baseOffset = 0; break;
+                    case 'd': baseOffset = 2; break;
+                    case 'e': baseOffset = 4; break;
+                    case 'f': baseOffset = 5; break;
+                    case 'g': baseOffset = 7; break;
+                    case 'a': baseOffset = 9; break;
+                    case 'b': baseOffset = 11; break;
+                    default: baseOffset = 0; break;
+                }
+                int semitonesFromA4 = (baseOffset + accidentals) - 9 + (octave - 4) * 12;
+                midiNote = 69 + semitonesFromA4;
+                freq = static_cast<float>(440.0 * std::pow(2.0, static_cast<double>(semitonesFromA4) / 12.0));
             }
 
             double durationInBeats = parseLengthInBeats(i, defaultLengthBeats);
-
             double startTimeSec = ConvertBeatsToSeconds(0.0, currentBeat, tempoMap);
             double durationSec = ConvertBeatsToSeconds(currentBeat, durationInBeats, tempoMap);
 
             if (isTie && !track.events.empty() && std::abs(track.events.back().frequency - freq) < 0.1f) {
                 track.events.back().durationSec += durationSec;
             } else {
-                float vol = (volumeInt > 15) ? (static_cast<float>(volumeInt) / 127.0f) : (static_cast<float>(volumeInt) / 15.0f);
+                float vBase = (volumeInt > 15) ? (static_cast<float>(volumeInt) / 127.0f) : (static_cast<float>(volumeInt) / 15.0f);
+                float vol = vBase * (static_cast<float>(fineVol) / 127.0f) * (static_cast<float>(velocity) / 127.0f);
                 vol = std::clamp(vol, 0.0f, 1.0f);
 
                 MMLNoteEvent note;
@@ -388,6 +454,8 @@ MMLTrack MMLParser::ParseTrack(const std::string& rawTrackMml, const std::map<do
                 note.volume = vol;
                 note.waveType = waveType;
                 note.customWaveId = customWaveId;
+                note.isDrum = isDrumKit;
+                note.drumMidiNote = static_cast<uint8_t>(std::clamp(midiNote, 0, 127));
 
                 track.events.push_back(note);
             }
@@ -425,6 +493,10 @@ MMLTrack MMLParser::ParseTrack(const std::string& rawTrackMml, const std::map<do
         else if (lowerCh == 'l') {
             i++;
             defaultLengthBeats = parseLengthInBeats(i, defaultLengthBeats);
+            while (i < len && trackMml[i] == '&') {
+                i++;
+                defaultLengthBeats += parseLengthInBeats(i, 0.0);
+            }
         }
         else if (lowerCh == 'v') {
             i++;
@@ -435,12 +507,63 @@ MMLTrack MMLParser::ParseTrack(const std::string& rawTrackMml, const std::map<do
         }
         else if (ch == '@') {
             i++;
-            int val = parseNumber(i);
-            if (val >= 0) {
-                customWaveId = static_cast<uint8_t>(val);
+            if (i < len && (trackMml[i] == 'd' || trackMml[i] == 'D')) {
+                i++;
+                isDrumKit = true;
                 waveType = WaveformType::Custom;
+                continue;
+            } else if (i < len && (trackMml[i] == 'v' || trackMml[i] == 'V')) {
+                i++;
+                int v = parseNumber(i);
+                if (v >= 0) fineVol = std::clamp(v, 0, 127);
+                continue;
+            } else if (i < len && (trackMml[i] == 'w' || trackMml[i] == 'W')) {
+                i++;
+                isDrumKit = false;
+                std::string wName;
+                while (i < len && (std::isalnum(static_cast<unsigned char>(trackMml[i])) || trackMml[i] == '.')) {
+                    wName += static_cast<char>(std::tolower(static_cast<unsigned char>(trackMml[i])));
+                    i++;
+                }
+                if (wName.find("12.5") != std::string::npos || wName.find("12") != std::string::npos) {
+                    waveType = WaveformType::Pulse12_5;
+                } else if (wName.find("25") != std::string::npos) {
+                    waveType = WaveformType::Pulse25;
+                } else if (wName.find("tri") != std::string::npos) {
+                    waveType = WaveformType::Triangle;
+                } else {
+                    waveType = WaveformType::Square;
+                }
+                continue;
+            } else {
+                int val = parseNumber(i);
+                if (val >= 0) {
+                    customWaveId = static_cast<uint8_t>(val);
+                    waveType = WaveformType::Custom;
+                    isDrumKit = false;
+                }
+                continue;
             }
         }
+        else if (lowerCh == 'u') {
+            i++;
+            int vel = parseNumber(i);
+            if (vel >= 0) velocity = std::clamp(vel, 0, 127);
+            continue;
+        }
+        else if (lowerCh == '~') {
+            i++;
+            parseNumber(i);
+            continue;
+        }
+        else if (ch == '_') {
+            i++;
+            while (i < len && (trackMml[i] == '-' || trackMml[i] == '+' || std::isdigit(static_cast<unsigned char>(trackMml[i])) || trackMml[i] == '.')) {
+                i++;
+            }
+            continue;
+        }
+
         else {
             i++;
         }

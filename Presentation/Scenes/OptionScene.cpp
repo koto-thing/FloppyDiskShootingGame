@@ -15,6 +15,7 @@ void OptionScene::Initialize() {
         Rect { { -0.95f, -0.90f }, { 0.35f, 0.10f } },
         "BACK TO TITLE"
     );
+    m_backToTitleButton->SetClickSound(Button::ClickSound::Cancel);
     m_backToTitleButton->SetOnClick([this]() { changeScene(SceneType::Title); });
 
     // 保存済みのレトロ映像効果設定を切替ボタンへ反映する

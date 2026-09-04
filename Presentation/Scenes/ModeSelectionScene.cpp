@@ -157,6 +157,7 @@ void ModeSelectionScene::Initialize() {
     // 左下にタイトルシーンへ戻るボタンを配置する
     m_backButton = std::make_unique<Button>(
         Rect { { -0.95f, -0.90f }, { 0.30f, 0.10f } }, "BACK");
+    m_backButton->SetClickSound(Button::ClickSound::Cancel);
     m_backButton->SetOnClick([this]() { changeScene(SceneType::Title); });
 }
 

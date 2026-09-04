@@ -3,6 +3,8 @@
 #include <array>
 #include <cstdint>
 
+#include "Stage5ModelTypes.h"
+
 namespace ShooterStages::Stage5 {
 
 /** @brief Stage 5専用の進行状態 */
@@ -21,6 +23,9 @@ enum class Phase {
     TayamaLiftEngines,
     TayamaCommandCore,
     TayamaCollapse,
+    CloudSea,
+    TayamaDragonBattle,
+    TayamaDragonCollapse,
     EndingReady
 };
 
@@ -63,8 +68,10 @@ struct SearchlightState {
     SearchlightPhase phase = SearchlightPhase::Searching;
     float beamX = 0.0f;
     float beamY = 0.0f;
+    float beamZ = 8.0f;
     float lockedX = 0.0f;
     float lockedY = 0.0f;
+    float lockedZ = 8.0f;
     int detectionFrames = 0;
     int timer = 0;
     int volley = 0;
@@ -84,6 +91,10 @@ struct TayamaWeakpointState {
 
 inline constexpr int SearchlightCount = 3;
 inline constexpr int TayamaWeakpointCount = static_cast<int>(TayamaWeakpoint::Count);
+inline constexpr int TayamaMaxHp = 6000;
+inline constexpr int TayamaPartBreakDamage = 500;
+static_assert(TayamaMaxHp > 3600);
+static_assert(TayamaPartBreakDamage * 10 >= TayamaMaxHp / 2);
 inline constexpr int EastsourceMaxHp = 1200;
 inline constexpr int EastsourceNoseHp = 180;
 inline constexpr int EastsourceWingHp = 240;
@@ -101,25 +112,76 @@ inline constexpr float PandDBuildingHeight = 1200.0f;
 inline constexpr float PandDBuildingCapScale = 1.08f;
 inline constexpr int PandDBuildingWindowColumns = 6;
 inline constexpr float RooftopSurfaceY = -3.35f;
-inline constexpr float TayamaBossScale = 1.18f;
+inline constexpr float TayamaBossScale = 8.0f;
+inline constexpr float TayamaArenaCenterZ = 57.0f;
+inline constexpr float TayamaOrbitRadius = 115.0f;
+inline constexpr float TayamaOrbitSpeed = 0.018f;
+inline constexpr float TayamaCameraDistance = 18.0f;
+inline constexpr float TayamaCameraHeight = 5.0f;
+inline constexpr float TayamaCameraLookAhead = 32.0f;
+inline constexpr float TayamaOverheadDistanceScale = 0.9f;
+inline constexpr float TayamaFrontDistanceScale = 1.4f;
+inline constexpr float TayamaPlayerMinY = -0.70f;
+inline constexpr float TayamaPlayerMaxY = 55.0f;
 inline constexpr float WallClimbHeight = 360.0f;
 inline constexpr float Part2SideEnemyEntryY = 2.35f;
 inline constexpr float Part2RailEnemyEntryY = 68.0f;
 inline constexpr float Part2RailEnemyEntryStep = 0.45f;
-inline constexpr float Part2RailEnemyFallSpeed = 0.32f;
+inline constexpr float Part2RailEnemyFallSpeed = 0.16f;
 inline constexpr float Part2RailEnemyPlaneZ = 35.0f;
 inline constexpr float Part2RailEnemyExitY = -5.0f;
+inline constexpr float Part2RailShotMinY = Part2RailEnemyExitY;
+inline constexpr float Part2RailShotMaxY = Part2RailEnemyEntryY + Part2RailEnemyEntryStep * 2.0f;
+inline constexpr float Part2RailPlayerMinY = 0.80f;
+inline constexpr float Part2RailPlayerMaxY = 16.0f;
+inline constexpr float Part2RailEnemyScale = 2.0f;
+inline constexpr float Part2SideDroneBaseY = 0.18f;
+inline constexpr float Part2SideDroneBaseStep = 0.18f;
+inline constexpr float Part2RailDroneBaseY = 9.0f;
+inline constexpr float Part2RailDroneBaseStep = 1.20f;
+inline constexpr float Part2RailDroneEntryY = Part2RailPlayerMaxY + 2.0f;
+inline constexpr int Part2RailDroneEntryFrames = 120;
 inline constexpr float Part2SideSceneryFallSpeed = 0.64f;
 inline constexpr float Part2RailSceneryFallSpeed = 0.96f;
 inline constexpr float Part2SideItemFallSpeed = 0.014f;
 inline constexpr float Part2RailItemFallSpeed = 0.06f;
-inline constexpr int WallClimbLowerFrames = 420;
-inline constexpr int WallClimbMiddleFrames = 480;
-inline constexpr int WallClimbUpperFrames = 540;
+inline constexpr int WallClimbLowerFrames = 600;
+inline constexpr int WallClimbMiddleFrames = 600;
+inline constexpr int WallClimbUpperFrames = 600;
+inline constexpr int Part2PlayerFlyAwayFrames = 30;
+inline constexpr float Part2PlayerFlyAwaySpeed = 0.12f;
 inline constexpr int RooftopArrivalFrames = 240;
 inline constexpr int CarrierTransformationFrames = 180;
+inline constexpr int CarrierCameraMoveFrames = 45;
+inline constexpr int TayamaIntroductionWarningFrames = 150;
 inline constexpr int TayamaCollapseFrames = 540;
-inline constexpr int QuietFlightFrames = 60;
+inline constexpr int FinalEscapeHeadStartFrames = 30;
+inline constexpr int FinalEscapeHeadDurationFrames = 180;
+inline constexpr int FinalEscapeDragonStartFrames = 120;
+inline constexpr int FinalEscapeDragonDurationFrames = 300;
+inline constexpr int FinalEscapePlayerStartFrames = 300;
+inline constexpr int FinalEscapePlayerDurationFrames = 150;
+inline constexpr int FinalEscapeFadeStartFrames = 450;
+inline constexpr int CloudSeaFadeFrames = 90;
+inline constexpr int CloudSeaAssemblyFrames = 240;
+inline constexpr int TayamaDragonMaxHp = 4000;
+inline constexpr int TayamaDragonSegmentCount = 26;
+inline constexpr float TayamaDragonShotFarZ = 108.0f;
+inline constexpr int TayamaDragonBarrageIntervalFrames = 90;
+inline constexpr int TayamaDragonSweepCycleFrames = 300;
+inline constexpr int TayamaDragonSweepWarningFrames = 45;
+inline constexpr int TayamaDragonSweepActiveFrames = 105;
+inline constexpr int TayamaDragonRushCycleFrames = 480;
+inline constexpr int TayamaDragonRushStartFrame = 150;
+inline constexpr int TayamaDragonRushWarningFrames = 60;
+inline constexpr int TayamaDragonRushActiveFrames = 30;
+inline constexpr int TayamaDragonRushRecoveryFrames = 75;
+inline constexpr float TayamaDragonRushWindupRate = 0.12f;
+inline constexpr float TayamaDragonRushSideDistance = 1.35f;
+inline constexpr float TayamaDragonRushRailDistance = 48.0f;
+inline constexpr int TayamaDragonCollapseSegmentIntervalFrames = 9;
+inline constexpr int TayamaDragonCollapseHeadExplosionFrame = 270;
+inline constexpr int TayamaDragonCollapseFrames = 360;
 inline constexpr int SearchlightLockFrames = 45;
 inline constexpr int SearchlightWarningFrames = 24;
 inline constexpr int SearchlightVolleyCount = 3;
@@ -129,6 +191,231 @@ inline constexpr int DroneMachineGunBurstFrames = 45;
 inline constexpr int DroneMachineGunShotIntervalFrames = 5;
 inline constexpr int DroneMachineGunCooldownFrames = 75;
 inline constexpr float DroneSearchlightDetectionRadius = 0.12f;
+inline constexpr int TayamaArmSpinWarningFrames = 45;
+inline constexpr int TayamaArmSpinActiveFrames = 180;
+inline constexpr int TayamaArmSpinRecoveryFrames = 30;
+inline constexpr int TayamaArmSpinCycleFrames = 300;
+inline constexpr int TayamaArmSpinTurns = 3;
+inline constexpr float TayamaArmSpinHitRadius = 4.0f;
+inline constexpr int TayamaBattleReadFrames = 76;
+inline constexpr int TayamaHangarSpawnIntervalFrames = 240;
+inline constexpr int TayamaRadarBurstIntervalFrames = 180;
+inline constexpr int TayamaRadarBurstBulletCount = 16;
+inline constexpr int TayamaHeadLaserCycleFrames = 240;
+inline constexpr int TayamaHeadLaserWarningFrames = 45;
+inline constexpr int TayamaHeadLaserActiveFrames = 60;
+inline constexpr float TayamaHeadLaserFrontDot = 0.92f;
+inline constexpr float TayamaHeadLaserLength = 200.0f;
+inline constexpr float TayamaHeadLaserHitRadius = 3.2f;
+
+/**
+ * @brief TAYAMA龍突進攻撃の周期内フレームを取得する
+ * @param attackTimer 第2形態開始からの攻撃タイマー
+ * @return 予告開始を0とする周期内フレーム
+ */
+constexpr int TayamaDragonRushFrame(int attackTimer) {
+    const int frame = (attackTimer - TayamaDragonRushStartFrame) %
+        TayamaDragonRushCycleFrames;
+    return frame < 0 ? frame + TayamaDragonRushCycleFrames : frame;
+}
+
+/**
+ * @brief TAYAMA龍が突進の予告、攻撃、復帰中か判定する
+ * @param attackTimer 第2形態開始からの攻撃タイマー
+ * @return 突進シーケンス中の場合true
+ */
+constexpr bool IsTayamaDragonRushSequence(int attackTimer) {
+    return TayamaDragonRushFrame(attackTimer) < TayamaDragonRushWarningFrames +
+        TayamaDragonRushActiveFrames + TayamaDragonRushRecoveryFrames;
+}
+
+/**
+ * @brief TAYAMA龍突進が接触判定を持つフレームか判定する
+ * @param attackTimer 第2形態開始からの攻撃タイマー
+ * @return 突進中の場合true
+ */
+constexpr bool IsTayamaDragonRushActive(int attackTimer) {
+    const int frame = TayamaDragonRushFrame(attackTimer);
+    return frame >= TayamaDragonRushWarningFrames &&
+        frame < TayamaDragonRushWarningFrames + TayamaDragonRushActiveFrames;
+}
+
+/**
+ * @brief TAYAMA龍突進の移動率を取得する
+ * @param attackTimer 第2形態開始からの攻撃タイマー
+ * @return 通常位置を0、突進先を1とする移動率
+ */
+constexpr float TayamaDragonRushProgress(int attackTimer) {
+    const int frame = TayamaDragonRushFrame(attackTimer);
+    if (frame < TayamaDragonRushWarningFrames) {
+        return -TayamaDragonRushWindupRate * static_cast<float>(frame) /
+            static_cast<float>(TayamaDragonRushWarningFrames);
+    }
+    const int activeEnd = TayamaDragonRushWarningFrames +
+        TayamaDragonRushActiveFrames;
+    if (frame < activeEnd) {
+        const float charge = static_cast<float>(frame - TayamaDragonRushWarningFrames) /
+            static_cast<float>(TayamaDragonRushActiveFrames - 1);
+        return -TayamaDragonRushWindupRate +
+            (1.0f + TayamaDragonRushWindupRate) * charge;
+    }
+    const int recoveryEnd = activeEnd + TayamaDragonRushRecoveryFrames;
+    if (frame < recoveryEnd) {
+        return 1.0f - static_cast<float>(frame - activeEnd) /
+            static_cast<float>(TayamaDragonRushRecoveryFrames);
+    }
+    return 0.0f;
+}
+
+/**
+ * @brief 戦闘開始時の読ませ時間を除いた腕攻撃タイマーを取得する
+ * @param attackTimer フェーズ開始からの攻撃タイマー
+ * @return 腕攻撃開始後の経過フレーム
+ */
+constexpr int TayamaArmAttackTimer(int attackTimer) {
+    return attackTimer > TayamaBattleReadFrames ?
+        attackTimer - TayamaBattleReadFrames : 0;
+}
+
+/**
+ * @brief TAYAMA頭部レーザーが照射中のフレームか判定する
+ * @param attackTimer 読ませ時間を除いた攻撃タイマー
+ * @return レーザー照射中の場合true
+ */
+constexpr bool IsTayamaHeadLaserActive(int attackTimer) {
+    const int frame = attackTimer % TayamaHeadLaserCycleFrames;
+    return frame >= TayamaHeadLaserWarningFrames &&
+        frame < TayamaHeadLaserWarningFrames + TayamaHeadLaserActiveFrames;
+}
+
+/**
+ * @brief TAYAMA腕回転攻撃が接触判定を持つフレームか判定する
+ * @param attackTimer 攻撃タイマー
+ * @return 回転中の場合true
+ */
+constexpr bool IsTayamaArmSpinActive(int attackTimer) {
+    const int frame = attackTimer % TayamaArmSpinCycleFrames;
+    return frame >= TayamaArmSpinWarningFrames &&
+        frame < TayamaArmSpinWarningFrames + TayamaArmSpinActiveFrames;
+}
+
+/**
+ * @brief TAYAMA腕回転攻撃の角度を取得する
+ * @param attackTimer 攻撃タイマー
+ * @return 腕へ適用するZ軸回転角度
+ */
+constexpr float TayamaArmSpinAngle(int attackTimer) {
+    const int frame = attackTimer % TayamaArmSpinCycleFrames;
+    if (frame < TayamaArmSpinWarningFrames) return 0.0f;
+    if (frame >= TayamaArmSpinWarningFrames + TayamaArmSpinActiveFrames) return 0.0f;
+    return static_cast<float>(frame - TayamaArmSpinWarningFrames) /
+        static_cast<float>(TayamaArmSpinActiveFrames) *
+        Math::TwoPi * static_cast<float>(TayamaArmSpinTurns);
+}
+
+static_assert(!IsTayamaArmSpinActive(TayamaArmSpinWarningFrames - 1));
+static_assert(IsTayamaArmSpinActive(TayamaArmSpinWarningFrames));
+static_assert(!IsTayamaArmSpinActive(
+    TayamaArmSpinWarningFrames + TayamaArmSpinActiveFrames));
+static_assert(TayamaArmSpinAngle(0) == 0.0f);
+static_assert(TayamaArmSpinAngle(TayamaArmSpinWarningFrames) == 0.0f);
+static_assert(TayamaArmAttackTimer(TayamaBattleReadFrames) == 0);
+static_assert(TayamaArmAttackTimer(TayamaBattleReadFrames + 1) == 1);
+static_assert(!IsTayamaHeadLaserActive(TayamaHeadLaserWarningFrames - 1));
+static_assert(IsTayamaHeadLaserActive(TayamaHeadLaserWarningFrames));
+static_assert(!IsTayamaHeadLaserActive(
+    TayamaHeadLaserWarningFrames + TayamaHeadLaserActiveFrames));
+static_assert(TayamaDragonRushFrame(TayamaDragonRushStartFrame) == 0);
+static_assert(!IsTayamaDragonRushActive(
+    TayamaDragonRushStartFrame + TayamaDragonRushWarningFrames - 1));
+static_assert(IsTayamaDragonRushActive(
+    TayamaDragonRushStartFrame + TayamaDragonRushWarningFrames));
+static_assert(!IsTayamaDragonRushActive(TayamaDragonRushStartFrame +
+    TayamaDragonRushWarningFrames + TayamaDragonRushActiveFrames));
+static_assert(TayamaDragonRushProgress(TayamaDragonRushStartFrame) == 0.0f);
+static_assert(TayamaDragonRushProgress(TayamaDragonRushStartFrame +
+    TayamaDragonRushWarningFrames + TayamaDragonRushActiveFrames) == 1.0f);
+
+/**
+ * @brief 屋上到着演出で斜め上から正面へ回り込む進捗を取得する
+ * @param phaseTimer 屋上到着状態の経過フレーム数
+ * @return 斜め上を0、正面を1とする進捗
+ */
+constexpr float RooftopCameraFrontProgress(int phaseTimer) {
+    const float progress = static_cast<float>(phaseTimer - RooftopArrivalFrames / 2) /
+        static_cast<float>(RooftopArrivalFrames / 2);
+    return progress < 0.0f ? 0.0f : (progress > 1.0f ? 1.0f : progress);
+}
+
+/**
+ * @brief 変形終盤に戦闘カメラへ移る進捗を取得する
+ * @param phaseTimer 変形状態の経過フレーム数
+ * @return 正面全景を0、戦闘位置を1とする進捗
+ */
+constexpr float CarrierCameraBattleProgress(int phaseTimer) {
+    const float progress = static_cast<float>(phaseTimer -
+        (CarrierTransformationFrames - CarrierCameraMoveFrames)) /
+        static_cast<float>(CarrierCameraMoveFrames);
+    return progress < 0.0f ? 0.0f : (progress > 1.0f ? 1.0f : progress);
+}
+
+static_assert(RooftopCameraFrontProgress(0) == 0.0f);
+static_assert(RooftopCameraFrontProgress(RooftopArrivalFrames) == 1.0f);
+static_assert(CarrierCameraBattleProgress(0) == 0.0f);
+static_assert(CarrierCameraBattleProgress(CarrierTransformationFrames) == 1.0f);
+
+/**
+ * @brief 終幕ムービー内の指定区間を0から1へ正規化する
+ * @param phaseTimer 終幕ムービーの経過フレーム数
+ * @param startFrame 区間の開始フレーム
+ * @param durationFrames 区間の長さ
+ * @return 開始前を0、終了後を1とする進捗
+ */
+constexpr float FinalEscapeProgress(int phaseTimer, int startFrame, int durationFrames) {
+    const float progress = static_cast<float>(phaseTimer - startFrame) /
+        static_cast<float>(durationFrames);
+    return progress < 0.0f ? 0.0f : (progress > 1.0f ? 1.0f : progress);
+}
+
+/**
+ * @brief 雲海でTAYAMA頭部が龍の首へ合体する進捗を取得する
+ * @param phaseTimer 雲海演出の経過フレーム数
+ * @return 暗転復帰直後を0、合体完了を1とする進捗
+ */
+constexpr float CloudSeaAssemblyProgress(int phaseTimer) {
+    return FinalEscapeProgress(phaseTimer, CloudSeaFadeFrames,
+        CloudSeaAssemblyFrames - CloudSeaFadeFrames);
+}
+
+/**
+ * @brief 第2形態撃破演出で尻尾側から消えた節数を取得する
+ * @param phaseTimer 撃破演出の経過フレーム数
+ * @return 0から全節数までの破壊済み節数
+ */
+constexpr int TayamaDragonDestroyedSegmentCount(int phaseTimer) {
+    const int count = phaseTimer / TayamaDragonCollapseSegmentIntervalFrames;
+    return count < 0 ? 0 :
+        (count > TayamaDragonSegmentCount ? TayamaDragonSegmentCount : count);
+}
+
+static_assert(FinalEscapeFadeStartFrames + CloudSeaFadeFrames == TayamaCollapseFrames);
+static_assert(FinalEscapeProgress(FinalEscapeHeadStartFrames - 1,
+    FinalEscapeHeadStartFrames, FinalEscapeHeadDurationFrames) == 0.0f);
+static_assert(FinalEscapeProgress(FinalEscapeHeadStartFrames +
+    FinalEscapeHeadDurationFrames, FinalEscapeHeadStartFrames,
+    FinalEscapeHeadDurationFrames) == 1.0f);
+static_assert(FinalEscapeProgress(FinalEscapeDragonStartFrames +
+    FinalEscapeDragonDurationFrames, FinalEscapeDragonStartFrames,
+    FinalEscapeDragonDurationFrames) == 1.0f);
+static_assert(FinalEscapeProgress(FinalEscapePlayerStartFrames +
+    FinalEscapePlayerDurationFrames, FinalEscapePlayerStartFrames,
+    FinalEscapePlayerDurationFrames) == 1.0f);
+static_assert(CloudSeaAssemblyProgress(CloudSeaFadeFrames) == 0.0f);
+static_assert(CloudSeaAssemblyProgress(CloudSeaAssemblyFrames) == 1.0f);
+static_assert(TayamaDragonDestroyedSegmentCount(0) == 0);
+static_assert(TayamaDragonDestroyedSegmentCount(
+    TayamaDragonSegmentCount * TayamaDragonCollapseSegmentIntervalFrames) ==
+    TayamaDragonSegmentCount);
 
 /**
  * @brief 壁面警備ドローンのレーザーポインターへ自機が触れたか判定する
@@ -183,15 +470,25 @@ struct State {
     std::array<SearchlightState, SearchlightCount> searchlights {};
     std::array<TayamaWeakpointState, TayamaWeakpointCount> tayamaWeakpoints {};
     float tayamaTransformation = 0.0f;
+    float tayamaOrbitAngle = 0.0f;
+    float tayamaSideViewAngle = 0.0f;
     float checkpointPower = 0.0f;
     float coreTargetX = 0.0f;
     float coreTargetY = 0.0f;
+    float coreTargetZ = 8.0f;
+    Vector3 headLaserTarget {};
     int phaseTimer = 0;
     int checkpointScore = 0;
     int checkpointKills = 0;
     int soundCooldown = 0;
     int attackTimer = 0;
     int guardSpawnCooldown = 0;
+    int tayamaHp = 0;
+    int tayamaMaxHp = 0;
+    int tayamaDragonHitFlashFrames = 0;
+    bool headLaserArmed = false;
+    int tayamaCollisionBoundsFrame = -1;
+    std::array<Stage5GroupBounds, TayamaCollisionGroupCount> tayamaCollisionBounds {};
     Phase phase = Phase::Approach;
     Checkpoint checkpoint = Checkpoint::Chapter1;
 };
@@ -216,11 +513,14 @@ constexpr bool IsValidTransition(Phase from, Phase to) {
         (from == Phase::TayamaFireControl && to == Phase::TayamaLiftEngines) ||
         (from == Phase::TayamaLiftEngines && to == Phase::TayamaCommandCore) ||
         (from == Phase::TayamaCommandCore && to == Phase::TayamaCollapse) ||
-        (from == Phase::TayamaCollapse && to == Phase::EndingReady);
+        (from == Phase::TayamaCollapse && to == Phase::CloudSea) ||
+        (from == Phase::CloudSea && to == Phase::TayamaDragonBattle) ||
+        (from == Phase::TayamaDragonBattle && to == Phase::TayamaDragonCollapse) ||
+        (from == Phase::TayamaDragonCollapse && to == Phase::EndingReady);
 }
 
 /**
- * @brief EASTSOURCE撃破後のムービー区間か判定する
+ * @brief Stage 5の操作を停止するムービー区間か判定する
  * @param phase 判定するStage 5状態
  * @return 操作を停止するムービー区間の場合true
  */
@@ -228,7 +528,10 @@ constexpr bool IsCinematicPhase(Phase phase) {
     return phase == Phase::EastsourceFall ||
         phase == Phase::WallClimbTransition ||
         phase == Phase::RooftopArrival ||
-        phase == Phase::CarrierTransformation;
+        phase == Phase::CarrierTransformation ||
+        phase == Phase::TayamaCollapse ||
+        phase == Phase::CloudSea ||
+        phase == Phase::TayamaDragonCollapse;
 }
 
 /**
@@ -241,12 +544,65 @@ constexpr bool IsPart2RoutePhase(Phase phase) {
 }
 
 /**
+ * @brief 第2部道中クリア後の自機上昇演出中か判定する
+ * @param phase 現在のStage 5状態
+ * @param phaseTimer 現在状態の経過フレーム数
+ * @return 自機上昇演出中の場合true
+ */
+constexpr bool IsPart2PlayerFlyingAway(Phase phase, int phaseTimer) {
+    return phase == Phase::WallClimbUpper &&
+        phaseTimer >= WallClimbUpperFrames - WallClimbExitFadeFrames -
+            Part2PlayerFlyAwayFrames;
+}
+
+/**
  * @brief 超巨大ビル屋上を舞台にする状態か判定する
  * @param phase 現在のStage 5状態
  * @return 屋上背景を描画する場合true
  */
 constexpr bool IsRooftopPhase(Phase phase) {
-    return phase >= Phase::RooftopArrival && phase <= Phase::EndingReady;
+    return phase >= Phase::RooftopArrival && phase <= Phase::TayamaCollapse;
+}
+
+/**
+ * @brief 終幕ムービー後の雲海待機状態か判定する
+ * @param phase 現在のStage 5状態
+ * @return 雲海を描画する場合true
+ */
+constexpr bool IsCloudSeaPhase(Phase phase) {
+    return phase >= Phase::CloudSea && phase <= Phase::EndingReady;
+}
+
+/**
+ * @brief 雲海のTAYAMA龍第2形態が戦闘中か判定する
+ * @param phase 現在のStage 5状態
+ * @return 第2形態を操作可能な場合true
+ */
+constexpr bool IsTayamaDragonBattlePhase(Phase phase) {
+    return phase == Phase::TayamaDragonBattle;
+}
+
+/**
+ * @brief TAYAMAとの操作可能な最終戦か判定する
+ * @param phase 現在のStage 5状態
+ * @return TAYAMA戦闘中の場合true
+ */
+constexpr bool IsTayamaBattlePhase(Phase phase) {
+    return phase >= Phase::TayamaFireControl && phase <= Phase::TayamaCommandCore;
+}
+
+/**
+ * @brief ボス弾の発射元グループに対する接触除外を更新する
+ * @param ignoreMask 弾がまだ外へ出ていない発射元グループのビット列
+ * @param groupBit 判定対象グループのビット
+ * @param insideGroup 現在の弾位置がグループ内の場合true
+ * @return このフレームで対象グループとの接触を判定する場合true
+ */
+constexpr bool CanBossShotHitGroup(std::uint16_t& ignoreMask,
+    std::uint16_t groupBit, bool insideGroup) {
+    if ((ignoreMask & groupBit) == 0) return true;
+    if (!insideGroup) ignoreMask &= static_cast<std::uint16_t>(~groupBit);
+    return false;
 }
 
 /**
@@ -279,11 +635,80 @@ constexpr int Part2RouteElapsedFrames(Phase phase, int phaseTimer) {
     return 0;
 }
 
+/**
+ * @brief 第2部頭上敵の降下率を保ったまま視点別Y座標へ変換する
+ * @param y 変換元のY座標
+ * @param fromEntryY 変換元の出現Y座標
+ * @param fromExitY 変換元の消滅Y座標
+ * @param toEntryY 変換先の出現Y座標
+ * @param toExitY 変換先の消滅Y座標
+ * @return 変換先のY座標
+ */
+constexpr float RemapPart2EnemyY(float y, float fromEntryY, float fromExitY,
+    float toEntryY, float toExitY) {
+    const float range = fromEntryY - fromExitY;
+    if (range <= 0.0f) return toEntryY;
+    const float progress = (fromEntryY - y) / range;
+    const float clampedProgress = progress < 0.0f ? 0.0f : (progress > 1.0f ? 1.0f : progress);
+    return toEntryY + (toExitY - toEntryY) * clampedProgress;
+}
+
+/**
+ * @brief 第2部壁面ドローンの巡回基準Yを視点別座標へ変換する
+ * @param y 変換元の巡回基準Y
+ * @param fromBaseY 変換元の最下段Y
+ * @param fromStep 変換元の段間隔
+ * @param toBaseY 変換先の最下段Y
+ * @param toStep 変換先の段間隔
+ * @return 変換先の巡回基準Y
+ */
+constexpr float RemapPart2DroneBaseY(float y, float fromBaseY, float fromStep,
+    float toBaseY, float toStep) {
+    return fromStep <= 0.0f ? toBaseY : toBaseY + (y - fromBaseY) / fromStep * toStep;
+}
+
+/**
+ * @brief 第2部の視点補間率から敵モデル倍率を取得する
+ * @param railWeight 3D視点の補間率
+ * @return 2Dでは1、3DではPart2RailEnemyScale
+ */
+constexpr float Part2EnemyScaleMultiplier(float railWeight) {
+    return 1.0f + (Part2RailEnemyScale - 1.0f) * railWeight;
+}
+
+/**
+ * @brief 第2部3Dの壁面ドローン走査波を画面内Y座標へ変換する
+ * @param wave -1から1の走査波
+ * @return 自機移動範囲内の照準Y座標
+ */
+constexpr float Part2RailDroneAimY(float wave) {
+    constexpr float Margin = 0.35f;
+    constexpr float Minimum = Part2RailPlayerMinY + Margin;
+    constexpr float Maximum = Part2RailPlayerMaxY - Margin;
+    return (Minimum + Maximum) * 0.5f + wave * (Maximum - Minimum) * 0.5f;
+}
+
+/**
+ * @brief 第2部3Dの壁面ドローン登場補間率を取得する
+ * @param age 生成後の経過フレーム数
+ * @return 生成直後を0、壁面巡回開始時を1とする補間率
+ */
+constexpr float Part2RailDroneEntryProgress(int age) {
+    const float progress = static_cast<float>(age) /
+        static_cast<float>(Part2RailDroneEntryFrames);
+    const float clamped = progress < 0.0f ? 0.0f : (progress > 1.0f ? 1.0f : progress);
+    return clamped * clamped * (3.0f - 2.0f * clamped);
+}
+
 static_assert(IsPart2RoutePhase(Phase::WallClimbLower));
 static_assert(IsPart2RoutePhase(Phase::WallClimbMiddle));
 static_assert(IsPart2RoutePhase(Phase::WallClimbUpper));
 static_assert(!IsPart2RoutePhase(Phase::WallClimbTransition));
 static_assert(!IsPart2RoutePhase(Phase::RooftopArrival));
+static_assert(!IsPart2PlayerFlyingAway(Phase::WallClimbUpper,
+    WallClimbUpperFrames - WallClimbExitFadeFrames - Part2PlayerFlyAwayFrames - 1));
+static_assert(IsPart2PlayerFlyingAway(Phase::WallClimbUpper,
+    WallClimbUpperFrames - WallClimbExitFadeFrames - Part2PlayerFlyAwayFrames));
 static_assert(Part2ChapterNumber(Phase::WallClimbLower) == 1);
 static_assert(Part2ChapterNumber(Phase::WallClimbMiddle) == 2);
 static_assert(Part2ChapterNumber(Phase::WallClimbUpper) == 3);
@@ -295,7 +720,24 @@ static_assert(Part2RouteElapsedFrames(Phase::WallClimbUpper, 0) ==
 static_assert(Part2RailEnemyEntryY > 60.0f);
 static_assert(Part2SideEnemyEntryY > 2.0f);
 static_assert(Part2RailEnemyFallSpeed > 0.0f);
+static_assert(Part2RailShotMinY < Part2RailPlayerMinY);
+static_assert(Part2RailShotMaxY > Part2RailPlayerMaxY);
+static_assert(Part2RailPlayerMinY < Part2RailPlayerMaxY);
+static_assert(Part2EnemyScaleMultiplier(0.0f) == 1.0f);
+static_assert(Part2EnemyScaleMultiplier(1.0f) == Part2RailEnemyScale);
+static_assert(Part2RailDroneAimY(-1.0f) > Part2RailPlayerMinY);
+static_assert(Part2RailDroneAimY(1.0f) < Part2RailPlayerMaxY);
+static_assert(Part2RailDroneEntryY > Part2RailDroneBaseY + Part2RailDroneBaseStep * 2.0f);
+static_assert(Part2RailDroneEntryProgress(0) == 0.0f);
+static_assert(Part2RailDroneEntryProgress(Part2RailDroneEntryFrames / 2) == 0.5f);
+static_assert(Part2RailDroneEntryProgress(Part2RailDroneEntryFrames) == 1.0f);
 static_assert(Part2SideSceneryFallSpeed > 0.0f);
+static_assert(RemapPart2EnemyY(2.35f, 2.35f, -1.87f, 68.0f, -5.0f) == 68.0f);
+static_assert(RemapPart2EnemyY(-1.87f, 2.35f, -1.87f, 68.0f, -5.0f) == -5.0f);
+static_assert(RemapPart2DroneBaseY(Part2SideDroneBaseY + Part2SideDroneBaseStep,
+    Part2SideDroneBaseY, Part2SideDroneBaseStep,
+    Part2RailDroneBaseY, Part2RailDroneBaseStep) ==
+    Part2RailDroneBaseY + Part2RailDroneBaseStep);
 
 /**
  * @brief EASTSOURCE撃破後に自機が画面奥へ飛ぶ進行率を取得する
@@ -350,7 +792,7 @@ constexpr std::uint32_t WallWaveHash(int waveIndex, int phaseSeed) {
 }
 
 /**
- * @brief EASTSOURCE撃破後ムービーの暗転率を取得する
+ * @brief Stage 5ムービーの暗転率を取得する
  * @param phase 現在のStage 5状態
  * @param phaseTimer 現在状態の経過フレーム数
  * @return 透明を0、完全な暗転を1とする不透明度
@@ -385,6 +827,14 @@ constexpr float CinematicFadeAlpha(Phase phase, int phaseTimer) {
     if (phase == Phase::WallClimbLower && phaseTimer < WallClimbFadeFrames) {
         return 1.0f - static_cast<float>(phaseTimer) /
             static_cast<float>(WallClimbFadeFrames);
+    }
+    if (phase == Phase::TayamaCollapse) {
+        return FinalEscapeProgress(phaseTimer, FinalEscapeFadeStartFrames,
+            CloudSeaFadeFrames);
+    }
+    if (phase == Phase::CloudSea && phaseTimer < CloudSeaFadeFrames) {
+        return 1.0f - static_cast<float>(phaseTimer) /
+            static_cast<float>(CloudSeaFadeFrames);
     }
     return 0.0f;
 }
