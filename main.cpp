@@ -173,6 +173,9 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
             break;
         }
 
+        // キーボードとマウスのメッセージ後にゲームパッドを取得する
+        Input::PollGamepad();
+
         Time::BeginFrame();
 
         app.ProcessInput();

@@ -4,8 +4,8 @@
 #include <windows.h>
 
 #include "../../Engine/Graphics/Renderer.h"
+#include "../../Engine/Input/Input.h"
 #include "../../Engine/Time/Time.h"
-#include "../../Infrastructure/ExternalServices/InputService.h"
 #include "../Common/SpaceBackground.h"
 
 namespace {
@@ -102,7 +102,7 @@ void CreditScene::ProcessInput() {
     }
 
     // Escapeキーでタイトル画面へ戻る
-    if (InputService::IsKeyPressed(VK_ESCAPE)) {
+    if (Input::GetKeyDown(KeyCode::Escape)) {
         changeScene(SceneType::Title);
     }
 }

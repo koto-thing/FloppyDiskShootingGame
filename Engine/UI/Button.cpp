@@ -10,6 +10,8 @@ Button::Button(Vector2 size, RectAlign alignment, std::string text, Vector2 offs
 
 void Button::Update(const UIInputState& input) {
     m_hovered = m_enabled && m_bounds.Contains(input.position);
+    // フォーカス喪失や切断で解放イベントが破棄された押下を取り消す
+    if (!input.primaryDown && !input.primaryReleased) m_pressed = false;
     if (!m_enabled) return;
 
     if (input.primaryPressed && m_hovered) {

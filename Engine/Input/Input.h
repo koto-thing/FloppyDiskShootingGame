@@ -20,7 +20,7 @@ class WindowsInputBackend;
 class InputTestAccess;
 
 /**
- * @brief キーボードとマウスの入力状態をフレーム単位で管理する
+ * @brief キーボード、マウス、ゲームパッドの入力状態をフレーム単位で管理する
  */
 class Input {
 public:
@@ -33,8 +33,15 @@ public:
 
     /**
      * @brief 新しいフレームの入力受付を開始する
+     * @return なし
      */
     static void BeginFrame();
+
+    /**
+     * @brief Windowsメッセージ処理後にゲームパッドを取得する
+     * @return なし
+     */
+    static void PollGamepad();
 
     /**
      * @brief 指定したキーが押されているかを取得する
@@ -109,9 +116,13 @@ private:
     friend class InputTestAccess;
 
     static std::array<bool, static_cast<std::size_t>(KeyCode::Count)> m_currentKeys;
+    static std::array<bool, static_cast<std::size_t>(KeyCode::Count)> m_currentGamepadKeys;
+    static std::array<unsigned char, static_cast<std::size_t>(KeyCode::Count)> m_frameStartKeySources;
     static std::array<bool, static_cast<std::size_t>(KeyCode::Count)> m_keyDown;
     static std::array<bool, static_cast<std::size_t>(KeyCode::Count)> m_keyUp;
     static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_currentMouseButtons;
+    static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_currentGamepadMouseButtons;
+    static std::array<unsigned char, static_cast<std::size_t>(MouseButton::Count)> m_frameStartMouseButtonSources;
     static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_mouseButtonDown;
     static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_mouseButtonUp;
     static Vector2 m_mousePosition;
@@ -122,15 +133,46 @@ private:
      * @brief Win32仮想キーの状態を反映する
      * @param virtualKey Win32仮想キーコード
      * @param isPressed 押下中の場合はtrue
+     * @return なし
      */
     static void SetNativeKeyState(UINT virtualKey, bool isPressed);
+
+    /**
+     * @brief ゲームパッドから割り当てたキー状態を反映する
+     * @param key 対象の抽象キー
+     * @param isPressed 押下中の場合はtrue
+     * @return なし
+     */
+    static void SetGamepadKeyState(KeyCode key, bool isPressed);
 
     /**
      * @brief マウスボタンの状態を反映する
      * @param button 対象のマウスボタン
      * @param isPressed 押下中の場合はtrue
+     * @return なし
      */
     static void SetMouseButtonState(MouseButton button, bool isPressed);
+
+    /**
+     * @brief ゲームパッドから割り当てたマウスボタン状態を反映する
+     * @param button 対象のマウスボタン
+     * @param isPressed 押下中の場合はtrue
+     * @return なし
+     */
+    static void SetGamepadMouseButtonState(MouseButton button, bool isPressed);
+
+    /**
+     * @brief ゲームパッド由来のマウスボタン操作をクリックせず取り消す
+     * @param button 対象のマウスボタン
+     * @return なし
+     */
+    static void CancelGamepadMouseButtonState(MouseButton button);
+
+    /**
+     * @brief フォーカス喪失時に物理入力とフレーム内イベントを取り消す
+     * @return なし
+     */
+    static void CancelNativeInputState();
 
     /**
      * @brief マウス移動量を加算する

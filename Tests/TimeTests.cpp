@@ -25,6 +25,7 @@ void RunStage4BossModelViewTests();
 void RunStage4WeaponDroneViewTests();
 void RunStage5ModelViewTests();
 void RunVoiceDpcmDecoderTests();
+void RunWavSamplesTests();
 #include <thread>
 
 namespace {
@@ -183,6 +184,7 @@ void QuaternionOperationsProduceExpectedResults()
 int main()
 {
     try {
+        RunWavSamplesTests();
         InitializeResetsState();
         BeginFrameUpdatesScaledAndUnscaledTime();
         PauseStopsScaledTimeButNotUnscaledTime();

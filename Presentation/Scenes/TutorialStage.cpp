@@ -39,6 +39,8 @@ void TutorialStage::ProcessInput() {
 
 /** @brief 課題を更新し、全達成時はStage1へ進む */
 void TutorialStage::Tick() {
+    // UI押下中は射撃や既存弾による課題進行を止めて二重遷移を防ぐ
+    if (m_skipButton->IsPressed() || m_nextButton->IsPressed()) return;
     m_game->Tick();
     if (m_game->IsTutorialComplete()) FinishTutorial();
 }

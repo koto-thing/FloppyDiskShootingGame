@@ -3,9 +3,13 @@
 #include "WindowsInputBackend.h"
 
 std::array<bool, static_cast<std::size_t>(KeyCode::Count)> Input::m_currentKeys{};
+std::array<bool, static_cast<std::size_t>(KeyCode::Count)> Input::m_currentGamepadKeys{};
+std::array<unsigned char, static_cast<std::size_t>(KeyCode::Count)> Input::m_frameStartKeySources{};
 std::array<bool, static_cast<std::size_t>(KeyCode::Count)> Input::m_keyDown{};
 std::array<bool, static_cast<std::size_t>(KeyCode::Count)> Input::m_keyUp{};
 std::array<bool, static_cast<std::size_t>(MouseButton::Count)> Input::m_currentMouseButtons{};
+std::array<bool, static_cast<std::size_t>(MouseButton::Count)> Input::m_currentGamepadMouseButtons{};
+std::array<unsigned char, static_cast<std::size_t>(MouseButton::Count)> Input::m_frameStartMouseButtonSources{};
 std::array<bool, static_cast<std::size_t>(MouseButton::Count)> Input::m_mouseButtonDown{};
 std::array<bool, static_cast<std::size_t>(MouseButton::Count)> Input::m_mouseButtonUp{};
 Vector2 Input::m_mousePosition{};
@@ -20,9 +24,13 @@ float Input::m_mouseWheelDelta = 0.0f;
 bool Input::Initialize(HWND hwnd) {
     // すべてのデジタル入力状態を未入力に戻す
     m_currentKeys.fill(false);
+    m_currentGamepadKeys.fill(false);
+    m_frameStartKeySources.fill(0);
     m_keyDown.fill(false);
     m_keyUp.fill(false);
     m_currentMouseButtons.fill(false);
+    m_currentGamepadMouseButtons.fill(false);
+    m_frameStartMouseButtonSources.fill(0);
     m_mouseButtonDown.fill(false);
     m_mouseButtonUp.fill(false);
 
@@ -36,8 +44,19 @@ bool Input::Initialize(HWND hwnd) {
 
 /**
  * @brief 新しいフレームの入力受付を開始する
+ * @return なし
  */
 void Input::BeginFrame() {
+    // 各論理入力を保持している入力元を保存する
+    for (std::size_t i = 0; i < m_frameStartKeySources.size(); ++i) {
+        m_frameStartKeySources[i] = static_cast<unsigned char>(m_currentKeys[i]) |
+            static_cast<unsigned char>(m_currentGamepadKeys[i] << 1);
+    }
+    for (std::size_t i = 0; i < m_frameStartMouseButtonSources.size(); ++i) {
+        m_frameStartMouseButtonSources[i] = static_cast<unsigned char>(m_currentMouseButtons[i]) |
+            static_cast<unsigned char>(m_currentGamepadMouseButtons[i] << 1);
+    }
+
     // 前フレームで発生したデジタル入力イベントを消去する
     m_keyDown.fill(false);
     m_keyUp.fill(false);
@@ -50,13 +69,43 @@ void Input::BeginFrame() {
 }
 
 /**
+ * @brief Windowsメッセージ処理後にゲームパッドを取得する
+ * @return なし
+ */
+void Input::PollGamepad() {
+    // メッセージ入力を先に反映して入力元の持ち替え順を維持する
+    WindowsInputBackend::Update();
+
+    // フレーム中に入力元だけが入れ替わった操作は連続押下として扱う
+    for (std::size_t i = 0; i < m_frameStartKeySources.size(); ++i) {
+        const unsigned char currentSources = static_cast<unsigned char>(m_currentKeys[i]) |
+            static_cast<unsigned char>(m_currentGamepadKeys[i] << 1);
+        if (m_frameStartKeySources[i] != 0 && currentSources != 0 &&
+            (m_frameStartKeySources[i] & currentSources) == 0) {
+            m_keyDown[i] = false;
+            m_keyUp[i] = false;
+        }
+    }
+    for (std::size_t i = 0; i < m_frameStartMouseButtonSources.size(); ++i) {
+        const unsigned char currentSources = static_cast<unsigned char>(m_currentMouseButtons[i]) |
+            static_cast<unsigned char>(m_currentGamepadMouseButtons[i] << 1);
+        if (m_frameStartMouseButtonSources[i] != 0 && currentSources != 0 &&
+            (m_frameStartMouseButtonSources[i] & currentSources) == 0) {
+            m_mouseButtonDown[i] = false;
+            m_mouseButtonUp[i] = false;
+        }
+    }
+}
+
+/**
  * @brief 指定したキーが押されているかを取得する
  * @param key 確認するキー
  * @return 押されている場合はtrue
  */
 bool Input::GetKey(KeyCode key) {
     const auto index = static_cast<std::size_t>(key);
-    return index < m_currentKeys.size() && m_currentKeys[index];
+    return index < m_currentKeys.size() &&
+        (m_currentKeys[index] || m_currentGamepadKeys[index]);
 }
 
 /**
@@ -86,7 +135,8 @@ bool Input::GetKeyUp(KeyCode key) {
  */
 bool Input::GetMouseButton(MouseButton button) {
     const auto index = static_cast<std::size_t>(button);
-    return index < m_currentMouseButtons.size() && m_currentMouseButtons[index];
+    return index < m_currentMouseButtons.size() &&
+        (m_currentMouseButtons[index] || m_currentGamepadMouseButtons[index]);
 }
 
 /**
@@ -147,16 +197,40 @@ void Input::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam) {
  * @brief Win32仮想キーの状態を反映する
  * @param virtualKey Win32仮想キーコード
  * @param isPressed 押下中の場合はtrue
+ * @return なし
  */
 void Input::SetNativeKeyState(UINT virtualKey, bool isPressed) {
     // 対応する抽象キーを検索して状態を更新する
     for (std::size_t i = 1; i < m_currentKeys.size(); ++i) {
         if (ToVirtualKey(static_cast<KeyCode>(i)) == static_cast<int>(virtualKey)) {
             if (m_currentKeys[i] == isPressed) return;
+            const bool wasPressed = m_currentKeys[i] || m_currentGamepadKeys[i];
             m_currentKeys[i] = isPressed;
-            (isPressed ? m_keyDown : m_keyUp)[i] = true;
+            const bool isCombinedPressed = m_currentKeys[i] || m_currentGamepadKeys[i];
+            if (wasPressed != isCombinedPressed) {
+                (isCombinedPressed ? m_keyDown : m_keyUp)[i] = true;
+            }
             return;
         }
+    }
+}
+
+/**
+ * @brief ゲームパッドから割り当てたキー状態を反映する
+ * @param key 対象の抽象キー
+ * @param isPressed 押下中の場合はtrue
+ * @return なし
+ */
+void Input::SetGamepadKeyState(KeyCode key, bool isPressed) {
+    const auto index = static_cast<std::size_t>(key);
+    if (index >= m_currentGamepadKeys.size() || m_currentGamepadKeys[index] == isPressed) return;
+
+    // 物理キーボードを含む論理状態が変化した時だけエッジを記録する
+    const bool wasPressed = m_currentKeys[index] || m_currentGamepadKeys[index];
+    m_currentGamepadKeys[index] = isPressed;
+    const bool isCombinedPressed = m_currentKeys[index] || m_currentGamepadKeys[index];
+    if (wasPressed != isCombinedPressed) {
+        (isCombinedPressed ? m_keyDown : m_keyUp)[index] = true;
     }
 }
 
@@ -164,12 +238,71 @@ void Input::SetNativeKeyState(UINT virtualKey, bool isPressed) {
  * @brief マウスボタンの状態を反映する
  * @param button 対象のマウスボタン
  * @param isPressed 押下中の場合はtrue
+ * @return なし
  */
 void Input::SetMouseButtonState(MouseButton button, bool isPressed) {
     const auto index = static_cast<std::size_t>(button);
     if (index >= m_currentMouseButtons.size() || m_currentMouseButtons[index] == isPressed) return;
+    const bool wasPressed = m_currentMouseButtons[index] || m_currentGamepadMouseButtons[index];
     m_currentMouseButtons[index] = isPressed;
-    (isPressed ? m_mouseButtonDown : m_mouseButtonUp)[index] = true;
+    const bool isCombinedPressed = m_currentMouseButtons[index] || m_currentGamepadMouseButtons[index];
+    if (wasPressed != isCombinedPressed) {
+        (isCombinedPressed ? m_mouseButtonDown : m_mouseButtonUp)[index] = true;
+    }
+}
+
+/**
+ * @brief ゲームパッドから割り当てたマウスボタン状態を反映する
+ * @param button 対象のマウスボタン
+ * @param isPressed 押下中の場合はtrue
+ * @return なし
+ */
+void Input::SetGamepadMouseButtonState(MouseButton button, bool isPressed) {
+    const auto index = static_cast<std::size_t>(button);
+    if (index >= m_currentGamepadMouseButtons.size() ||
+        m_currentGamepadMouseButtons[index] == isPressed) return;
+
+    // 物理マウスを含む論理状態が変化した時だけエッジを記録する
+    const bool wasPressed = m_currentMouseButtons[index] || m_currentGamepadMouseButtons[index];
+    m_currentGamepadMouseButtons[index] = isPressed;
+    const bool isCombinedPressed = m_currentMouseButtons[index] || m_currentGamepadMouseButtons[index];
+    if (wasPressed != isCombinedPressed) {
+        (isCombinedPressed ? m_mouseButtonDown : m_mouseButtonUp)[index] = true;
+    }
+}
+
+/**
+ * @brief ゲームパッド由来のマウスボタン操作をクリックせず取り消す
+ * @param button 対象のマウスボタン
+ * @return なし
+ */
+void Input::CancelGamepadMouseButtonState(MouseButton button) {
+    const auto index = static_cast<std::size_t>(button);
+    if (index >= m_currentGamepadMouseButtons.size() ||
+        !m_currentGamepadMouseButtons[index]) return;
+
+    // 解放エッジを作らずUI側で押下操作を破棄できる状態へ戻す
+    m_currentGamepadMouseButtons[index] = false;
+    if (!m_currentMouseButtons[index]) {
+        m_mouseButtonDown[index] = false;
+        m_mouseButtonUp[index] = false;
+    }
+}
+
+/**
+ * @brief フォーカス喪失時に物理入力とフレーム内イベントを取り消す
+ * @return なし
+ */
+void Input::CancelNativeInputState() {
+    // バックグラウンドへ持ち越さないよう物理入力と全エッジを破棄する
+    m_currentKeys.fill(false);
+    m_keyDown.fill(false);
+    m_keyUp.fill(false);
+    m_currentMouseButtons.fill(false);
+    m_mouseButtonDown.fill(false);
+    m_mouseButtonUp.fill(false);
+    m_mouseDelta = {};
+    m_mouseWheelDelta = 0.0f;
 }
 
 /**

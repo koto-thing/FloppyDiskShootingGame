@@ -2200,6 +2200,7 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
             SmoothStep(static_cast<float>(shooter.m_stage5.phaseTimer) / CarrierTransformationFrames));
         if (shooter.m_stage5.phaseTimer >= CarrierTransformationFrames) {
             // 変形完了後は共通の警告、会話、名前表示を終えてから戦闘へ入る
+            shooter.m_bossStoryLine = 0;
             shooter.m_bossIntroductionPhase = BossIntroductionPhase::Entrance;
             shooter.m_bossIntroductionTimer = 0;
             if (shooter.m_audio) {

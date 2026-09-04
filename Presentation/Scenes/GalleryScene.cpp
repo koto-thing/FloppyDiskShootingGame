@@ -179,8 +179,11 @@ void GalleryScene::ProcessInput() {
     }
 
     // Spaceで動作を停止し、Rで現在展示の初期視点へ戻す
-    if (Input::GetKeyDown(KeyCode::Space) && IsUnlocked()) m_playing = !m_playing;
-    if (Input::GetKeyDown(KeyCode::R)) ResetExhibit();
+    if (Input::GetKeyDown(KeyCode::Space) &&
+        !Input::GetMouseButtonDown(MouseButton::Left) && IsUnlocked()) {
+        m_playing = !m_playing;
+    }
+    if (Input::GetKeyDown(KeyCode::R) || Input::GetKeyDown(KeyCode::X)) ResetExhibit();
 
     // AとDまたは左ドラッグでカメラを周回させる
     const float keyOrbit = static_cast<float>(Input::GetKey(KeyCode::D)) -

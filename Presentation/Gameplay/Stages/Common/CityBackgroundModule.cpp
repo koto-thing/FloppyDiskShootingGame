@@ -30,6 +30,7 @@ constexpr float TruckRailWidth = 4.8f;
 constexpr float TruckRailHeight = 6.0f;
 constexpr float TruckRailDepth = 13.5f;
 constexpr float TruckRailCycleLength = 220.0f;
+constexpr int TruckNeonFlashFrames = 10;
 constexpr float SideRoadTopY = -6.0f;
 constexpr float SideRoadCenterY = -8.65f;
 constexpr float SideRoadBottomY = -11.3f;
@@ -65,10 +66,22 @@ constexpr bool ShouldDrawTraffic(int stageNumber, bool bossBattle, bool bossEnte
     return stageNumber != 4 || !bossBattle || bossEntering;
 }
 
+/**
+ * @brief トラックのネオンを一定間隔で明滅させる輝度を返す
+ * @param frame 現在のフレーム番号
+ * @return ネオンの輝度
+ */
+constexpr float TruckNeonIntensity(int frame) {
+    return (frame / TruckNeonFlashFrames) % 2 == 0 ? 1.0f : 0.16f;
+}
+
 static_assert(ShouldDrawTraffic(4, false));
 static_assert(!ShouldDrawTraffic(4, true));
 static_assert(ShouldDrawTraffic(4, true, true));
 static_assert(ShouldDrawTraffic(5, true));
+static_assert(TruckNeonIntensity(0) == 1.0f);
+static_assert(TruckNeonIntensity(TruckNeonFlashFrames) == 0.16f);
+static_assert(TruckNeonIntensity(TruckNeonFlashFrames * 2) == 1.0f);
 
 }
 
@@ -414,10 +427,18 @@ void SideScrollingShooter::CityBackgroundModule::DrawTruck(
         SmoothStep(ShooterStages::Stage4::TrafficFadeAlpha(
             shooter.m_bossIntroductionTimer)) : 1.0f;
     if (alpha <= 0.0f) return;
+    const float neonIntensity = TruckNeonIntensity(shooter.m_frame);
     const float bodyColor[4] = {TruckBodyColor[0], TruckBodyColor[1], TruckBodyColor[2], alpha};
-    const float neonColor[4] = {TruckNeonColor[0], TruckNeonColor[1], TruckNeonColor[2], alpha};
+    const float neonColor[4] = {
+        TruckNeonColor[0] * neonIntensity,
+        TruckNeonColor[1] * neonIntensity,
+        TruckNeonColor[2] * neonIntensity,
+        alpha};
     const float accentColor[4] = {
-        TruckAccentColor[0], TruckAccentColor[1], TruckAccentColor[2], alpha};
+        TruckAccentColor[0] * neonIntensity,
+        TruckAccentColor[1] * neonIntensity,
+        TruckAccentColor[2] * neonIntensity,
+        alpha};
     const float cabinColor[4] = {BuildingColor[0], BuildingColor[1], BuildingColor[2], alpha};
     constexpr float SideRoadZ = SidePlaneZ + 13.55f;
     const float sideX = WrapNdcX(0.47f - shooter.m_scroll * 0.72f) * 18.0f;
