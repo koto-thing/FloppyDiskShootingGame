@@ -16,6 +16,18 @@ void RunStage5ModelViewTests() {
     using Phase = SideScrollingShooter::Stage5Phase;
     using Weakpoint = SideScrollingShooter::TayamaWeakpoint;
     static_assert(TayamaPartGroupCount == ShooterStages::Stage5::TayamaCollisionGroupCount);
+
+    // 第2形態の攻撃は選択中の一種類だけが固有タイムラインを進める
+    using DragonAttack = ShooterStages::Stage5::TayamaDragonAttack;
+    static_assert(ShooterStages::Stage5::TayamaDragonAttackTimeline(
+        DragonAttack::Rush, 0) == ShooterStages::Stage5::TayamaDragonRushStartFrame);
+    static_assert(ShooterStages::Stage5::TayamaDragonAttackTimeline(
+        DragonAttack::Orbit, 0) == ShooterStages::Stage5::TayamaDragonRushStartFrame +
+            ShooterStages::Stage5::TayamaDragonOrbitStartFrame);
+    static_assert(ShooterStages::Stage5::TayamaDragonAttackDuration(
+        DragonAttack::Rush) == ShooterStages::Stage5::TayamaDragonRushWarningFrames +
+            ShooterStages::Stage5::TayamaDragonRushActiveFrames +
+            ShooterStages::Stage5::TayamaDragonRushRecoveryFrames);
     assert(ShooterStages::Stage5::State {}.tayamaCollisionBoundsFrame == -1);
 
     // 反射ファンネルは第2形態開始5秒後から5秒間隔で3基を射出する
@@ -25,6 +37,15 @@ void RunStage5ModelViewTests() {
         ShooterStages::Stage5::TayamaReflectFunnelLaunchIntervalFrames - 1));
     static_assert(ShooterStages::Stage5::IsTayamaReflectFunnelLaunchFrame(
         ShooterStages::Stage5::TayamaReflectFunnelLaunchIntervalFrames));
+    static_assert(!ShooterStages::Stage5::IsTayamaReflectFunnelShotFrame(
+        ShooterStages::Stage5::TayamaReflectFunnelLaunchFrames - 1));
+    static_assert(ShooterStages::Stage5::IsTayamaReflectFunnelShotFrame(
+        ShooterStages::Stage5::TayamaReflectFunnelLaunchFrames));
+    static_assert(!ShooterStages::Stage5::IsTayamaReflectFunnelShotFrame(
+        ShooterStages::Stage5::TayamaReflectFunnelLaunchFrames + 1));
+    static_assert(ShooterStages::Stage5::IsTayamaReflectFunnelShotFrame(
+        ShooterStages::Stage5::TayamaReflectFunnelLaunchFrames +
+            ShooterStages::Stage5::TayamaReflectFunnelShotIntervalFrames));
 
     // 第2形態の突進は予告後だけ接触判定を持ち、復帰完了後に通常位置へ戻る
     constexpr int rushStart = ShooterStages::Stage5::TayamaDragonRushStartFrame;
@@ -284,12 +305,23 @@ void RunStage5ModelViewTests() {
         ShooterStages::Stage5::Part2RailPlayerMaxY);
     assert(ShooterStages::Stage5::Part2RailDroneEntryY >
         ShooterStages::Stage5::Part2RailDroneBaseY +
-        ShooterStages::Stage5::Part2RailDroneBaseStep * 2.0f);
+        ShooterStages::Stage5::Part2RailDroneBaseStep *
+            (ShooterStages::Stage5::Part2DroneRowCount - 1));
     assert(ShooterStages::Stage5::Part2RailDroneEntryProgress(0) == 0.0f);
     assert(ShooterStages::Stage5::Part2RailDroneEntryProgress(
         ShooterStages::Stage5::Part2RailDroneEntryFrames / 2) == 0.5f);
     assert(ShooterStages::Stage5::Part2RailDroneEntryProgress(
         ShooterStages::Stage5::Part2RailDroneEntryFrames) == 1.0f);
+
+    // 一巡するまで全ドローンが異なる壁面区画へ配置されることを検証する
+    constexpr int DronePlacementCount = ShooterStages::Stage5::Part2DroneColumnCount *
+        ShooterStages::Stage5::Part2DroneRowCount;
+    std::array<bool, DronePlacementCount> occupiedDronePlacements {};
+    for (int wave = 0; wave < DronePlacementCount; ++wave) {
+        const int placement = ShooterStages::Stage5::Part2DronePlacementIndex(wave, 4);
+        assert(!occupiedDronePlacements[placement]);
+        occupiedDronePlacements[placement] = true;
+    }
     constexpr float SideEnemyExitY = -1.87f;
     const float railHalfwayY = ShooterStages::Stage5::RemapPart2EnemyY(
         (ShooterStages::Stage5::Part2SideEnemyEntryY + SideEnemyExitY) * 0.5f,

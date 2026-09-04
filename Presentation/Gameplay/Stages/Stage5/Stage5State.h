@@ -161,10 +161,12 @@ inline constexpr float Part2RailShotMaxY = Part2RailEnemyEntryY + Part2RailEnemy
 inline constexpr float Part2RailPlayerMinY = 0.80f;
 inline constexpr float Part2RailPlayerMaxY = 16.0f;
 inline constexpr float Part2RailEnemyScale = 2.0f;
-inline constexpr float Part2SideDroneBaseY = 0.18f;
-inline constexpr float Part2SideDroneBaseStep = 0.18f;
-inline constexpr float Part2RailDroneBaseY = 9.0f;
-inline constexpr float Part2RailDroneBaseStep = 1.20f;
+inline constexpr int Part2DroneColumnCount = 5;
+inline constexpr int Part2DroneRowCount = 6;
+inline constexpr float Part2SideDroneBaseY = -0.62f;
+inline constexpr float Part2SideDroneBaseStep = 0.30f;
+inline constexpr float Part2RailDroneBaseY = 3.0f;
+inline constexpr float Part2RailDroneBaseStep = 2.35f;
 inline constexpr float Part2RailDroneEntryY = Part2RailPlayerMaxY + 2.0f;
 inline constexpr int Part2RailDroneEntryFrames = 120;
 inline constexpr float Part2SideSceneryFallSpeed = 0.64f;
@@ -259,8 +261,59 @@ inline constexpr float TayamaHeadLaserHitRadius = 3.2f;
 inline constexpr int TayamaReflectFunnelCount = 3;
 inline constexpr int TayamaReflectFunnelLaunchIntervalFrames = 5 * 60;
 inline constexpr int TayamaReflectFunnelLaunchFrames = 60;
+inline constexpr int TayamaReflectFunnelShotIntervalFrames = 5 * 60;
 inline constexpr int TayamaReflectFunnelHp = 30;
 inline constexpr float TayamaReflectShotSpeed = 0.11f;
+
+/** @brief TAYAMA龍第2形態の排他的な攻撃 */
+enum class TayamaDragonAttack {
+    None,
+    HeadLaser,
+    BodyBarrage,
+    BodySweep,
+    Rush,
+    Orbit,
+    RomanceCannon,
+    Count
+};
+
+inline constexpr int TayamaDragonAttackCooldownFrames = 45;
+
+/**
+ * @brief 攻撃固有タイマーを既存の演出タイムラインへ変換する
+ * @param attack 選択中の攻撃
+ * @param timer 攻撃開始からのフレーム数
+ * @return 既存ヘルパーへ渡すタイマー
+ */
+constexpr int TayamaDragonAttackTimeline(TayamaDragonAttack attack, int timer) {
+    if (attack == TayamaDragonAttack::Rush) return TayamaDragonRushStartFrame + timer;
+    if (attack == TayamaDragonAttack::Orbit) {
+        return TayamaDragonRushStartFrame + TayamaDragonOrbitStartFrame + timer;
+    }
+    if (attack == TayamaDragonAttack::RomanceCannon) {
+        return TayamaDragonRomanceCannonIntervalFrames + timer;
+    }
+    return timer;
+}
+
+/**
+ * @brief 選択攻撃の継続フレーム数を取得する
+ * @param attack 対象攻撃
+ * @return 継続フレーム数
+ */
+constexpr int TayamaDragonAttackDuration(TayamaDragonAttack attack) {
+    if (attack == TayamaDragonAttack::HeadLaser) {
+        return TayamaHeadLaserWarningFrames + TayamaHeadLaserActiveFrames;
+    }
+    if (attack == TayamaDragonAttack::BodyBarrage) return TayamaDragonBarrageIntervalFrames;
+    if (attack == TayamaDragonAttack::BodySweep) return TayamaDragonSweepWarningFrames +
+        TayamaDragonSweepActiveFrames + TayamaDragonSweepRecoveryFrames;
+    if (attack == TayamaDragonAttack::Rush) return TayamaDragonRushWarningFrames +
+        TayamaDragonRushActiveFrames + TayamaDragonRushRecoveryFrames;
+    if (attack == TayamaDragonAttack::Orbit) return TayamaDragonOrbitFrames;
+    if (attack == TayamaDragonAttack::RomanceCannon) return TayamaDragonRomanceCannonSequenceFrames;
+    return TayamaDragonAttackCooldownFrames;
+}
 
 /** @brief TAYAMA龍第2形態が射出する反射ファンネル */
 struct TayamaReflectFunnel {
@@ -281,6 +334,17 @@ struct TayamaReflectFunnel {
 constexpr bool IsTayamaReflectFunnelLaunchFrame(int attackTimer) {
     return attackTimer > 0 &&
         attackTimer % TayamaReflectFunnelLaunchIntervalFrames == 0;
+}
+
+/**
+ * @brief TAYAMA龍第2形態の反射ファンネルが射撃する時刻か判定する
+ * @param age ファンネル生成後の経過フレーム数
+ * @return 配置完了後または5秒間隔の射撃時刻の場合true
+ */
+constexpr bool IsTayamaReflectFunnelShotFrame(int age) {
+    return age >= TayamaReflectFunnelLaunchFrames &&
+        (age - TayamaReflectFunnelLaunchFrames) %
+            TayamaReflectFunnelShotIntervalFrames == 0;
 }
 inline constexpr int TayamaRearMissileCount = 10;
 inline constexpr float TayamaRearMissileBackDot = 0.0f;
@@ -816,6 +880,9 @@ struct State {
     int tayamaHp = 0;
     int tayamaMaxHp = 0;
     int tayamaDragonHitFlashFrames = 0;
+    int tayamaDragonAttackTimer = 0;
+    TayamaDragonAttack tayamaDragonAttack = TayamaDragonAttack::None;
+    TayamaDragonAttack previousTayamaDragonAttack = TayamaDragonAttack::None;
     bool headLaserArmed = false;
     bool tayamaStompLeftFoot = true;
     int tayamaCollisionBoundsFrame = -1;
@@ -1056,6 +1123,29 @@ constexpr float Part2RailDroneEntryProgress(int age) {
     return clamped * clamped * (3.0f - 2.0f * clamped);
 }
 
+/**
+ * @brief 第2部壁面ドローンの配置区画を重複なしの巡回順で取得する
+ * @param waveIndex ドローンウェーブ番号
+ * @param phaseSeed 壁面区画番号
+ * @return 左右列と上下段を直列化した配置区画番号
+ */
+constexpr int Part2DronePlacementIndex(int waveIndex, int phaseSeed) {
+    constexpr int PlacementCount = Part2DroneColumnCount * Part2DroneRowCount;
+    const int index = waveIndex * 11 + phaseSeed * 7;
+    return (index % PlacementCount + PlacementCount) % PlacementCount;
+}
+
+/**
+ * @brief 第2部3D壁面ドローンの巡回基準Xを取得する
+ * @param placementIndex 配置区画番号
+ * @return 壁面中央を0とする巡回基準X
+ */
+constexpr float Part2RailDroneBaseX(int placementIndex) {
+    constexpr float ColumnStep = 0.34f;
+    const int column = placementIndex % Part2DroneColumnCount;
+    return static_cast<float>(column - Part2DroneColumnCount / 2) * ColumnStep;
+}
+
 static_assert(IsPart2RoutePhase(Phase::WallClimbLower));
 static_assert(IsPart2RoutePhase(Phase::WallClimbMiddle));
 static_assert(IsPart2RoutePhase(Phase::WallClimbUpper));
@@ -1086,10 +1176,15 @@ static_assert(Part2EnemyScaleMultiplier(0.0f) == 1.0f);
 static_assert(Part2EnemyScaleMultiplier(1.0f) == Part2RailEnemyScale);
 static_assert(Part2RailDroneAimY(-1.0f) > Part2RailPlayerMinY);
 static_assert(Part2RailDroneAimY(1.0f) < Part2RailPlayerMaxY);
-static_assert(Part2RailDroneEntryY > Part2RailDroneBaseY + Part2RailDroneBaseStep * 2.0f);
+static_assert(Part2RailDroneEntryY >
+    Part2RailDroneBaseY + Part2RailDroneBaseStep * (Part2DroneRowCount - 1));
 static_assert(Part2RailDroneEntryProgress(0) == 0.0f);
 static_assert(Part2RailDroneEntryProgress(Part2RailDroneEntryFrames / 2) == 0.5f);
 static_assert(Part2RailDroneEntryProgress(Part2RailDroneEntryFrames) == 1.0f);
+static_assert(Part2DronePlacementIndex(0, 0) != Part2DronePlacementIndex(1, 0));
+static_assert(Part2DronePlacementIndex(0, 0) == Part2DronePlacementIndex(30, 0));
+static_assert(Part2RailDroneBaseX(0) < 0.0f);
+static_assert(Part2RailDroneBaseX(Part2DroneColumnCount - 1) > 0.0f);
 static_assert(Part2SideSceneryFallSpeed > 0.0f);
 static_assert(RemapPart2EnemyY(2.35f, 2.35f, -1.87f, 68.0f, -5.0f) == 68.0f);
 static_assert(RemapPart2EnemyY(-1.87f, 2.35f, -1.87f, 68.0f, -5.0f) == -5.0f);

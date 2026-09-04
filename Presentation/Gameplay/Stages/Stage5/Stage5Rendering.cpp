@@ -1173,10 +1173,13 @@ void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
     const int visibleCount = ShooterStages::Stage5::TayamaDragonSegmentCount - destroyed;
     const bool hitFlash = shooter.m_stage5.tayamaDragonHitFlashFrames > 0 &&
         (shooter.m_stage5.tayamaDragonHitFlashFrames / 2) % 2 != 0;
-    const int romanceFrame = ShooterStages::Stage5::TayamaDragonRomanceCannonFrame(
-        shooter.m_stage5.attackTimer);
+    const int attackTimeline = ShooterStages::Stage5::TayamaDragonAttackTimeline(
+        shooter.m_stage5.tayamaDragonAttack, shooter.m_stage5.tayamaDragonAttackTimer);
+    const int romanceFrame = shooter.m_stage5.tayamaDragonAttack ==
+        ShooterStages::Stage5::TayamaDragonAttack::RomanceCannon ?
+        ShooterStages::Stage5::TayamaDragonRomanceCannonFrame(attackTimeline) : -1;
 
-    // ステージ3と同じ反射ファンネルモデルを龍の胴体周囲へ描画する
+    // ステージ3と同じ反射ファンネルモデルを自機周囲へ描画する
     for (const auto& state : shooter.m_stage5.tayamaReflectFunnels) {
         if (!state.active) continue;
         const Vector3 position {ToWorldX(state.x), ToWorldY(state.y), state.z};
@@ -1244,11 +1247,11 @@ void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
 
     // 発射する胴体節を予告中から膨張発光させ、発射後は滑らかに収束させる
     if (shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle &&
-        !ShooterStages::Stage5::IsTayamaDragonRushSequence(shooter.m_stage5.attackTimer) &&
-        !ShooterStages::Stage5::IsTayamaDragonOrbitActive(shooter.m_stage5.attackTimer)) {
+        shooter.m_stage5.tayamaDragonAttack ==
+            ShooterStages::Stage5::TayamaDragonAttack::BodyBarrage) {
         constexpr int Sources[] = {4, 10, 16, 22};
         const float glow = SmoothStep(ShooterStages::Stage5::TayamaDragonBarrageGlow(
-            shooter.m_stage5.attackTimer));
+            attackTimeline));
         if (glow > 0.0f) {
             const int volley = shooter.m_stage5.attackTimer /
                 ShooterStages::Stage5::TayamaDragonBarrageIntervalFrames;
@@ -1323,10 +1326,10 @@ void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
     // 合体後の頭部レーザーを予告線と照射本体で描き分ける
     if (shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle &&
         shooter.m_stage5.headLaserArmed) {
-        const int laserFrame = shooter.m_stage5.attackTimer %
+        const int laserFrame = shooter.m_stage5.tayamaDragonAttackTimer %
             ShooterStages::Stage5::TayamaHeadLaserCycleFrames;
         const bool active = ShooterStages::Stage5::IsTayamaHeadLaserActive(
-            shooter.m_stage5.attackTimer);
+            attackTimeline);
         if (laserFrame < ShooterStages::Stage5::TayamaHeadLaserWarningFrames || active) {
             const float progress = static_cast<float>(laserFrame) /
                 static_cast<float>(ShooterStages::Stage5::TayamaHeadLaserWarningFrames);
@@ -1342,7 +1345,7 @@ void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
                     const float pulse = static_cast<float>(shooter.m_frame % 12) / 12.0f;
                     const float widthProgress = SmoothStep(
                         ShooterStages::Stage5::TayamaDragonLaserWidthProgress(
-                            shooter.m_stage5.attackTimer));
+                            attackTimeline));
                     const float width = Math::Lerp(0.16f,
                         ShooterStages::Stage5::TayamaHeadLaserHitRadius, widthProgress);
                     shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
