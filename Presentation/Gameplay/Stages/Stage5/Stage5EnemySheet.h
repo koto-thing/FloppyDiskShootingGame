@@ -21,6 +21,14 @@ public:
     virtual ~Stage5EnemySheet() = default;
 
     /**
+     * @brief 1チャプターの長さを取得する
+     * @return チャプターのフレーム数
+     */
+    virtual int ChapterFrameLength() const {
+        return SideScrollingShooter::ChapterLengthFrames;
+    }
+
+    /**
      * @brief 指定フレームで出現させる敵を取得する
      * @param frame 現在のステージフレーム
      * @param spawnIndex 同一フレーム内で取得する出現候補の番号
@@ -46,6 +54,7 @@ protected:
      * @brief チャプター単位で現在フレームの出現規則を選択する
      * @param chapters チャプター配列
      * @param chapterCount チャプター数
+     * @param chapterFrameLength 1チャプターの長さ
      * @param frame 現在のステージフレーム
      * @param spawnIndex 同一フレーム内で取得する出現候補の番号
      * @param spawn 出現設定の格納先
@@ -53,8 +62,8 @@ protected:
      * @return 出現規則を選択した場合true
      */
     static bool TrySelectByChapters(const Chapter* chapters, int chapterCount,
-        int frame, int spawnIndex, EnemySpawnRule& spawn, int& chapterNumber) {
-        const int chapterFrameLength = SideScrollingShooter::ChapterLengthFrames;
+        int chapterFrameLength, int frame, int spawnIndex,
+        EnemySpawnRule& spawn, int& chapterNumber) {
         for (int chapterIndex = 0; chapterIndex < chapterCount; ++chapterIndex) {
             const int chapterFirstFrame = chapterIndex * chapterFrameLength;
             if (frame < chapterFirstFrame || frame >= chapterFirstFrame + chapterFrameLength) continue;

@@ -215,8 +215,11 @@ bool SideScrollingShooter::StageDispatch::TryHitBossBody(
 
 bool SideScrollingShooter::StageDispatch::BlocksPlayerShot(
     const SideScrollingShooter& shooter, const Shot& shot, const Enemy& boss) {
-    return shooter.m_stageNumber == 3 &&
-        Stage3Module::BlocksPlayerShot(shooter, shot, boss);
+    if (shooter.m_stageNumber == 3) {
+        return Stage3Module::BlocksPlayerShot(shooter, shot, boss);
+    }
+    return shooter.m_stageNumber == 4 &&
+        Stage4Module::BlocksPlayerShot(shooter, shot, boss);
 }
 
 bool SideScrollingShooter::StageDispatch::CanHitBossWhileCollisionDisabled(
@@ -523,7 +526,9 @@ bool SideScrollingShooter::StageDispatch::DrawSpecialShot(
     const Camera3D& camera, const Shot& shot, float yaw) {
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
-    case 4: return Stage4Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
+    case 4:
+        if (Stage4Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw)) return true;
+        return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
     case 3:
         if (Stage3Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw)) return true;
         return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);

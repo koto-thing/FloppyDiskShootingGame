@@ -95,12 +95,30 @@ public:
         const Shot& shot, const Enemy& boss, BossPart& part);
 
     /**
+     * @brief 主砲交換中にStage 4ボス本体へ当たった自機弾を遮断する
+     * @param shooter 判定に使用するゲーム本体
+     * @param shot 判定する自機弾
+     * @param boss 判定するStage 4ボス
+     * @return ダメージを与えず遮断する場合true
+     */
+    static bool BlocksPlayerShot(const SideScrollingShooter& shooter,
+        const Shot& shot, const Enemy& boss);
+
+    /**
      * @brief Stage 4ボスの生存砲部位から自機方向へ弾を発射する
      * @param shooter 弾を生成するゲーム本体
      * @param boss 発射元となるStage 4ボス
      * @return なし
      */
     static void FireBossPartBarrage(SideScrollingShooter& shooter, Enemy& boss);
+
+    /**
+     * @brief Stage 4ボスの三系統の副砲攻撃を独立周期で更新する
+     * @param shooter 弾を生成するゲーム本体
+     * @param boss 発射元となるStage 4ボス
+     * @return なし
+     */
+    static void TickSecondaryGunAttacks(SideScrollingShooter& shooter, const Enemy& boss);
 
     /**
      * @brief 指定球がStage 4ボス本体へ接触したか判定する
@@ -185,6 +203,20 @@ public:
         Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw);
 
 private:
+    /**
+     * @brief 主砲種別に対応する破壊可能部位を取得する
+     * @param weapon 主砲種別
+     * @return 主砲ごとに割り当てたボス部位
+     */
+    static BossPart MainCannonPart(ShooterStages::Stage4::MainWeaponType weapon);
+
+    /**
+     * @brief 指定部位がStage 4主砲用の部位か判定する
+     * @param part 判定する部位
+     * @return 主砲用部位の場合true
+     */
+    static bool IsMainCannonPart(BossPart part);
+
     /**
      * @brief 現在主砲から指定主砲への交換を開始する
      * @param shooter 更新するゲーム本体

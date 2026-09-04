@@ -337,9 +337,9 @@ void SideScrollingShooter::TickLinkedEnemyLasers() {
 }
 
 void SideScrollingShooter::TickShots() {
-    // Stage3の遅延点火ミサイルは画面外到達または命中時に爆発へ変換する
+    // Stage3とStage4の遅延点火ミサイルは画面外到達または命中時に爆発へ変換する
     auto DeactivateShot = [this](Shot& shot) {
-        if (m_stageNumber == 3 && shot.enemy &&
+        if ((m_stageNumber == 3 || m_stageNumber == 4) && shot.enemy &&
             shot.stage2.kind == ShooterStages::Stage2::ShotKind::Funnel &&
             shot.stage2.delayedEngine) {
             SpawnExplosion(shot.x, shot.y, shot.z);
@@ -455,7 +455,15 @@ void SideScrollingShooter::TickShots() {
                     enemy.bossPartHp[hitPart] = 0;
                     SpawnEnemyDebris(enemy, hitPart);
                     const int partDamage = m_stage->BossPartBreakDamage(hitPart);
-                    const bool bossDefeated = DamageBoss(enemy, partDamage);
+                    bool bossDefeated = false;
+                    if (m_stageNumber == 4 && Stage4Module::IsWeaponSwapActive(*this)) {
+                        // 交換中の通常ダメージ保護とは別に副砲破壊ダメージだけ反映する
+                        enemy.hp -= partDamage;
+                        m_bossHp = (std::max)(0, enemy.hp);
+                        bossDefeated = enemy.hp <= 0;
+                    } else {
+                        bossDefeated = DamageBoss(enemy, partDamage);
+                    }
                     PlayHitSound();
                     if (bossDefeated) DefeatBoss(enemy);
                 }
@@ -750,6 +758,8 @@ void SideScrollingShooter::FireBossPartBarrage(const Enemy& boss) {
 }
 
 bool SideScrollingShooter::DamageBoss(Enemy& boss, int damage) {
+    // Stage4主砲交換中は、副砲破壊処理から直接与えるダメージ以外を無効化する
+    if (m_stageNumber == 4 && Stage4Module::IsWeaponSwapActive(*this)) return false;
     boss.hp -= damage;
     m_bossHp = (std::max)(0, boss.hp);
     if (m_stageNumber == 4) {

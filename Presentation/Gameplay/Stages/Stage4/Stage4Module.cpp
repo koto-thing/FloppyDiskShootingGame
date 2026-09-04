@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 #include "../../../../Engine/Graphics/Renderer.h"
 #include "../../../../Engine/Input/Input.h"
@@ -61,6 +62,16 @@ constexpr Vector3 Stage4SecondaryGunLocal[] = {
 };
 constexpr float Stage4MainCannonHitRadius = 1.45f;
 constexpr float Stage4SecondaryGunHitRadius = 0.82f;
+constexpr float Stage4SecondaryShotSpeed = 0.19f;
+constexpr float Stage4SecondaryMissileLaunchVelocity = 0.09f;
+constexpr int Stage4AimedBurstCount = 5;
+constexpr int Stage4SpreadShotCount = 8;
+constexpr int Stage4SpreadAttackInterval = 240;
+constexpr int Stage4SpreadAttackStartFrame = 40;
+constexpr int Stage4SpreadShotInterval = 5;
+constexpr int Stage4AimedAttackInterval = 180;
+constexpr int Stage4AimedAttackStartFrame = 100;
+constexpr int Stage4AimedShotInterval = 6;
 constexpr int Stage4WeaponSwapReturnFrames = 42;
 constexpr int Stage4BossDefeatSequenceFrames = 360;
 constexpr int Stage4BossDefeatChargeStartFrame = 72;
@@ -137,6 +148,14 @@ Stage4MainWeaponPose WeaponPose(const Stage4Logic& state, Stage4Weapon weapon, b
     return pose;
 }
 
+/** @brief Stage3機銃と同じ決定的な散射量を取得する @param seed 散射Seed @return -1から1の散射量 */
+constexpr float SecondaryGunSpread(std::uint32_t seed) {
+    seed ^= seed >> 16;
+    seed *= 0x7FEB352Du;
+    seed ^= seed >> 15;
+    return static_cast<float>(seed & 1023u) / 511.5f - 1.0f;
+}
+
 /** @brief 迫撃砲の姿勢から発射速度を作る @param baseYaw 車体基準Yaw @param yawOffset 主砲左右角 @param pitch 主砲仰角 @param speed 発射速度 @return ワールド弾速 */
 Vector3 SiegeMortarVelocity(float baseYaw, float yawOffset, float pitch, float speed) {
     const float horizontalSpeed = speed * std::cos(pitch);
@@ -201,6 +220,12 @@ float SwapProgress(const Stage4Logic& state, const Stage4SwapConfig& config) {
 
 static_assert(sizeof(Stage4SecondaryGunLocal) / sizeof(Stage4SecondaryGunLocal[0]) == 6);
 static_assert(sizeof(Stage4BodyHitLocal) / sizeof(Stage4BodyHitLocal[0]) == 12);
+static_assert(Stage4AimedBurstCount == 5);
+static_assert(Stage4SpreadAttackStartFrame +
+    (Stage4SpreadShotCount - 1) * Stage4SpreadShotInterval < Stage4SpreadAttackInterval);
+static_assert(Stage4AimedAttackStartFrame +
+    (Stage4AimedBurstCount - 1) * Stage4AimedShotInterval < Stage4AimedAttackInterval);
+static_assert(SecondaryGunSpread(1u) >= -1.0f && SecondaryGunSpread(1u) <= 1.0f);
 
 }
 
@@ -529,9 +554,10 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
     BossModelTransform transform {
         {ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z},
         aimTarget, yaw + Stage4ModelYawOffset, Stage4BossScale,
-        enemy.bossPartHp[BossNose] > 0, true
+        enemy.bossPartHp[MainCannonPart(shooter.m_stage4.currentWeapon)] > 0, true
     };
     const Stage4Logic& swap = shooter.m_stage4;
+    const BossPart currentMainCannonPart = MainCannonPart(swap.currentWeapon);
     const Stage4SwapConfig swapConfig = ShooterStages::Stage4::SwapConfig(swap.incomingWeapon);
 
     // Romance Cannon装着時だけ車体全体を沈ませ重量を受ける動きを作る
@@ -542,13 +568,24 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
     }
     Stage4BossModelState state;
     state.mainCannon = false;
-    state.mainCannonHit = enemy.bossPartHitFlashFrames[BossNose] > 0 &&
-        (enemy.bossPartHitFlashFrames[BossNose] / 2) % 2 != 0;
+    state.mainCannonHit = enemy.bossPartHitFlashFrames[currentMainCannonPart] > 0 &&
+        (enemy.bossPartHitFlashFrames[currentMainCannonPart] / 2) % 2 != 0;
     for (int i = 0; i < 6; ++i) {
         const int part = BossFunnelHatch0 + i;
         state.secondaryGuns[i] = enemy.bossPartHp[part] > 0;
         state.secondaryGunsHit[i] = enemy.bossPartHitFlashFrames[part] > 0 &&
             (enemy.bossPartHitFlashFrames[part] / 2) % 2 != 0;
+        state.secondaryGunTracksTarget[i] = true;
+        if (i >= 4) {
+            const Vector3 mount = LocalToWorld(shooter, enemy, Stage4SecondaryGunLocal[i]);
+            state.secondaryGunAimTargets[i] = mount + Vector3 {0.0f, 8.0f, 0.0f};
+        } else if (i >= 2) {
+            const float sweep = std::sin(static_cast<float>(enemy.age) * 0.035f +
+                static_cast<float>(i) * Math::Pi) * 3.2f;
+            state.secondaryGunAimTargets[i] = aimTarget + Vector3 {0.0f, sweep, 0.0f};
+        } else {
+            state.secondaryGunAimTargets[i] = aimTarget;
+        }
     }
     const bool phase1MainCannonActive = swap.currentWeapon == Stage4Weapon::Phase1Cannon &&
         (swap.swapState == Stage4SwapState::None ||
@@ -615,7 +652,9 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
 
     // 装着主砲またはパージ中の旧主砲を独立Transformで描画する
     const BossModelTransform mount = Stage4BossModelView::MainWeaponMount(aimedTransform);
-    if (swap.outgoingVisual != Stage4WeaponVisual::Hidden) {
+    const BossPart outgoingMainCannonPart = MainCannonPart(swap.outgoingWeapon);
+    if (swap.outgoingVisual != Stage4WeaponVisual::Hidden &&
+        enemy.bossPartHp[outgoingMainCannonPart] > 0) {
         BossModelTransform outgoingTransform = mount;
         if (swap.swapState == Stage4SwapState::Unlock) {
             const float progress = SmoothStep(SwapProgress(swap, swapConfig));
@@ -633,7 +672,9 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
         const Stage4MainWeaponPose outgoingPose =
             WeaponPose(swap, swap.outgoingWeapon, shooter.IsRailGameplayActive());
         Stage4BossModelView::DrawMainWeapon(outgoingType, outgoingTransform,
-            outgoingPose, DrawBossPart, state.mainCannonHit);
+            outgoingPose, DrawBossPart,
+            enemy.bossPartHitFlashFrames[outgoingMainCannonPart] > 0 &&
+            (enemy.bossPartHitFlashFrames[outgoingMainCannonPart] / 2) % 2 != 0);
 
         if (swap.swapState == Stage4SwapState::Purge) {
             // 旧主砲下面の補助エンジンへ既存の噴射煙と炎を重ねる
@@ -656,7 +697,9 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
 
     // 搬入主砲はSpawn、Approach、Carry、Align、Mountの各点を滑らかに結ぶ
     BossModelTransform incomingTransform = mount;
-    if (swap.incomingVisual != Stage4WeaponVisual::Hidden) {
+    const BossPart incomingMainCannonPart = MainCannonPart(swap.incomingWeapon);
+    if (swap.incomingVisual != Stage4WeaponVisual::Hidden &&
+        enemy.bossPartHp[incomingMainCannonPart] > 0) {
         const bool romance = swap.incomingWeapon == Stage4Weapon::RomanceCannon;
         const Vector3 spawnOffset = romance ? Vector3 {15.0f, 13.0f, 0.0f} :
             Vector3 {11.0f, 10.0f, 0.0f};
@@ -691,7 +734,9 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
         const Stage4MainWeaponPose incomingPose =
             WeaponPose(swap, swap.incomingWeapon, shooter.IsRailGameplayActive());
         Stage4BossModelView::DrawMainWeapon(
-            incomingType, incomingTransform, incomingPose, DrawBossPart);
+            incomingType, incomingTransform, incomingPose, DrawBossPart,
+            enemy.bossPartHitFlashFrames[incomingMainCannonPart] > 0 &&
+            (enemy.bossPartHitFlashFrames[incomingMainCannonPart] / 2) % 2 != 0);
 
         // 主砲側CarryPointへ各ドローンのLiftPointを一致させて編隊を作る
         if (swap.swapState >= Stage4SwapState::DroneApproach &&
@@ -740,9 +785,10 @@ bool SideScrollingShooter::Stage4Module::TryHitBossPart(
     const Enemy& boss, BossPart& part) {
     if (boss.type != 2) return false;
 
-    // 主砲身をBossNose枠として判定する
-    if (boss.bossPartHp[BossNose] > 0) {
-        const Vector3 world = LocalToWorld(shooter, boss, BossPartLocalPosition(BossNose));
+    // 主砲交換中は主砲へのダメージを無効化し、副砲だけを破壊可能にする
+    const BossPart mainCannonPart = MainCannonPart(shooter.m_stage4.currentWeapon);
+    if (!IsWeaponSwapActive(shooter) && boss.bossPartHp[mainCannonPart] > 0) {
+        const Vector3 world = LocalToWorld(shooter, boss, BossPartLocalPosition(mainCannonPart));
         const bool hit = shooter.IsRailGameplayActive() ?
             Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
                 shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
@@ -752,7 +798,7 @@ bool SideScrollingShooter::Stage4Module::TryHitBossPart(
                 FromWorldX(world.x), FromWorldY(world.y),
                 Stage4MainCannonHitRadius / WorldXScale);
         if (hit) {
-            part = BossNose;
+            part = mainCannonPart;
             return true;
         }
     }
@@ -777,58 +823,148 @@ bool SideScrollingShooter::Stage4Module::TryHitBossPart(
     return false;
 }
 
+bool SideScrollingShooter::Stage4Module::BlocksPlayerShot(
+    const SideScrollingShooter& shooter, const Shot& shot, const Enemy& boss) {
+    if (!IsWeaponSwapActive(shooter) || boss.type != 2) return false;
+
+    // 副砲判定を通過した弾が交換中の車体へ当たった場合はHPを減らさず遮断する
+    for (const Vector3& local : Stage4BodyHitLocal) {
+        const Vector3 world = LocalToWorld(shooter, boss, local);
+        const bool hit = shooter.IsRailGameplayActive() ?
+            Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
+                shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
+                shot.hitRadius * WorldXScale, world.x, world.y, world.z,
+                Stage4BodyHitRadius) :
+            Hit(shot.x, shot.y, shot.hitRadius,
+                FromWorldX(world.x), FromWorldY(world.y),
+                Stage4BodyHitRadius / WorldXScale);
+        if (hit) return true;
+    }
+    return false;
+}
+
 void SideScrollingShooter::Stage4Module::FireBossPartBarrage(
     SideScrollingShooter& shooter, Enemy& boss) {
     if (boss.type != 2 || IsWeaponSwapActive(shooter)) return;
 
-    // 生存中の主砲身と副砲6基から、現在の自機位置へ直接撃つ
-    bool fired = false;
-    for (int partIndex = 0; partIndex < BossPartCount; ++partIndex) {
-        const BossPart part = static_cast<BossPart>(partIndex);
-        if (boss.bossPartHp[part] <= 0) continue;
-        if (part != BossNose && SecondaryGunIndex(part) < 0) continue;
+    // 主砲周期では現在装着中の主砲だけを発射する
+    const BossPart mainCannonPart = MainCannonPart(shooter.m_stage4.currentWeapon);
+    if (boss.bossPartHp[mainCannonPart] > 0) {
+        SpawnMainCannonball(shooter, boss);
+        boss.recoilType = shooter.m_stage4.currentWeapon == Stage4Weapon::RomanceCannon ? 1 : 0;
+        boss.recoilAge = Stage4EnemySheet::MainCannonRecoilFramesForWeapon(
+            shooter.m_stage4.currentWeapon);
+    }
+}
 
-        if (part == BossNose) {
-            SpawnMainCannonball(shooter, boss);
-            boss.recoilType = shooter.m_stage4.currentWeapon == Stage4Weapon::RomanceCannon ? 1 : 0;
-            boss.recoilAge = Stage4EnemySheet::MainCannonRecoilFramesForWeapon(
-                shooter.m_stage4.currentWeapon);
+void SideScrollingShooter::Stage4Module::TickSecondaryGunAttacks(
+    SideScrollingShooter& shooter, const Enemy& boss) {
+    if (boss.type != 2) return;
+
+    // 突進開始フレームも含め、突進中はミサイル以外の副砲を停止する
+    const bool rushActive = Stage4EnemySheet::IsRushAttackActive(boss);
+    const int spreadFrame = boss.age % Stage4SpreadAttackInterval;
+    const int aimedFrame = boss.age % Stage4AimedAttackInterval;
+    const int mainAttackInterval = shooter.m_stage->BossAttackInterval(
+        static_cast<BossPhase>(boss.bossPhase));
+    const bool firesMissile = mainAttackInterval > 0 &&
+        boss.age % mainAttackInterval == 0;
+    const bool firesSpread = !rushActive &&
+        spreadFrame >= Stage4SpreadAttackStartFrame &&
+        spreadFrame <= Stage4SpreadAttackStartFrame +
+            (Stage4SpreadShotCount - 1) * Stage4SpreadShotInterval &&
+        (spreadFrame - Stage4SpreadAttackStartFrame) % Stage4SpreadShotInterval == 0;
+    const bool firesAimed = !rushActive &&
+        aimedFrame >= Stage4AimedAttackStartFrame &&
+        aimedFrame <= Stage4AimedAttackStartFrame +
+            (Stage4AimedBurstCount - 1) * Stage4AimedShotInterval &&
+        (aimedFrame - Stage4AimedAttackStartFrame) % Stage4AimedShotInterval == 0;
+    if (!firesMissile && !firesSpread && !firesAimed) return;
+
+    const Vector3 player {
+        ToWorldX(shooter.m_playerX), ToWorldY(shooter.m_playerY),
+        shooter.IsRailGameplayActive() ? PlayerRailZ : SidePlaneZ
+    };
+    auto DirectionTo = [&](const Vector3& source, const Vector3& target) {
+        Vector3 delta = target - source;
+        if (!shooter.IsRailGameplayActive()) delta.z = 0.0f;
+        return delta / (std::max)(0.001f, delta.Length());
+    };
+    auto SpawnBullet = [&](const Vector3& source, const Vector3& direction,
+        float hitRadius, int damage) {
+        for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+            auto& shot = shooter.m_shots[shotIndex];
+            if (shot.active) continue;
+            shot = {};
+            shot.x = FromWorldX(source.x);
+            shot.y = FromWorldY(source.y);
+            shot.z = source.z;
+            shot.transitionSideX = shot.x;
+            shot.transitionSideY = shot.y;
+            shot.vx = FromWorldX(direction.x * Stage4SecondaryShotSpeed);
+            shot.vy = FromWorldY(direction.y * Stage4SecondaryShotSpeed);
+            shot.vz = direction.z * Stage4SecondaryShotSpeed;
+            shot.hitRadius = hitRadius;
+            shot.damage = damage;
+            shot.enemy = true;
+            shot.active = true;
+            return true;
+        }
+        return false;
+    };
+
+    bool fired = false;
+    for (int gun = 0; gun < 6; ++gun) {
+        const BossPart part = static_cast<BossPart>(BossFunnelHatch0 + gun);
+        if (boss.bossPartHp[part] <= 0) continue;
+        const Vector3 source = LocalToWorld(shooter, boss, BossPartLocalPosition(part));
+
+        // 中央二基は独立周期の一回につき自機方向へ一発ずつ撃つ
+        if (gun < 2) {
+            if (firesAimed) {
+                fired |= SpawnBullet(source, DirectionTo(source, player), 0.022f, 1);
+            }
             continue;
         }
 
-        const Vector3 world = LocalToWorld(shooter, boss, BossPartLocalPosition(part));
-        const int bulletCount = shooter.m_stage->BossPartBulletCount(
-            part, static_cast<BossPhase>(boss.bossPhase), shooter.IsRailGameplayActive());
-        for (int index = 0; index < bulletCount; ++index) {
-            const float spread = static_cast<float>(index) -
-                static_cast<float>(bulletCount - 1) * 0.5f;
-            const float sourceX = FromWorldX(world.x);
-            const float sourceY = FromWorldY(world.y);
-            const float targetY = shooter.m_playerY + spread * 0.08f;
+        // 手前二基はバースト中に一発ずつStage3と同じ散射式でばらまく
+        if (gun < 4) {
+            if (!firesSpread) continue;
+            const Vector3 aimed = DirectionTo(source, player);
+            const std::uint32_t seed = static_cast<std::uint32_t>(boss.age) * 17u +
+                static_cast<std::uint32_t>(gun) * 131u;
+            Vector3 direction = aimed;
+            direction.x += SecondaryGunSpread(seed) * 0.62f;
+            direction.y += SecondaryGunSpread(seed + 53u) * 0.48f;
             if (shooter.IsRailGameplayActive()) {
-                const float dx = ToWorldX(shooter.m_playerX) - world.x;
-                const float dy = ToWorldY(targetY) - world.y;
-                const float dz = PlayerRailZ - world.z;
-                const float length = (std::max)(
-                    0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
-                const float speed = boss.behavior != nullptr ?
-                    boss.behavior->RailAimedShotSpeed() : 0.62f;
-                shooter.SpawnShotDirect(sourceX, sourceY, world.z,
-                    FromWorldX(dx / length * speed),
-                    FromWorldY(dy / length * speed),
-                    dz / length * speed, true, index, bulletCount);
-            } else {
-                const float dx = shooter.m_playerX - sourceX;
-                const float dy = targetY - sourceY;
-                const float length = (std::max)(
-                    0.001f, std::sqrt(dx * dx + dy * dy));
-                const float speed = boss.behavior != nullptr ?
-                    boss.behavior->AimedShotSpeed() : 0.018f;
-                shooter.SpawnShot(sourceX, sourceY,
-                    dx / length * speed, dy / length * speed, true, world.z,
-                    boss.behavior != nullptr ? boss.behavior->RailAimedShotSpeed() : 0.62f);
+                direction.z += SecondaryGunSpread(seed + 101u) * 0.10f;
             }
+            direction = direction / (std::max)(0.001f, direction.Length());
+            fired |= SpawnBullet(source, direction, 0.022f, 1);
+            continue;
+        }
+
+        // 後方二基は主砲と同じ周期でStage3と同じ遅延点火追尾ミサイルを撃つ
+        if (!firesMissile) continue;
+        for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
+            auto& shot = shooter.m_shots[shotIndex];
+            if (shot.active) continue;
+            shot = {};
+            shot.x = FromWorldX(source.x);
+            shot.y = FromWorldY(source.y);
+            shot.z = source.z;
+            shot.transitionSideX = shot.x;
+            shot.transitionSideY = shot.y;
+            shot.vy = Stage4SecondaryMissileLaunchVelocity;
+            shot.hitRadius = 0.055f;
+            shot.damage = 2;
+            shot.enemy = true;
+            shot.stage2.kind = ShooterStages::Stage2::ShotKind::Funnel;
+            shot.stage2.delayedEngine = true;
+            shot.active = true;
+            shooter.PlayMissileLaunchSound();
             fired = true;
+            break;
         }
     }
     if (fired) shooter.PlayEnemyShotSound();
@@ -921,12 +1057,17 @@ void SideScrollingShooter::Stage4Module::TickSpecialShotAfterMove(
 }
 
 bool SideScrollingShooter::Stage4Module::IsShotCullProtected(const Shot& shot) {
-    return shot.stage4.kind == ShotKind::Cannonball;
+    return shot.stage4.kind == ShotKind::Cannonball ||
+        (shot.stage2.kind == ShooterStages::Stage2::ShotKind::Funnel &&
+            shot.stage2.delayedEngine);
 }
 
 float SideScrollingShooter::Stage4Module::EnemyShotHitRadius(
     const Shot& shot, bool railMode) {
     if (shot.stage4.kind != ShotKind::Cannonball) {
+        if (shot.stage2.kind == ShooterStages::Stage2::ShotKind::Funnel) {
+            return railMode ? 0.42f : 0.055f;
+        }
         return railMode ? 0.28f : 0.022f;
     }
     return railMode ? shot.hitRadius * WorldXScale : shot.hitRadius;
@@ -936,7 +1077,7 @@ bool SideScrollingShooter::Stage4Module::SpawnBossDebris(
     SideScrollingShooter& shooter, const Enemy& boss, int bossPart) {
     if (boss.type != 2) return false;
     const BossPart part = static_cast<BossPart>(bossPart);
-    if (bossPart >= 0 && part != BossNose && SecondaryGunIndex(part) < 0) return false;
+    if (bossPart >= 0 && !IsMainCannonPart(part) && SecondaryGunIndex(part) < 0) return false;
 
     constexpr float ArmorBlack[] = {0.060f, 0.065f, 0.075f, 1.0f};
     constexpr float HighlightBlack[] = {0.10f, 0.10f, 0.12f, 1.0f};
@@ -971,7 +1112,7 @@ bool SideScrollingShooter::Stage4Module::SpawnBossDebris(
     }
 
     // 破壊された砲の主要プリミティブだけを飛散させる
-    if (part == BossNose) {
+    if (IsMainCannonPart(part)) {
         if (shooter.m_stage4.currentWeapon == Stage4Weapon::RomanceCannon) {
             AddPiece(2, {-4.2f, 5.0f, 0.0f}, {3.2f, 1.55f, 1.55f}, HighlightBlack);
             AddPiece(2, {-7.0f, 5.0f, 0.0f}, {2.6f, 1.35f, 1.35f}, ArmorBlack);
@@ -1029,6 +1170,19 @@ Vector3 SideScrollingShooter::Stage4Module::LocalToWorld(
 int SideScrollingShooter::Stage4Module::SecondaryGunIndex(BossPart part) {
     const int index = static_cast<int>(part) - BossFunnelHatch0;
     return index >= 0 && index < 6 ? index : -1;
+}
+
+SideScrollingShooter::BossPart SideScrollingShooter::Stage4Module::MainCannonPart(
+    ShooterStages::Stage4::MainWeaponType weapon) {
+    switch (weapon) {
+    case Stage4Weapon::SiegeMortar: return BossLeftWing;
+    case Stage4Weapon::RomanceCannon: return BossRightWing;
+    default: return BossNose;
+    }
+}
+
+bool SideScrollingShooter::Stage4Module::IsMainCannonPart(BossPart part) {
+    return part == BossNose || part == BossLeftWing || part == BossRightWing;
 }
 
 Vector3 SideScrollingShooter::Stage4Module::BossPartLocalPosition(BossPart part) {

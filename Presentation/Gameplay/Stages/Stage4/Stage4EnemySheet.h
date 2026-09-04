@@ -10,6 +10,11 @@
  */
 class SideScrollingShooter::Stage4EnemySheet : public SideScrollingShooter::Stage {
 public:
+    struct Chapter {
+        const EnemySpawnRule* spawnRules = nullptr;
+        int spawnRuleCount = 0;
+    };
+
     /**
      * @brief ステージ番号を取得する
      * @return Stage 4を表す番号
@@ -28,6 +33,70 @@ public:
      */
     bool TrySelectEnemySpawn(int frame, int spawnIndex,
         EnemySpawnRule& spawn, int& chapterNumber) const override = 0;
+
+protected:
+    /**
+     * @brief チャプター配列参照を生成する
+     * @param rules チャプター内の出現規則配列
+     * @return 出現規則配列と要素数
+     */
+    template<int RuleCount>
+    static constexpr Chapter MakeChapter(const EnemySpawnRule (&rules)[RuleCount]) {
+        return {rules, RuleCount};
+    }
+
+    /**
+     * @brief チャプター単位で現在フレームの出現規則を選択する
+     * @param chapters チャプター配列
+     * @param chapterCount チャプター数
+     * @param chapterFrameLength 1チャプターの長さ
+     * @param frame 現在のステージフレーム
+     * @param spawnIndex 同一フレーム内で取得する出現候補の番号
+     * @param spawn 出現設定の格納先
+     * @param chapterNumber 現在チャプター番号の格納先
+     * @return 出現規則を選択した場合true
+     */
+    static bool TrySelectByChapters(const Chapter* chapters, int chapterCount,
+        int chapterFrameLength, int frame, int spawnIndex,
+        EnemySpawnRule& spawn, int& chapterNumber) {
+        for (int chapterIndex = 0; chapterIndex < chapterCount; ++chapterIndex) {
+            const int chapterFirstFrame = chapterIndex * chapterFrameLength;
+            if (frame < chapterFirstFrame || frame >= chapterFirstFrame + chapterFrameLength) continue;
+            chapterNumber = chapterIndex + 1;
+            const Chapter& chapter = chapters[chapterIndex];
+            return TrySelectByRules(chapter.spawnRules, chapter.spawnRuleCount,
+                spawnIndex, frame - chapterFirstFrame, spawn);
+        }
+        return false;
+    }
+
+    /**
+     * @brief 出現規則配列から現在フレームの規則を選択する
+     * @param rules 出現規則配列
+     * @param ruleCount 出現規則数
+     * @param spawnIndex 同一フレーム内で取得する出現候補の番号
+     * @param frame チャプター内フレーム
+     * @param spawn 出現設定の格納先
+     * @return 出現規則を選択した場合true
+     */
+    static bool TrySelectByRules(const EnemySpawnRule* rules, int ruleCount,
+        int spawnIndex, int frame, EnemySpawnRule& spawn) {
+        int matchedIndex = 0;
+        for (int i = 0; i < ruleCount; ++i) {
+            const EnemySpawnRule& rule = rules[i];
+            if (frame < rule.firstFrame) continue;
+            if (frame != rule.firstFrame &&
+                (rule.interval <= 0 || (frame - rule.firstFrame) % rule.interval != 0)) {
+                continue;
+            }
+            if (matchedIndex++ != spawnIndex) continue;
+            spawn = rule;
+            return true;
+        }
+        return false;
+    }
+
+public:
 
     /**
      * @brief Stage 4ボスをStage 2と同じ基準位置へ配置する
@@ -100,11 +169,19 @@ public:
         }
     }
 
+    int BossMaxHp() const override {
+        return 2100;
+    }
+
     /** @brief Stage 4ボスの砲部位HPを設定する @param boss 設定するボス @return なし */
     void ConfigureBossPartHp(Enemy& boss) const override {
-        boss.bossPartHp = {260, 0, 0, 0, 0,
-            90, 90, 90, 90, 90, 90,
-            0, 0, 0, 0, 0, 0};
+        boss.bossPartHp = {};
+        boss.bossPartHp[BossNose] = Phase1MainCannonHp;
+        boss.bossPartHp[BossLeftWing] = SiegeMortarHp;
+        boss.bossPartHp[BossRightWing] = RomanceCannonHp;
+        for (int gun = 0; gun < 6; ++gun) {
+            boss.bossPartHp[BossFunnelHatch0 + gun] = SecondaryGunHp;
+        }
     }
 
     /**
@@ -123,7 +200,7 @@ public:
      * @return 本体へ与えるダメージ
      */
     int BossPartBreakDamage(BossPart part) const override {
-        return part == BossNose ? 140 : 70;
+        return part == BossNose || part == BossLeftWing || part == BossRightWing ? 300 : 100;
     }
 
     /**
@@ -135,7 +212,10 @@ public:
     void TickBoss(SideScrollingShooter& shooter, Enemy& boss) const override {
         constexpr float TurretTrackingRate = 0.06f;
 
-        // 交換中は戦車を基準位置へ止めて攻撃用の移動処理を行わない
+        // 副砲は主砲交換中も独立した周期で攻撃を継続する
+        Stage4Module::TickSecondaryGunAttacks(shooter, boss);
+
+        // 交換中は戦車を基準位置へ止めて主砲用の移動処理を行わない
         if (Stage4Module::TickWeaponSwap(shooter, boss)) {
             boss.motionAge = 0;
             boss.phase = 0.0f;
@@ -257,8 +337,22 @@ public:
         return (railMode ? RailPattern : SidePattern)[index % 7];
     }
 
+    /**
+     * @brief Stage 4ボスが突進開始フレームを含む突進動作中か取得する
+     * @param boss 判定するボス
+     * @return 突進動作中の場合true
+     */
+    static constexpr bool IsRushAttackActive(const Enemy& boss) {
+        return IsRushPhase(static_cast<BossPhase>(boss.bossPhase)) &&
+            (boss.phase > 0.0f || boss.age % RushIntervalFrames == 0);
+    }
+
 private:
-    inline static constexpr int RushIntervalFrames = 700;
+    static constexpr int Phase1MainCannonHp = 500;
+    static constexpr int SiegeMortarHp = 500;
+    static constexpr int RomanceCannonHp = 600;
+    static constexpr int SecondaryGunHp = 200;
+    inline static constexpr int RushIntervalFrames = 1000;
     inline static constexpr int RushWindupFrames = 42;
     inline static constexpr int RushChargeFrames = 61;
     inline static constexpr int RushWaitFrames = 48;

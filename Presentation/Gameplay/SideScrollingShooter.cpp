@@ -20,7 +20,7 @@ using SideScrollingShooterShared::BossNameRevealFrames;
 using SideScrollingShooterShared::BossWarningSirenMml;
 
 constexpr float PowerAfterRestart(float power) {
-    return power > 0.01f ? power - 0.01f : 0.0f;
+    return power > 0.05f ? power - 0.05f : 0.0f;
 }
 
 /**
@@ -38,8 +38,6 @@ constexpr int MissionStartSecondVoiceFrame =
 constexpr int MissionClearSecondVoiceFrame =
     VoicePlaybackFrames(VoiceSamples::suspect) + VoiceGapFrames;
 
-static_assert(PowerAfterRestart(3.25f) > 3.239f && PowerAfterRestart(3.25f) < 3.241f);
-static_assert(PowerAfterRestart(0.005f) == 0.0f);
 constexpr float PowerAfterDebugIncrease(float power, float maxPower) {
     return power + 1.0f < maxPower ? power + 1.0f : maxPower;
 }
@@ -65,8 +63,11 @@ constexpr int ChapterProgressPercentForFrame(int frame, int startFrame, int endF
     return elapsed * 100 / duration;
 }
 
-static_assert(PowerAfterRestart(3.25f) > 3.239f && PowerAfterRestart(3.25f) < 3.241f);
-static_assert(PowerAfterRestart(0.005f) == 0.0f);
+static_assert(PowerAfterRestart(3.25f) > 3.199f &&
+    PowerAfterRestart(3.25f) < 3.201f);
+static_assert(PowerAfterRestart(0.75f) > 0.699f &&
+    PowerAfterRestart(0.75f) < 0.701f);
+static_assert(PowerAfterRestart(0.05f) == 0.0f);
 static_assert(PowerAfterDebugIncrease(2.25f, 4.0f) == 3.25f);
 static_assert(PowerAfterDebugIncrease(3.50f, 4.0f) == 4.0f);
 static_assert(EarnsChapterBombBonus(5, 6));
