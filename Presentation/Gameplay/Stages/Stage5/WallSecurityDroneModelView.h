@@ -318,6 +318,19 @@ public:
             {0.0f, -0.08f, -0.565f});
     }
 
+    /**
+     * @brief 壁面接触パッド中心のモデルローカル位置を取得する
+     * @param xSide 左側を-1、右側を1とする符号
+     * @param ySide 下側を-1、上側を1とする符号
+     * @param contactExtension 0を収納、1を壁面へ完全展開とする伸縮量
+     * @return 指定した磁着パッドの壁面側中心位置
+     */
+    static constexpr Vector3 WallContactLocalPosition(float xSide, float ySide,
+        float contactExtension) {
+        return {xSide * 0.31f, ySide * 0.20f,
+            0.44f + Math::Clamp01(contactExtension) * 0.18f};
+    }
+
 private:
     inline static constexpr ColorF MainArmor {0.10f, 0.11f, 0.12f, 1.0f};
     inline static constexpr ColorF Armor {0.16f, 0.17f, 0.18f, 1.0f};

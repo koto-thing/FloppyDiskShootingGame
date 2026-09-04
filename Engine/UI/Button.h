@@ -13,6 +13,9 @@
 /** @brief クリック可能な矩形UIコントロール */
 class Button {
 public:
+    enum class ClickSound { Confirm, Cancel };
+    using ClickSoundHandler = std::function<void(ClickSound)>;
+
     explicit Button(Rect bounds = {}, std::string text = {});
     Button(Vector2 size, RectAlign alignment, std::string text = {}, Vector2 offset = Vector2::Zero);
 
@@ -29,6 +32,14 @@ public:
     bool IsHovered() const { return m_hovered; }
     bool IsPressed() const { return m_pressed; }
     void SetOnClick(std::function<void()> callback) { m_onClick = std::move(callback); }
+    /** @brief クリック時に再生する効果音の種類を設定する
+     * @param sound 効果音の種類
+     */
+    void SetClickSound(ClickSound sound) { m_clickSound = sound; }
+    /** @brief 全ボタン共通の効果音再生処理を設定する
+     * @param handler 効果音の種類を受け取る再生処理
+     */
+    static void SetClickSoundHandler(ClickSoundHandler handler) { s_clickSoundHandler = std::move(handler); }
 
     /** @brief UI入力を処理し、ボタン内で押して離した時にコールバックを実行する */
     void Update(const UIInputState& input);
@@ -47,6 +58,8 @@ private:
     Rect m_bounds;
     std::string m_text;
     std::function<void()> m_onClick;
+    ClickSound m_clickSound = ClickSound::Confirm;
+    inline static ClickSoundHandler s_clickSoundHandler;
     bool m_enabled = true;
     bool m_hovered = false;
     bool m_pressed = false;

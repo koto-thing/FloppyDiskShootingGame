@@ -23,7 +23,7 @@ public:
      * @param stageNumber 取得するステージ番号
      * @return 指定ステージの台詞とボス名
      */
-    static BossStory Story(int stageNumber);
+    static BossStory Story(const SideScrollingShooter& shooter);
 
     /**
      * @brief 既存のステージギミック初期化へ転送する
@@ -425,9 +425,11 @@ public:
      * @brief 現在ステージの3D画面エフェクトを描画する
      * @param shooter 描画対象
      * @param renderer 描画先
+     * @param camera 現在の3Dカメラ
      * @return なし
      */
-    static void DrawOverlay3D(const SideScrollingShooter& shooter, Renderer& renderer);
+    static void DrawOverlay3D(const SideScrollingShooter& shooter, Renderer& renderer,
+        const Camera3D& camera);
 
     /**
      * @brief 現在ステージの専用HUD描画を試みる

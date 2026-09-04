@@ -3,7 +3,7 @@
 #include "../Common/BossStory.h"
 
 namespace ShooterStages::Stage5 {
-inline constexpr BossStoryLine StoryLines[] = {
+inline constexpr BossStoryLine EastsourceStoryLines[] = {
     {"MOMIJI", "...Out of the way.", false},                                                                               // MOMIJI: ……そこをどきな。
     {"MOMIJI", "The Boss is just beyond this gate, isn't he?", false},                                                     // MOMIJI: この扉の向こうに、あんたらの親玉がいるんだろう。
     {"HITMAN EASTSOURCE", "Hahahahaha! Hyaho~!!", true},                                                                   // EASTSOURCE: ハーッハッハッハ！ ヒャッホォォゥ！！
@@ -30,7 +30,24 @@ inline constexpr BossStoryLine StoryLines[] = {
  * @brief Stage 5のボス戦前会話を取得する
  * @return Stage 5の台詞とボス名を含む会話定義
  */
-inline constexpr BossStory Story() {
-    return BossStories::Create(StoryLines, "EASTSOURCE");
+inline constexpr BossStory EastsourceStory() {
+    return BossStories::Create(EastsourceStoryLines, "EASTSOURCE");
+}
+
+inline constexpr BossStoryLine TayamaStoryLines[] = {
+    {"CHAIRMAN TAYAMA", "So you are the officer who tore through my entire fleet.", true},          // TAYAMA: 我が艦隊をことごとく潰した警官とは、お前か
+    {"MOMIJI", "TAYAMA. Your syndicate ends here.", false},                                         // MOMIJI: TAYAMA。あんたの組もここまでだ
+    {"CHAIRMAN TAYAMA", "An organization is immortal while its chairman still stands.", true},      // TAYAMA: 会長が立つ限り、組織は不滅だ
+    {"MOMIJI", "Then I'll bring down the chairman and the whole rotten tower with him.", false},     // MOMIJI: なら会長ごと、その腐った塔を叩き潰す
+    {"CHAIRMAN TAYAMA", "Know your place. This city, this sky, and your life belong to me.", true},  // TAYAMA: 身の程を知れ。この街も空も、お前の命も儂のものだ
+    {"MOMIJI", "Not anymore. MOMIJI, engaging the final target!", false},                            // MOMIJI: 今日で終わりだ。最終目標TAYAMA、交戦開始！
+};
+
+/**
+ * @brief Stage 5のラスボス戦前会話を取得する
+ * @return TAYAMA戦の台詞とボス名を含む会話定義
+ */
+inline constexpr BossStory TayamaStory() {
+    return BossStories::Create(TayamaStoryLines, "TAYAMA");
 }
 }
