@@ -451,11 +451,10 @@ void SideScrollingShooter::ProcessInput() {
     if (Input::GetKeyDown(KeyCode::F3)) StartDebugCheckpoint(3, 1, false);
     if (Input::GetKeyDown(KeyCode::F4)) StartDebugCheckpoint(4, 1, false);
     if (Input::GetKeyDown(KeyCode::F5)) StartDebugCheckpoint(5, 1, false);
-#endif
+    if (Input::GetKeyDown(KeyCode::F9)) Stage5Module::StartDebugPhase(*this, Stage5Phase::TayamaFireControl);
     if (Input::GetKeyDown(KeyCode::Alpha1)) StartDebugCheckpoint(m_stageNumber, 1, false);
     if (Input::GetKeyDown(KeyCode::Alpha2)) StartDebugCheckpoint(m_stageNumber, 2, false);
     if (Input::GetKeyDown(KeyCode::Alpha3)) StartDebugCheckpoint(m_stageNumber, 3, false);
-#ifdef _DEBUG
     if (Input::GetKeyDown(KeyCode::P)) {
         const int previousPowerLevel = PowerLevel();
         m_power = PowerAfterDebugIncrease(m_power, MaxPower);

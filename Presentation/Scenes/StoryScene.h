@@ -55,11 +55,11 @@ private:
 
         /**
          * @brief TAYAMA会長率いる血も涙もない巨大極道組織が無法の宙域を支配している
-         * @details LUMI、RYOTA、BOTAMOCHI、KOTOが率いるPANDD艦隊は星々を粉砕し、宇宙を恐怖に陥れている
+         * @details LUMI、RYOTA、BOTAMOCHI、KOTOが率いるROUGAI艦隊は星々を粉砕し、宇宙を恐怖に陥れている
          */
         "CHAIRMAN TAYAMA AND HIS BLOODTHIRSTY",
         "YAKUZA SYNDICATE RULE THE FRONTIER.",
-        "BOSSES LUMI, RYOTA, BOTAMOCHI, AND KOTO",
+        "BOSSES BOTAMOCHI, RYOTA, LUMI, AND KOTO",
         "LEAD A FLEET THAT CRUSHES EVERY PLANET",
         "AND PLUNGES THE STARS INTO TERROR.",
         "",

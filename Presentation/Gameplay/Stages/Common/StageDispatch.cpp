@@ -292,7 +292,8 @@ bool SideScrollingShooter::StageDispatch::IsShotCullProtected(
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::IsShotCullProtected(shot);
     case 4: return Stage4Module::IsShotCullProtected(shot);
-    case 5:
+    case 5: return Stage4Module::IsShotCullProtected(shot) ||
+        Stage3Module::IsShotCullProtected(shot);
     case 3: return Stage3Module::IsShotCullProtected(shot);
     default: return false;
     }
