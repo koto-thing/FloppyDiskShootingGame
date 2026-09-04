@@ -5,6 +5,7 @@
 
 #include "../../../../Infrastructure/ExternalServices/AudioService.h"
 #include "../../SideScrollingShooterEnemies.h"
+#include "../../Voices/VoiceDpcmDecoder.h"
 #include "../Common/StageDefinition.h"
 #include "Stage2BossModelView.h"
 #include "Stage2EnemySheet.h"
@@ -964,6 +965,11 @@ bool SideScrollingShooter::Stage2Module::HandleBossDefeat(
     shooter.m_score += 5000;
     shooter.m_clear = true;
     shooter.m_clearTimer = 440;
+
+    // LUMIの撃破音声を圧縮データからPCMへ復号して再生する
+    static const auto lumiDeathVoice =
+        VoiceCodec::DecodeForAudioService(VoiceSamples::lumiDeath);
+    if (shooter.m_audio) shooter.m_audio->PlaySE(lumiDeathVoice);
     PlayDefeatSound(shooter, false);
     return true;
 }

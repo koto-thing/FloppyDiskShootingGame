@@ -261,6 +261,10 @@ void SideScrollingShooter::StageDispatch::TickSpecialShotBeforeMove(
     case 3:
         Stage3Module::TickSpecialShotBeforeMove(shooter, shot);
         break;
+    case 5:
+        Stage4Module::TickSpecialShotBeforeMove(shooter, shot);
+        Stage5Module::TickSpecialShotBeforeMove(shooter, shot);
+        break;
     }
 }
 
@@ -276,6 +280,9 @@ void SideScrollingShooter::StageDispatch::TickSpecialShotAfterMove(
             shooter, shot, previousX, previousY, previousZ);
         break;
     case 5:
+        Stage4Module::TickSpecialShotAfterMove(
+            shooter, shot, previousX, previousY, previousZ);
+        if (!shot.active) break;
         Stage5Module::TickSpecialShotAfterMove(shooter, shot);
         break;
     }
@@ -536,6 +543,8 @@ bool SideScrollingShooter::StageDispatch::DrawSpecialShot(
         if (Stage3Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw)) return true;
         return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
     case 5:
+        if (Stage4Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw)) return true;
+        if (Stage3Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw)) return true;
         return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
     default: return false;
     }
@@ -634,7 +643,8 @@ Vector2 SideScrollingShooter::StageDispatch::SidePlayerYRange(
 
 bool SideScrollingShooter::StageDispatch::CanEnemyShotDamagePlayer(
     const SideScrollingShooter& shooter, const Shot& shot) {
-    return shooter.m_stageNumber != 3 || Stage3Module::CanEnemyShotDamagePlayer(shot);
+    return (shooter.m_stageNumber != 3 && shooter.m_stageNumber != 5) ||
+        Stage3Module::CanEnemyShotDamagePlayer(shot);
 }
 
 int SideScrollingShooter::StageDispatch::BossIntroductionFrames(

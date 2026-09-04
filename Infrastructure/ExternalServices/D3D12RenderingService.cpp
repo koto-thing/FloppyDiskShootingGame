@@ -275,6 +275,31 @@ VS_OUTPUT VSRailgun(uint vertexId : SV_VertexID)
 
 float4 PSRailgun(VS_OUTPUT input) : SV_TARGET
 {
+    if (u_shapeType > 4.5f)
+    {
+        // 金色レーザーの白熱した芯を脈動させる
+        float endMask = 1.0f - smoothstep(0.90f, 1.0f, abs(input.uv.x));
+        float core = 1.0f - smoothstep(0.015f, 0.085f, abs(input.uv.y));
+        float innerGlow = 1.0f - smoothstep(0.04f, 0.52f, abs(input.uv.y));
+        float pulse = 0.84f + 0.16f * sin(u_progress * 6.283185f);
+        float alpha = saturate(core + innerGlow * 0.76f) * endMask * pulse;
+        if (alpha < 0.01f) discard;
+        float3 color = lerp(float3(1.0f, 0.42f, 0.015f),
+            float3(1.0f, 1.0f, 0.82f), core);
+        return float4(color, alpha);
+    }
+
+    if (u_shapeType > 3.5f)
+    {
+        // 金色レーザーの外周へ広い加算発光を作る
+        float endMask = 1.0f - smoothstep(0.86f, 1.0f, abs(input.uv.x));
+        float halo = 1.0f - smoothstep(0.04f, 0.92f, abs(input.uv.y));
+        float ripple = 0.82f + 0.18f * sin(input.uv.x * 54.0f + u_progress * 6.283185f);
+        float alpha = halo * endMask * ripple * 0.38f;
+        if (alpha < 0.008f) discard;
+        return float4(1.0f, 0.55f, 0.035f, alpha);
+    }
+
     if (u_shapeType > 2.5f)
     {
         // チャージ進行に合わせて予告レーザーを濃くする

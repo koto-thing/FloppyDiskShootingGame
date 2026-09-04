@@ -7,6 +7,7 @@
 #include <string_view>
 
 #include "../../Engine/Graphics/Renderer.h"
+#include "../../Engine/Input/Input.h"
 #include "Models/AircraftModelView.h"
 #include "Models/StageEnemyModelView.h"
 #include "SideScrollingShooterShared.h"
@@ -178,8 +179,8 @@ void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, Renderer& rende
     // 2Dモードと同じカメラ状態から、3Dレールの追従カメラへ補間する
     Vector3 sidePosition{0.0f, sideCameraY, SideCameraZ};
     Vector3 sideTarget{0.0f, sideCameraY, SidePlaneZ};
-    Vector3 railPosition{playerPosition.x * 0.18f, playerPosition.y * 0.12f + 1.0f, PlayerRailZ - 15.5f};
-    Vector3 railTarget{playerPosition.x * 0.28f, playerPosition.y * 0.18f, PlayerRailZ + 22.0f};
+    Vector3 railPosition = playerPosition + Vector3 {0.0f, 2.8f, -7.5f};
+    Vector3 railTarget = playerPosition + Vector3 {0.0f, 0.5f, 14.0f};
 
     StageDispatch::ApplyCameraCorrection(*this, railPosition, railTarget);
     if (IsTayamaBattle()) {
@@ -1044,8 +1045,11 @@ void SideScrollingShooter::DrawTutorialControlHint(
     if (!m_tutorialMode || m_missionStartTimer > 0 ||
         m_tutorialStep >= TutorialStepCount) return;
 
-    constexpr const char* Hints[] = {
+    constexpr const char* KeyboardHints[] = {
         "MOVE WASD", "SLOW SHIFT", "Z ATTACK", "C BOMB", "X SHIFT"
+    };
+    constexpr const char* GamepadHints[] = {
+        "MOVE L STICK", "SLOW LB/LT", "A/RB/RT ATTACK", "Y BOMB", "X SHIFT"
     };
     Vector2 screenPosition;
     Vector3 player = PlayerWorldPosition();
@@ -1058,7 +1062,8 @@ void SideScrollingShooter::DrawTutorialControlHint(
                 static_cast<float>(viewport.width) * 2.0f - 1.0f,
         1.0f - (screenPosition.y - static_cast<float>(viewport.y)) /
                 static_cast<float>(viewport.height) * 2.0f};
-    renderer.DrawText(Hints[m_tutorialStep], TextAlign::Center, 0.015f,
+    const char* hint = (Input::IsGamepadConnected() ? GamepadHints : KeyboardHints)[m_tutorialStep];
+    renderer.DrawText(hint, TextAlign::Center, 0.015f,
         {0.35f, 1.0f, 0.85f, 1.0f}, position, 0.0025f);
 }
 
@@ -1294,7 +1299,8 @@ void SideScrollingShooter::DrawBossStory(Renderer& renderer) const {
         renderer.DrawText(text.substr(secondLineStart), {-0.78f, -0.57f}, 0.016f,
             ColorF::White(), CharacterSpacing);
     }
-    renderer.DrawText("Z: NEXT   X: SKIP", {0.50f, -0.60f}, 0.012f,
+    renderer.DrawText(Input::IsGamepadConnected() ? "A: NEXT   X: SKIP" : "Z: NEXT   X: SKIP",
+        {0.50f, -0.60f}, 0.012f,
         {0.65f, 0.75f, 0.82f, 1.0f}, CharacterSpacing);
 }
 

@@ -311,6 +311,7 @@ private:
         int shrinkStartAge = 36;
         ShooterStages::Stage2::DebrisState stage2 {};
         bool gravity = false;
+        bool damagesPlayer = false;
         bool active = false;
     };
 
@@ -341,10 +342,7 @@ private:
         bool bombAwarded = false;
     };
 
-    static constexpr int DefaultShotCapacity = 128;
-    static constexpr int Stage5ShotCapacity = 256;
-    static_assert(Stage5ShotCapacity > DefaultShotCapacity);
-    static constexpr int ShotCapacity = Stage5ShotCapacity;
+    static constexpr int ShotCapacity = 512;
     static constexpr int EnemyCapacity = 12;
     static constexpr int ItemCapacity = 48;
     static constexpr int ExplosionCapacity = ShotCapacity + 32;
@@ -612,11 +610,11 @@ private:
     void SpawnShot(float x, float y, float vx, float vy, bool enemy,
         float z = -1.0f, float railSpeed = -1.0f, int damage = 1);
     /**
-     * @brief 現在のStageで使用できる弾プール容量を取得する
-     * @return Stage5では拡張容量、それ以外では標準容量
+     * @brief 全Stage共通の弾プール容量を取得する
+     * @return 弾プール容量
      */
     constexpr int ActiveShotCapacity() const {
-        return m_stageNumber == 5 ? Stage5ShotCapacity : DefaultShotCapacity;
+        return ShotCapacity;
     }
     /**
      * @brief XYZ速度を指定して固定長プールへ弾を生成する
@@ -658,7 +656,8 @@ private:
     Debris* SpawnDebrisPiece(float x, float y, float z, float vx, float vy, float vz,
         float yaw, float spin, int shape, float width, float height, float depth,
         const float color[4], int lifetime = DebrisLifetimeFrames,
-        int shrinkStartAge = DebrisLifetimeFrames, bool gravity = false);
+        int shrinkStartAge = DebrisLifetimeFrames, bool gravity = false,
+        bool damagesPlayer = false);
     void FireSpecialShots();
     void UpdateHomingShot(Shot& shot);
     void DamagePlayer();
@@ -1058,6 +1057,6 @@ static_assert(!SideScrollingShooter::UsesVerticalPlayerShots(
 static_assert(SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
     SideScrollingShooter::TayamaWeakpoint::FireControlRadar,
     SideScrollingShooter::Stage5Phase::TayamaFireControl));
-static_assert(!SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
+static_assert(SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
     SideScrollingShooter::TayamaWeakpoint::CommandCore,
-    SideScrollingShooter::Stage5Phase::TayamaLiftEngines));
+    SideScrollingShooter::Stage5Phase::TayamaFireControl));

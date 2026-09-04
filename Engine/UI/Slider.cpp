@@ -30,6 +30,8 @@ float Slider::NormalizedValue() const {
 }
 
 void Slider::Update(const UIInputState& input) {
+    // フォーカス喪失や切断で解放イベントが破棄されたドラッグを取り消す
+    if (!input.primaryDown && !input.primaryReleased) m_dragging = false;
     if (!m_enabled) return;
     if (input.primaryPressed && m_bounds.Contains(input.position)) {
         m_dragging = true;
