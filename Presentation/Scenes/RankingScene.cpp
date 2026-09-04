@@ -29,6 +29,7 @@ void RankingScene::Initialize() {
     m_rankings = ScoreRepository {}.Load();
     m_returnButton = std::make_unique<Button>(
         Vector2 { 0.34f, 0.09f }, RectAlign::BottomRight, "TITLE", Vector2 { -0.04f, 0.04f });
+    m_returnButton->SetClickSound(Button::ClickSound::Cancel);
     m_returnButton->SetOnClick([this]() { changeScene(SceneType::Title); });
 }
 

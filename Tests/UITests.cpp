@@ -30,14 +30,29 @@ void RunUITests() {
 
     Button button{{{-0.5f, -0.25f}, {1.0f, 0.5f}}, "Start"};
     int clickCount = 0;
+    int soundCount = 0;
+    Button::ClickSound playedSound = Button::ClickSound::Cancel;
+    Button::SetClickSoundHandler([&](Button::ClickSound sound) {
+        ++soundCount;
+        playedSound = sound;
+    });
     button.SetOnClick([&clickCount] { ++clickCount; });
     button.Update({{0.0f, 0.0f}, true, true, false});
     Require(button.IsHovered() && button.IsPressed(), "Button must become pressed after a pointer press inside bounds");
     button.Update({{0.0f, 0.0f}, false, false, true});
     Require(clickCount == 1 && !button.IsPressed(), "Button must click only when released inside bounds");
+    Require(soundCount == 1 && playedSound == Button::ClickSound::Confirm,
+            "Button must play the confirm sound when clicked by default");
     button.Update({{0.0f, 0.0f}, true, true, false});
     button.Update({{0.8f, 0.0f}, false, false, true});
     Require(clickCount == 1, "Button must not click when released outside bounds");
+    Require(soundCount == 1, "Button must not play a sound when released outside bounds");
+    button.SetClickSound(Button::ClickSound::Cancel);
+    button.Update({{0.0f, 0.0f}, true, true, false});
+    button.Update({{0.0f, 0.0f}, false, false, true});
+    Require(soundCount == 2 && playedSound == Button::ClickSound::Cancel,
+            "Button must play its configured cancel sound");
+    Button::SetClickSoundHandler({});
 
     Renderer renderer;
     renderer.BeginFrame();

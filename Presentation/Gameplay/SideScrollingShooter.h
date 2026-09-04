@@ -1,6 +1,7 @@
 ﻿#pragma once
 
 #include <array>
+#include <cmath>
 #include <cstdint>
 
 #include "../../Domain/ValueObjects/DifficultyType.h"
@@ -151,6 +152,8 @@ private:
         int barrageIndex = -1;
         int barrageCount = 0;
         int age = 0;
+        int hitCount = 0;
+        std::uint16_t bossCollisionIgnoreMask = 0;
         ShooterStages::Stage2::ShotState stage2 {};
         ShooterStages::Stage4::ShotState stage4 {};
         PlayerType playerType = Homing;
@@ -158,7 +161,15 @@ private:
         bool special = false;
         bool piercing = false;
         bool grazed = false;
+        bool firedByBoss = false;
+        bool bossCollisionInitialized = false;
         bool active = false;
+
+        /**
+         * @brief 自機弾の命中回数を加算して消滅判定を適用する
+         * @return なし
+         */
+        void RegisterHit() { if (!piercing || ++hitCount >= 5) active = false; }
     };
 
     /** @brief ボス機体で個別に破壊できる部位 */
@@ -251,6 +262,7 @@ private:
         std::array<int, BossPartCount> bossPartHitFlashFrames {};
         bool collisionEnabled = true;
         bool entersFromTop = false;
+        bool entersWallFromTop = false;
         const EnemyBehavior* behavior = nullptr;
         bool active = false;
     };
@@ -408,7 +420,6 @@ public:
     static constexpr int RooftopArrivalFrames = ShooterStages::Stage5::RooftopArrivalFrames;
     static constexpr int CarrierTransformationFrames = ShooterStages::Stage5::CarrierTransformationFrames;
     static constexpr int TayamaCollapseFrames = ShooterStages::Stage5::TayamaCollapseFrames;
-    static constexpr int Stage5QuietFlightFrames = ShooterStages::Stage5::QuietFlightFrames;
     static constexpr int SearchlightLockFrames = ShooterStages::Stage5::SearchlightLockFrames;
     static constexpr int SearchlightWarningFrames = ShooterStages::Stage5::SearchlightWarningFrames;
     static constexpr int SearchlightVolleyCount = ShooterStages::Stage5::SearchlightVolleyCount;
@@ -444,6 +455,24 @@ public:
     static constexpr bool IsTayamaWeakpointActiveForPhase(
         TayamaWeakpoint weakpoint, Stage5Phase phase) {
         return ShooterStages::Stage5::IsWeakpointActiveForPhase(weakpoint, phase);
+    }
+
+    /**
+     * @brief TAYAMAを中心とする円形アリーナ上のXZ座標を取得する
+     * @param angle ボス正面を0とする周回角
+     * @param sideOffset 固定2D視点内の横移動量
+     * @return XにワールドX、YにワールドZを格納した座標
+     */
+    static Vector2 TayamaOrbitXZ(float angle, float sideOffset) {
+        const float radialX = std::sin(angle);
+        const float radialZ = -std::cos(angle);
+        const float tangentX = std::cos(angle);
+        const float tangentZ = std::sin(angle);
+        return {
+            radialX * ShooterStages::Stage5::TayamaOrbitRadius + tangentX * sideOffset * WorldXScale,
+            ShooterStages::Stage5::TayamaArenaCenterZ +
+                radialZ * ShooterStages::Stage5::TayamaOrbitRadius + tangentZ * sideOffset * WorldXScale
+        };
     }
 
 private:
@@ -600,10 +629,11 @@ private:
      * @param enemy 敵弾の場合true
      * @param barrageIndex 弾幕内の弾番号
      * @param barrageCount 弾幕の総弾数
+     * @param firedByBoss ボスが発射した弾の場合true
      * @return なし
      */
     void SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy,
-        int barrageIndex = -1, int barrageCount = 0);
+        int barrageIndex = -1, int barrageCount = 0, bool firedByBoss = false);
     /**
      * @brief 命中または敵撃破位置へ爆発エフェクトを生成する
      * @param x 2D座標系のX座標
@@ -716,6 +746,21 @@ private:
     /** @brief チャプターの総合スコアを算出する */
     static int CalculateChapterTotalScore(const ChapterResult& result);
     float RailBlend() const;
+    /**
+     * @brief TAYAMAとの操作可能な最終戦か判定する
+     * @return TAYAMA戦闘中の場合true
+     */
+    bool IsTayamaBattle() const;
+    /**
+     * @brief 現在の表示切り替え先がTAYAMA周回3D視点か判定する
+     * @return 周回3D視点の場合true
+     */
+    bool IsTayamaOrbitViewActive() const;
+    /**
+     * @brief 現在のゲームルール上の自機ワールド座標を取得する
+     * @return 自機中心のワールド座標
+     */
+    Vector3 PlayerWorldPosition() const;
     bool IsRailGameplayActive() const;
     bool IsRailRenderActive() const;
     /**

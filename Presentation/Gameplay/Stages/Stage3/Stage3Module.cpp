@@ -634,10 +634,12 @@ const SideScrollingShooter::Stage& SideScrollingShooter::Stage3Module::Definitio
     static_assert(BossPhase2WorldZ +
         Stage3BarrierCageView::BarrierHalfLength * BossModelScale > PlayerRailZ + 22.0f);
     static_assert(Phase2SurvivalFrames == 30 * 60);
-    static_assert(Phase2HpForRemainingFrames(600, 900) == 300);
-    static_assert(Phase2HpForRemainingFrames(600, 0) == 0);
+    static_assert(Phase3StartHp(600) == 400);
+    static_assert(Phase2HpForRemainingFrames(600, 900) == 500);
+    static_assert(Phase2HpForRemainingFrames(600, 0) == 400);
     static_assert(Phase3SurvivalFrames == 60 * 60);
-    static_assert(Phase3HpForRemainingFrames(600, 1800) == 300);
+    static_assert(Phase3HpForRemainingFrames(600, 3600) == 400);
+    static_assert(Phase3HpForRemainingFrames(600, 1800) == 200);
     static_assert(Phase3HpForRemainingFrames(600, 0) == 0);
     static const Stage3EnemySheetEasy easySheet;
     static const Stage3EnemySheetNormal normalSheet;
@@ -737,14 +739,14 @@ void SideScrollingShooter::Stage3Module::TickBoss(
         return;
     }
 
-    // ゴンドラ全武装を周期発射し、30秒で残りHPを均等に減らす
+    // ゴンドラ全武装を周期発射し、30秒でPhase3開始HPまで均等に減らす
     if (boss.phase == BossPhase2Survival) {
         FireBossPartBarrage(shooter, boss);
         boss.motionAge = (std::max)(0, boss.motionAge - 1);
         boss.hp = Phase2HpForRemainingFrames(
             static_cast<int>(boss.actionX), boss.motionAge);
         shooter.m_bossHp = boss.hp;
-        if (boss.hp > 0) return;
+        if (boss.motionAge > 0) return;
 
         for (auto& shot : shooter.m_shots) {
             if (!shot.active || !shot.enemy) continue;
@@ -778,7 +780,6 @@ void SideScrollingShooter::Stage3Module::TickBoss(
         shooter.m_stage3 = {};
         boss.phase = BossPhase3Survival;
         boss.motionAge = Phase3SurvivalFrames;
-        boss.hp = static_cast<int>(boss.actionX);
         shooter.m_bossHp = boss.hp;
         return;
     }
@@ -1152,7 +1153,7 @@ bool SideScrollingShooter::Stage3Module::TryDamageStageTarget(
         if (!hit) continue;
 
         shooter.SpawnExplosion(shot.x, shot.y, shot.z);
-        if (!shot.piercing) shot.active = false;
+        shot.RegisterHit();
         funnel.hp -= shot.damage;
         if (funnel.hp > 0) return true;
 

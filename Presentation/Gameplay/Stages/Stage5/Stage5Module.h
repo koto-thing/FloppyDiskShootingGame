@@ -139,6 +139,14 @@ public:
     static void TickBoss(SideScrollingShooter& shooter, Enemy& eastsource);
 
     /**
+     * @brief ラスボス第一形態の弾と発射元機体の再接触を処理する
+     * @param shooter 更新対象
+     * @param shot 更新する弾
+     * @return なし
+     */
+    static void TickSpecialShotAfterMove(SideScrollingShooter& shooter, Shot& shot);
+
+    /**
      * @brief 自機弾をStage 5固有ターゲットへ適用する
      * @param shooter 更新対象
      * @param shot 判定する自機弾
@@ -205,7 +213,7 @@ public:
      * @brief Stage 5用カメラFar Clipを取得する
      * @return Stage 5のFar Clip
      */
-    static constexpr float CameraFarClip() { return 220.0f; }
+    static constexpr float CameraFarClip() { return 400.0f; }
 
     /**
      * @brief 現在の演出状態で敵を描画するか判定する
@@ -214,6 +222,14 @@ public:
      * @return 描画する場合true、格納庫内に隠す場合false
      */
     static bool ShouldDrawEnemy(const SideScrollingShooter& shooter, const Enemy& enemy);
+
+    /**
+     * @brief Stage 5の進行状態に対応する空を描画する
+     * @param shooter 描画対象
+     * @param renderer 描画先
+     * @return なし
+     */
+    static void DrawSky(const SideScrollingShooter& shooter, Renderer& renderer);
 
     /**
      * @brief Stage 5専用3Dワールドを描画する
@@ -234,6 +250,17 @@ public:
      * @return なし
      */
     static void DrawPart2Background(const SideScrollingShooter& shooter,
+        Renderer& renderer, const Camera3D& camera, float railWeight);
+
+    /**
+     * @brief 雲海とTAYAMA龍第2形態を2Dと3Dで共通描画する
+     * @param shooter 描画対象
+     * @param renderer 描画先
+     * @param camera 現在のカメラ
+     * @param railWeight 横視点からレール視点への補間率
+     * @return なし
+     */
+    static void DrawCloudSeaWorld(const SideScrollingShooter& shooter,
         Renderer& renderer, const Camera3D& camera, float railWeight);
 
     /**
@@ -270,9 +297,11 @@ public:
      * @brief Stage 5専用3D画面エフェクトを描画する
      * @param shooter 描画対象
      * @param renderer 描画先
+     * @param camera 現在の3Dカメラ
      * @return なし
      */
-    static void DrawOverlay3D(const SideScrollingShooter& shooter, Renderer& renderer);
+    static void DrawOverlay3D(const SideScrollingShooter& shooter, Renderer& renderer,
+        const Camera3D& camera);
 
     /**
      * @brief Stage 5専用HUDを描画する
@@ -315,6 +344,13 @@ public:
     static bool SpawnBossDebris(SideScrollingShooter& shooter,
         const Enemy& enemy, int bossPart = -1);
 
+    /**
+     * @brief TAYAMAの登場演出完了後に最終戦を開始する
+     * @param shooter 更新対象
+     * @return なし
+     */
+    static void CompleteTayamaIntroduction(SideScrollingShooter& shooter);
+
 private:
     class StageDefinitionImpl;
 
@@ -342,12 +378,26 @@ private:
     static TayamaModelState TayamaState(const SideScrollingShooter& shooter);
     static bool TryDamageWallSearchlight(SideScrollingShooter& shooter, Shot& shot);
     static bool TryDamageTayama(SideScrollingShooter& shooter, Shot& shot);
+    static bool TryDamageTayamaDragon(SideScrollingShooter& shooter, Shot& shot);
     static void UpdateTayamaBossHp(SideScrollingShooter& shooter);
     static void StartTayamaPhase(SideScrollingShooter& shooter,
         Stage5Phase phase, bool resetCurrentHp = true);
     static void TickTayama(SideScrollingShooter& shooter);
+    static void TickTayamaDragon(SideScrollingShooter& shooter);
     static void TickStateMachine(SideScrollingShooter& shooter);
     static void PlayCue(SideScrollingShooter& shooter, int cue);
-    static void DrawScreenEffects(const SideScrollingShooter& shooter, Renderer& renderer);
+    static void DrawScreenEffects(const SideScrollingShooter& shooter, Renderer& renderer,
+        const Camera3D* camera);
     static void DrawStage5Hud(const SideScrollingShooter& shooter, Renderer& renderer);
+    static void DrawFinalEscapeDragon(const SideScrollingShooter& shooter,
+        Renderer& renderer, const Camera3D& camera);
+    static void DrawCloudSea(const SideScrollingShooter& shooter,
+        Renderer& renderer, const Camera3D& camera);
+    static void DrawTayamaDragon(const SideScrollingShooter& shooter,
+        Renderer& renderer, const Camera3D& camera, float railWeight);
+    static Vector3 TayamaDragonSegmentPosition(const SideScrollingShooter& shooter,
+        int index, float railWeight);
+    static float TayamaDragonSegmentRadius(int index, float railWeight);
+    static Stage5ModelTransform TayamaDragonHeadTransform(
+        const SideScrollingShooter& shooter, float railWeight);
 };

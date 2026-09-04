@@ -35,9 +35,11 @@ private:
     std::unique_ptr<Button> m_openOptionsButton;
     std::unique_ptr<Button> m_closeMenuButton;
     std::unique_ptr<Button> m_backToMenuButton;
+    std::unique_ptr<Button> m_retroEffectButton;
     Slider m_masterVolumeSlider;
     Slider m_bgmVolumeSlider;
     Slider m_seVolumeSlider;
+    bool m_retroEffectEnabled = true;
     bool m_pauseMenuOpen = false;
     bool m_optionsOpen = false;
     int m_allClearTimer = 0;

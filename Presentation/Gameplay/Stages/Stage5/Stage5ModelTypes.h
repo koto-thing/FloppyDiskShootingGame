@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 
 #include "../../../../Engine/Graphics/IRenderBackend.h"
 #include "../../../../Engine/Math/Math.h"
@@ -26,6 +27,10 @@ struct Stage5GroupBounds {
     float radius = 0.0f;
     bool valid = false;
 };
+
+namespace ShooterStages::Stage5 {
+inline constexpr std::size_t TayamaCollisionGroupCount = 14;
+}
 
 namespace Stage5ModelDetail {
 /**

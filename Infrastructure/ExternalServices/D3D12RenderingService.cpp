@@ -342,15 +342,45 @@ struct RendererTransformBufferData {
 #include <cstdio>
 #include <vector>
 
-// .exeが存在する絶対パスを基準にシェーダーファイルへのフルパスを解決する
-std::wstring GetShaderFilePath(const wchar_t* fileName) {
-    wchar_t exePath[MAX_PATH];
-    GetModuleFileNameW(NULL, exePath, MAX_PATH);
-    wchar_t* lastSlash = wcsrchr(exePath, L'\\');
-    if (lastSlash) {
-        *(lastSlash + 1) = L'\0'; // 実行ファイル名部分を切り捨て
-    }
-    return std::wstring(exePath) + fileName;
+namespace {
+constexpr WORD ObjectShaderResourceId = 201;
+constexpr WORD BackgroundShaderResourceId = 202;
+constexpr WORD SpellCircleShaderResourceId = 203;
+constexpr WORD PixelUpscaleShaderResourceId = 204;
+
+/**
+ * @brief 実行ファイルに埋め込んだHLSLをコンパイルする
+ * @param resourceId RCDATAのリソースID
+ * @param sourceName エラー表示用のソース名
+ * @param entryPoint シェーダーのエントリーポイント
+ * @param target シェーダーモデル
+ * @param flags1 コンパイルフラグ
+ * @param shader コンパイル済みシェーダーの出力先
+ * @param error コンパイルエラーの出力先
+ * @return コンパイル結果
+ */
+HRESULT CompileEmbeddedShader(
+    WORD resourceId,
+    const char* sourceName,
+    const char* entryPoint,
+    const char* target,
+    UINT flags1,
+    ID3DBlob** shader,
+    ID3DBlob** error) {
+    // 実行ファイルからHLSLのバイト列を取得する
+    HMODULE module = GetModuleHandleW(nullptr);
+    HRSRC resource = FindResourceW(module, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
+    if (!resource) return HRESULT_FROM_WIN32(ERROR_RESOURCE_DATA_NOT_FOUND);
+    HGLOBAL loadedResource = LoadResource(module, resource);
+    const void* source = loadedResource ? LockResource(loadedResource) : nullptr;
+    const DWORD sourceSize = SizeofResource(module, resource);
+    if (!source || sourceSize == 0) return HRESULT_FROM_WIN32(ERROR_RESOURCE_DATA_NOT_FOUND);
+
+    // 外部ファイルに展開せず埋め込みソースを直接コンパイルする
+    return D3DCompile(
+        source, sourceSize, sourceName, nullptr, nullptr, entryPoint, target,
+        flags1, 0, shader, error);
+}
 }
 
 /**
@@ -795,23 +825,15 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
-    // 各シェーダーファイルへの絶対パスを取得
-    std::wstring pathObject = GetShaderFilePath(L"Shaders\\ObjectShader.hlsl");
-    std::wstring pathBackground = GetShaderFilePath(L"Shaders\\BackgroundShader.hlsl");
-    std::wstring pathSpellCircle = GetShaderFilePath(L"Shaders\\SpellCircleShader.hlsl");
-    std::wstring pathUpscale = GetShaderFilePath(L"Shaders\\PixelUpscaleShader.hlsl");
-
     // 共通頂点シェーダーのコンパイル
     ComPtr<ID3DBlob> vertexShader;
     error.Reset();
-    HRESULT hrVS = D3DCompileFromFile(
-        pathObject.c_str(),
-        nullptr,
-        nullptr,
+    HRESULT hrVS = CompileEmbeddedShader(
+        ObjectShaderResourceId,
+        "ObjectShader.hlsl",
         "VSMain",
         "vs_5_0",
         D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
-        0,
         &vertexShader,
         &error);
     if (FAILED(hrVS)) {
@@ -819,7 +841,7 @@ bool D3D12RenderingService::InitPipeline() {
             MessageBoxA(NULL, (char*)error->GetBufferPointer(), "Shader Compile Error (VS)", MB_OK);
         } else {
             char buf[128];
-            sprintf_s(buf, "D3DCompileFromFile (VS) Failed with HRESULT: 0x%08X", hrVS);
+            sprintf_s(buf, "Embedded shader compile (VS) failed with HRESULT: 0x%08X", hrVS);
             MessageBoxA(NULL, buf, "Shader Compile Error", MB_OK);
         }
         
@@ -864,14 +886,12 @@ bool D3D12RenderingService::InitPipeline() {
     // A. Object 用 PSO 作成 (PSObject)
     ComPtr<ID3DBlob> pixelShaderObj;
     error.Reset();
-    HRESULT hrPSObj = D3DCompileFromFile(
-        pathObject.c_str(),
-        nullptr,
-        nullptr,
+    HRESULT hrPSObj = CompileEmbeddedShader(
+        ObjectShaderResourceId,
+        "ObjectShader.hlsl",
         "PSObject",
         "ps_5_0",
         D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
-        0,
         &pixelShaderObj,
         &error);
     if (FAILED(hrPSObj)) {
@@ -879,7 +899,7 @@ bool D3D12RenderingService::InitPipeline() {
             MessageBoxA(NULL, (char*)error->GetBufferPointer(), "Shader Compile Error (PSObject)", MB_OK);
         } else {
             char buf[128];
-            sprintf_s(buf, "D3DCompileFromFile (PSObject) Failed with HRESULT: 0x%08X", hrPSObj);
+            sprintf_s(buf, "Embedded shader compile (PSObject) failed with HRESULT: 0x%08X", hrPSObj);
             MessageBoxA(NULL, buf, "Shader Compile Error", MB_OK);
         }
         return false;
@@ -915,14 +935,12 @@ bool D3D12RenderingService::InitPipeline() {
     // B. Background 用 PSO 作成 (PSBackground)
     ComPtr<ID3DBlob> pixelShaderBG;
     error.Reset();
-    HRESULT hrPSBG = D3DCompileFromFile(
-        pathBackground.c_str(),
-        nullptr,
-        nullptr,
+    HRESULT hrPSBG = CompileEmbeddedShader(
+        BackgroundShaderResourceId,
+        "BackgroundShader.hlsl",
         "PSBackground",
         "ps_5_0",
         D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
-        0,
         &pixelShaderBG,
         &error);
     if (FAILED(hrPSBG)) {
@@ -930,7 +948,7 @@ bool D3D12RenderingService::InitPipeline() {
             MessageBoxA(NULL, (char*)error->GetBufferPointer(), "Shader Compile Error (PSBackground)", MB_OK);
         } else {
             char buf[128];
-            sprintf_s(buf, "D3DCompileFromFile (PSBackground) Failed with HRESULT: 0x%08X", hrPSBG);
+            sprintf_s(buf, "Embedded shader compile (PSBackground) failed with HRESULT: 0x%08X", hrPSBG);
             MessageBoxA(NULL, buf, "Shader Compile Error", MB_OK);
         }
         return false;
@@ -948,14 +966,12 @@ bool D3D12RenderingService::InitPipeline() {
     // C. SpellCircle 用 PSO 作成 (PSSpellCircle)
     ComPtr<ID3DBlob> pixelShaderSC;
     error.Reset();
-    HRESULT hrPSSC = D3DCompileFromFile(
-        pathSpellCircle.c_str(),
-        nullptr,
-        nullptr,
+    HRESULT hrPSSC = CompileEmbeddedShader(
+        SpellCircleShaderResourceId,
+        "SpellCircleShader.hlsl",
         "PSSpellCircle",
         "ps_5_0",
         D3DCOMPILE_DEBUG | D3DCOMPILE_SKIP_OPTIMIZATION,
-        0,
         &pixelShaderSC,
         &error);
     if (FAILED(hrPSSC)) {
@@ -963,7 +979,7 @@ bool D3D12RenderingService::InitPipeline() {
             MessageBoxA(NULL, (char*)error->GetBufferPointer(), "Shader Compile Error (PSSpellCircle)", MB_OK);
         } else {
             char buf[128];
-            sprintf_s(buf, "D3DCompileFromFile (PSSpellCircle) Failed with HRESULT: 0x%08X", hrPSSC);
+            sprintf_s(buf, "Embedded shader compile (PSSpellCircle) failed with HRESULT: 0x%08X", hrPSSC);
             MessageBoxA(NULL, buf, "Shader Compile Error", MB_OK);
         }
         return false;
@@ -1024,6 +1040,19 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
+    // 通常敵弾は不透明3D形状に遮られるが、半透明同士の描画順を壊さないよう深度を書き込まない
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC enemyShotPsoDesc = playerShotPsoDesc;
+    enemyShotPsoDesc.DepthStencilState.DepthEnable = TRUE;
+    enemyShotPsoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+    enemyShotPsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+    enemyShotPsoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+    if (FAILED(m_device->CreateGraphicsPipelineState(
+        &enemyShotPsoDesc, IID_PPV_ARGS(&m_pipelineStateEnemyShot)))) {
+        MessageBoxA(NULL, "CreateGraphicsPipelineState (EnemyShot) Failed",
+            "PSO Creation Error", MB_OK);
+        return false;
+    }
+
     /** @brief C++文字列から命中爆発用シェーダーをコンパイルする */
     ComPtr<ID3DBlob> explosionVertexShader;
     ComPtr<ID3DBlob> explosionPixelShader;
@@ -1063,6 +1092,19 @@ bool D3D12RenderingService::InitPipeline() {
     if (FAILED(m_device->CreateGraphicsPipelineState(
         &explosionPsoDesc, IID_PPV_ARGS(&m_pipelineStateExplosion)))) {
         MessageBoxA(NULL, "CreateGraphicsPipelineState (Explosion) Failed",
+            "PSO Creation Error", MB_OK);
+        return false;
+    }
+
+    // エンジン炎は既存の3D形状に遮られるが、半透明同士の描画順を壊さないよう深度を書き込まない
+    D3D12_GRAPHICS_PIPELINE_STATE_DESC engineFlamePsoDesc = explosionPsoDesc;
+    engineFlamePsoDesc.DepthStencilState.DepthEnable = TRUE;
+    engineFlamePsoDesc.DepthStencilState.DepthWriteMask = D3D12_DEPTH_WRITE_MASK_ZERO;
+    engineFlamePsoDesc.DepthStencilState.DepthFunc = D3D12_COMPARISON_FUNC_LESS_EQUAL;
+    engineFlamePsoDesc.DSVFormat = DXGI_FORMAT_D32_FLOAT;
+    if (FAILED(m_device->CreateGraphicsPipelineState(
+        &engineFlamePsoDesc, IID_PPV_ARGS(&m_pipelineStateEngineFlame)))) {
+        MessageBoxA(NULL, "CreateGraphicsPipelineState (Engine Flame) Failed",
             "PSO Creation Error", MB_OK);
         return false;
     }
@@ -1122,8 +1164,8 @@ bool D3D12RenderingService::InitPipeline() {
     ComPtr<ID3DBlob> upscaleVertexShader;
     ComPtr<ID3DBlob> upscalePixelShader;
     error.Reset();
-    if (FAILED(D3DCompileFromFile(
-        pathUpscale.c_str(), nullptr, nullptr, "VSMain", "vs_5_0", shaderCompileFlags, 0,
+    if (FAILED(CompileEmbeddedShader(
+        PixelUpscaleShaderResourceId, "PixelUpscaleShader.hlsl", "VSMain", "vs_5_0", shaderCompileFlags,
         &upscaleVertexShader, &error))) {
         if (error) MessageBoxA(NULL, static_cast<char*>(error->GetBufferPointer()),
             "Upscale Shader Compile Error (VS)", MB_OK);
@@ -1131,8 +1173,8 @@ bool D3D12RenderingService::InitPipeline() {
     }
 
     error.Reset();
-    if (FAILED(D3DCompileFromFile(
-        pathUpscale.c_str(), nullptr, nullptr, "PSMain", "ps_5_0", shaderCompileFlags, 0,
+    if (FAILED(CompileEmbeddedShader(
+        PixelUpscaleShaderResourceId, "PixelUpscaleShader.hlsl", "PSMain", "ps_5_0", shaderCompileFlags,
         &upscalePixelShader, &error))) {
         if (error) MessageBoxA(NULL, static_cast<char*>(error->GetBufferPointer()),
             "Upscale Shader Compile Error (PS)", MB_OK);
@@ -1465,7 +1507,7 @@ void D3D12RenderingService::DrawPrimitive3D(const Primitive3D& primitive) {
     ++m_constantBufferCursor;
 }
 
-/** @brief 埋め込みHLSLを使用して自機弾を描画する */
+/** @brief 埋め込みHLSLを使用して弾を描画する */
 void D3D12RenderingService::DrawPlayerShot(const PlayerShotVisual& shot) {
     if (m_constantBufferCursor >= MAX_CONSTANT_BUFFER_ELEMENTS) return;
 
@@ -1474,16 +1516,17 @@ void D3D12RenderingService::DrawPlayerShot(const PlayerShotVisual& shot) {
         reinterpret_cast<char*>(m_cbvCpuData) + static_cast<size_t>(m_constantBufferCursor) * 256);
     const DirectX::XMMATRIX matrix = DirectX::XMMatrixScaling(shot.size.x, shot.size.y, 1.0f) *
         DirectX::XMMatrixRotationZ(shot.direction) *
-        DirectX::XMMatrixTranslation(shot.position.x, shot.position.y, 0.0f);
+        DirectX::XMMatrixTranslation(shot.position.x, shot.position.y, shot.depth);
     DirectX::XMStoreFloat4x4(&cbData->u_wvpMatrix, DirectX::XMMatrixTranspose(matrix));
     cbData->u_Color = {1.0f, 1.0f, 1.0f, 1.0f};
     cbData->u_time = shot.time;
     cbData->u_shapeType = static_cast<float>(shot.type);
     cbData->u_rotAngle = shot.direction;
 
-    /** @brief 自機弾専用PSOで4頂点の矩形を描画する */
+    // 通常敵弾だけ深度テスト有効PSOを使い、3D形状の深度バッファを参照する
     const int previousPipelineType = m_currentPipelineType;
-    m_commandList->SetPipelineState(m_pipelineStatePlayerShot.Get());
+    m_commandList->SetPipelineState(
+        shot.depthTest ? m_pipelineStateEnemyShot.Get() : m_pipelineStatePlayerShot.Get());
     m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     const D3D12_GPU_VIRTUAL_ADDRESS address = m_constantBuffer->GetGPUVirtualAddress() +
@@ -1513,9 +1556,11 @@ void D3D12RenderingService::DrawExplosion(const ExplosionVisual& explosion) {
 
     // 爆発専用PSOで画面正対クアッドを発行する
     const int previousPipelineType = m_currentPipelineType;
-    m_commandList->SetPipelineState((explosion.effectType == 0 || explosion.effectType == 3 ||
-        explosion.effectType == 4 || explosion.effectType == 5) ?
-        m_pipelineStateExplosion.Get() : m_pipelineStateExplosionSmoke.Get());
+    ID3D12PipelineState* pipelineState = explosion.effectType == 3 ?
+        m_pipelineStateEngineFlame.Get() :
+        ((explosion.effectType == 0 || explosion.effectType == 4 || explosion.effectType == 5) ?
+            m_pipelineStateExplosion.Get() : m_pipelineStateExplosionSmoke.Get());
+    m_commandList->SetPipelineState(pipelineState);
     m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
     const D3D12_GPU_VIRTUAL_ADDRESS address = m_constantBuffer->GetGPUVirtualAddress() +

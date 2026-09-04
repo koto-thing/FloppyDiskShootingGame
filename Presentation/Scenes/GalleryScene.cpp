@@ -154,6 +154,7 @@ void GalleryScene::Initialize() {
     m_camera.SetFieldOfView(Math::ToRadians(48.0f));
     m_returnButton = std::make_unique<Button>(
         Vector2 {0.38f, 0.09f}, RectAlign::BottomRight, "BACK TO TITLE", Vector2 {-0.04f, 0.04f});
+    m_returnButton->SetClickSound(Button::ClickSound::Cancel);
     m_returnButton->SetOnClick([this]() { changeScene(SceneType::Title); });
     ResetExhibit();
 }

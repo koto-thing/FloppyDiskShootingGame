@@ -4,10 +4,14 @@
 
 /** @brief 全ステージクリア後のエンディングを遠近スクロールで表示するシーン */
 class EndingScene final : public StoryScene {
+public:
+    /** @brief エンディングシーンを初期化する */
+    void Initialize() override;
+
 protected:
     /**
      * @brief エンディング終了後に遷移するシーンを取得する
-     * @return ランキングシーン
+     * @return クレジットシーン
      */
     SceneType NextScene() const override;
     /**

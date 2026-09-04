@@ -13,6 +13,7 @@
 #include "SideScrollingShooterShared.h"
 #include "Stages/Common/StageDispatch.h"
 #include "Stages/Stage1/Stage1Module.h"
+#include "Stages/Stage5/Stage5Module.h"
 #include "Voices/VoiceDpcmDecoder.h"
 
 namespace {
@@ -20,7 +21,7 @@ using SideScrollingShooterShared::BossNameRevealFrames;
 using SideScrollingShooterShared::BossWarningSirenMml;
 
 constexpr float PowerAfterRestart(float power) {
-    return power > 1.0f ? power - 1.0f : 0.0f;
+    return power > 0.01f ? power - 0.01f : 0.0f;
 }
 
 /**
@@ -38,8 +39,8 @@ constexpr int MissionStartSecondVoiceFrame =
 constexpr int MissionClearSecondVoiceFrame =
     VoicePlaybackFrames(VoiceSamples::suspect) + VoiceGapFrames;
 
-static_assert(PowerAfterRestart(3.25f) == 2.25f);
-static_assert(PowerAfterRestart(0.75f) == 0.0f);
+static_assert(PowerAfterRestart(3.25f) > 3.239f && PowerAfterRestart(3.25f) < 3.241f);
+static_assert(PowerAfterRestart(0.005f) == 0.0f);
 constexpr float PowerAfterDebugIncrease(float power, float maxPower) {
     return power + 1.0f < maxPower ? power + 1.0f : maxPower;
 }
@@ -65,8 +66,8 @@ constexpr int ChapterProgressPercentForFrame(int frame, int startFrame, int endF
     return elapsed * 100 / duration;
 }
 
-static_assert(PowerAfterRestart(3.25f) == 2.25f);
-static_assert(PowerAfterRestart(0.75f) == 0.0f);
+static_assert(PowerAfterRestart(3.25f) > 3.239f && PowerAfterRestart(3.25f) < 3.241f);
+static_assert(PowerAfterRestart(0.005f) == 0.0f);
 static_assert(PowerAfterDebugIncrease(2.25f, 4.0f) == 3.25f);
 static_assert(PowerAfterDebugIncrease(3.50f, 4.0f) == 4.0f);
 static_assert(EarnsChapterBombBonus(5, 6));
@@ -149,6 +150,8 @@ void SideScrollingShooter::ApplyDifficultyToStage5WeakpointHp() {
         weakpoint.hp = ScaleHpForDifficulty(weakpoint.hp, m_difficulty);
         weakpoint.maxHp = ScaleHpForDifficulty(weakpoint.maxHp, m_difficulty);
     }
+    m_stage5.tayamaHp = ScaleHpForDifficulty(m_stage5.tayamaHp, m_difficulty);
+    m_stage5.tayamaMaxHp = m_stage5.tayamaHp;
 }
 
 /**
@@ -555,8 +558,10 @@ void SideScrollingShooter::Tick() {
     StageDispatch::TickWorld(*this);
 
     // 3Dから2Dへ確定するフレームだけは、座標変換直後の特殊障害物との誤接触を除外する
+    const Vector3 playerPosition = PlayerWorldPosition();
     if (!completingRailToSideTransition &&
-        StageDispatch::HitsHazard(*this, m_playerX, m_playerY, PlayerRailZ, 0.055f)) {
+        StageDispatch::HitsHazard(*this, FromWorldX(playerPosition.x),
+            FromWorldY(playerPosition.y), playerPosition.z, 0.055f)) {
         DamagePlayer();
         return;
     }
@@ -716,6 +721,18 @@ void SideScrollingShooter::RequestViewMode(ViewMode mode) {
     // 切り替え開始から3秒間の無敵と8秒間の再入力待ちを付与する
     m_invincible = (std::max)(m_invincible, ViewToggleInvincibleFrames);
     m_viewToggleCooldown = ViewToggleCooldownFrames;
+    if (IsTayamaBattle()) {
+        // 2Dでは切替地点の周回角を固定し、3D復帰時は画面内の横位置を周回角へ戻す
+        if (mode == ViewMode::Side2D) {
+            m_stage5.tayamaSideViewAngle = m_stage5.tayamaOrbitAngle;
+            m_playerX = 0.0f;
+        } else {
+            m_stage5.tayamaOrbitAngle = m_stage5.tayamaSideViewAngle +
+                std::atan2(ToWorldX(m_playerX), ShooterStages::Stage5::TayamaOrbitRadius);
+            m_playerX = 0.0f;
+        }
+        return;
+    }
     if (mode == ViewMode::Rail3D) {
         // 遷移中はTickPlayerを通らないため、開始時点で機体を地面上へ戻す
         m_playerY = (std::max)(m_playerY, PlayerRailMinY());
@@ -732,6 +749,18 @@ void SideScrollingShooter::InitializeRailObjects() {
         enemy.transitionSideX = enemy.x;
         enemy.transitionSideY = enemy.y;
         enemy.transitionRailZ = enemy.z;
+        if (m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase) &&
+            enemy.entersFromTop) {
+            // 視点切替前の降下率を3D壁面座標へ引き継ぐ
+            constexpr float SideExitY = Side2DPlayerMinY - Side2DShotCullMargin;
+            enemy.baseY = ShooterStages::Stage5::RemapPart2EnemyY(enemy.y,
+                ShooterStages::Stage5::Part2SideEnemyEntryY, SideExitY,
+                ShooterStages::Stage5::Part2RailEnemyEntryY,
+                ShooterStages::Stage5::Part2RailEnemyExitY);
+            enemy.y = enemy.baseY;
+            enemy.baseZ = ShooterStages::Stage5::Part2RailEnemyPlaneZ;
+            enemy.z = enemy.baseZ;
+        }
         if (enemy.z <= 0.0f) {
             enemy.z = ToRailZFromSideX(enemy.x);
         }
@@ -741,6 +770,14 @@ void SideScrollingShooter::InitializeRailObjects() {
         }
         if (enemy.type == Stage::WallSecurityDroneEnemy) {
             // 外壁警備ドローンは視点切り替え直後から壁面のZ座標を維持する
+            enemy.entersWallFromTop = false;
+            const float previousBaseY = enemy.baseY;
+            enemy.baseY = ShooterStages::Stage5::RemapPart2DroneBaseY(enemy.baseY,
+                ShooterStages::Stage5::Part2SideDroneBaseY,
+                ShooterStages::Stage5::Part2SideDroneBaseStep,
+                ShooterStages::Stage5::Part2RailDroneBaseY,
+                ShooterStages::Stage5::Part2RailDroneBaseStep);
+            enemy.y += enemy.baseY - previousBaseY;
             enemy.z = WallSecurityDroneEnemyBehavior::WallSurfaceZ();
             enemy.baseX = enemy.railAnchorX;
             enemy.x = enemy.baseX;
@@ -833,6 +870,27 @@ void SideScrollingShooter::InitializeSideObjects() {
         enemy.transitionSideX = enemy.x;
         enemy.transitionSideY = enemy.y;
         enemy.transitionRailZ = enemy.z;
+        if (m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase) &&
+            enemy.entersFromTop) {
+            // 視点切替前の降下率を2D画面座標へ引き継ぐ
+            constexpr float SideExitY = Side2DPlayerMinY - Side2DShotCullMargin;
+            enemy.baseY = ShooterStages::Stage5::RemapPart2EnemyY(enemy.y,
+                ShooterStages::Stage5::Part2RailEnemyEntryY,
+                ShooterStages::Stage5::Part2RailEnemyExitY,
+                ShooterStages::Stage5::Part2SideEnemyEntryY, SideExitY);
+            enemy.y = enemy.baseY;
+        }
+        if (enemy.type == Stage::WallSecurityDroneEnemy) {
+            // 3D壁面高度から2Dの巡回段へ戻す
+            enemy.entersWallFromTop = false;
+            const float previousBaseY = enemy.baseY;
+            enemy.baseY = ShooterStages::Stage5::RemapPart2DroneBaseY(enemy.baseY,
+                ShooterStages::Stage5::Part2RailDroneBaseY,
+                ShooterStages::Stage5::Part2RailDroneBaseStep,
+                ShooterStages::Stage5::Part2SideDroneBaseY,
+                ShooterStages::Stage5::Part2SideDroneBaseStep);
+            enemy.y += enemy.baseY - previousBaseY;
+        }
         if (enemy.type == 2) {
             m_stage->ConfigureBossSideAnchor(enemy);
             continue;
@@ -939,7 +997,7 @@ int SideScrollingShooter::Score() const {
 
 /** @brief ボス戦前会話を進行する */
 void SideScrollingShooter::TickBossStory() {
-    const BossStory story = StageDispatch::Story(m_stageNumber);
+    const BossStory story = StageDispatch::Story(*this);
     if (m_bossStoryLine >= story.lineCount) {
         m_bossStoryActive = false;
         return;
@@ -982,6 +1040,10 @@ void SideScrollingShooter::TickBossIntroduction() {
         // 名前表示完了後に初めて通常の戦闘更新へ戻す
         m_bossIntroductionPhase = BossIntroductionPhase::None;
         m_bossIntroductionTimer = 0;
+        if (m_stageNumber == 5 &&
+            m_stage5.phase == ShooterStages::Stage5::Phase::CarrierTransformation) {
+            Stage5Module::CompleteTayamaIntroduction(*this);
+        }
     }
 }
 
@@ -1039,7 +1101,8 @@ void SideScrollingShooter::DamagePlayer() {
     if (m_audio) m_audio->PlaySE(MomijiDeathVoice());
 
     // 敵撃破と同じ破壊爆発を自機位置へ生成してから復帰を待つ
-    SpawnExplosion(m_playerX, m_playerY, PlayerRailZ, true);
+    const Vector3 player = PlayerWorldPosition();
+    SpawnExplosion(FromWorldX(player.x), FromWorldY(player.y), player.z, true);
     PlayHitSound();
     m_playerDestructionTimer = PlayerDestructionWaitFrames;
 }
@@ -1216,7 +1279,7 @@ void SideScrollingShooter::RestartCurrentChapter() {
         return;
     }
 
-    // 通常戦では被弾時点のPowerから1.0だけ失い、0.0未満にはしない
+    // 通常戦では被弾時点のPowerから0.01だけ失い、0.0未満にはしない
     if (StageDispatch::TryRestartCheckpoint(*this)) return;
     ++m_chapterRetryCounts[m_chapterNumber - 1];
     m_shots = {};
@@ -1388,12 +1451,36 @@ float SideScrollingShooter::RailBlend() const {
     return railWeight;
 }
 
+bool SideScrollingShooter::IsTayamaBattle() const {
+    return m_stageNumber == 5 &&
+        ShooterStages::Stage5::IsTayamaBattlePhase(m_stage5.phase);
+}
+
+bool SideScrollingShooter::IsTayamaOrbitViewActive() const {
+    return IsTayamaBattle() &&
+        (m_viewTransitionTimer > 0 ? m_nextViewMode : m_viewMode) == ViewMode::Rail3D;
+}
+
+Vector3 SideScrollingShooter::PlayerWorldPosition() const {
+    if (!IsTayamaBattle()) {
+        return {ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ};
+    }
+
+    // 3Dは周回角、2Dは切替時に固定した角と画面横位置から同じ円形アリーナへ配置する
+    const float angle = IsTayamaOrbitViewActive() ?
+        m_stage5.tayamaOrbitAngle : m_stage5.tayamaSideViewAngle;
+    const float sideOffset = IsTayamaOrbitViewActive() ? 0.0f : m_playerX;
+    const Vector2 orbit = TayamaOrbitXZ(angle, sideOffset);
+    return {orbit.x, ToWorldY(m_playerY), orbit.y};
+}
+
 bool SideScrollingShooter::IsRailGameplayActive() const {
-    return (m_viewTransitionTimer > 0 ? m_nextViewMode : m_viewMode) == ViewMode::Rail3D;
+    return IsTayamaBattle() ||
+        (m_viewTransitionTimer > 0 ? m_nextViewMode : m_viewMode) == ViewMode::Rail3D;
 }
 
 bool SideScrollingShooter::IsRailRenderActive() const {
-    return m_viewMode == ViewMode::Rail3D || m_nextViewMode == ViewMode::Rail3D ||
+    return IsTayamaBattle() || m_viewMode == ViewMode::Rail3D || m_nextViewMode == ViewMode::Rail3D ||
         m_viewTransitionTimer > 0;
 }
 

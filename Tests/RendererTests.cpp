@@ -26,6 +26,7 @@ public:
     float lastCharacterSpacing = 0.0f;
     Vector2 lastTextPosition {};
     Rect lastRect {};
+    PlayerShotVisual lastPlayerShot {};
 
     void BeginFrame() override { events.emplace_back("begin"); }
     void DrawCircle(const Circle&, const ColorF&) override { events.emplace_back("circle"); }
@@ -34,6 +35,11 @@ public:
         events.emplace_back("rect");
     }
     void DrawExplosion(const ExplosionVisual&) override { events.emplace_back("explosion"); }
+    /** @brief 弾描画情報を記録する @param shot 弾描画情報 @return なし */
+    void DrawPlayerShot(const PlayerShotVisual& shot) override {
+        lastPlayerShot = shot;
+        events.emplace_back("player-shot");
+    }
     void DrawTextCommand(std::string_view, const Vector2& position, float, const ColorF&, float characterSpacing) override {
         lastCharacterSpacing = characterSpacing;
         lastTextPosition = position;
@@ -85,6 +91,19 @@ void RecordsExplosionCommand() {
         "Engine flame command must preserve its effect type");
     Require(renderer.Command(2).explosion.effectType == 4,
         "Mortar shockwave command must preserve its effect type");
+}
+
+/** @brief 弾の深度情報がバックエンドまで保持されることを検証する @return なし */
+void PreservesShotDepthTest() {
+    FakeRenderBackend backend;
+    Renderer renderer(backend);
+    renderer.BeginFrame();
+    renderer.DrawPlayerShot({{}, {}, 0.0f, 0.0f, 4, 0.75f, true});
+    renderer.Flush();
+    Require(backend.lastPlayerShot.depth == 0.75f,
+        "Shot command must preserve projected depth");
+    Require(backend.lastPlayerShot.depthTest,
+        "Shot command must preserve depth-test selection");
 }
 
 void SendsCharacterSpacingToBackend() {
@@ -220,6 +239,7 @@ void RunRendererTests() {
     RecordsAndResetsCommands();
     RecordsCharacterSpacing();
     RecordsExplosionCommand();
+    PreservesShotDepthTest();
     SendsCharacterSpacingToBackend();
     AlignsTextToScreenPositions();
     AlignsRectToScreenPositions();
