@@ -1178,7 +1178,8 @@ void SideScrollingShooter::Stage3Module::FireBossPartBarrage(
     if (boss.phase == BossPhase2Survival) {
         const int elapsed = Phase2SurvivalFrames - boss.motionAge;
         const int cycle = elapsed % BossLaserCycleFrames;
-        const bool machineGunFrame = cycle == 0 || cycle == 32 || cycle == 64;
+        const bool machineGunFrame =
+            cycle == 0 || cycle == 16 || cycle == 32 || cycle == 48 || cycle == 64;
         const bool missileFrame = cycle == 220;
 
         const BossModelTransform transform = BossTransform(shooter, boss);

@@ -1258,7 +1258,6 @@ void SideScrollingShooter::TickTutorial() {
 void SideScrollingShooter::RestartCurrentChapter() {
     // ボス戦中は警報を再生せずBキーと同じ戦闘開始状態へ戻す
     const bool restartBossBattle = m_bossBattle;
-    m_power = PowerAfterRestart(m_power);
     if (restartBossBattle) {
         if (!StageDispatch::HandleDebugBossInput(*this)) {
             StartDebugCheckpoint(m_stageNumber, 3, true, false);
@@ -1269,6 +1268,7 @@ void SideScrollingShooter::RestartCurrentChapter() {
     }
 
     // 通常戦では被弾時点のPowerから0.01だけ失い、0.0未満にはしない
+    m_power = PowerAfterRestart(m_power);
     if (StageDispatch::TryRestartCheckpoint(*this)) return;
     ++m_chapterRetryCounts[m_chapterNumber - 1];
     m_shots = {};
