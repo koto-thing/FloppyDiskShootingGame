@@ -262,6 +262,11 @@ void SideScrollingShooter::StageDispatch::TickSpecialShotBeforeMove(
         break;
     case 5:
         Stage4Module::TickSpecialShotBeforeMove(shooter, shot);
+        if (shot.stage2.kind == ShooterStages::Stage2::ShotKind::Funnel &&
+            shot.stage2.delayedEngine) {
+            // 通常敵ミサイルはStage3/4と同じ遅延点火を使う
+            Stage3Module::TickSpecialShotBeforeMove(shooter, shot);
+        }
         Stage5Module::TickSpecialShotBeforeMove(shooter, shot);
         break;
     }
