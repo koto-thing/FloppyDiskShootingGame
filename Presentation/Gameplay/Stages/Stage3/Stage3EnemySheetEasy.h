@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../../GameplayRandom.h"
 #include "Stage3EnemySheet.h"
 
 /**
@@ -10,7 +11,7 @@
  */
 class SideScrollingShooter::Stage3EnemySheetEasy final : public SideScrollingShooter::Stage3EnemySheet {
 public:
-    static constexpr int ChapterLength = 500;
+    static constexpr int ChapterLength = 1200;
 
     /**
      * @brief 1チャプターの長さを取得する
@@ -31,27 +32,39 @@ public:
     bool TrySelectEnemySpawn(int frame, int spawnIndex,
         EnemySpawnRule& spawn, int& chapterNumber) const override {
         static constexpr EnemySpawnRule Chapter1[] = {
-            {StraightShooterEnemy, 40, 84, 1.10f, -0.82f, 0.88f, 50.0f},
-            {DiveRusherEnemy, 160, 260, 1.12f, -0.28f, 0.96f, 60.0f}
+            {BasicEnemy, 25, 100, 2.6f, -0.72f, -0.54f, 60.0f},
+            {StraightShooterEnemy, 50, 200, 1.10f, 0.0f, -0.88f, 50.0f},
+            {DiveRusherEnemy, 100, 200, 1.12f, -0.28f, 1.5f, 60.0f},
+            {HeavyEnemy, 100, 300, 2.6f, 0.00f, 0.0f, 60.0f}
         };
         static constexpr EnemySpawnRule Chapter2[] = {
-            {StraightShooterEnemy, 30, 82, 1.10f, 0.28f, -0.88f, 40.0f},
-            {LinkedLaserEnemy, 80, 360, 1.12f, -0.45f, 0.0f, 60.0f},
-            {CircleShooterEnemy, 140, 300, 1.14f, 0.82f, 0.32f, 56.0f},
-            {MissileShooterEnemy, 180, 340, 1.14f, -0.40f, -0.92f, 60.0f},
-            {DiveRusherEnemy, 220, 300, 1.12f, -0.58f, 0.96f, 60.0f}
+            {BasicEnemy, 25, 100, 2.6f, -0.72f, -0.54f, 60.0f},
+            {DiveRusherEnemy, 100, 150, 1.12f, -0.28f, 1.5f, 60.0f},
+            {ArmoredEnemy, 250, 200, 2.6f, 0.00f, -0.70f, 60.0f},
+            {MissileShooterEnemy, 25, 350, 1.14f, 0.00f, -0.92f, 60.0f},
         };
         static constexpr EnemySpawnRule Chapter3[] = {
-            {ArmoredEnemy, 40, 240, 1.12f, -0.85f, -0.18f, 60.0f},
-            {LinkedLaserEnemy, 90, 320, 1.12f, 0.45f, 0.0f, 60.0f},
-            {CircleShooterEnemy, 120, 280, 1.14f, -0.28f, 0.86f, 50.0f},
-            {MissileShooterEnemy, 150, 320, 1.14f, 0.20f, -0.92f, 60.0f},
-            {DiveRusherEnemy, 190, 260, 1.12f, 0.48f, 0.96f, 60.0f}
+            {BasicEnemy, 25, 100, 2.6f, -0.72f, -0.54f, 60.0f},
+            {DiveRusherEnemy, 100, 150, 1.12f, -0.28f, 1.5f, 60.0f},
+            {ArmoredEnemy, 250, 200, 2.6f, 0.00f, -0.70f, 60.0f},
+            {SquareShooterEnemy, 700, 1200, 2.6f, 0.0f, 0.0f, 54.0f},
+            {CircleShooterEnemy, 600, 300, 2.6f, 0.0f, 0.6f, 54.0f},
+            {MissileShooterEnemy, 25, 300, 1.14f, 0.40f, -0.92f, 60.0f},
+            {MissileShooterEnemy, 25, 300, 1.14f, -0.40f, -0.92f, 60.0f},
+            {StraightShooterEnemy, 100, 300, 1.10f, 0.0f, -0.88f, 50.0f},
         };
         constexpr Chapter Chapters[] = {
             MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)
         };
-        return TrySelectByChapters(
-            Chapters, 3, ChapterFrameLength(), frame, spawnIndex, spawn, chapterNumber);
+        const bool selected = TrySelectByChapters(Chapters, 3, ChapterFrameLength(), frame, spawnIndex, spawn, chapterNumber);
+        // YとZの生成範囲をランダム化
+        if (selected) {
+            if (spawn.enemyType == BasicEnemy) {
+                spawn.y = GameplayRandom::Range(-0.86f, 0.86f);
+                spawn.railX = GameplayRandom::Range(-1.0f, 1.0f);
+            }
+        }
+
+        return selected;
     }
 };
