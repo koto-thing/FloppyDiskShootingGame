@@ -64,6 +64,9 @@ void RunStage5ModelViewTests() {
         ShooterStages::Stage5::TayamaDragonRushActiveFrames +
         ShooterStages::Stage5::TayamaDragonRushRecoveryFrames;
     assert(ShooterStages::Stage5::TayamaDragonRushProgress(rushStart + 30) < 0.0f);
+    assert(ShooterStages::Stage5::TayamaDragonRushWarningProgress(rushStart) == 0.0f);
+    assert(ShooterStages::Stage5::TayamaDragonRushWarningProgress(rushActive - 1) == 1.0f);
+    assert(ShooterStages::Stage5::TayamaDragonRushWarningProgress(rushActive) == 0.0f);
     assert(ShooterStages::Stage5::IsTayamaDragonRushActive(rushActive));
     assert(ShooterStages::Stage5::TayamaDragonRushProgress(rushActive +
         ShooterStages::Stage5::TayamaDragonRushActiveFrames - 1) == 1.0f);
