@@ -118,8 +118,8 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
     renderer.DrawText(bombStatus, TextAlign::TopCenter, 0.014f, { 0.55f, 0.85f, 1.0f, 1.0f }, { 0.0f, -0.025f });
     renderer.DrawText(StageDispatch::IsViewLocked(*this) ?
-        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  BOMB: C  3D MODE LOCKED" :
-        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  BOMB: C  MODE: X", { -0.92f, -0.92f }, 0.012f,
+        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  3D MODE LOCKED  BOMB: C  MENU: ESC" :
+        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  MODE: X  BOMB: C  MENU: ESC", { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
 
     DrawBossHud(renderer);
@@ -264,8 +264,8 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
     renderer.DrawText(bombStatus, TextAlign::TopCenter, 0.014f, { 0.55f, 0.85f, 1.0f, 1.0f }, { 0.0f, -0.025f });
     renderer.DrawText(StageDispatch::IsViewLocked(*this) ?
-        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  BOMB: C  3D MODE LOCKED" :
-        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  BOMB: C  MODE: X", { -0.92f, -0.92f }, 0.012f,
+        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  3D MODE LOCKED  BOMB: C  MENU: ESC" :
+        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  MODE: X  BOMB: C  MENU: ESC", { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
     if (m_viewTransitionTimer > 0) {
         renderer.DrawText("CAMERA SHIFT", { -0.16f, -0.02f }, 0.026f,
