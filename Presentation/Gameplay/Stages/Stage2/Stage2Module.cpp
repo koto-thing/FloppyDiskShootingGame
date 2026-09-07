@@ -622,7 +622,7 @@ float SideScrollingShooter::Stage2Module::BattleshipWorldY(
 }
 
 bool SideScrollingShooter::Stage2Module::TryHitBossBody(
-    const SideScrollingShooter& shooter, const Shot& shot, const Enemy& boss) {
+    const SideScrollingShooter& shooter, const Shot& shot, const Enemy& boss, Vector3* aimPosition) {
     constexpr float BodyLocalX = 0.55f;
     constexpr float BodyLocalY = 0.95f;
     constexpr float ModelScale = 1.92f;
@@ -638,6 +638,8 @@ bool SideScrollingShooter::Stage2Module::TryHitBossBody(
         boss.z + shooter.m_stage2.boss.landBattleshipOffsetZ -
             std::sin(yaw) * BodyLocalX * ModelScale
     };
+    // 部位破壊後の追尾でも分離済み上部船体の中心を使う
+    if (aimPosition) { *aimPosition = center; return true; }
     return railMode ?
         Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
             ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
@@ -646,9 +648,18 @@ bool SideScrollingShooter::Stage2Module::TryHitBossBody(
             BodyRadius / WorldXScale);
 }
 
+/**
+ * @brief 未破壊部位への衝突判定または攻撃可能な部位中心の取得を行う
+ * @param shooter 判定対象のゲーム本体
+ * @param shot 判定する自機弾
+ * @param boss 判定するボス
+ * @param part 命中部位の出力先、座標取得時は部位番号の入力
+ * @param aimPosition 非nullなら衝突判定せず部位のワールド中心を出力する
+ * @return 命中または座標取得に成功した場合true
+ */
 bool SideScrollingShooter::Stage2Module::TryHitBossPart(
     const SideScrollingShooter& shooter, const Shot& shot,
-    const Enemy& boss, BossPart& part) {
+    const Enemy& boss, BossPart& part, Vector3* aimPosition) {
     constexpr float ModelScale = 1.92f;
     constexpr Vector3 PartPosition[] = {
         {-2.30f, 2.08f, 0.0f}, {-0.55f, 2.60f, -0.92f},
@@ -669,6 +680,7 @@ bool SideScrollingShooter::Stage2Module::TryHitBossPart(
     // 武装全破壊までは装甲内の接続コアを命中対象にしない
     for (int i = 0; i <= BossRightEngine; ++i) {
         if (boss.bossPartHp[i] <= 0 || (i == BossRightEngine && !weaponsDestroyed)) continue;
+        if (aimPosition && part != i) continue;
         const Vector3& local = PartPosition[i];
         const bool submarinePart = i == BossRightEngine;
         const float yaw = battleshipYaw +
@@ -690,6 +702,8 @@ bool SideScrollingShooter::Stage2Module::TryHitBossPart(
             boss.z + unitOffsetZ +
                 (-local.x * sine + local.z * cosine) * ModelScale
         };
+        // 追尾照準も命中判定と同じ変形済み部位中心を使用する
+        if (aimPosition) { *aimPosition = world; return true; }
         const bool hit = railMode ?
             Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
                 shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
@@ -705,7 +719,7 @@ bool SideScrollingShooter::Stage2Module::TryHitBossPart(
     // 側面のオレンジ色の小窓十二基を描画と同じローカル座標で個別判定する
     for (int hatch = 0; hatch < BossFunnelHatchCount; ++hatch) {
         const int partIndex = BossFunnelHatch0 + hatch;
-        if (boss.bossPartHp[partIndex] <= 0) continue;
+        if (boss.bossPartHp[partIndex] <= 0 || (aimPosition && part != partIndex)) continue;
         const float localX = -2.65f + static_cast<float>(hatch % 6) * 1.05f;
         const float localZ = (hatch < 6 ? -1.0f : 1.0f) * 1.80f;
         const float submarineYaw = battleshipYaw + (separated ? Math::HalfPi : 0.0f);
@@ -718,6 +732,8 @@ bool SideScrollingShooter::Stage2Module::TryHitBossPart(
             boss.z + shooter.m_stage2.boss.sandSubmarineOffsetZ +
                 (-localX * sine + localZ * cosine) * ModelScale
         };
+        // 追尾照準も命中判定と同じ変形済み部位中心を使用する
+        if (aimPosition) { *aimPosition = world; return true; }
         const bool hit = railMode ?
             Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
                 shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,

@@ -1,4 +1,4 @@
-﻿#include "Stage5Module.h"
+#include "Stage5Module.h"
 
 #include <algorithm>
 #include <cmath>
@@ -579,7 +579,7 @@ bool SideScrollingShooter::Stage5Module::CanReplacePlayerShot(bool enemy) {
  * @return EASTSOURCEの専用部位へ命中した場合true、命中しない場合false
  */
 bool SideScrollingShooter::Stage5Module::TryHitBossPart(
-    const SideScrollingShooter& shooter, const Shot& shot, const Enemy& boss, BossPart& part) {
+    const SideScrollingShooter& shooter, const Shot& shot, const Enemy& boss, BossPart& part, Vector3* aimPosition) {
     constexpr EastsourcePartGroup Groups[] = {
         EastsourcePartGroup::Nose,
         EastsourcePartGroup::LeftWing,
@@ -592,10 +592,13 @@ bool SideScrollingShooter::Stage5Module::TryHitBossPart(
 
     // 描画と同じ26パーツから集約した各グループ境界へ線分判定する
     for (int index = BossNose; index <= BossRightEngine; ++index) {
-        if (boss.bossPartHp[index] <= 0) continue;
+        if (boss.bossPartHp[index] <= 0 || (aimPosition && part != index)) continue;
         const Stage5GroupBounds bounds = EastsourceModelView::GroupBounds(
             transform, state, Groups[index]);
-        if (!bounds.valid || !Hit3DSegment(
+        if (!bounds.valid) continue;
+        // 追尾と衝突で描画由来の部位境界を共有する
+        if (aimPosition) { *aimPosition = bounds.center; return true; }
+        if (!Hit3DSegment(
             ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
             ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
             bounds.center.x, bounds.center.y, bounds.center.z, bounds.radius)) continue;
@@ -2907,4 +2910,46 @@ void SideScrollingShooter::Stage5Module::PlayCue(SideScrollingShooter& shooter, 
         shooter.m_stage5.soundCooldown = 16;
         break;
     }
+}
+
+/**
+ * @brief 命中判定と同じモデル境界から専用ボスの追尾先を取得する
+ * @param shooter 更新対象
+ * @param index 弱点または龍の節番号
+ * @param position ワールド中心の出力先
+ * @return 攻撃可能な標的がある場合true
+ */
+bool SideScrollingShooter::Stage5Module::GetHomingTarget(
+    SideScrollingShooter& shooter, int index, Vector3& position) {
+    // 龍は本体基準点ではなく実際に移動している各節を狙う
+    if (shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle) {
+        if (index < 0 || index >= ShooterStages::Stage5::TayamaDragonSegmentCount) return false;
+        position = TayamaDragonSegmentPosition(shooter, index, shooter.RailBlend());
+        return true;
+    }
+    if (shooter.m_stage5.phase < Stage5Phase::TayamaFireControl ||
+        shooter.m_stage5.phase > Stage5Phase::TayamaCommandCore ||
+        index < 0 || index >= TayamaWeakpointCount) return false;
+    const auto& weakpoint = shooter.m_stage5.tayamaWeakpoints[index];
+    if (!weakpoint.active || weakpoint.destroyed || weakpoint.hp <= 0) return false;
+
+    // 同一フレームの追尾弾と衝突判定で変形後の境界キャッシュを共有する
+    if (shooter.m_stage5.tayamaCollisionBoundsFrame != shooter.m_frame) {
+        shooter.m_stage5.tayamaCollisionBounds = TayamaModelView::AllGroupBounds(
+            TayamaTransform(shooter), shooter.m_stage5.tayamaTransformation, TayamaState(shooter));
+        shooter.m_stage5.tayamaCollisionBoundsFrame = shooter.m_frame;
+    }
+    constexpr TayamaPartGroup Groups[] = {
+        TayamaPartGroup::LeftSearchlight,
+        TayamaPartGroup::RightSearchlight,
+        TayamaPartGroup::FireControlRadar,
+        TayamaPartGroup::LeftLiftEngine,
+        TayamaPartGroup::RightLiftEngine,
+        TayamaPartGroup::CommandCore
+    };
+    const auto& bounds = shooter.m_stage5.tayamaCollisionBounds[
+        static_cast<std::size_t>(Groups[static_cast<std::size_t>(weakpoint.type)])];
+    if (!bounds.valid) return false;
+    position = bounds.center;
+    return true;
 }

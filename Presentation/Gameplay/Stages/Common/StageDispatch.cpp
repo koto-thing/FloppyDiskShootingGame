@@ -193,15 +193,24 @@ bool SideScrollingShooter::StageDispatch::TryDamageStageTarget(
     }
 }
 
+/**
+ * @brief 未破壊部位への衝突判定または攻撃可能な部位中心の取得を行う
+ * @param shooter 判定対象のゲーム本体
+ * @param shot 判定する自機弾
+ * @param boss 判定するボス
+ * @param part 命中部位の出力先、座標取得時は部位番号の入力
+ * @param aimPosition 非nullなら衝突判定せず部位のワールド中心を出力する
+ * @return 命中または座標取得に成功した場合true
+ */
 bool SideScrollingShooter::StageDispatch::TryHitBossPart(
     const SideScrollingShooter& shooter, const Shot& shot,
-    const Enemy& boss, BossPart& part) {
+    const Enemy& boss, BossPart& part, Vector3* aimPosition) {
     switch (shooter.m_stageNumber) {
-    case 2: return Stage2Module::TryHitBossPart(shooter, shot, boss, part);
-    case 4: return Stage4Module::TryHitBossPart(shooter, shot, boss, part);
-    case 3: return Stage3Module::TryHitBossPart(shooter, shot, boss, part);
-    case 5: return Stage5Module::TryHitBossPart(shooter, shot, boss, part);
-    default: return shooter.TryHitDefaultBossPart(shot, boss, part);
+    case 2: return Stage2Module::TryHitBossPart(shooter, shot, boss, part, aimPosition);
+    case 4: return Stage4Module::TryHitBossPart(shooter, shot, boss, part, aimPosition);
+    case 3: return Stage3Module::TryHitBossPart(shooter, shot, boss, part, aimPosition);
+    case 5: return Stage5Module::TryHitBossPart(shooter, shot, boss, part, aimPosition);
+    default: return shooter.TryHitDefaultBossPart(shot, boss, part, aimPosition);
     }
 }
 
