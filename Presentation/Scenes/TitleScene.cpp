@@ -16,7 +16,7 @@
  */
 void TitleScene::Initialize() {
     if (getData().audio) {
-        getData().audio->PlayMMLBGM(std::string(MMLData::title), true);
+        getData().audio->PlayMMLBGM(std::string(MMLData::GetTitleBgm()), true);
     }
     // 画面中央の少し上にゲーム開始ボタンを配置する
     m_startButton = std::make_unique<Button>(

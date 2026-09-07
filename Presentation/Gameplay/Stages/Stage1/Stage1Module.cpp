@@ -470,7 +470,7 @@ void SideScrollingShooter::Stage1Module::TickBossDefeat(
         shooter.PlayHitSound();
         static const auto kotoDeathVoice =
             VoiceCodec::DecodeForAudioService(VoiceSamples::kotoDeath);
-        if (shooter.m_audio) shooter.m_audio->PlaySE(kotoDeathVoice);
+        if (shooter.m_audio) shooter.m_audio->PlayVoice(kotoDeathVoice);
     }
 
     // 外装を一定間隔で剥がし、機体全体が一度に消えないよう段階破壊する

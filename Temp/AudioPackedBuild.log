@@ -1,0 +1,21 @@
+
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(551,5): warning MSB8028: 中間ディレクトリ (D:/Pandd/FloppyDiskShootingGame/Temp/AudioPackedObj/) に別のプロジェクト (FloppyDiskShootingGame.vcxproj) と共有されているファイルが含まれています。これにより、クリーンしてリビルド動作が適切に行われない可能性があります。 [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\Temp\AudioPackedBuild\FloppyEngine.lib
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(551,5): warning MSB8028: 中間ディレクトリ (D:/Pandd/FloppyDiskShootingGame/Temp/AudioPackedObj/) に別のプロジェクト (FloppyEngine.vcxproj) と共有されているファイルが含まれています。これにより、クリーンしてリビルド動作が適切に行われない可能性があります。 [D:\Pandd\FloppyDiskShootingGame\FloppyDiskShootingGame.vcxproj]
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  AudioService.cpp
+  PackedAudioSamples.cpp
+  SynthWaveGenerator.cpp
+  SideScrollingShooter.cpp
+  Stage1Module.cpp
+  Stage2Module.cpp
+  Stage3Module.cpp
+  Stage4Module.cpp
+  Stage5Module.cpp
+  コード生成しています。
+  5 of 6550 functions (<0.1%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    39 functions had inline decision re-evaluated but remain unchanged
+  コード生成が終了しました。
+  FloppyDiskShootingGame.vcxproj -> D:\Pandd\FloppyDiskShootingGame\Temp\AudioPackedBuild\SpaceYakuza.exe

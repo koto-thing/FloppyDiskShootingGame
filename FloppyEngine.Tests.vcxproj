@@ -39,7 +39,7 @@
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>_CONSOLE;UNICODE;_UNICODE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>_CONSOLE;UNICODE;_UNICODE;FLOPPY_AUDIO_TESTS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
       <RuntimeLibrary Condition="'$(Configuration)'=='Release'">MultiThreaded</RuntimeLibrary>
@@ -72,6 +72,12 @@
     <ClCompile Include="Tests\Stage5ModelViewTests.cpp" />
     <ClCompile Include="Tests\VoiceDpcmDecoderTests.cpp" />
     <ClCompile Include="Tests\WavSamplesTests.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\SynthWaveGenerator.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\MMLData.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\PackedAudioSamples.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\MMLParser.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\AudioService.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\SfxrGenerator.cpp" />
     <ClCompile Include="Presentation\Common\SpaceBackground.cpp" />
     <ClCompile Include="Infrastructure\Repositories\ScoreRepository.cpp" />
     <ClCompile Include="Infrastructure\Repositories\SettingsRepository.cpp" />
@@ -82,4 +88,10 @@
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="PackMML" BeforeTargets="ClCompile">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Scripts\PackMml.ps1&quot;" />
+  </Target>
+  <Target Name="PackAudioSamples" BeforeTargets="ClCompile">
+    <Exec Command="python &quot;$(ProjectDir)Scripts\PackAudioSamples.py&quot;" />
+  </Target>
 </Project>

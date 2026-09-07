@@ -34,15 +34,18 @@ inline std::vector<std::int16_t> DecodeImaAdpcm(
     };
 
     std::vector<std::int16_t> output;
-    output.reserve(sample.sampleCount);
     if (sample.sampleCount == 0) return output;
+    // 可逆圧縮の復元失敗や不足したADPCMデータを再生前に拒否する
+    const auto* data = Audio::PackedAudioSamples::Get(sample.offset, sample.byteCount);
+    if (!data || sample.sampleCount / 2 > sample.byteCount) return output;
+    output.reserve(sample.sampleCount);
 
     int predictor = sample.initialPredictor;
     int stepIndex = std::clamp<int>(sample.initialStepIndex, 0, 88);
     output.push_back(static_cast<std::int16_t>(predictor));
 
     for (std::size_t i = 0; i < sample.byteCount && output.size() < sample.sampleCount; ++i) {
-        const std::uint8_t packed = sample.data[i];
+        const std::uint8_t packed = data[i];
         for (int shift : {0, 4}) {
             if (output.size() >= sample.sampleCount) break;
             const int code = (packed >> shift) & 0x0F;
@@ -61,13 +64,13 @@ inline std::vector<std::int16_t> DecodeImaAdpcm(
 }
 
 /**
- * @brief PCMデータを線形補間でリサンプリングする
+ * @brief PCMデータを4点の三次補間でリサンプリングする
  * @param input 入力PCMデータ
  * @param sourceRate 入力サンプルレート
  * @param destinationRate 出力サンプルレート
  * @return リサンプリングした16bit PCMデータ
  */
-inline std::vector<std::int16_t> ResampleLinear(
+inline std::vector<std::int16_t> ResampleCubic(
     const std::vector<std::int16_t>& input,
     std::uint32_t sourceRate,
     std::uint32_t destinationRate)
@@ -84,9 +87,15 @@ inline std::vector<std::int16_t> ResampleLinear(
         const double sourcePosition = i * ratio;
         const std::size_t left = std::min<std::size_t>(
             static_cast<std::size_t>(sourcePosition), input.size() - 1);
-        const std::size_t right = std::min(left + 1, input.size() - 1);
+        // 端では端点を延長し、Catmull-Rom補間で波形の傾きを滑らかにつなぐ
+        const double p0 = input[left > 0 ? left - 1 : 0];
+        const double p1 = input[left];
+        const double p2 = input[std::min(left + 1, input.size() - 1)];
+        const double p3 = input[std::min(left + 2, input.size() - 1)];
         const double fraction = sourcePosition - left;
-        const double value = input[left] + (input[right] - input[left]) * fraction;
+        // ponytail: 三次補間は帯域制限フィルターではないため、縮小用途ではsinc方式へ変更する
+        const double value = p1 + 0.5 * fraction * (p2 - p0 + fraction *
+            (2 * p0 - 5 * p1 + 4 * p2 - p3 + fraction * (3 * (p1 - p2) + p3 - p0)));
         output[i] = static_cast<std::int16_t>(std::clamp(
             static_cast<int>(std::lround(value)), -32768, 32767));
     }
@@ -101,7 +110,17 @@ inline std::vector<std::int16_t> ResampleLinear(
 inline std::vector<std::int16_t> DecodeForAudioService(
     const VoiceSamples::ImaAdpcmSample& sample)
 {
-    return ResampleLinear(DecodeImaAdpcm(sample), sample.sampleRate, 44100);
+    std::vector<std::int16_t> output = ResampleCubic(DecodeImaAdpcm(sample), sample.sampleRate, 44100);
+
+    // 両端2msをフェードし、切り詰め済み音声を無音へ滑らかにつなぐ
+    const std::size_t fade = std::min<std::size_t>(88, output.size() / 2);
+    for (std::size_t i = 0; i < fade; ++i) {
+        const float gain = static_cast<float>(i) / static_cast<float>(fade);
+        output[i] = static_cast<std::int16_t>(std::lround(output[i] * gain));
+        output[output.size() - 1 - i] = static_cast<std::int16_t>(
+            std::lround(output[output.size() - 1 - i] * gain));
+    }
+    return output;
 }
 
 /**

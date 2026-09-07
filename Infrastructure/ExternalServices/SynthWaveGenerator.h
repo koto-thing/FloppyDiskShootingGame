@@ -53,9 +53,11 @@ public:
      * @brief MMLシーケンスからPCMデータを生成する
      * @param sequence 生成元のMMLシーケンス
      * @param sampleRate サンプルレート
+     * @param stereo trueの場合は左右交互のステレオPCMを生成する
+     * @param normalizeBgm trueの場合は有音区間の実効値で曲全体の音量を調整する
      * @return 生成した16bit PCMデータ
      */
-    std::vector<int16_t> GeneratePCM(const MMLSequence& sequence, int sampleRate = 44100);
+    std::vector<int16_t> GeneratePCM(const MMLSequence& sequence, int sampleRate = 44100, bool stereo = false, bool normalizeBgm = false);
 
 private:
     /**

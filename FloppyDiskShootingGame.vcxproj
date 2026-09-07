@@ -153,6 +153,8 @@
   <ItemGroup>
     <ClCompile Include="Infrastructure\ExternalServices\TextRenderingService.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\AudioService.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\MMLData.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\PackedAudioSamples.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\MMLParser.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\SynthWaveGenerator.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\SfxrGenerator.cpp" />
@@ -200,6 +202,8 @@
     <ClInclude Include="Infrastructure\ExternalServices\MMLData.h" />
     <ClInclude Include="Infrastructure\ExternalServices\MMLParser.h" />
     <ClInclude Include="Infrastructure\ExternalServices\SynthWaveGenerator.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\MMLSource.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\PackedMMLData.h" />
     <ClInclude Include="Infrastructure\ExternalServices\SfxrGenerator.h" />
     <ClInclude Include="Infrastructure\ExternalServices\D3D12RenderingService.h" />
     <ClInclude Include="Infrastructure\ExternalServices\InputService.h" />
@@ -323,5 +327,11 @@
   <Target Name="CopyMML" AfterTargets="AfterBuild">
     <Copy SourceFiles="mml\test.mml" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('mml\test.mml')" />
     <Copy SourceFiles="test.mml" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" Condition="Exists('test.mml')" />
+  </Target>
+  <Target Name="PackMML" BeforeTargets="ClCompile">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Scripts\PackMml.ps1&quot;" />
+  </Target>
+  <Target Name="PackAudioSamples" BeforeTargets="ClCompile">
+    <Exec Command="python &quot;$(ProjectDir)Scripts\PackAudioSamples.py&quot;" />
   </Target>
 </Project>
