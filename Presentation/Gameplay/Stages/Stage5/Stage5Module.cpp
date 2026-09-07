@@ -1107,7 +1107,7 @@ void SideScrollingShooter::Stage5Module::DefeatEastsource(SideScrollingShooter& 
     if (shooter.m_stage5.phase != Stage5Phase::EastsourceBattle) return;
     static const auto eastsourceDeathVoice =
         VoiceCodec::DecodeForAudioService(VoiceSamples::eastsourceDeath);
-    if (shooter.m_audio) shooter.m_audio->PlaySE(eastsourceDeathVoice);
+    if (shooter.m_audio) shooter.m_audio->PlayVoice(eastsourceDeathVoice);
     shooter.UnlockGallery(GalleryEntry::Eastsource);
     eastsource.hp = 0;
     eastsource.collisionEnabled = false;
@@ -1853,7 +1853,7 @@ void SideScrollingShooter::Stage5Module::UpdateTayamaBossHp(SideScrollingShooter
     if (shooter.m_stage5.tayamaHp <= 0) {
         static const auto tayamaDeathVoice =
             VoiceCodec::DecodeForAudioService(VoiceSamples::tayamaDeath);
-        if (shooter.m_audio) shooter.m_audio->PlaySE(tayamaDeathVoice);
+        if (shooter.m_audio) shooter.m_audio->PlayVoice(tayamaDeathVoice);
         shooter.UnlockGallery(GalleryEntry::Tayama);
         StartPhase(shooter, Stage5Phase::TayamaCollapse, false);
     }

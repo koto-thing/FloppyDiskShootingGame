@@ -587,7 +587,7 @@ void SideScrollingShooter::Stage4Module::PlayDefeatVoice(
     }();
 
     // ランダムに選んだ音声を再生する
-    shooter.m_audio->PlaySE(GameplayRandom::Range(0.0f, 1.0f) < 0.5f ?
+    shooter.m_audio->PlayVoice(GameplayRandom::Range(0.0f, 1.0f) < 0.5f ?
         botaVoice : mochiVoice);
 }
 

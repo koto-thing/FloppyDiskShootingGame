@@ -15,7 +15,6 @@
 #include "Domain/ValueObjects/SceneType.h"
 #include "Infrastructure/ExternalServices/Win32WindowService.h"
 #include "Infrastructure/ExternalServices/AudioService.h"
-#include "Infrastructure/ExternalServices/MMLData.h"
 #include "Infrastructure/Repositories/SettingsRepository.h"
 #include "Infrastructure/ExternalServices/D3D12RenderingService.h"
 #include "Engine/Graphics/Renderer.h"
@@ -146,9 +145,6 @@ int WINAPI wWinMain(
         params.startFrequency = sound == Button::ClickSound::Confirm ? 0.65f : 0.18f;
         audio.PlaySE(params);
     });
-
-    // タイトル画面のBGMを再生する
-    audio.PlayMMLBGM(std::string(MMLData::title), true);
 
     // シーンマネージャを作成
     SceneManager<SceneType, SceneSharedData> app;

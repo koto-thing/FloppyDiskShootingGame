@@ -1,0 +1,16 @@
+
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(551,5): warning MSB8028: 中間ディレクトリ (D:/Pandd/FloppyDiskShootingGame/Temp/AudioPackedTestsObj/) に別のプロジェクト (FloppyEngine.Tests.vcxproj) と共有されているファイルが含まれています。これにより、クリーンしてリビルド動作が適切に行われない可能性があります。 [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\Temp\AudioPackedTests\FloppyEngine.lib
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(551,5): warning MSB8028: 中間ディレクトリ (D:/Pandd/FloppyDiskShootingGame/Temp/AudioPackedTestsObj/) に別のプロジェクト (FloppyEngine.vcxproj) と共有されているファイルが含まれています。これにより、クリーンしてリビルド動作が適切に行われない可能性があります。 [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.Tests.vcxproj]
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  AudioService.cpp
+  PackedAudioSamples.cpp
+  SynthWaveGenerator.cpp
+  VoiceDpcmDecoderTests.cpp
+  WavSamplesTests.cpp
+  コードを生成中...
+  FloppyEngine.lib(Time.obj) : MSIL .netmodule または /GL を伴ってコンパイルされたモジュールが見つかりました。/LTCG を使用して再開始してください。リンカーのパフォーマンスを向上させるためには、コマンドラインに /LTCG を追加してください。
+  コード生成しています。
+  コード生成が終了しました。
+  FloppyEngine.Tests.vcxproj -> D:\Pandd\FloppyDiskShootingGame\Temp\AudioPackedTests\FloppyEngine.Tests.exe

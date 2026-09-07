@@ -1795,7 +1795,7 @@ bool SideScrollingShooter::Stage3Module::HandleBossDefeat(
     // RYOTAの撃破音声を圧縮データからPCMへ復号して再生する
     static const auto ryotaDeathVoice =
         VoiceCodec::DecodeForAudioService(VoiceSamples::ryotaDeath);
-    if (shooter.m_audio) shooter.m_audio->PlaySE(ryotaDeathVoice);
+    if (shooter.m_audio) shooter.m_audio->PlayVoice(ryotaDeathVoice);
     return true;
 }
 

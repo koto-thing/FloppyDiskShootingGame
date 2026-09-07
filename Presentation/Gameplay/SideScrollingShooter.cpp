@@ -506,8 +506,8 @@ void SideScrollingShooter::Tick() {
             MissionBannerDisplayFrames);
         if (!m_tutorialMode && m_audio) {
             const int elapsedFrames = MissionBannerDisplayFrames - m_missionStartTimer;
-            if (elapsedFrames == 0) m_audio->PlaySE(MissionVoice());
-            else if (elapsedFrames == MissionStartSecondVoiceFrame) m_audio->PlaySE(StartVoice());
+            if (elapsedFrames == 0) m_audio->PlayVoice(MissionVoice());
+            else if (elapsedFrames == MissionStartSecondVoiceFrame) m_audio->PlayVoice(StartVoice());
         }
         --m_missionStartTimer;
         return;
@@ -530,8 +530,8 @@ void SideScrollingShooter::Tick() {
             ClearWaitFrames);
         if (!m_tutorialMode && m_audio && m_clearTimer > 0 && m_clearTimer <= ClearWaitFrames) {
             const int elapsedFrames = ClearWaitFrames - m_clearTimer;
-            if (elapsedFrames == 0) m_audio->PlaySE(SuspectVoice());
-            else if (elapsedFrames == MissionClearSecondVoiceFrame) m_audio->PlaySE(ArrestedVoice());
+            if (elapsedFrames == 0) m_audio->PlayVoice(SuspectVoice());
+            else if (elapsedFrames == MissionClearSecondVoiceFrame) m_audio->PlayVoice(ArrestedVoice());
         }
         StageDispatch::TickBossDefeat(*this);
         TickExplosions();
@@ -1164,7 +1164,7 @@ void SideScrollingShooter::DamagePlayer() {
     if (m_playerDestructionTimer > 0) return;
 
     // 被弾成立と同時に撃破音声を開始する
-    if (m_audio) m_audio->PlaySE(RandomMomijiDeathVoice());
+    if (m_audio) m_audio->PlayVoice(RandomMomijiDeathVoice());
     if (m_stageNumber == 4) Stage4Module::PlayDefeatVoice(*this);
 
     // 敵撃破と同じ破壊爆発を自機位置へ生成してから復帰を待つ

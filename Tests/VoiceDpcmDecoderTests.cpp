@@ -32,6 +32,40 @@ bool HasAudibleEdges(const std::vector<std::int16_t>& pcm, std::uint32_t sampleR
  * @return なし
  */
 void RunVoiceDpcmDecoderTests() {
+    // 空入力・無効レート・単一点・等倍変換でも境界を安全に扱う
+    assert(VoiceCodec::ResampleCubic({}, 6000, 44100).empty());
+    assert(VoiceCodec::ResampleCubic({1234}, 0, 44100).empty());
+    assert(VoiceCodec::ResampleCubic({1234}, 6000, 0).empty());
+    assert(VoiceCodec::ResampleCubic({1234}, 6000, 12000) ==
+        std::vector<std::int16_t>({1234, 1234}));
+    assert(VoiceCodec::ResampleCubic({-32768, 32767}, 6000, 6000) ==
+        std::vector<std::int16_t>({-32768, 32767}));
+
+    // 既知の正弦波で線形補間より復元誤差が小さいことを確認する
+    constexpr double Pi = 3.14159265358979323846;
+    std::vector<std::int16_t> tone(600);
+    for (std::size_t i = 0; i < tone.size(); ++i) {
+        tone[i] = static_cast<std::int16_t>(std::lround(12000 * std::sin(2 * Pi * i / 10)));
+    }
+    const auto upsampled = VoiceCodec::ResampleCubic(tone, 6000, 44100);
+    assert(upsampled.size() == 4410);
+    double cubicError = 0;
+    double linearError = 0;
+    for (std::size_t i = 20; i + 20 < upsampled.size(); ++i) {
+        const double position = i * 6000.0 / 44100;
+        const auto left = static_cast<std::size_t>(position);
+        const double linear = std::lerp(static_cast<double>(tone[left]),
+            static_cast<double>(tone[left + 1]), position - left);
+        const double ideal = 12000 * std::sin(2 * Pi * position / 10);
+        cubicError += std::pow(upsampled[i] - ideal, 2);
+        linearError += std::pow(linear - ideal, 2);
+    }
+    assert(cubicError < linearError * 0.1);
+
+    // 補間のオーバーシュートを16bit範囲へ飽和させる
+    const auto peaks = VoiceCodec::ResampleCubic({-32768, 32767, 32767, -32768}, 6000, 12000);
+    assert(peaks[3] == 32767);
+
     const std::vector<std::int16_t> source =
         VoiceCodec::DecodeImaAdpcm(VoiceSamples::momijiDeath);
     const std::vector<std::int16_t> plain =
@@ -98,5 +132,8 @@ void RunVoiceDpcmDecoderTests() {
     }));
     assert(!radio.empty());
     assert(radio.size() == plain.size());
+    // 短い端部フェードで発声を残したまま開始・終了の段差をなくす
+    assert(plain.front() == 0 && plain.back() == 0);
+    assert(HasAudibleEdges(plain, 44100));
     for (const std::int16_t value : radio) assert(value % 256 == 0);
 }

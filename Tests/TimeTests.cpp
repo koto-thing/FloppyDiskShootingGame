@@ -27,6 +27,7 @@ void RunStage4WeaponDroneViewTests();
 void RunStage5ModelViewTests();
 void RunVoiceDpcmDecoderTests();
 void RunWavSamplesTests();
+void RunAudioServiceTests();
 #include <thread>
 
 namespace {
@@ -186,9 +187,13 @@ int main()
 {
     // assert失敗時にWindowsエラー報告を起動せず、テストプロセスを直ちに終了する
     _set_abort_behavior(0, _WRITE_ABORT_MSG | _CALL_REPORTFAULT);
+    _set_error_mode(_OUT_TO_STDERR);
 
     try {
+        std::cout << "Checking sample generation" << std::endl;
         RunWavSamplesTests();
+        std::cout << "Checking audio output" << std::endl;
+        RunAudioServiceTests();
         InitializeResetsState();
         BeginFrameUpdatesScaledAndUnscaledTime();
         PauseStopsScaledTimeButNotUnscaledTime();

@@ -1,0 +1,526 @@
+{
+  "original_bytes": 132912,
+  "groups": {
+    "instruments": {
+      "count": 40,
+      "bytes": 71079
+    },
+    "voices": {
+      "count": 14,
+      "bytes": 61833
+    }
+  },
+  "rows": [
+    {
+      "codec": "zlib-9",
+      "individual_bytes": 113323,
+      "instruments": 56013,
+      "voices": 56339,
+      "separate_bytes": 112352,
+      "combined_bytes": 113009,
+      "saved_bytes": 19903,
+      "saved_percent": 14.97,
+      "decode_ms_median": 0.485
+    },
+    {
+      "codec": "bzip2-9",
+      "individual_bytes": 123611,
+      "instruments": 53630,
+      "voices": 57402,
+      "separate_bytes": 111032,
+      "combined_bytes": 114180,
+      "saved_bytes": 18732,
+      "saved_percent": 14.09,
+      "decode_ms_median": 5.561
+    },
+    {
+      "codec": "LZMA2-XZ-9",
+      "individual_bytes": 117156,
+      "instruments": 52036,
+      "voices": 53968,
+      "separate_bytes": 106004,
+      "combined_bytes": 106164,
+      "saved_bytes": 26748,
+      "saved_percent": 20.12,
+      "decode_ms_median": 4.797
+    },
+    {
+      "codec": "MSZIP",
+      "individual_bytes": 114601,
+      "instruments": 56259,
+      "voices": 56070,
+      "separate_bytes": 112329,
+      "combined_bytes": 113174,
+      "saved_bytes": 19738,
+      "saved_percent": 14.85,
+      "decode_ms_median": 0.701
+    },
+    {
+      "codec": "XPRESS",
+      "individual_bytes": 133931,
+      "instruments": 71107,
+      "voices": 61861,
+      "separate_bytes": 132968,
+      "combined_bytes": 132940,
+      "saved_bytes": -28,
+      "saved_percent": -0.02,
+      "decode_ms_median": 0.011
+    },
+    {
+      "codec": "XPRESS-HUFF",
+      "individual_bytes": 122899,
+      "instruments": 57972,
+      "voices": 56198,
+      "separate_bytes": 114170,
+      "combined_bytes": 115350,
+      "saved_bytes": 17562,
+      "saved_percent": 13.21,
+      "decode_ms_median": 0.478
+    },
+    {
+      "codec": "LZMS",
+      "individual_bytes": 124329,
+      "instruments": 56738,
+      "voices": 56792,
+      "separate_bytes": 113530,
+      "combined_bytes": 113864,
+      "saved_bytes": 19048,
+      "saved_percent": 14.33,
+      "decode_ms_median": 2.18
+    }
+  ],
+  "manifest": [
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_AcousticGrandPiano",
+      "offset": 0,
+      "size": 1584,
+      "sha256": "2254af2e88bcb2423084f9c5298c242af144237c87f7a3d739b4100c971c57a2"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_Agogo",
+      "offset": 1584,
+      "size": 2959,
+      "sha256": "e139c027769ce8fe50f85065f4ba638e7e561e44aa0fa92b737e117e4f74b61e"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_BlownBottle",
+      "offset": 4543,
+      "size": 887,
+      "sha256": "fe83a67e46413911077d92388a1afc0988d0505358a38b8d7949879f77b3cdb5"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_BrassSection",
+      "offset": 5430,
+      "size": 1617,
+      "sha256": "6ec28c80a5b76cc69b338c183de7e6df6a64e28fdee705c31670bef01308f484"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_ChurchOrgan",
+      "offset": 7047,
+      "size": 1029,
+      "sha256": "7d8abf47303b06269662316abe76575de8659d3a83092fcc5cc329b667c7b716"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_Clavi",
+      "offset": 8076,
+      "size": 1178,
+      "sha256": "a8bdd7360370bfe862e82967774f6f66f027f14c444e4d75cf64c478c658d71f"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_Crash",
+      "offset": 9254,
+      "size": 6044,
+      "sha256": "6e57b280112b0eb33119e2354f41e2d22266239ba5fbf93080f7fb628a88f422"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_DistortionGuitar",
+      "offset": 15298,
+      "size": 3538,
+      "sha256": "a477d7cc15410dadfb5dea6145c8e804f37685515af4fa6fdb13029296ae4af7"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_DrawbarOrgan",
+      "offset": 18836,
+      "size": 1666,
+      "sha256": "09fcccca2faee6adb3433e75339535aa74bd9e84ac36f4f0c98ff65a782237d9"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_Dulcimer",
+      "offset": 20502,
+      "size": 1251,
+      "sha256": "eb36199865d2e9ab0628a5d51d0ea543b1d95e73747ca89bd2aa69725aa94a27"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_ElectricPiano1",
+      "offset": 21753,
+      "size": 428,
+      "sha256": "f2facbc1558359781fcfcbf3d9d961599c364231b5b91142e13c7d6097ccbc6e"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_FrenchHorn",
+      "offset": 22181,
+      "size": 1184,
+      "sha256": "b5e4aebd890cdfe2209ed48380e729f3b5a53f8d852c4a812f7434ff81a0027a"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_GuitarFretNoise",
+      "offset": 23365,
+      "size": 804,
+      "sha256": "5508bc66dbcd635c77ecb604c5e3726453a68fd34aaab026fc74ed3adda7f4d4"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_Harpsichord",
+      "offset": 24169,
+      "size": 1246,
+      "sha256": "0c96b1157b2538dc10bd73c3887f90cdff2998cc9246eeaa8f08739a3de635bc"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_HiHatOpen",
+      "offset": 25415,
+      "size": 2019,
+      "sha256": "a57568d8fab052d317b1088d64883e4bb94000ad4b0de60df4380f34949272f5"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_Kick",
+      "offset": 27434,
+      "size": 2001,
+      "sha256": "cccb189030a4c91d8f9fbfc2429346724920250e78aef6232da082168c2ce01a"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_LeadCalliope",
+      "offset": 29435,
+      "size": 1832,
+      "sha256": "17a241ea3ccf5cc5c41ad50aaf4e1ba9a91f16588f47eba227fa5db0354b30c1"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_LeadCharang",
+      "offset": 31267,
+      "size": 2187,
+      "sha256": "5ea703482104fd0f068cc413ae51544edfd8df695751456eaccb947267f9db45"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_LeadFifths",
+      "offset": 33454,
+      "size": 3215,
+      "sha256": "66e43fa3ac9b38f4020f82280cc7a28b01bcb084fb2d876d7b2a6927bc429928"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_LeadSawtooth",
+      "offset": 36669,
+      "size": 2170,
+      "sha256": "81fbf75135130489bf8e162f0497c1b45115cdd2eee608d6eeaef660066afd5b"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_LeadSquare",
+      "offset": 38839,
+      "size": 2516,
+      "sha256": "28653ead07a4aae75490ac2476ed28a0274e6f911593bf96500027219f804e8c"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_MelodicTom",
+      "offset": 41355,
+      "size": 3201,
+      "sha256": "e406b2cc1c99deb08d48fb332ba755bb10a6a013ad01466ad9e194aa4ce1098b"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_MusicBox",
+      "offset": 44556,
+      "size": 1102,
+      "sha256": "d4b3146748498ca525f41a6685228e2d71d832b1611bc564c540d81eb8be0f6e"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_NylonAcousticGuitar",
+      "offset": 45658,
+      "size": 1247,
+      "sha256": "bed19ee8c0e988c543d9466d386bc10177f643d585590045194525a3104e162b"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_Ocarina",
+      "offset": 46905,
+      "size": 2976,
+      "sha256": "7bdcb1b02cda7bed4ea9e88ca74527f0da2653ed686cbdcb5ba7e77ef6d86309"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_OverdrivenGuitar",
+      "offset": 49881,
+      "size": 2804,
+      "sha256": "87a889c83b21805f9514d2c2f0cb21501697c0177b1e681360b9717b2e896ee4"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_RockOrgan",
+      "offset": 52685,
+      "size": 1846,
+      "sha256": "04ec7a7b2a8ca2f83af78b398141d611cda040f67459e547223a1f7db65d8034"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_Snare",
+      "offset": 54531,
+      "size": 1201,
+      "sha256": "e298390c17795b0b2d1e6bc3d414c355a7f192874328e26a51bc443242f03ed6"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_StringEnsemble1",
+      "offset": 55732,
+      "size": 1042,
+      "sha256": "9fb3258a06856a5615f8531fccbef3aa68367e52f7535aeb77116d7d6a9a5702"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_SynthDrum",
+      "offset": 56774,
+      "size": 1601,
+      "sha256": "d8d582968647246430e89c9b3cc302f3bdbb3d2f8d8198240f2ee69693669e04"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_Tambourine",
+      "offset": 58375,
+      "size": 1601,
+      "sha256": "10841679c625f9f98dfb7098ea9079c78cb0141189a51d8968aee9b68f163ab0"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_TomHigh",
+      "offset": 59976,
+      "size": 1202,
+      "sha256": "07c3cad70bf2e9bcf3d185b22767e9461c2b2f64a747d02da566d8106b99ba32"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_TomLow",
+      "offset": 61178,
+      "size": 1601,
+      "sha256": "4f5b29e40406692fe04b37872825c1fc6c55720c6928fbb30f2247b3a82a94a0"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_TomMid",
+      "offset": 62779,
+      "size": 1401,
+      "sha256": "3fe392735f1fa466a81f9837c73e7a7ec0ef3e31e95d967a25f66bb8f0796a5d"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_Trumpet",
+      "offset": 64180,
+      "size": 1035,
+      "sha256": "e2d2ad8a59dfe060a68e5ca34b623c3600a56196e87b0b7120e5a414ace9623f"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_Woodblock",
+      "offset": 65215,
+      "size": 906,
+      "sha256": "632a03f8a16f549a6a2e863377ce6c32181f5dd18628ead49cf72961effd9639"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_ChoirAahs",
+      "offset": 66121,
+      "size": 1005,
+      "sha256": "4408872e82296fbd0db9cf3c792cdbb1afb1cce2a0eb02a909d4628bb1779144"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_Oboe",
+      "offset": 67126,
+      "size": 889,
+      "sha256": "95a9c462e163fd9bfa25d2f6a8e675621a189cfd19c00524b883b7b6cec1d6a8"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_SynthBass1",
+      "offset": 68015,
+      "size": 733,
+      "sha256": "ad0b9d0bfae02a07a6a108af232494a48b1937e3068a062a2837039de6075dc4"
+    },
+    {
+      "group": "instruments",
+      "source": "Infrastructure/ExternalServices/WavSamplesSource.h",
+      "name": "sample_Vibraphone",
+      "offset": 68748,
+      "size": 2331,
+      "sha256": "773e219c11bc21cb3fe1386950438d365ff3e5b6e736300756e47937b3a9b5c9"
+    },
+    {
+      "group": "voices",
+      "source": "Presentation/Gameplay/Voices/VoiceSamplesSource.h",
+      "name": "tayamaDeathData",
+      "offset": 71079,
+      "size": 8683,
+      "sha256": "6ee0b7aadc1d8db0d421e3d29703b4b763a5207d614ddfd335451f58e7730974"
+    },
+    {
+      "group": "voices",
+      "source": "Presentation/Gameplay/Voices/VoiceSamplesSource.h",
+      "name": "eastsourceDeathData",
+      "offset": 79762,
+      "size": 8158,
+      "sha256": "08fcc2f87b13cbee8507ffc32eadefa8826c50fc9a5bb931d14e64b3a6c5ab96"
+    },
+    {
+      "group": "voices",
+      "source": "Presentation/Gameplay/Voices/VoiceSamplesSource.h",
+      "name": "momijiDeathData",
+      "offset": 87920,
+      "size": 5887,
+      "sha256": "7819b4ffc020ba3bb8e37eb4a9056dc190fa81f329261492207a45081c377b2e"
+    },
+    {
+      "group": "voices",
+      "source": "Presentation/Gameplay/Voices/VoiceSamplesSource.h",
+      "name": "missionData",
+      "offset": 93807,
+      "size": 1839,
+      "sha256": "196be035f89413839dbfe54b4de9b160322a9237bd4bae706e3e1b1dac15ded8"
+    },
+    {
+      "group": "voices",
+      "source": "Presentation/Gameplay/Voices/VoiceSamplesSource.h",
+      "name": "startData",
+      "offset": 95646,
+      "size": 1573,
+      "sha256": "ae1fbc662e3e741c84e52bbe29ae9eb2e1702e310e3ba00cea408b18adcb4027"
+    },
+    {
+      "group": "voices",
+      "source": "Presentation/Gameplay/Voices/VoiceSamplesSource.h",
+      "name": "arrestedData",
+      "offset": 97219,
+      "size": 2481,
+      "sha256": "2f3e3c2a90daadb2d5cf97a7e928a25e01ed6aad26a23d307ba9e84f177b8194"
+    },
+    {
+      "group": "voices",
+      "source": "Presentation/Gameplay/Voices/VoiceSamplesSource.h",
+      "name": "suspectData",
+      "offset": 99700,
+      "size": 2002,
+      "sha256": "2ea158db762a57ca63837b65a0a1565e9dea922c17625ed4cc2b5e9358c98580"
+    },
+    {
+      "group": "voices",
+      "source": "Presentation/Gameplay/Voices/VoiceSamplesSource.h",
+      "name": "kotoDeathData",
+      "offset": 101702,
+      "size": 6006,
+      "sha256": "cd0ac548ed9dbb3eb4819a32fdf5bc9e895d1abf3dae5f04f5e739f98a757110"
+    },
+    {
+      "group": "voices",
+      "source": "Presentation/Gameplay/Voices/VoiceSamplesSource.h",
+      "name": "ryotaDeathData",
+      "offset": 107708,
+      "size": 2016,
+      "sha256": "ba30f462913f062dd8545369671fa2198a7edcd406050d32b02f3397a222decc"
+    },
+    {
+      "group": "voices",
+      "source": "Presentation/Gameplay/Voices/VoiceSamplesSource.h",
+      "name": "lumiDeathData",
+      "offset": 109724,
+      "size": 6586,
+      "sha256": "fd3d9319217823ccb144bea3fb76e57f983976487bd441647e9a8f6787e630d9"
+    },
+    {
+      "group": "voices",
+      "source": "Presentation/Gameplay/Voices/VoiceSamplesSource.h",
+      "name": "botamochiDeathBotaData",
+      "offset": 116310,
+      "size": 4770,
+      "sha256": "1c06e2e8527db8c7984592be90a2c2044808dcdf1046c538156183fc73d79fcc"
+    },
+    {
+      "group": "voices",
+      "source": "Presentation/Gameplay/Voices/VoiceSamplesSource.h",
+      "name": "botamochiDeathMochiData",
+      "offset": 121080,
+      "size": 4740,
+      "sha256": "f9c0241900624f454f6c34a4f353b080800e8748dd35e2ccaeb7fff53d326358"
+    },
+    {
+      "group": "voices",
+      "source": "Presentation/Gameplay/Voices/VoiceSamplesSource.h",
+      "name": "momijiDeathRattle2Data",
+      "offset": 125820,
+      "size": 4530,
+      "sha256": "6b9e5102993c7e14b9b5401ddd742700bd3e010a01872750387bb65ce8a9487f"
+    },
+    {
+      "group": "voices",
+      "source": "Presentation/Gameplay/Voices/VoiceSamplesSource.h",
+      "name": "momijiDeathRattle5Data",
+      "offset": 130350,
+      "size": 2562,
+      "sha256": "bc9a046c317042c0d667a406f035e5ed52b7b9e3690a00dab513711096d20317"
+    }
+  ]
+}

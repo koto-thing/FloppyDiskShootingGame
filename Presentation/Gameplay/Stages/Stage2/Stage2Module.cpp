@@ -969,7 +969,7 @@ bool SideScrollingShooter::Stage2Module::HandleBossDefeat(
     // LUMIの撃破音声を圧縮データからPCMへ復号して再生する
     static const auto lumiDeathVoice =
         VoiceCodec::DecodeForAudioService(VoiceSamples::lumiDeath);
-    if (shooter.m_audio) shooter.m_audio->PlaySE(lumiDeathVoice);
+    if (shooter.m_audio) shooter.m_audio->PlayVoice(lumiDeathVoice);
     PlayDefeatSound(shooter, false);
     return true;
 }

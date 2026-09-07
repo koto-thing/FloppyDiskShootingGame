@@ -1,6 +1,7 @@
 #include "SynthWaveGenerator.h"
 #include "WavSamples.h"
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <fstream>
@@ -9,6 +10,9 @@
 #include <random>
 #include <string>
 #include <vector>
+#ifdef FLOPPY_AUDIO_TESTS
+#include <cassert>
+#endif
 
 namespace Audio {
 
@@ -139,7 +143,90 @@ struct WavSample {
     bool isOneShot = false;
     int loopStart = 0;
     int loopEnd = 0;
+    mutable std::map<std::pair<int, bool>, std::vector<float>> playbackCache;
+
+    /**
+     * @brief ループを接続し、移調先のナイキスト周波数に合わせた波形を取得する
+     * @param step 出力1サンプルあたりに進む入力サンプル数
+     * @param loop ループ再生する場合true
+     * @return 元波形またはキャッシュされた再生用波形
+     */
+    const std::vector<float>& GetPlaybackData(double step, bool loop) const {
+        if (step <= 1.0 && !loop) return data;
+        // ponytail: フィルターは移調比1/16刻みで共有し、より厳密な帯域が必要なら刻みを細かくする
+        const int rateKey = static_cast<int>(std::ceil(std::max(1.0, step) * 16));
+        const auto key = std::make_pair(rateKey, loop);
+        if (const auto found = playbackCache.find(key); found != playbackCache.end()) return found->second;
+
+        // 入力は保持し、最大4msのクロスフェードをループ長を変えずに適用する
+        std::vector<float> prepared = data;
+        if (loop) {
+            const int fade = std::min({sampleRate / 250, (loopEnd - loopStart) / 4, loopStart});
+            for (int i = 0; i < fade; ++i) {
+                prepared[loopEnd - fade + i] = std::lerp(data[loopEnd - fade + i],
+                    data[loopStart - fade + i], static_cast<float>(i + 1) / fade);
+            }
+        }
+
+        // 高い移調だけ事前に63タップの窓付きsincで帯域制限し、発音中の計算を増やさない
+        if (rateKey > 16) {
+            constexpr int Radius = 31;
+            std::array<double, Radius * 2 + 1> kernel{};
+            const double cutoff = 0.9 * 16 / rateKey;
+            double sum = 0;
+            for (int tap = -Radius; tap <= Radius; ++tap) {
+                const double sinc = tap == 0 ? cutoff : std::sin(std::numbers::pi * cutoff * tap) / (std::numbers::pi * tap);
+                const double window = 0.42 + 0.5 * std::cos(std::numbers::pi * tap / Radius) +
+                    0.08 * std::cos(2 * std::numbers::pi * tap / Radius);
+                kernel[tap + Radius] = sinc * window;
+                sum += kernel[tap + Radius];
+            }
+            const auto input = prepared;
+            for (int i = 0; i < static_cast<int>(input.size()); ++i) {
+                double value = 0;
+                for (int tap = -Radius; tap <= Radius; ++tap) {
+                    int index = i + tap;
+                    // 持続部分は周期境界で畳み込み、アタックとワンショットは端点を延長する
+                    if (loop && i >= loopStart && i < loopEnd) {
+                        const int length = loopEnd - loopStart;
+                        index = loopStart + ((index - loopStart) % length + length) % length;
+                    }
+                    value += input[std::clamp(index, 0, static_cast<int>(input.size()) - 1)] * kernel[tap + Radius];
+                }
+                prepared[i] = static_cast<float>(value / sum);
+            }
+        }
+        return playbackCache.emplace(key, std::move(prepared)).first->second;
+    }
 };
+
+#ifdef FLOPPY_AUDIO_TESTS
+/**
+ * @brief 既知の二音を使い、移調時の帯域制限と原波形の保持を検証する
+ * @return なし
+ */
+void RunSamplePlaybackChecks() {
+    // 2倍速で折り返す高域だけを除去し、通過帯域の音量を維持する
+    WavSample sample;
+    for (int i = 0; i < 1200; ++i) {
+        sample.data.push_back(static_cast<float>(std::sin(2 * std::numbers::pi * 0.1 * i) +
+            std::sin(2 * std::numbers::pi * 0.4 * i)));
+    }
+    const auto original = sample.data;
+    const auto& filtered = sample.GetPlaybackData(2, false);
+    double lowAmplitude = 0;
+    double highAmplitude = 0;
+    for (int i = 100; i < 1100; ++i) {
+        lowAmplitude += filtered[i] * std::sin(2 * std::numbers::pi * 0.1 * i) / 500;
+        highAmplitude += filtered[i] * std::sin(2 * std::numbers::pi * 0.4 * i) / 500;
+    }
+    assert(std::abs(lowAmplitude - 1) < 0.01);
+    assert(std::abs(highAmplitude) < 0.01);
+    assert(sample.data == original);
+    assert(&filtered == &sample.GetPlaybackData(2, false));
+    assert(&sample.data == &sample.GetPlaybackData(1, false));
+}
+#endif
 
 class WavSampleManager {
 public:
@@ -526,8 +613,8 @@ SynthWaveGenerator::SynthWaveGenerator() {
     customProvider_ = std::make_shared<SFCPCMSampleProvider>();
 }
 
-std::vector<int16_t> SynthWaveGenerator::GeneratePCM(const MMLSequence& sequence, int sampleRate) {
-    if (sequence.tracks.empty() || sequence.maxDurationSec <= 0.0) {
+std::vector<int16_t> SynthWaveGenerator::GeneratePCM(const MMLSequence& sequence, int sampleRate, bool stereo, bool normalizeBgm) {
+    if (sampleRate <= 0 || sequence.tracks.empty() || sequence.maxDurationSec <= 0.0) {
         return {};
     }
 
@@ -536,7 +623,8 @@ std::vector<int16_t> SynthWaveGenerator::GeneratePCM(const MMLSequence& sequence
         return {};
     }
 
-    std::vector<float> mixBuffer(totalSamples, 0.0f);
+    const size_t channels = stereo ? 2 : 1;
+    std::vector<float> mixBuffer(totalSamples * channels, 0.0f);
     int fadeSamples = std::max(1, static_cast<int>(fadeTimeSec_ * sampleRate));
     auto& sampleMgr = WavSampleManager::Get();
 
@@ -551,6 +639,15 @@ std::vector<int16_t> SynthWaveGenerator::GeneratePCM(const MMLSequence& sequence
             if (startSample >= totalSamples || durationSamples == 0) {
                 continue;
             }
+
+            // 主旋律・低音・打楽器を中央に残し、他のトラックを控えめに左右へ配置する
+            constexpr float Pans[] = {0.0f, -0.2f, 0.2f, -0.35f, 0.35f};
+            const bool bass = event.waveType == WaveformType::Custom && event.customWaveId >= 32 && event.customWaveId <= 39;
+            const float pan = stereo && !event.isDrum && !bass && event.frequency >= 130 ? Pans[trackIndex % 5] : 0;
+            const auto addSample = [&](size_t frame, float value) {
+                mixBuffer[frame * channels] += value * (1 - pan);
+                if (stereo) mixBuffer[frame * channels + 1] += value * (1 + pan);
+            };
 
             // 1. WAV サンプルによる PCM 再生 (Custom 音色 または ドラム)
             if (event.waveType == WaveformType::Custom || event.isDrum) {
@@ -567,46 +664,61 @@ std::vector<int16_t> SynthWaveGenerator::GeneratePCM(const MMLSequence& sequence
                     bool oneShot = event.isDrum || wav->isOneShot;
                     float rootFreq = 440.0f * std::pow(2.0f, (wav->rootMidi - 69) / 12.0f);
                     float pitchRatio = event.isDrum ? 1.0f : (event.frequency / rootFreq);
-                    float step = pitchRatio * (static_cast<float>(wav->sampleRate) / static_cast<float>(sampleRate));
+                    double step = pitchRatio * (static_cast<double>(wav->sampleRate) / sampleRate);
                     if (step <= 0.0f) step = 1.0f;
 
                     size_t playSamples = durationSamples;
                     if (oneShot) {
-                        size_t wavLenInOutput = static_cast<size_t>(static_cast<float>(wav->data.size()) / step) + 1;
-                        playSamples = std::max(durationSamples, wavLenInOutput);
+                        playSamples = static_cast<size_t>(std::ceil(wav->data.size() / static_cast<double>(step)));
                     }
 
                     size_t endSample = std::min(totalSamples, startSample + playSamples);
-                    float pos = 0.0f;
+                    double pos = 0.0;
+                    bool looped = false;
+                    const bool hasLoop = !oneShot && wav->loopEnd > wav->loopStart;
+                    const auto& playbackData = wav->GetPlaybackData(step, hasLoop);
                     int fadeAttack = std::min(fadeSamples, static_cast<int>(durationSamples / 4));
-                    int fadeRelease = std::min(static_cast<int>(0.015f * sampleRate), static_cast<int>(durationSamples / 2));
+                    int fadeRelease = std::min(static_cast<int>((oneShot ? 0.002f : 0.015f) * sampleRate),
+                        static_cast<int>((endSample - startSample) / 2));
 
                     for (size_t s = startSample; s < endSample; ++s) {
                         size_t sampleIndexInNote = s - startSample;
                         float env = 1.0f;
                         if (sampleIndexInNote < static_cast<size_t>(fadeAttack)) {
                             env = static_cast<float>(sampleIndexInNote) / static_cast<float>(fadeAttack);
-                        } else if (!oneShot && sampleIndexInNote > durationSamples - static_cast<size_t>(fadeRelease)) {
-                            size_t rem = durationSamples - sampleIndexInNote;
-                            env = static_cast<float>(rem) / static_cast<float>(fadeRelease);
+                        }
+                        // 実際の再生末尾を0へ落とし、打楽器の終端や曲末の切断音も抑える
+                        const size_t remaining = endSample - 1 - s;
+                        if (remaining < static_cast<size_t>(fadeRelease)) {
+                            env *= static_cast<float>(remaining) / static_cast<float>(fadeRelease);
                         }
 
-                        size_t idx0 = static_cast<size_t>(pos);
-                        size_t idx1 = idx0 + 1;
-                        float frac = pos - static_cast<float>(idx0);
-                        float s0 = (idx0 < wav->data.size()) ? wav->data[idx0] : 0.0f;
-                        float s1 = (idx1 < wav->data.size()) ? wav->data[idx1] : s0;
-                        float wavVal = s0 + frac * (s1 - s0);
+                        // 補間の参照点もループ内へ折り返し、ループ外の波形の混入を防ぐ
+                        const auto readSample = [&](int index) {
+                            if (hasLoop && (index >= wav->loopEnd || (looped && index < wav->loopStart))) {
+                                const int length = wav->loopEnd - wav->loopStart;
+                                index = wav->loopStart + ((index - wav->loopStart) % length + length) % length;
+                            }
+                            return playbackData[std::clamp(index, 0, static_cast<int>(playbackData.size()) - 1)];
+                        };
+                        const int index = static_cast<int>(pos);
+                        const float frac = static_cast<float>(pos - index);
+                        const float p0 = readSample(index - 1);
+                        const float p1 = readSample(index);
+                        const float p2 = readSample(index + 1);
+                        const float p3 = readSample(index + 2);
+                        // 帯域制限済みの波形を4点補間する
+                        const float wavVal = p1 + 0.5f * frac * (p2 - p0 + frac *
+                            (2 * p0 - 5 * p1 + 4 * p2 - p3 + frac * (3 * (p1 - p2) + p3 - p0)));
 
-                        mixBuffer[s] += wavVal * event.volume * env * 0.7f;
+                        addSample(s, wavVal * event.volume * env * 0.7f);
 
                         pos += step;
-                        if (!oneShot) {
-                            if (wav->loopEnd > wav->loopStart && pos >= static_cast<float>(wav->loopEnd)) {
+                        if (hasLoop) {
+                            if (pos >= static_cast<float>(wav->loopEnd)) {
                                 float loopLen = static_cast<float>(wav->loopEnd - wav->loopStart);
-                                while (pos >= static_cast<float>(wav->loopEnd) && loopLen > 0.0f) {
-                                    pos -= loopLen;
-                                }
+                                pos = wav->loopStart + std::fmod(pos - wav->loopStart, loopLen);
+                                looped = true;
                             }
                         } else {
                             if (pos >= static_cast<float>(wav->data.size())) {
@@ -632,9 +744,11 @@ std::vector<int16_t> SynthWaveGenerator::GeneratePCM(const MMLSequence& sequence
                 float env = 1.0f;
                 if (sampleIndexInNote < static_cast<size_t>(noteFadeSamples)) {
                     env = static_cast<float>(sampleIndexInNote) / static_cast<float>(noteFadeSamples);
-                } else if (sampleIndexInNote > durationSamples - static_cast<size_t>(noteFadeSamples)) {
-                    size_t rem = durationSamples - sampleIndexInNote;
-                    env = static_cast<float>(rem) / static_cast<float>(noteFadeSamples);
+                }
+                // 合成音も最終サンプルまでに無音へ戻す
+                const size_t remaining = endSample - 1 - s;
+                if (remaining < static_cast<size_t>(noteFadeSamples)) {
+                    env *= static_cast<float>(remaining) / static_cast<float>(noteFadeSamples);
                 }
 
                 if (event.waveType == WaveformType::Noise) {
@@ -646,7 +760,7 @@ std::vector<int16_t> SynthWaveGenerator::GeneratePCM(const MMLSequence& sequence
                     event.waveType, event.customWaveId, phase, event.frequency, sampleRate, lfsr, timeInNoteSec, trackIndex
                 );
 
-                mixBuffer[s] += oscSample * event.volume * env;
+                addSample(s, oscSample * event.volume * env);
 
                 phase += phaseIncrement;
                 if (phase >= 1.0f) {
@@ -657,14 +771,46 @@ std::vector<int16_t> SynthWaveGenerator::GeneratePCM(const MMLSequence& sequence
         trackIndex++;
     }
 
-    std::vector<int16_t> pcmBuffer(totalSamples);
+    std::vector<int16_t> pcmBuffer(mixBuffer.size());
     float trackCountFactor = std::sqrt(static_cast<float>(std::max<size_t>(1, sequence.tracks.size())));
     float scale = 0.55f / trackCountFactor;
 
-    for (size_t i = 0; i < totalSamples; ++i) {
+    // 曲全体に同じ倍率を掛け、フレーズの強弱と左右の音量比を保つ
+    if (normalizeBgm) {
+        // ponytail: 400ms区間のRMSで簡易補正する、聴感の厳密な一致が必要ならLUFS計測へ置換する
+        const size_t blockSize = std::max<size_t>(1, sampleRate * 2 / 5) * channels;
+        std::vector<double> energies;
+        double energySum = 0;
+        float peak = 0;
+        for (size_t start = 0; start < mixBuffer.size(); start += blockSize) {
+            const size_t end = std::min(start + blockSize, mixBuffer.size());
+            double energy = 0;
+            for (size_t i = start; i < end; ++i) {
+                energy += static_cast<double>(mixBuffer[i]) * mixBuffer[i];
+                peak = std::max(peak, std::abs(mixBuffer[i]));
+            }
+            energy /= end - start;
+            if (energy > 1e-8) {
+                energies.push_back(energy);
+                energySum += energy;
+            }
+        }
+        // 無音と平均より10dB以上小さい区間を除外し、増幅とピークに上限を設ける
+        if (!energies.empty()) {
+            const double gate = energySum / energies.size() * 0.1;
+            double gatedEnergy = 0;
+            size_t count = 0;
+            for (double energy : energies) {
+                if (energy >= gate) { gatedEnergy += energy; ++count; }
+            }
+            scale = std::min({ 4.0f, static_cast<float>(0.1 / std::sqrt(gatedEnergy / count)), 0.8f / peak });
+        }
+    }
+
+    for (size_t i = 0; i < mixBuffer.size(); ++i) {
         float sample = mixBuffer[i] * scale;
-        sample = std::tanh(sample);
-        pcmBuffer[i] = static_cast<int16_t>(sample * 30000.0f);
+        sample = normalizeBgm ? sample : std::tanh(sample);
+        pcmBuffer[i] = static_cast<int16_t>(sample * (normalizeBgm ? 32767.0f : 30000.0f));
     }
 
     return pcmBuffer;
