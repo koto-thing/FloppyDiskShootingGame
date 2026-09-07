@@ -8,12 +8,15 @@ struct PooledValue {
     bool active = false;
 };
 
+/** @brief テスト条件を検証する */
 void Require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
 }
 
+/** @brief オブジェクトプールの再利用と上限を検証する */
 void RunObjectPoolTests() {
+    // 容量上限までの生成を検証する
     ObjectPool<PooledValue> pool(2);
     Require(pool.Capacity() == 2, "Pool capacity must be fixed");
     PooledValue* first = pool.Spawn();
@@ -24,6 +27,7 @@ void RunObjectPoolTests() {
     Require(pool.Spawn() == nullptr, "Pool must reject spawns at capacity");
     Require(pool.ActiveCount() == 2, "Pool active count must match spawned objects");
 
+    // 無効化した要素の再利用を検証する
     first->active = false;
     PooledValue* reused = pool.Spawn();
     Require(reused == first, "Inactive object must be reused without allocation");

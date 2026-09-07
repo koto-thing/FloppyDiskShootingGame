@@ -35,6 +35,11 @@ public:
         m_factories[key] = []() { return std::make_unique<SceneType>(); };
     }
 
+    /**
+     * @brief 管理対象にシーンを追加する互換エントリーポイント
+     * @tparam SceneType 追加するシーンクラスの型
+     * @param key シーンを識別するためのキー
+     */
     template <typename SceneType>
     void addScene(const Key& key) { AddScene<SceneType>(key); }
     
@@ -46,6 +51,10 @@ public:
         ApplyScene(firstSceneKey);
     }
 
+    /**
+     * @brief 初期シーンを設定する互換エントリーポイント
+     * @param firstSceneKey 最初のシーンの識別キー
+     */
     void init(const Key& firstSceneKey) { Initialize(firstSceneKey); }
 
     /**

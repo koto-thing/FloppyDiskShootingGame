@@ -8,7 +8,7 @@
  */
 class SideScrollingShooter::EnemyBehavior {
 public:
-	// @brief 敵の初期配置候補
+	/** @brief 敵の初期配置候補 */
     // { 2DのX, 3DのX, 上下Y, 3DのZ }
     struct EntryCandidate {
         float sideX = 1.08f;

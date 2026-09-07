@@ -907,7 +907,7 @@ void SideScrollingShooter::InitializeRailObjects() {
             shot.vz = 0.0f;
             continue;
         }
-        /** @brief 2D横移動をレール奥行きの移動量へ変換する */
+        // 2D横移動をレール奥行きの移動量へ変換する
         if (shot.enemy) {
             shot.vz = sideVx * 18.0f;
         }

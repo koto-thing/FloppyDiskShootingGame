@@ -296,6 +296,11 @@ t120@18v12l8u102[dfgcrf<a+r>dfgcra+ad]4[d+f+g+c+rf+<br>d+f+g+c+rba+d+]4,
 @18v3l8r4u25[dfgcrf<a+r>dfgcra+ad]4[d+f+g+c+rf+<br>d+f+g+c+rba+d+]3d+f+g+c+rf+<br>d+f+g+c+rb;
 )MML";
 
+/**
+ * @brief ステージ番号に対応するBGMを取得する
+ * @param stage ステージ番号
+ * @return ステージBGM
+ */
 inline std::string_view GetStageBgm(int stage) {
     switch (stage) {
         case 1: return stage1;
@@ -308,6 +313,11 @@ inline std::string_view GetStageBgm(int stage) {
     }
 }
 
+/**
+ * @brief ステージ番号に対応するボスBGMを取得する
+ * @param stage ステージ番号
+ * @return ボスBGM
+ */
 inline std::string_view GetBossBgm(int stage) {
     switch (stage) {
         case 1: return boss1;
@@ -320,9 +330,23 @@ inline std::string_view GetBossBgm(int stage) {
     }
 }
 
+/**
+ * @brief タイトルBGMを取得する
+ * @return タイトルBGM
+ */
 inline std::string_view GetTitleBgm() { return title; }
+
+/**
+ * @brief エンディングBGMを取得する
+ * @return エンディングBGM
+ */
 inline std::string_view GetEndingBgm() { return ending; }
 
+/**
+ * @brief 名前に対応するMMLを取得する
+ * @param name MML名
+ * @return 対応するMML、存在しない場合は空の文字列
+ */
 inline std::string_view GetByName(std::string_view name) {
     if (name == "title") return title;
     if (name == "ending") return ending;

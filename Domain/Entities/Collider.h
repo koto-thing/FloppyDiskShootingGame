@@ -7,6 +7,10 @@
 
 class Collider : public Component {
 public:
+    /**
+     * @brief コライダーを生成する
+     * @param type コライダーの種類
+     */
     explicit Collider(ColliderType type)
         : m_type(type) {
         

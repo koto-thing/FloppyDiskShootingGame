@@ -1,6 +1,7 @@
 #include "Camera3D.h"
 #include <cmath>
 
+/** @brief 指定した位置へ3Dカメラを向ける */
 bool Camera3D::LookAt(const Vector3& target, const Vector3& up) {
     const Vector3 forward = (target - m_position).Normalized();
     if (forward == Vector3::Zero) return false;
@@ -16,11 +17,13 @@ bool Camera3D::LookAt(const Vector3& target, const Vector3& up) {
     return true;
 }
 
+/** @brief 3Dカメラのビュー行列を生成する */
 Matrix4x4 Camera3D::ViewMatrix() const {
     const Vector3 right = Right(), up = Up(), forward = Forward();
     return {right.x, right.y, right.z, -Vector3::Dot(right, m_position), up.x, up.y, up.z, -Vector3::Dot(up, m_position), forward.x, forward.y, forward.z, -Vector3::Dot(forward, m_position), 0, 0, 0, 1};
 }
 
+/** @brief 3Dカメラの投影行列を生成する */
 Matrix4x4 Camera3D::ProjectionMatrix() const {
     const float aspect = m_viewport.AspectRatio();
     if (m_mode == ProjectionMode::Orthographic) {
@@ -31,6 +34,7 @@ Matrix4x4 Camera3D::ProjectionMatrix() const {
     return {f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, m_farClip / (m_farClip - m_nearClip), -m_nearClip * m_farClip / (m_farClip - m_nearClip), 0, 0, 1, 0};
 }
 
+/** @brief ワールド座標をスクリーン座標へ安全に変換する */
 bool Camera3D::TryWorldToScreen(const Vector3& world, Vector2& screen, float* depth) const {
     if (!m_viewport.IsValid()) return false;
     const Vector4 clip = ProjectionMatrix() * (ViewMatrix() * Vector4(world, 1.0f));
@@ -41,6 +45,7 @@ bool Camera3D::TryWorldToScreen(const Vector3& world, Vector2& screen, float* de
     return std::isfinite(screen.x) && std::isfinite(screen.y);
 }
 
+/** @brief スクリーン座標からレイを生成する */
 Ray Camera3D::ScreenPointToRay(const Vector2& screen) const {
     if (!m_viewport.IsValid()) return Ray::Invalid();
     const float nx = (screen.x - m_viewport.x) / m_viewport.width * 2.0f - 1.0f;

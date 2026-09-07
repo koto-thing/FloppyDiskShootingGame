@@ -6,7 +6,7 @@
 
 /**
  * @brief クレジットシーン全体の表示内容を管理するクラス
- * @details columnsの先頭から順に、画面下部から上部へ流れるクレジットを構成します
+ * @details columnsの先頭から順に、画面下部から上部へ流れるクレジットを構成する
  */
 class CreditSceneContent {
 public:
@@ -17,19 +17,19 @@ public:
     static CreditSceneContent CreateDefault();
 
     /**
-     * @brief クレジットの表示列を追加します
+     * @brief クレジットの表示列を追加する
      * @param column 追加するクレジットの表示列
      */
     void AddColumn(CreditSceneColumn column);
 
     /**
-     * @brief 上から下への表示順でクレジットの表示列を取得します
+     * @brief 上から下への表示順でクレジットの表示列を取得する
      * @return クレジットの表示列一覧
      */
     const std::vector<CreditSceneColumn>& GetColumns() const;
 
     /**
-     * @brief 先頭行からクレジット末尾までのスクロール距離を取得します
+     * @brief 先頭行からクレジット末尾までのスクロール距離を取得する
      * @return NDC座標系におけるクレジット全体の高さ
      */
     float GetScrollLength() const;

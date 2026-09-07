@@ -4,6 +4,10 @@
 
 class CircleCollider final : public Collider {
 public:
+    /**
+     * @brief 円コライダーを生成する
+     * @param radius コライダーの半径
+     */
     explicit CircleCollider(float radius) 
         : Collider(ColliderType::CIRCLE),
           m_radius(radius) {

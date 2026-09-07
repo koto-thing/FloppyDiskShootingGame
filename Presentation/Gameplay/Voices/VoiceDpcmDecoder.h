@@ -10,6 +10,11 @@
 
 namespace VoiceCodec {
 
+/**
+ * @brief IMA ADPCMデータをPCMデータへ復号する
+ * @param sample 復号するIMA ADPCMサンプル
+ * @return 復号した16bit PCMデータ
+ */
 inline std::vector<std::int16_t> DecodeImaAdpcm(
     const VoiceSamples::ImaAdpcmSample& sample)
 {
@@ -55,6 +60,13 @@ inline std::vector<std::int16_t> DecodeImaAdpcm(
     return output;
 }
 
+/**
+ * @brief PCMデータを線形補間でリサンプリングする
+ * @param input 入力PCMデータ
+ * @param sourceRate 入力サンプルレート
+ * @param destinationRate 出力サンプルレート
+ * @return リサンプリングした16bit PCMデータ
+ */
 inline std::vector<std::int16_t> ResampleLinear(
     const std::vector<std::int16_t>& input,
     std::uint32_t sourceRate,
@@ -81,6 +93,11 @@ inline std::vector<std::int16_t> ResampleLinear(
     return output;
 }
 
+/**
+ * @brief AudioService向けの44100Hz PCMデータへ変換する
+ * @param sample 変換するIMA ADPCMサンプル
+ * @return 44100Hzへ変換した16bit PCMデータ
+ */
 inline std::vector<std::int16_t> DecodeForAudioService(
     const VoiceSamples::ImaAdpcmSample& sample)
 {

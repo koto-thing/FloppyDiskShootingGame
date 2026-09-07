@@ -383,7 +383,7 @@ void SideScrollingShooter::TickShots() {
         const float previousY = shot.y;
         const float previousZ = shot.z;
 
-        /** @brief 追尾弾を最寄りの前方敵へ旋回させる */
+        // 追尾弾を最寄りの前方敵へ旋回させる
         if (!shot.enemy && shot.special && shot.playerType == Homing) {
             UpdateHomingShot(shot);
         }
@@ -1050,7 +1050,7 @@ void SideScrollingShooter::FireSpecialShots() {
     const int damage = config.damage;
     constexpr float DegreesToRadians = 3.1415926535f / 180.0f;
 
-    /** @brief 弾数に応じて左右対称の角度と発射位置を求める */
+    // 弾数に応じて左右対称の角度と発射位置を求める
     for (int i = 0; i < projectileCount; ++i) {
         const float centeredIndex = static_cast<float>(i) -
             static_cast<float>(projectileCount - 1) * 0.5f;
@@ -1065,7 +1065,7 @@ void SideScrollingShooter::FireSpecialShots() {
                 m_playerY + centeredIndex * config.spawnOffsetY);
         const float railSpawnOffsetX = config.spawnOffsetY > 0.0f ? config.spawnOffsetY : 0.05f;
 
-        /** @brief 空きスロットへ機体タイプ固有の属性を設定する */
+        // 空きスロットへ機体タイプ固有の属性を設定する
         for (int shotIndex = 0; shotIndex < ActiveShotCapacity(); ++shotIndex) {
             auto& shot = m_shots[shotIndex];
             if (shot.active) continue;
@@ -1106,7 +1106,7 @@ void SideScrollingShooter::FireSpecialShots() {
                     shot.vy = std::cos(angle) * config.speed;
                     shot.vz = 0.0f;
                 } else if (railGameplay) {
-                    /** @brief 3Dレールでは特殊弾を奥行き方向へ進ませ、拡散角を横移動へ適用する */
+                    // 3Dレールでは特殊弾を奥行き方向へ進ませ、拡散角を横移動へ適用する
                     shot.vx = std::sin(angle) * config.speed;
                     shot.vy = 0.0f;
                     shot.vz = 1.45f;
@@ -1206,7 +1206,7 @@ void SideScrollingShooter::UpdateHomingShot(Shot& shot) {
     }
     if (target == nullptr || targetDistanceSquared <= 0.000001f) return;
 
-    /** @brief 現在速度と目標方向を補間して速度を一定に保つ */
+    // 現在速度と目標方向を補間して速度を一定に保つ
     const auto& config = PlayerShotConfigs[static_cast<size_t>(Homing)];
     const float inverseDistance = 1.0f / std::sqrt(targetDistanceSquared);
     const float desiredVx = (target->x - shot.x) * inverseDistance * config.speed;

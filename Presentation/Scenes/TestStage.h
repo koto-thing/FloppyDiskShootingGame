@@ -13,13 +13,23 @@ class SideScrollingShooter;
  */
 class TestStage : public IScene<SceneType, SceneSharedData> {
 public:
+    /** @brief テストステージを生成する */
     TestStage();
+    /** @brief テストステージを破棄する */
     ~TestStage() override;
 
+    /** @brief テストステージを初期化する */
     void Initialize() override;
+    /** @brief テストステージの入力を処理する */
     void ProcessInput() override;
+    /** @brief テストステージを更新する */
     void Tick() override;
+    /** @brief テストステージのリソースを解放する */
     void Dispose() override;
+    /**
+     * @brief テストステージを描画する
+     * @param renderer 描画コマンドを記録するRenderer
+     */
     void Render(Renderer& renderer) override;
 
 private:

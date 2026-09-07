@@ -1,5 +1,6 @@
 #include "Win32WindowService.h"
 /**
+ * @brief ウィンドウを作成する
  * ウィンドウを作成する
  * @param hInstance インスタンスハンドル
  * @param width 幅

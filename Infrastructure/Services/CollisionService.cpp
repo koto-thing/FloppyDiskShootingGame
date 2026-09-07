@@ -4,6 +4,11 @@
 #include <cmath>
 #include <functional>
 
+/**
+ * @brief 2つのコライダーから順序付き衝突ペアを生成する
+ * @param lhs 左側のコライダー
+ * @param rhs 右側のコライダー
+ */
 CollisionService::CollisionPair::CollisionPair(const Collider* lhs, const Collider* rhs) {
     if (std::less<const Collider*>{}(rhs, lhs)) {
         first = rhs;
@@ -14,12 +19,14 @@ CollisionService::CollisionPair::CollisionPair(const Collider* lhs, const Collid
     }
 }
 
+/** @brief 衝突ペアのハッシュ値を計算する */
 std::size_t CollisionService::CollisionPairHash::operator()(const CollisionPair& pair) const {
     const std::size_t firstHash = std::hash<const Collider*>{}(pair.first);
     const std::size_t secondHash = std::hash<const Collider*>{}(pair.second);
     return firstHash ^ (secondHash + 0x9e3779b9u + (firstHash << 6) + (firstHash >> 2));
 }
 
+/** @brief コライダーを重複なく登録する */
 void CollisionService::RegisterCollider(const std::shared_ptr<Collider>& collider) {
     if (!collider) {
         return;
@@ -30,6 +37,7 @@ void CollisionService::RegisterCollider(const std::shared_ptr<Collider>& collide
     m_colliders.emplace_back(collider);
 }
 
+/** @brief コライダーと関連する衝突状態を登録対象から除去する */
 void CollisionService::UnregisterCollider(const Collider* collider) {
     std::erase_if(
         m_colliders,
@@ -47,7 +55,9 @@ void CollisionService::UnregisterCollider(const Collider* collider) {
     });
 }
 
+/** @brief 衝突状態を更新してイベントを通知する */
 void CollisionService::Tick() {
+    // 破棄済みコライダーを除去して今回の接触集合を初期化する
     std::erase_if(
         m_colliders,
         [](const auto& collider) {
@@ -57,6 +67,7 @@ void CollisionService::Tick() {
 
     m_currentPairs.clear();
 
+    // 現在の衝突を調べてEnterまたはStayを通知する
     for (std::size_t i = 0; i < m_colliders.size(); ++i) {
         const auto a = m_colliders[i].lock();
 
@@ -85,6 +96,7 @@ void CollisionService::Tick() {
         }
     }
 
+    // 前回だけ存在した衝突へExitを通知する
     for (const CollisionPair& pair : m_previousPairs) {
         if (!m_currentPairs.contains(pair) && FindLiveCollider(pair.first) && FindLiveCollider(pair.second)) {
             Dispatch(pair, CollisionEvent::Exit);
@@ -94,12 +106,14 @@ void CollisionService::Tick() {
     m_previousPairs = m_currentPairs;
 }
 
+/** @brief 登録済みコライダーと衝突履歴を消去する */
 void CollisionService::Clear() {
     m_colliders.clear();
     m_previousPairs.clear();
     m_currentPairs.clear();
 }
 
+/** @brief 登録中のコライダーから有効な共有所有権を取得する */
 std::shared_ptr<Collider> CollisionService::FindLiveCollider(const Collider* collider) const {
     for (const auto& weakCollider : m_colliders) {
         if (const auto locked = weakCollider.lock(); locked && locked.get() == collider) return locked;
@@ -107,6 +121,7 @@ std::shared_ptr<Collider> CollisionService::FindLiveCollider(const Collider* col
     return nullptr;
 }
 
+/** @brief 衝突イベントを両方のGameObjectへ通知する */
 void CollisionService::Dispatch(const CollisionPair& pair, CollisionEvent event) const {
     const auto first = FindLiveCollider(pair.first);
     const auto second = FindLiveCollider(pair.second);
@@ -132,6 +147,7 @@ void CollisionService::Dispatch(const CollisionPair& pair, CollisionEvent event)
     }
 }
 
+/** @brief 互いのレイヤーマスクが衝突を許可しているか判定する */
 bool CollisionService::CanCollide(const Collider& a, const Collider& b) const {
     const auto aLayer = static_cast<std::uint32_t>(a.GetLayer());
     const auto bLayer = static_cast<std::uint32_t>(b.GetLayer());
@@ -142,6 +158,7 @@ bool CollisionService::CanCollide(const Collider& a, const Collider& b) const {
     return aTargetsB && bTargetsA;
 }
 
+/** @brief コライダー種別に応じた交差判定を実行する */
 bool CollisionService::CheckCollision(const Collider& a,const Collider& b) const {
     if (a.GetColliderType() == ColliderType::CIRCLE &&
         b.GetColliderType() == ColliderType::CIRCLE) {
@@ -178,6 +195,7 @@ bool CollisionService::CheckCollision(const Collider& a,const Collider& b) const
     return false;
 }
 
+/** @brief 円コライダー同士の交差を判定する */
 bool CollisionService::CheckCircleCircle(
     const CircleCollider& a,
     const CircleCollider& b
@@ -192,6 +210,7 @@ bool CollisionService::CheckCircleCircle(
     return deltaX * deltaX + deltaY * deltaY <= radiusSum * radiusSum;
 }
 
+/** @brief 軸平行境界箱同士の交差を判定する */
 bool CollisionService::CheckAABBAABB(
     const AABBCollider& a,
     const AABBCollider& b
@@ -207,6 +226,7 @@ bool CollisionService::CheckAABBAABB(
                std::abs(aHalfSize.y) + std::abs(bHalfSize.y);
 }
 
+/** @brief 円コライダーと軸平行境界箱の交差を判定する */
 bool CollisionService::CheckCircleAABB(
     const CircleCollider& circle,
     const AABBCollider& aabb

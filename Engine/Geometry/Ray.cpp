@@ -3,12 +3,19 @@
 #include "Box.h"
 #include <algorithm>
 #include <cmath>
+/**
+ * @brief 始点と方向からレイを生成する
+ * @param o レイの始点
+ * @param d レイの方向
+ */
 Ray::Ray(const Vector3& o, const Vector3& d) : origin(o), direction(d.LengthSquared() <= Math::Epsilon ? Vector3::Forward : d.Normalized()) {}
+/** @brief レイと球の交差を判定する */
 bool Ray::Intersects(const Sphere& sphere, RayHit* hit) const {
     const Vector3 delta = sphere.center - origin; const float radius = std::abs(sphere.radius); const float t = Vector3::Dot(delta, direction); const float discriminant = t * t - (delta.LengthSquared() - radius * radius);
     if (discriminant < 0.0f) return false; const float root = std::sqrt(discriminant); float distance = t - root; if (distance < 0.0f) distance = t + root; if (distance < 0.0f) return false;
     if (hit) { hit->distance = distance; hit->point = PointAt(distance); hit->normal = (hit->point - sphere.center).Normalized(); } return true;
 }
+/** @brief レイと境界箱の交差を判定する */
 bool Ray::Intersects(const Box& box, RayHit* hit) const {
     const auto a = box.Min(), b = box.Max(); float enter = 0.0f, exit = INFINITY; int enterAxis = -1;
     const float o[3] = {origin.x, origin.y, origin.z}, d[3] = {direction.x, direction.y, direction.z}, mn[3] = {a.x, a.y, a.z}, mx[3] = {b.x, b.y, b.z};

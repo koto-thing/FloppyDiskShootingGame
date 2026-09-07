@@ -134,7 +134,7 @@ void ModeSelectionScene::Initialize() {
             Vector2 { 0.40f, 0.12f }, RectAlign::Center,
             difficultyLabels[i], Vector2 { 0.0f, 0.20f - static_cast<float>(i) * 0.20f });
         m_difficultyButtons[i]->SetOnClick([this, difficulty = difficulties[i]]() {
-            /** @brief 選択した難易度を共有データへ保存する */
+            // 選択した難易度を共有データへ保存する
             getData().difficulty = difficulty;
             m_stateController->SetCurrentState(ModeSelectionState::PlayerTypeSelect);
         });

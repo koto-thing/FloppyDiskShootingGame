@@ -5,6 +5,12 @@
 
 namespace {
 
+/**
+ * @brief 行列から回転成分を抽出する
+ * @param matrix 分解対象の行列
+ * @param scale 行列から抽出済みの拡縮
+ * @return 抽出した回転
+ */
 Quaternion RotationFromMatrix(const Matrix4x4& matrix, const Vector3& scale) {
     Matrix4x4 rotation = matrix;
     for (int column = 0; column < 3; ++column) {
@@ -46,15 +52,19 @@ Quaternion RotationFromMatrix(const Matrix4x4& matrix, const Vector3& scale) {
 
 }
 
+/** @brief Transformを初期状態で生成する */
 Transform::Transform()
     : m_localPosition(Vector3::Zero), m_localRotation(Quaternion::Identity),
       m_localScale(Vector3::One), m_parent(nullptr), m_worldMatrix(Matrix4x4::Identity), m_dirty(true) {}
 
+/** @brief 親子関係を解除してTransformを破棄する */
 Transform::~Transform() {
+    // 親から自身を外す
     if (m_parent != nullptr) {
         m_parent->RemoveChild(this);
         m_parent = nullptr;
     }
+    // 子のワールド姿勢を維持したまま親子関係を解除する
     for (Transform* child : m_children) {
         if (child == nullptr) continue;
         const Matrix4x4 childWorld = child->WorldMatrix();
@@ -80,8 +90,10 @@ const Vector3& Transform::LocalScale() const { return m_localScale; }
 void Transform::SetLocalScale(const Vector3& scale) { m_localScale = scale; MarkDirty(); }
 void Transform::Translate(const Vector3& distance) { SetLocalPosition(m_localPosition + distance); }
 
+/** @brief 親を設定し、必要ならワールド姿勢を維持する */
 bool Transform::SetParent(Transform* parent, bool keepWorldTransform) {
     if (parent == this || parent == m_parent || (parent != nullptr && parent->IsDescendantOf(this))) return false;
+    // 現在のワールド姿勢を基準に新しいローカル姿勢を計算する
     const Matrix4x4 oldWorld = WorldMatrix();
     Matrix4x4 local = oldWorld;
     if (keepWorldTransform && parent != nullptr) {
@@ -89,9 +101,11 @@ bool Transform::SetParent(Transform* parent, bool keepWorldTransform) {
         if (!parent->WorldMatrix().TryInverse(inverse)) return false;
         local = inverse * oldWorld;
     }
+    // 既存の親子関係を更新する
     if (m_parent != nullptr) m_parent->RemoveChild(this);
     m_parent = parent;
     if (m_parent != nullptr) m_parent->m_children.push_back(this);
+    // 姿勢維持の有無に応じてローカル行列を確定する
     if (keepWorldTransform) {
         SetLocalMatrix(local);
     } else {
@@ -127,6 +141,7 @@ void Transform::SetLocalMatrix(const Matrix4x4& matrix) {
     m_localRotation = RotationFromMatrix(matrix, scale);
     MarkDirty();
 }
+/** @brief 親姿勢を反映してワールド行列を再構築する */
 void Transform::RebuildWorldMatrix() const {
     const Matrix4x4 local = Matrix4x4::Scale(m_localScale) * m_localRotation.ToMatrix() * Matrix4x4::Translation(m_localPosition);
     m_worldMatrix = m_parent == nullptr ? local : m_parent->WorldMatrix() * local;

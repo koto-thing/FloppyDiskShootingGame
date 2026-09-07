@@ -11,7 +11,14 @@
  */
 class AudioService {
 public:
+    /**
+     * @brief オーディオ管理サービスを生成する
+     */
     AudioService();
+
+    /**
+     * @brief オーディオ管理サービスを破棄する
+     */
     ~AudioService();
 
     /**

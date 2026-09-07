@@ -131,7 +131,7 @@ void CreditSceneContent::AddColumn(CreditSceneColumn column) {
 }
 
 /**
- * @brief 上から下への表示順でクレジットの表示列を取得します
+ * @brief 上から下への表示順でクレジットの表示列を取得する
  * @return クレジットの表示列一覧
  */
 const std::vector<CreditSceneColumn>& CreditSceneContent::GetColumns() const {

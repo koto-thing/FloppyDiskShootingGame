@@ -1019,7 +1019,7 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
-    /** @brief C++文字列から自機弾専用シェーダーをコンパイルする */
+    // C++文字列から自機弾専用シェーダーをコンパイルする
     ComPtr<ID3DBlob> playerShotVertexShader;
     ComPtr<ID3DBlob> playerShotPixelShader;
     error.Reset();
@@ -1045,7 +1045,7 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
-    /** @brief 発光を重ねられる加算ブレンドの自機弾PSOを作成する */
+    // 発光を重ねられる加算ブレンドの自機弾PSOを作成する
     D3D12_GRAPHICS_PIPELINE_STATE_DESC playerShotPsoDesc = psoDesc;
     playerShotPsoDesc.VS = {
         playerShotVertexShader->GetBufferPointer(), playerShotVertexShader->GetBufferSize() };
@@ -1078,7 +1078,7 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
-    /** @brief C++文字列から命中爆発用シェーダーをコンパイルする */
+    // C++文字列から命中爆発用シェーダーをコンパイルする
     ComPtr<ID3DBlob> explosionVertexShader;
     ComPtr<ID3DBlob> explosionPixelShader;
     error.Reset();
@@ -1103,7 +1103,7 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
-    /** @brief 加算ブレンドで発光する爆発用PSOを作成する */
+    // 加算ブレンドで発光する爆発用PSOを作成する
     D3D12_GRAPHICS_PIPELINE_STATE_DESC explosionPsoDesc = playerShotPsoDesc;
     explosionPsoDesc.VS = { explosionVertexShader->GetBufferPointer(), explosionVertexShader->GetBufferSize() };
     explosionPsoDesc.PS = { explosionPixelShader->GetBufferPointer(), explosionPixelShader->GetBufferSize() };
@@ -1134,7 +1134,7 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
-    /** @brief C++文字列からレールガン軌跡シェーダーをコンパイルする */
+    // C++文字列からレールガン軌跡シェーダーをコンパイルする
     ComPtr<ID3DBlob> railgunVertexShader;
     ComPtr<ID3DBlob> railgunPixelShader;
     error.Reset();
@@ -1360,7 +1360,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE D3D12RenderingService::GetRtvCpuDescriptorHandle() c
  * パイプラインステートを切り替える (0: Object, 1: Background, 2: SpellCircle, 3: Model3D, 4: PlayerShot, 5: Explosion)
  */
 void D3D12RenderingService::SetPipelineState(int type) {
-    /** @brief 文字描画後に元のパイプラインを復元するため選択を保持する */
+    // 文字描画後に元のパイプラインを復元するため選択を保持する
     m_currentPipelineType = type;
     if (type == 0) {
         m_commandList->SetPipelineState(m_pipelineStateObject.Get());
@@ -1444,7 +1444,7 @@ void D3D12RenderingService::DrawUiPrimitive(
     UINT vertexCount) {
     if (m_constantBufferCursor >= MAX_CONSTANT_BUFFER_ELEMENTS) return;
 
-    /** @brief 4頂点で構成するUIプリミティブ用の三角形ストリップを設定する */
+    // 4頂点で構成するUIプリミティブ用の三角形ストリップを設定する
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
     // NDC上の中心、サイズを既存シェーダーの単位形状へ変換する
@@ -1536,7 +1536,7 @@ void D3D12RenderingService::DrawPrimitive3D(const Primitive3D& primitive) {
 void D3D12RenderingService::DrawPlayerShot(const PlayerShotVisual& shot) {
     if (m_constantBufferCursor >= MAX_CONSTANT_BUFFER_ELEMENTS) return;
 
-    /** @brief 自機弾の位置と大きさを定数バッファへ設定する */
+    // 自機弾の位置と大きさを定数バッファへ設定する
     auto* cbData = reinterpret_cast<RendererTransformBufferData*>(
         reinterpret_cast<char*>(m_cbvCpuData) + static_cast<size_t>(m_constantBufferCursor) * 256);
     const DirectX::XMMATRIX matrix = DirectX::XMMatrixScaling(shot.size.x, shot.size.y, 1.0f) *
@@ -1680,7 +1680,7 @@ void D3D12RenderingService::RenderText(const char* text, DirectX::XMFLOAT2 posit
     
     // 次のテキストが使用する位置を自動更新
     m_constantBufferCursor += static_cast<UINT>(length);
-    /** @brief フォント専用ルートシグネチャとPSOが後続のモデルやUIへ漏れないよう復元する */
+    // フォント専用ルートシグネチャとPSOが後続のモデルやUIへ漏れないよう復元する
     m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
     SetPipelineState(m_currentPipelineType);
 }
