@@ -22,6 +22,31 @@ public:
     static void Reset(SideScrollingShooter& shooter);
 
     /**
+     * @brief 登場と会話と撃破演出中も砂嵐の時間と濃度を更新する
+     * @param shooter 更新するゲーム本体
+     * @return なし
+     */
+    static void TickSandstorm(SideScrollingShooter& shooter);
+
+    /**
+     * @brief 現在の視錐台全体へ砂嵐のCube粒子を描画する
+     * @param shooter 描画するゲーム本体
+     * @param renderer 描画先
+     * @param camera 現在のカメラ
+     * @return なし
+     */
+    static void DrawSandstorm(const SideScrollingShooter& shooter,
+        Renderer& renderer, const Camera3D& camera);
+
+    /**
+     * @brief HUDの文字描画前に画面へ砂色のかすみを重ねる
+     * @param shooter 描画するゲーム本体
+     * @param renderer 描画先
+     * @return なし
+     */
+    static void DrawSandstormHaze(const SideScrollingShooter& shooter, Renderer& renderer);
+
+    /**
      * @brief Stage 2ボス専用Behaviorを取得する
      * @return Stage 2ボス専用Behavior
      */

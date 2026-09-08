@@ -1,8 +1,22 @@
 #pragma once
 
 #include <cstdint>
+#include <algorithm>
 
 namespace ShooterStages::Stage2 {
+
+/** @brief 砂嵐が最大濃度へ達するフレーム数 */
+inline constexpr int SandstormFadeFrames = 180;
+
+/**
+ * @brief ボスの生存状態に応じて砂嵐の濃度を一段階進める
+ * @param exposure 現在の濃度フレーム数
+ * @param active ボス戦中かつ未撃破の場合true
+ * @return 0からSandstormFadeFramesの濃度フレーム数
+ */
+constexpr int NextSandstormExposure(int exposure, bool active) {
+    return (std::clamp)(exposure + (active ? 1 : -1), 0, SandstormFadeFrames);
+}
 
 /** @brief Stage 2ボスの行動状態 */
 enum class BossAction {
@@ -90,6 +104,8 @@ inline constexpr int BoneArchMaxHp = 12000;
 /** @brief Stage 2全体の永続状態 */
 struct State {
     BossState boss {};
+    int sandstormFrame = 0;
+    int sandstormExposure = 0;
     int boneArchHp = BoneArchMaxHp;
     bool boneArchDestroyed = false;
 };

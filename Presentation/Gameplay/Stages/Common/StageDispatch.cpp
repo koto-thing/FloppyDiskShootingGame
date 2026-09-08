@@ -504,6 +504,9 @@ void SideScrollingShooter::StageDispatch::DrawStageWorld3D(
 void SideScrollingShooter::StageDispatch::DrawOverlay2D(
     const SideScrollingShooter& shooter, Renderer& renderer) {
     switch (shooter.m_stageNumber) {
+    case 2:
+        Stage2Module::DrawSandstormHaze(shooter, renderer);
+        break;
     case 5:
         Stage5Module::DrawOverlay2D(shooter, renderer);
         break;
@@ -513,6 +516,9 @@ void SideScrollingShooter::StageDispatch::DrawOverlay2D(
 void SideScrollingShooter::StageDispatch::DrawOverlay3D(
     const SideScrollingShooter& shooter, Renderer& renderer, const Camera3D& camera) {
     switch (shooter.m_stageNumber) {
+    case 2:
+        Stage2Module::DrawSandstormHaze(shooter, renderer);
+        break;
     case 5:
         Stage5Module::DrawOverlay3D(shooter, renderer, camera);
         break;

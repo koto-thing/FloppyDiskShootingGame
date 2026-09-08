@@ -123,6 +123,16 @@ void SideScrollingShooter::Stage2Module::Reset(SideScrollingShooter& shooter) {
     shooter.m_stage2 = {};
 }
 
+void SideScrollingShooter::Stage2Module::TickSandstorm(SideScrollingShooter& shooter) {
+    // 会話で止まるm_frameから独立させ、撃破後は同じ濃度から晴らす
+    auto& state = shooter.m_stage2;
+    state.sandstormExposure = ShooterStages::Stage2::NextSandstormExposure(
+        state.sandstormExposure, shooter.m_bossBattle && !shooter.m_clear);
+    if (state.sandstormExposure > 0) {
+        state.sandstormFrame = (state.sandstormFrame + 1) % 7200;
+    }
+}
+
 const SideScrollingShooter::EnemyBehavior&
 SideScrollingShooter::Stage2Module::BossBehaviorInstance() {
     static const BossBehavior behavior;

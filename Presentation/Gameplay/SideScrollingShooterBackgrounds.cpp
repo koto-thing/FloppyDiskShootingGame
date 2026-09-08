@@ -7,6 +7,7 @@
 #include "../../Engine/Graphics/Renderer.h"
 #include "../../Engine/Input/Input.h"
 #include "Stages/Common/StageDispatch.h"
+#include "Stages/Stage2/Stage2Module.h"
 
 
 #include "SideScrollingShooterEnemies.h"
@@ -113,6 +114,8 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
             PlayerHitRadius2D * WorldYScale * 2.0f, PlayerHitboxColor);
     }
 
+    // 半透明の砂粒は船体と弾の描画後に重ねる
+    if (m_stageNumber == 2) Stage2Module::DrawSandstorm(*this, renderer, camera);
     renderer.ResetCamera();
     DrawHudBackground(renderer);
     StageDispatch::DrawOverlay2D(*this, renderer);
@@ -256,6 +259,8 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
             playerPosition.z,
             hitboxWidth, hitboxHeight, hitboxHeight, PlayerHitboxColor);
     }
+    // 遷移中も同じカメラから砂嵐を描画して2D終点と一致させる
+    if (m_stageNumber == 2) Stage2Module::DrawSandstorm(*this, renderer, camera);
     renderer.ResetCamera();
     DrawHudBackground(renderer);
     StageDispatch::DrawOverlay3D(*this, renderer, camera);

@@ -13,6 +13,7 @@
 #include "SideScrollingShooterShared.h"
 #include "Stages/Common/StageDispatch.h"
 #include "Stages/Stage1/Stage1Module.h"
+#include "Stages/Stage2/Stage2Module.h"
 #include "Stages/Stage4/Stage4Module.h"
 #include "Stages/Stage5/Stage5Module.h"
 #include "GameplayRandom.h"
@@ -516,6 +517,9 @@ void SideScrollingShooter::Tick() {
     const bool completingRailToSideTransition = m_viewTransitionTimer == 1 &&
         m_viewMode == ViewMode::Rail3D && m_nextViewMode == ViewMode::Side2D;
     TickViewTransition();
+
+    // 登場、会話、クリアの早期returnより前に砂嵐を進める
+    if (m_stageNumber == 2) Stage2Module::TickSandstorm(*this);
 
     // HUD用HPは実HPへ追従させ、ダメージ時の減少を視認できるようにする
     if (m_displayBossHp > static_cast<float>(m_bossHp)) {

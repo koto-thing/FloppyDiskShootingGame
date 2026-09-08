@@ -38,6 +38,50 @@ Vector3 RotateYawOffset(float x, float y, float z, float yaw) {
 
 }
 
+void SideScrollingShooter::Stage2Module::DrawSandstorm(
+    const SideScrollingShooter& shooter, Renderer& renderer, const Camera3D& camera) {
+    const auto& state = shooter.m_stage2;
+    if (state.sandstormExposure == 0) return;
+    const float intensity = SmoothStep(static_cast<float>(state.sandstormExposure) /
+        ShooterStages::Stage2::SandstormFadeFrames);
+
+    // 現在のカメラ基準で3層に分散し、双方向の視点遷移でも画面端を覆う
+    constexpr int ParticleCount = 240;
+    constexpr float ViewMargin = 1.18f;
+    static_assert(ViewMargin > 1.0f);
+    for (int index = 0; index < ParticleCount; ++index) {
+        const int layer = 2 - index / (ParticleCount / 3);
+        const float depth = 10.0f + static_cast<float>(layer) * 16.0f;
+        const float halfHeight = depth * std::tan(camera.FieldOfView() * 0.5f);
+        const float halfWidth = halfHeight * renderer.AspectRatio();
+
+        // 手前ほど速く横へ流し、折り返しは視野の外で行う
+        const int phase = (index * 137 + state.sandstormFrame * (5 - layer)) % 720;
+        const float x = ViewMargin * (1.0f - static_cast<float>(phase) / 360.0f);
+        const float drift = std::sin(static_cast<float>(state.sandstormFrame % 180) *
+            Math::TwoPi / 180.0f + static_cast<float>(index)) * 0.06f;
+        const float y = -1.1f + static_cast<float>((index * 197) % 719) / 718.0f * 2.2f + drift;
+        const Vector3 position = camera.Position() + camera.Forward() * depth +
+            camera.Right() * (x * halfWidth) + camera.Up() * (y * halfHeight);
+        const float size = halfHeight * (0.004f + static_cast<float>(2 - layer) * 0.002f);
+        const float color[] = {0.82f, 0.59f, 0.30f,
+            intensity * (0.20f + static_cast<float>(2 - layer) * 0.08f)};
+        shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
+            position, {size * 1.8f, size, size}, {}, color);
+    }
+}
+
+void SideScrollingShooter::Stage2Module::DrawSandstormHaze(
+    const SideScrollingShooter& shooter, Renderer& renderer) {
+    if (shooter.m_stage2.sandstormExposure == 0) return;
+    const float intensity = SmoothStep(static_cast<float>(shooter.m_stage2.sandstormExposure) /
+        ShooterStages::Stage2::SandstormFadeFrames);
+
+    // 弾と船体を判別できる透明度に抑え、文字類はこの後に描画する
+    renderer.Draw(Rect {{0.0f, 0.0f}, {2.0f, 2.0f}},
+        {0.70f, 0.48f, 0.23f, intensity * 0.28f});
+}
+
 float SideScrollingShooter::Stage2Module::NightBlend(
     const SideScrollingShooter& shooter) {
     return Math::Clamp01(static_cast<float>(shooter.m_frame - NightStartFrame) /
