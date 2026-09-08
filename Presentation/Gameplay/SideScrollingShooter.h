@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <array>
 #include <cmath>
@@ -22,6 +22,7 @@ enum class PrimitiveShape;
  * @brief 固定長プールで動作する横スクロールシューティングのゲーム本体
  */
 class SideScrollingShooter {
+    friend struct HomingShotTests;
 public:
     /** @brief 自機弾の挙動を調整するパラメータ */
     struct PlayerShotParameters {
@@ -153,6 +154,7 @@ private:
         int barrageCount = 0;
         int age = 0;
         int hitCount = 0;
+        int homingTarget = -1;
         std::uint16_t bossCollisionIgnoreMask = 0;
         ShooterStages::Stage2::ShotState stage2 {};
         ShooterStages::Stage4::ShotState stage4 {};
@@ -693,17 +695,19 @@ private:
      * @param shot 判定対象の自機弾
      * @param boss 判定対象のボス
      * @param part 命中した部位の格納先
+     * @param aimPosition 非nullなら衝突判定せず指定部位の攻撃可能なワールド中心を取得する
      * @return 部位へ命中した場合true、命中しない場合false
      */
-    bool TryHitBossPart(const Shot& shot, const Enemy& boss, BossPart& part) const;
+    bool TryHitBossPart(const Shot& shot, const Enemy& boss, BossPart& part, Vector3* aimPosition = nullptr) const;
     /**
      * @brief 共通または移行中のボス部位判定を行う
      * @param shot 判定対象の自機弾
      * @param boss 判定対象のボス
      * @param part 命中した部位の格納先
+     * @param aimPosition 非nullなら衝突判定せず指定部位の攻撃可能なワールド中心を取得する
      * @return 部位へ命中した場合true、命中しない場合false
      */
-    bool TryHitDefaultBossPart(const Shot& shot, const Enemy& boss, BossPart& part) const;
+    bool TryHitDefaultBossPart(const Shot& shot, const Enemy& boss, BossPart& part, Vector3* aimPosition = nullptr) const;
     void PlayShotSound();
     void PlayHitSound();
     /** @brief 敵のエネルギー弾発射音を再生する @return なし */

@@ -163,15 +163,25 @@ public:
     static bool TryDamageStageTarget(SideScrollingShooter& shooter, Shot& shot);
 
     /**
-     * @brief 自機弾とEASTSOURCE部位の衝突を判定する
+     * @brief 現フェーズで攻撃可能な専用標的の中心を取得する
+     * @param shooter 更新対象
+     * @param index 弱点または龍の節番号
+     * @param position ワールド中心の出力先
+     * @return 攻撃可能な標的がある場合true
+     */
+    static bool GetHomingTarget(SideScrollingShooter& shooter, int index, Vector3& position);
+
+    /**
+     * @brief 自機弾とEASTSOURCE部位の衝突または追尾座標を判定する
      * @param shooter 判定対象
      * @param shot 判定する自機弾
      * @param boss EASTSOURCE本体
-     * @param part 命中部位の格納先
-     * @return EASTSOURCEの専用部位へ命中した場合true、命中しない場合false
+     * @param part 命中部位の出力先、座標取得時は部位番号の入力
+     * @param aimPosition 非nullなら衝突判定せず攻撃可能な部位中心を取得する
+     * @return 命中または座標取得に成功した場合true
      */
     static bool TryHitBossPart(const SideScrollingShooter& shooter,
-        const Shot& shot, const Enemy& boss, BossPart& part);
+        const Shot& shot, const Enemy& boss, BossPart& part, Vector3* aimPosition = nullptr);
 
     /**
      * @brief EASTSOURCE撃破後の専用遷移を処理する

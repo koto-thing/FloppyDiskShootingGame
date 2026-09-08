@@ -1257,9 +1257,18 @@ float SideScrollingShooter::Stage3Module::Phase1FocusZ(const Enemy& boss) {
         BossSectionAdvanceZ(sectionProgress);
 }
 
+/**
+ * @brief 未破壊部位への衝突判定または攻撃可能な部位中心の取得を行う
+ * @param shooter 判定対象のゲーム本体
+ * @param shot 判定する自機弾
+ * @param boss 判定するボス
+ * @param part 命中部位の出力先、座標取得時は部位番号の入力
+ * @param aimPosition 非nullなら衝突判定せず部位のワールド中心を出力する
+ * @return 命中または座標取得に成功した場合true
+ */
 bool SideScrollingShooter::Stage3Module::TryHitBossPart(
     const SideScrollingShooter& shooter, const Shot& shot,
-    const Enemy& boss, BossPart& part) {
+    const Enemy& boss, BossPart& part, Vector3* aimPosition) {
     if (shooter.m_bossIntroductionPhase != BossIntroductionPhase::None ||
         boss.motionAge > 0 ||
         boss.phase >= static_cast<float>(Stage3BossModelView::Phase1SectionCount)) {
@@ -1271,7 +1280,7 @@ bool SideScrollingShooter::Stage3Module::TryHitBossPart(
     const bool railMode = shooter.IsRailGameplayActive();
     for (int slot = 0; slot < Stage3BossModelView::Phase1TurretsPerSection; ++slot) {
         const int partIndex = Stage3BossModelView::Phase1PartIndex(section, slot);
-        if (boss.bossPartHp[partIndex] <= 0) continue;
+        if (boss.bossPartHp[partIndex] <= 0 || (aimPosition && part != partIndex)) continue;
         const int topGunIndex = Stage3BossModelView::Phase1TopGunIndex(section, slot);
         const Vector3 local = Stage3BossModelView::TopGunMount(topGunIndex).localPosition;
         const float cosine = std::cos(transform.yaw);
@@ -1281,6 +1290,8 @@ bool SideScrollingShooter::Stage3Module::TryHitBossPart(
             transform.position.y + local.y * transform.scale,
             transform.position.z + (-local.x * sine + local.z * cosine) * transform.scale
         };
+        // 追尾照準も命中判定と同じ変形済み部位中心を使用する
+        if (aimPosition) { *aimPosition = world; return true; }
         const bool hit = railMode ?
             Hit3DSegment(
                 ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,

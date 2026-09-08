@@ -153,10 +153,11 @@ public:
      * @param shot 判定する自機弾
      * @param boss 判定するボス
      * @param part 命中部位の格納先
+     * @param aimPosition 非nullなら衝突判定せず指定部位の攻撃可能なワールド中心を取得する
      * @return 現在ステージのボス部位へ命中した場合true、命中しない場合false
      */
     static bool TryHitBossPart(const SideScrollingShooter& shooter,
-        const Shot& shot, const Enemy& boss, BossPart& part);
+        const Shot& shot, const Enemy& boss, BossPart& part, Vector3* aimPosition = nullptr);
 
     /**
      * @brief 自機弾と現在ステージの専用ボス船体との判定を試みる

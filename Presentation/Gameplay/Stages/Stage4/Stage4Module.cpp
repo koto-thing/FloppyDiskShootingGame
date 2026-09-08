@@ -966,15 +966,26 @@ bool SideScrollingShooter::Stage4Module::DrawBossModel(
     return true;
 }
 
+/**
+ * @brief 未破壊部位への衝突判定または攻撃可能な部位中心の取得を行う
+ * @param shooter 判定対象のゲーム本体
+ * @param shot 判定する自機弾
+ * @param boss 判定するボス
+ * @param part 命中部位の出力先、座標取得時は部位番号の入力
+ * @param aimPosition 非nullなら衝突判定せず部位のワールド中心を出力する
+ * @return 命中または座標取得に成功した場合true
+ */
 bool SideScrollingShooter::Stage4Module::TryHitBossPart(
     const SideScrollingShooter& shooter, const Shot& shot,
-    const Enemy& boss, BossPart& part) {
+    const Enemy& boss, BossPart& part, Vector3* aimPosition) {
     if (boss.type != 2) return false;
 
     // 主砲交換中は主砲へのダメージを無効化し、副砲だけを破壊可能にする
     const BossPart mainCannonPart = MainCannonPart(shooter.m_stage4.currentWeapon);
-    if (!IsWeaponSwapActive(shooter) && boss.bossPartHp[mainCannonPart] > 0) {
+    if (!IsWeaponSwapActive(shooter) && boss.bossPartHp[mainCannonPart] > 0 && (!aimPosition || part == mainCannonPart)) {
         const Vector3 world = LocalToWorld(shooter, boss, BossPartLocalPosition(mainCannonPart));
+        // 追尾照準も命中判定と同じ変形済み部位中心を使用する
+        if (aimPosition) { *aimPosition = world; return true; }
         const bool hit = shooter.IsRailGameplayActive() ?
             Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
                 shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
@@ -992,8 +1003,10 @@ bool SideScrollingShooter::Stage4Module::TryHitBossPart(
     // 副砲6基をBossFunnelHatch0からBossFunnelHatch5の枠として判定する
     for (int gun = 0; gun < 6; ++gun) {
         const BossPart candidate = static_cast<BossPart>(BossFunnelHatch0 + gun);
-        if (boss.bossPartHp[candidate] <= 0) continue;
+        if (boss.bossPartHp[candidate] <= 0 || (aimPosition && part != candidate)) continue;
         const Vector3 world = LocalToWorld(shooter, boss, BossPartLocalPosition(candidate));
+        // 追尾照準も命中判定と同じ変形済み部位中心を使用する
+        if (aimPosition) { *aimPosition = world; return true; }
         const bool hit = shooter.IsRailGameplayActive() ?
             Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
                 shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
