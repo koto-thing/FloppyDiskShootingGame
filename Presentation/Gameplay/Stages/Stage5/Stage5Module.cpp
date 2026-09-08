@@ -1662,7 +1662,7 @@ Vector3 SideScrollingShooter::Stage5Module::TayamaDragonSegmentPosition(
             player.x + std::cos(angle) * ShooterStages::Stage5::TayamaDragonOrbitRadius,
             player.y + std::sin(angle) * ShooterStages::Stage5::TayamaDragonOrbitRadius,
             Math::Lerp(SidePlaneZ + segment * 0.025f,
-                47.0f + segment * 2.05f, viewWeight)
+                player.z, viewWeight)
         };
         const float blend = SmoothStep(ShooterStages::Stage5::TayamaDragonOrbitBlend(
             attackTimeline));
@@ -2401,13 +2401,13 @@ void SideScrollingShooter::Stage5Module::TickTayamaDragon(
             shot.vx = FromWorldX(direction.x);
             shot.vy = FromWorldY(direction.y);
             shot.vz = shooter.IsRailGameplayActive() ? direction.z : 0.0f;
-            shot.hitRadius = 0.32f;
+            shot.hitRadius = 0.16f;
             shot.damage = 4;
             shot.enemy = true;
             shot.stage4.kind = ShooterStages::Stage4::ShotKind::Cannonball;
             shot.stage4.detonateAtPlayerZ = true;
             shot.stage4.fixedSideExplosionX = true;
-            shot.stage4.explosionRadius = shooter.IsRailGameplayActive() ? 1.15f : 1.85f;
+            shot.stage4.explosionRadius = shooter.IsRailGameplayActive() ? 0.575f : 0.925f;
             shot.stage4.sideExplosionX = -1.5f;
             shot.active = true;
             shooter.ShakeScreen(0.24f, 30);

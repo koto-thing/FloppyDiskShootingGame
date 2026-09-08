@@ -9,7 +9,7 @@
 class WindowsInputBackendTestAccess;
 
 /**
- * @brief Win32入力とXInputをInputが扱う形式へ変換する
+ * @brief Win32入力とXInputおよびSwitch 2 ProをInputが扱う形式へ変換する
  */
 class WindowsInputBackend {
 public:
@@ -21,7 +21,7 @@ public:
     static bool Initialize(HWND hwnd);
 
     /**
-     * @brief 接続中のXInputゲームパッドを取得して入力状態へ反映する
+     * @brief 接続中の対応ゲームパッドを取得して入力状態へ反映する
      * @return なし
      */
     static void Update();

@@ -47,21 +47,6 @@ constexpr int Phase3FunnelLaunchInterval(int hatch, int launchCount) {
     return 55 + static_cast<int>(value % 91u);
 }
 
-/**
- * @brief Phase 3主砲の予告中に使用する追従率を取得する
- * @param frame 予告開始からの経過フレーム
- * @param fireFrame 発射フレーム
- * @return 予告の前後で遅く中央で速い追従率
- */
-constexpr float Phase3MainGunTrackingRate(int frame, int fireFrame) {
-    const float progress = fireFrame > 0 ?
-        static_cast<float>(frame) / static_cast<float>(fireFrame) : 1.0f;
-    const float clamped = progress < 0.0f ? 0.0f : (progress > 1.0f ? 1.0f : progress);
-    const float triangle = clamped < 0.5f ? clamped * 2.0f : (1.0f - clamped) * 2.0f;
-    const float eased = triangle * triangle * (3.0f - 2.0f * triangle);
-    return 0.012f + eased * 0.078f;
-}
-
 /** @brief Stage 2特殊弾の種類 */
 enum class ShotKind {
     None,

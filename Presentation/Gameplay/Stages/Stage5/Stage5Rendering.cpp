@@ -48,6 +48,11 @@ constexpr unsigned char PandDBuildingSignGlyphs[][7] = {
 constexpr int PandDBuildingSignCharacterCount =
     static_cast<int>(std::size(PandDBuildingSignGlyphs));
 static_assert(PandDBuildingSignCharacterCount == 9);
+// ムービーと第2形態戦で機械龍の黄金色を共有する
+constexpr float TayamaDragonBodyColor[] = {0.36f, 0.18f, 0.025f, 1.0f};
+constexpr float TayamaDragonArmorColor[] = {0.95f, 0.56f, 0.08f, 1.0f};
+constexpr float TayamaDragonEdgeColor[] = {1.55f, 0.92f, 0.16f, 1.0f};
+constexpr float TayamaDragonCoreColor[] = {1.80f, 0.62f, 0.06f, 1.0f};
 constexpr int TayamaGoldenLaserGlowEffect = 4;
 constexpr int TayamaGoldenLaserCoreEffect = 5;
 constexpr int RainCycle = 240;
@@ -1049,10 +1054,6 @@ void SideScrollingShooter::Stage5Module::DrawFinalEscapeDragon(
     if (progress <= 0.0f) return;
 
     constexpr int SegmentCount = 26;
-    constexpr float BodyColor[] = {0.36f, 0.18f, 0.025f, 1.0f};
-    constexpr float ArmorColor[] = {0.95f, 0.56f, 0.08f, 1.0f};
-    constexpr float EdgeColor[] = {1.55f, 0.92f, 0.16f, 1.0f};
-    constexpr float CoreColor[] = {1.80f, 0.62f, 0.06f, 1.0f};
     const auto SegmentPosition = [&](int index) {
         const float distance = static_cast<float>(index) * 8.6f;
         const float wave = progress * 4.4f - static_cast<float>(index) * 0.46f;
@@ -1079,10 +1080,10 @@ void SideScrollingShooter::Stage5Module::DrawFinalEscapeDragon(
             Matrix4x4::RotationY(yaw) * Matrix4x4::RotationZ(pitch) *
             Matrix4x4::Scale({length, thickness, thickness});
         shooter.DrawModelPrimitive(renderer, camera,
-            static_cast<int>(PrimitiveShape::Box), bodyWorld, BodyColor);
+            static_cast<int>(PrimitiveShape::Box), bodyWorld, TayamaDragonBodyColor);
         shooter.DrawModelPrimitive(renderer, camera,
             static_cast<int>(PrimitiveShape::Sphere), head,
-            {thickness * 1.12f, thickness * 1.12f, thickness * 1.12f}, {}, ArmorColor);
+            {thickness * 1.12f, thickness * 1.12f, thickness * 1.12f}, {}, TayamaDragonArmorColor);
 
         // 側面装甲と発光節を一定間隔で置き、巨大な機械構造として輪郭を読ませる
         if (index % 2 == 0) {
@@ -1091,24 +1092,24 @@ void SideScrollingShooter::Stage5Module::DrawFinalEscapeDragon(
                     static_cast<int>(PrimitiveShape::Box),
                     head + Vector3 {static_cast<float>(side) * thickness * 0.95f, 0.0f, 0.0f},
                     {thickness * 0.78f, 1.1f, thickness * 1.35f},
-                    {0.0f, segmentWave * 0.08f, static_cast<float>(side) * 0.34f}, EdgeColor);
+                    {0.0f, segmentWave * 0.08f, static_cast<float>(side) * 0.34f}, TayamaDragonEdgeColor);
             }
         }
         if (index % 3 == 0) {
             shooter.DrawModelPrimitive(renderer, camera,
                 static_cast<int>(PrimitiveShape::Sphere),
                 head + Vector3 {0.0f, 0.0f, -thickness * 0.62f},
-                {1.2f, 1.2f, 0.55f}, {}, CoreColor);
+                {1.2f, 1.2f, 0.55f}, {}, TayamaDragonCoreColor);
         }
     }
 
     const Vector3 collar = SegmentPosition(0);
     shooter.DrawModelPrimitive(renderer, camera,
         static_cast<int>(PrimitiveShape::Cylinder), collar,
-        {9.0f, 3.0f, 9.0f}, {}, EdgeColor);
+        {9.0f, 3.0f, 9.0f}, {}, TayamaDragonEdgeColor);
     shooter.DrawModelPrimitive(renderer, camera,
         static_cast<int>(PrimitiveShape::Cylinder), collar + Vector3 {0.0f, 1.1f, 0.0f},
-        {5.8f, 3.5f, 5.8f}, {}, CoreColor);
+        {5.8f, 3.5f, 5.8f}, {}, TayamaDragonCoreColor);
 }
 
 /**
@@ -1191,10 +1192,6 @@ void SideScrollingShooter::Stage5Module::DrawCloudSea(
 void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
     const SideScrollingShooter& shooter, Renderer& renderer,
     const Camera3D& camera, float railWeight) {
-    constexpr float BodyColor[] = {0.10f, 0.12f, 0.16f, 1.0f};
-    constexpr float ArmorColor[] = {0.28f, 0.32f, 0.38f, 1.0f};
-    constexpr float EdgeColor[] = {0.48f, 0.56f, 0.64f, 1.0f};
-    constexpr float CoreColor[] = {0.08f, 0.72f, 1.0f, 1.0f};
     constexpr float HitColor[] = {1.0f, 0.18f, 0.10f, 1.0f};
     const bool collapsing = shooter.m_stage5.phase == Stage5Phase::TayamaDragonCollapse;
     const int destroyed = collapsing ?
@@ -1251,13 +1248,13 @@ void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
             Matrix4x4::Scale({length, radius * 1.45f, radius * 1.45f});
         shooter.DrawModelPrimitive(renderer, camera,
             static_cast<int>(PrimitiveShape::Box), bodyWorld,
-            hitFlash ? HitColor : BodyColor);
+            hitFlash ? HitColor : TayamaDragonBodyColor);
         shooter.DrawModelPrimitive(renderer, camera,
             static_cast<int>(PrimitiveShape::Sphere), head,
             {radius * TayamaModelView::DragonJointDiameterScale,
                 radius * TayamaModelView::DragonJointDiameterScale,
                 radius * TayamaModelView::DragonJointDiameterScale}, {},
-            hitFlash ? HitColor : ArmorColor);
+            hitFlash ? HitColor : TayamaDragonArmorColor);
 
         // 装甲板と発光コアを節ごとにずらして機械龍の密度を作る
         if (index % 2 == 0) {
@@ -1267,14 +1264,14 @@ void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
                     head + Vector3 {static_cast<float>(side) * radius * 0.92f, 0.0f, 0.0f},
                     {radius * 0.72f, radius * 0.34f, radius * 1.28f},
                     {0.0f, static_cast<float>(shooter.m_frame) * 0.004f,
-                        static_cast<float>(side) * 0.34f}, EdgeColor);
+                        static_cast<float>(side) * 0.34f}, TayamaDragonEdgeColor);
             }
         }
         if (index % 3 == 0) {
             shooter.DrawModelPrimitive(renderer, camera,
                 static_cast<int>(PrimitiveShape::Sphere),
                 head + Vector3 {0.0f, 0.0f, -radius * 0.64f},
-                {radius * 0.34f, radius * 0.34f, radius * 0.16f}, {}, CoreColor);
+                {radius * 0.34f, radius * 0.34f, radius * 0.16f}, {}, TayamaDragonCoreColor);
         }
     }
 
@@ -1293,7 +1290,7 @@ void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
             const float radius = 1.2f * glow;
             shooter.DrawModelPrimitive(renderer, camera,
                 static_cast<int>(PrimitiveShape::Sphere), source,
-                {radius, radius, radius}, {}, CoreColor);
+                {radius, radius, radius}, {}, TayamaDragonCoreColor);
         }
     }
 

@@ -312,8 +312,8 @@ bool SideScrollingShooter::Stage2Module::DrawBossModel(
     // 上下ユニットへ別Transformを渡し、合体状態を描画する
     constexpr float BossScale = 1.92f;
     const float railWeight = Math::Clamp01(1.0f - yaw / Math::HalfPi);
-    const int railgunCycle = shooter.m_stage2.boss.actionAge % RailgunCycleFrames;
-    const bool railgunLocked = railgunCycle < RailgunFireFrame + RailgunVisualFrames;
+    // Phase 3では予告・発射・待機を通して同じ平滑化済み照準を使う
+    const bool railgunLocked = boss.phase >= 3.0f;
     const Vector3 aimTarget {
         ToWorldX(railgunLocked ? boss.actionX : boss.turretAimX),
         ToWorldY(railgunLocked ? boss.actionY : boss.turretAimY),
@@ -340,6 +340,7 @@ bool SideScrollingShooter::Stage2Module::DrawBossModel(
         aimTarget, yaw, BossScale,
         boss.phase >= 3.0f && shooter.m_stage2.boss.action != BossAction::Separating, true
     };
+    battleship.secondaryGunsTrackTarget = true;
     battleship.secondaryAimTarget = {
         ToWorldX(boss.turretAimX), ToWorldY(boss.turretAimY),
         Math::Lerp(SidePlaneZ, boss.turretAimZ, railWeight)
@@ -478,8 +479,8 @@ bool SideScrollingShooter::Stage2Module::DrawBossModel(
 
     // Phase 3では発射直後だけ専用HLSLで固定照準の軌跡を急速に消す
     const int beamCycle = shooter.m_stage2.boss.actionAge % RailgunCycleFrames;
-    const int beamAge = beamCycle - RailgunFireFrame;
-    const bool pointerVisible = beamCycle < RailgunFireFrame &&
+    const int beamAge = beamCycle - RailgunFireFrame(shooter.m_difficulty);
+    const bool pointerVisible = beamCycle < RailgunFireFrame(shooter.m_difficulty) &&
         shooter.m_stage2.boss.action != BossAction::Separating;
     const bool beamVisible = beamAge >= 0 && beamAge < RailgunVisualFrames;
     const bool mirageVisible = beamAge >= 0 && beamAge < RailgunMirageFrames;
@@ -522,7 +523,7 @@ bool SideScrollingShooter::Stage2Module::DrawBossModel(
         if (pointerVisible) {
             DrawRailgunLayer(0.10f,
                 static_cast<float>(beamCycle) /
-                    static_cast<float>(RailgunFireFrame), 1);
+                    static_cast<float>(RailgunFireFrame(shooter.m_difficulty)), 1);
         } else if (beamVisible) {
             DrawRailgunLayer(0.85f,
                 static_cast<float>(beamAge) /

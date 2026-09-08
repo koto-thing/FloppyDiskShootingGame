@@ -23,6 +23,7 @@ enum class PrimitiveShape;
  */
 class SideScrollingShooter {
     friend struct HomingShotTests;
+    friend struct OrbitShotTests;
 public:
     /** @brief 自機弾の挙動を調整するパラメータ */
     struct PlayerShotParameters {
@@ -164,6 +165,7 @@ private:
         bool piercing = false;
         bool grazed = false;
         bool firedByBoss = false;
+        bool tayamaDragonOrbit = false;
         bool bossCollisionInitialized = false;
         bool active = false;
 

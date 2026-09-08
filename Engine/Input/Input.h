@@ -44,10 +44,13 @@ public:
     static void PollGamepad();
 
     /**
-     * @brief XInputゲームパッドが接続されているか取得する
+     * @brief 対応ゲームパッドが接続されているか取得する
      * @return 接続中の場合はtrue
      */
     static bool IsGamepadConnected();
+
+    /** @brief Switch 2 Proの直接入力を使用中か取得する @return 使用中の場合はtrue */
+    static bool IsSwitch2ProConnected();
 
     /**
      * @brief 指定したキーが押されているかを取得する
@@ -138,6 +141,7 @@ private:
     static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_mouseButtonDown;
     static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_mouseButtonUp;
     static bool m_gamepadConnected;
+    static bool m_switch2ProConnected;
     static Vector2 m_mousePosition;
     static Vector2 m_mouseDelta;
     static float m_mouseWheelDelta;

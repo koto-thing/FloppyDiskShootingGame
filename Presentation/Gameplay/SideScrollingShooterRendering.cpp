@@ -1051,6 +1051,9 @@ void SideScrollingShooter::DrawTutorialControlHint(
     constexpr const char* GamepadHints[] = {
         "MOVE L STICK", "SLOW LB/LT", "A/RB/RT ATTACK", "Y BOMB", "X SHIFT"
     };
+    constexpr const char* Switch2Hints[] = {
+        "MOVE L STICK", "SLOW L/ZL", "A/R/ZR ATTACK", "Y BOMB", "X SHIFT"
+    };
     Vector2 screenPosition;
     Vector3 player = PlayerWorldPosition();
     if (!IsTayamaBattle()) player.z = playerZ;
@@ -1062,7 +1065,8 @@ void SideScrollingShooter::DrawTutorialControlHint(
                 static_cast<float>(viewport.width) * 2.0f - 1.0f,
         1.0f - (screenPosition.y - static_cast<float>(viewport.y)) /
                 static_cast<float>(viewport.height) * 2.0f};
-    const char* hint = (Input::IsGamepadConnected() ? GamepadHints : KeyboardHints)[m_tutorialStep];
+    const char* hint = (Input::IsSwitch2ProConnected() ? Switch2Hints :
+        Input::IsGamepadConnected() ? GamepadHints : KeyboardHints)[m_tutorialStep];
     renderer.DrawText(hint, TextAlign::Center, 0.015f,
         {0.35f, 1.0f, 0.85f, 1.0f}, position, 0.0025f);
 }

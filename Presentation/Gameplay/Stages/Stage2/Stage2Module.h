@@ -248,7 +248,15 @@ private:
     static constexpr int BossApproachFrames = 90;
     static constexpr int BossAssemblyFrames = 90;
     static constexpr int RailgunCycleFrames = 180;
-    static constexpr int RailgunFireFrame = 60;
+    static constexpr int RailgunLockFrame = 60;
+    /**
+     * @brief 難易度別の照準固定時間を含む発射フレームを取得する
+     * @param difficulty 使用する難易度
+     * @return HARDは90、それ以外は120フレーム
+     */
+    static constexpr int RailgunFireFrame(DifficultyType difficulty) {
+        return RailgunLockFrame + (difficulty == Hard ? 30 : 60);
+    }
     static constexpr int RailgunVisualFrames = 12;
     static constexpr int RailgunMirageFrames = 36;
     static constexpr int FirstSinkEndFrame = 108;
@@ -256,7 +264,7 @@ private:
     static constexpr int DustLifetimeFrames = 28;
 
     static_assert(BossApproachFrames + BossAssemblyFrames == 180);
-    static_assert(RailgunFireFrame + RailgunMirageFrames <= RailgunCycleFrames);
+    static_assert(RailgunLockFrame + 60 + RailgunMirageFrames <= RailgunCycleFrames);
     static_assert(FirstSinkEndFrame < ResurfaceStartFrame);
 
     /**

@@ -207,7 +207,7 @@ bool SideScrollingShooter::Stage2Module::HandleBossInteractionAfterTick(
     // POST-incrementのactionAgeで発射フレームのレールガン判定を行う
     const int beamCycle = shooter.m_stage2.boss.actionAge % RailgunCycleFrames;
     if (boss.phase >= 3.0f && boss.bossPartHp[BossNose] > 0 &&
-        beamCycle == RailgunFireFrame && shooter.m_invincible == 0) {
+        beamCycle == RailgunFireFrame(shooter.m_difficulty) && shooter.m_invincible == 0) {
         constexpr float BossScale = 1.92f;
         const float yaw = shooter.IsRailGameplayActive() ? 0.0f : Math::HalfPi;
         const float cosine = std::cos(yaw);
@@ -338,22 +338,30 @@ void SideScrollingShooter::Stage2Module::TickBossPhase3(
         (SubmarineBuriedOffsetY - shooter.m_stage2.boss.sandSubmarineOffsetY) * 0.08f;
     const int beamCycle = shooter.m_stage2.boss.actionAge % RailgunCycleFrames;
     if (beamCycle == 0) {
-        boss.attackWarningFrames = RailgunFireFrame;
-        boss.actionX = boss.turretAimX;
-        boss.actionY = boss.turretAimY;
-        boss.actionZ = boss.turretAimZ;
+        boss.attackWarningFrames = RailgunFireFrame(shooter.m_difficulty);
     }
-    if (beamCycle < RailgunFireFrame) {
-        // 予告の前後はゆっくり、中央は素早く追従し、発射時に現在の照準へ固定する
-        const float trackingRate = ShooterStages::Stage2::Phase3MainGunTrackingRate(
-            beamCycle, RailgunFireFrame);
-        boss.actionX += (shooter.m_playerX - boss.actionX) * trackingRate;
-        boss.actionY += (shooter.m_playerY - boss.actionY) * trackingRate;
+    if (beamCycle < RailgunLockFrame || beamCycle >= RailgunFireFrame(shooter.m_difficulty) + RailgunVisualFrames) {
+        // 現在の入力を発射まで継続した位置を、低速・斜め補正・移動範囲込みで予測する
+        const float playerX = shooter.m_playerX;
+        const float playerY = shooter.m_playerY;
+        // HARDのみ発射時点を先読みし、確定後はHARDで0.5秒、他は1秒固定する
+        // 被弾判定はactionAge加算後なので、残り移動回数を1フレーム補正する
+        if (shooter.m_difficulty == Hard && beamCycle < RailgunLockFrame) {
+            for (int frame = beamCycle + 1; frame < RailgunFireFrame(shooter.m_difficulty); ++frame) {
+                shooter.TickPlayer();
+            }
+        }
+        // 入力の反転や予告開始でも照準を飛ばさず、予測位置へ滑らかに追従する
+        constexpr float MainGunTrackingRate = 0.08f;
         const float targetZ = shooter.IsRailGameplayActive() ?
             PlayerRailZ : ToRailZFromSideX(shooter.m_playerX);
-        boss.actionZ += (targetZ - boss.actionZ) * trackingRate;
+        boss.actionX += (shooter.m_playerX - boss.actionX) * MainGunTrackingRate;
+        boss.actionY += (shooter.m_playerY - boss.actionY) * MainGunTrackingRate;
+        boss.actionZ += (targetZ - boss.actionZ) * MainGunTrackingRate;
+        shooter.m_playerX = playerX;
+        shooter.m_playerY = playerY;
     }
-    if (beamCycle == RailgunFireFrame && boss.bossPartHp[BossNose] > 0) {
+    if (beamCycle == RailgunFireFrame(shooter.m_difficulty) && boss.bossPartHp[BossNose] > 0) {
         PlayRailgunSound(shooter);
     }
     // 各ハッチを独立したランダム間隔で待機させ、同一フレームの一斉射を避ける
@@ -771,6 +779,7 @@ void SideScrollingShooter::Stage2Module::FireBossPartBarrage(
         battleshipPosition, {}, yaw, ModelScale,
         boss.phase >= 3.0f && shooter.m_stage2.boss.action != BossAction::Separating, true
     };
+    battleship.secondaryGunsTrackTarget = true;
     battleship.secondaryAimTarget = {
         ToWorldX(boss.turretAimX), ToWorldY(boss.turretAimY),
         railMode ? boss.turretAimZ : SidePlaneZ

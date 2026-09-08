@@ -15,6 +15,7 @@ D:\Pandd\FloppyDiskShootingGame\Domain\Entities\MeshRenderer.cpp;D:\Pandd\Floppy
 D:\Pandd\FloppyDiskShootingGame\Domain\ValueObjects\CollisionLayer.cpp;D:\Pandd\FloppyDiskShootingGame\Temp\HomingEngineObj\CollisionLayer.obj
 D:\Pandd\FloppyDiskShootingGame\Engine\Input\Input.cpp;D:\Pandd\FloppyDiskShootingGame\Temp\HomingEngineObj\Input.obj
 D:\Pandd\FloppyDiskShootingGame\Engine\Input\WindowsInputBackend.cpp;D:\Pandd\FloppyDiskShootingGame\Temp\HomingEngineObj\WindowsInputBackend.obj
+D:\Pandd\FloppyDiskShootingGame\Engine\Input\Switch2ProInput.cpp;D:\Pandd\FloppyDiskShootingGame\Temp\HomingEngineObj\Switch2ProInput.obj
 D:\Pandd\FloppyDiskShootingGame\Engine\Time\Time.cpp;D:\Pandd\FloppyDiskShootingGame\Temp\HomingEngineObj\Time.obj
 D:\Pandd\FloppyDiskShootingGame\Engine\UI\Button.cpp;D:\Pandd\FloppyDiskShootingGame\Temp\HomingEngineObj\Button.obj
 D:\Pandd\FloppyDiskShootingGame\Engine\UI\Slider.cpp;D:\Pandd\FloppyDiskShootingGame\Temp\HomingEngineObj\Slider.obj

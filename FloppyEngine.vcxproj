@@ -103,6 +103,7 @@
     <ClCompile Include="Domain\ValueObjects\CollisionLayer.cpp" />
     <ClCompile Include="Engine\Input\Input.cpp" />
     <ClCompile Include="Engine\Input\WindowsInputBackend.cpp" />
+    <ClCompile Include="Engine\Input\Switch2ProInput.cpp" />
     <ClCompile Include="Engine\Time\Time.cpp" />
     <ClCompile Include="Engine\UI\Button.cpp" />
     <ClCompile Include="Engine\UI\Slider.cpp" />
@@ -114,6 +115,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Engine\Diagnostics\Debug.h" />
+    <ClInclude Include="Engine\Input\Switch2ProInput.h" />
     <ClInclude Include="Application\Interfaces\IScene.h" />
     <ClInclude Include="Application\UseCases\SceneManager.h" />
     <ClInclude Include="Domain\Entities\AABBCollider.h" />

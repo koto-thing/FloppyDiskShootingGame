@@ -4,6 +4,7 @@
 #include <memory>
 #include "../Presentation/Gameplay/SideScrollingShooter.h"
 #include "../Presentation/Gameplay/Stages/Stage5/Stage5Module.h"
+#include "../Presentation/Gameplay/Stages/Stage2/Stage2Module.h"
 
 struct HomingShotTests {
     /** @brief 実際の追尾と部位衝突をGPUなしで検証する @return なし */
@@ -141,6 +142,111 @@ struct HomingShotTests {
         assert(shot.homingTarget >= static_cast<int>(g.m_enemies.size()) * (Game::BossPartCount + 1));
         weakpoint.destroyed = true;
         assert(!Game::Stage5Module::GetHomingTarget(g, 0, weakpointPosition));
+        // Stage2主砲は入力の継続先を狙い、予測で実際の自機位置を変更しない
+        g.m_stageNumber = 2;
+        g.m_difficulty = Hard;
+        for (bool rail : {false, true}) {
+            g.m_viewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+            for (bool slow : {false, true}) {
+                for (int input = 0; input < 16; ++input) {
+                    g.m_moveLeft = (input & 1) != 0;
+                    g.m_moveRight = (input & 2) != 0;
+                    g.m_moveUp = (input & 4) != 0;
+                    g.m_moveDown = (input & 8) != 0;
+                    g.m_slowMove = slow;
+                    for (int cycle : {0, 30, 59}) {
+                        g.m_playerX = g.m_playerY = 0.0f;
+                        for (int frame = cycle + 1; frame < 90; ++frame) g.TickPlayer();
+                        const float expectedX = g.m_playerX;
+                        const float expectedY = g.m_playerY;
+                        g.m_playerX = g.m_playerY = 0.0f;
+                        Game::Enemy boss {};
+                        boss.phase = 3.0f;
+                        boss.hp = 30;
+                        boss.maxHp = 100;
+                        boss.age = 1;
+                        g.m_stage2.boss = {};
+                        g.m_stage2.boss.actionAge = cycle;
+                        Game::Stage2Module::TickBoss(g, boss);
+                        assert(g.m_playerX == 0.0f && g.m_playerY == 0.0f);
+                        if (cycle == 0) assert(boss.attackWarningFrames == 90);
+                        // 一度に予測位置へ飛ばず、各軸で予測位置との間へ進む
+                        assert(expectedX == 0.0f ? boss.actionX == 0.0f :
+                            boss.actionX / expectedX > 0.0f && boss.actionX / expectedX < 1.0f);
+                        assert(expectedY == 0.0f ? boss.actionY == 0.0f :
+                            boss.actionY / expectedY > 0.0f && boss.actionY / expectedY < 1.0f);
+                        const float aimX = boss.actionX;
+                        const float aimY = boss.actionY;
+                        const float aimZ = boss.actionZ;
+                        // HARDは確定後の0.5秒間と発射中に照準を固定する
+                        g.m_moveRight = !g.m_moveRight;
+                        for (int lockedFrame = 60; lockedFrame < 102; ++lockedFrame) {
+                            g.m_stage2.boss.actionAge = lockedFrame;
+                            Game::Stage2Module::TickBoss(g, boss);
+                            assert(boss.actionX == aimX && boss.actionY == aimY && boss.actionZ == aimZ);
+                        }
+                        g.m_moveRight = !g.m_moveRight;
+                    }
+                }
+            }
+        }
+        // 次の予告開始と発射後の追従再開でも照準を初期化しない
+        for (int cycle : {0, 102, 179}) {
+            Game::Enemy boss {};
+            boss.phase = 3.0f;
+            boss.hp = 30;
+            boss.maxHp = 100;
+            boss.age = 1;
+            boss.actionX = 1.0f;
+            g.m_playerX = g.m_playerY = 0.0f;
+            g.m_moveLeft = g.m_moveRight = g.m_moveUp = g.m_moveDown = false;
+            g.m_stage2.boss.actionAge = cycle;
+            Game::Stage2Module::TickBoss(g, boss);
+            assert(boss.actionX > 0.8f && boss.actionX < 1.0f);
+        }
+        // EASY/NORMALは移動入力があっても現在位置へ追従し、確定後は固定する
+        for (auto difficulty : {Easy, Normal}) {
+            g.m_difficulty = difficulty;
+            g.m_moveRight = true;
+            g.m_playerX = 0.5f;
+            Game::Enemy boss {};
+            boss.phase = 3.0f;
+            boss.hp = 30;
+            boss.maxHp = 100;
+            boss.age = 1;
+            boss.actionX = g.m_playerX;
+            g.m_stage2.boss.actionAge = 30;
+            Game::Stage2Module::TickBoss(g, boss);
+            assert(boss.actionX == g.m_playerX);
+            const float aimX = boss.actionX;
+            const float aimY = boss.actionY;
+            const float aimZ = boss.actionZ;
+            g.m_playerX = -0.5f;
+            for (int frame = 60; frame < 132; ++frame) {
+                g.m_stage2.boss.actionAge = frame;
+                Game::Stage2Module::TickBoss(g, boss);
+                assert(boss.actionX == aimX && boss.actionY == aimY && boss.actionZ == aimZ);
+            }
+        }
+        // ラスボス第2形態の3D移動端と、その位置から撃つ弾の生存を確認する
+        g.m_stageNumber = 5;
+        g.m_stage5.phase = Game::Stage5Phase::TayamaDragonBattle;
+        g.m_viewMode = g.m_nextViewMode = Game::ViewMode::Rail3D;
+        g.m_moveLeft = g.m_moveRight = g.m_moveUp = g.m_moveDown = false;
+        for (float edge : {-1.35f, 1.35f}) {
+            g.m_playerX = edge * 2.0f;
+            g.m_playerY = 2.0f;
+            g.TickPlayer();
+            assert(g.m_playerX == edge && g.m_playerY == 1.3f);
+            g.m_shots.fill({});
+            auto& edgeShot = g.m_shots[0];
+            edgeShot.active = true;
+            edgeShot.x = edge;
+            edgeShot.y = g.m_playerY;
+            edgeShot.z = 10.0f;
+            g.TickShots();
+            assert(edgeShot.active);
+        }
         std::puts("HomingShotTests passed");
     }
 };

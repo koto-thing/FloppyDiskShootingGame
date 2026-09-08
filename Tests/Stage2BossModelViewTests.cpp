@@ -18,14 +18,6 @@ void RunStage2BossModelViewTests() {
     assert(firstInterval != nextInterval);
     assert(firstInterval != otherHatchInterval);
 
-    // 主砲追従率が予告の中央で加速し、発射直前に減速することを確認する
-    const float trackingStart = ShooterStages::Stage2::Phase3MainGunTrackingRate(0, 60);
-    const float trackingMiddle = ShooterStages::Stage2::Phase3MainGunTrackingRate(30, 60);
-    const float trackingEnd = ShooterStages::Stage2::Phase3MainGunTrackingRate(60, 60);
-    assert(trackingMiddle > trackingStart);
-    assert(trackingMiddle > trackingEnd);
-    assert(std::fabs(trackingStart - trackingEnd) < 0.0001f);
-
     // Phase 1、2相当の固定照準では砲口が艦首方向へ砲身長分進むことを確認する
     BossModelTransform fixed {{10.0f, 20.0f, 30.0f}, {}, 0.0f, 2.0f};
     const Vector3 fixedMuzzle = LandBattleshipView::SecondaryGunMuzzlePosition(fixed, 0);

@@ -427,11 +427,16 @@ void SideScrollingShooter::TickShots() {
         const float railShotFarZ = m_stageNumber == 5 &&
             ShooterStages::Stage5::IsTayamaDragonBattlePhase(m_stage5.phase) ?
             ShooterStages::Stage5::TayamaDragonShotFarZ : EnemyRailFarZ;
-        const bool outsideRail = !IsTayamaBattle() &&
+        // 包囲弾は自機周囲の円から進入するため、通常の画面端より外まで保持する
+        const bool outsideOrbit = shot.tayamaDragonOrbit &&
+            Vector3::Distance(playerPosition,
+                {ToWorldX(shot.x), ToWorldY(shot.y), shot.z}) >
+                ShooterStages::Stage5::TayamaDragonOrbitRadius + 1.0f;
+        const bool outsideRail = !IsTayamaBattle() && (shot.tayamaDragonOrbit ? outsideOrbit :
             (shot.z < 0.0f || shot.z > railShotFarZ ||
-                std::abs(shot.x) > 1.2f ||
+                std::abs(shot.x) > (std::max)(1.2f, StageDispatch::PlayerXRange(*this).y) ||
                 shot.y < railShotMinY - Side2DShotCullMargin ||
-                shot.y > railShotMaxY + Side2DShotCullMargin);
+                shot.y > railShotMaxY + Side2DShotCullMargin));
         if (!cullProtected && IsRailGameplayActive() &&
             (outsideTayamaArena || outsideRail)) {
             DeactivateShot(shot);
@@ -994,7 +999,11 @@ void SideScrollingShooter::SpawnScoreItem(float x, float y, float z, int value,
  */
 void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy,
     int barrageIndex, int barrageCount, bool firedByBoss) {
-    if (enemy && !CanSpawnEnemyProjectile(x, y, z)) return;
+    // 第2形態の包囲射撃だけ自機に近い円周からの発射を許可する
+    const bool tayamaDragonOrbit = enemy && firedByBoss && m_stageNumber == 5 &&
+        m_stage5.phase == Stage5Phase::TayamaDragonBattle &&
+        m_stage5.tayamaDragonAttack == ShooterStages::Stage5::TayamaDragonAttack::Orbit;
+    if (enemy && !tayamaDragonOrbit && !CanSpawnEnemyProjectile(x, y, z)) return;
 
     Shot* available = nullptr;
     for (int shotIndex = 0; shotIndex < ActiveShotCapacity(); ++shotIndex) {
@@ -1035,6 +1044,7 @@ void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, 
     shot.barrageCount = barrageCount;
     shot.enemy = enemy;
     shot.firedByBoss = firedByBoss;
+    shot.tayamaDragonOrbit = tayamaDragonOrbit;
     shot.active = true;
 }
 

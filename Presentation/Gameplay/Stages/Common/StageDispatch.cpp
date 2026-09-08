@@ -634,6 +634,9 @@ void SideScrollingShooter::StageDispatch::TickBossIntroduction(SideScrollingShoo
 
 float SideScrollingShooter::StageDispatch::RailPlayerMaxY(
     const SideScrollingShooter& shooter) {
+    // ラスボス第2形態では上方向の回避範囲を広げる
+    if (shooter.m_stageNumber == 5 &&
+        ShooterStages::Stage5::IsTayamaDragonBattlePhase(shooter.m_stage5.phase)) return 3.5f;
     return shooter.m_stageNumber == 3 ? Stage3Module::RailPlayerMaxY(shooter) : 0.9f;
 }
 
@@ -644,6 +647,9 @@ float SideScrollingShooter::StageDispatch::SideCameraY(
 
 Vector2 SideScrollingShooter::StageDispatch::PlayerXRange(
     const SideScrollingShooter& shooter) {
+    // ラスボス第2形態の3D視点では左右の回避範囲を少し広げる
+    if (shooter.m_stageNumber == 5 && shooter.IsRailGameplayActive() &&
+        ShooterStages::Stage5::IsTayamaDragonBattlePhase(shooter.m_stage5.phase)) return {-1.35f, 1.35f};
     if (shooter.m_stageNumber == 3) return Stage3Module::PlayerXRange(shooter);
     return shooter.IsRailGameplayActive() ? Vector2 {-1.2f, 1.2f} :
         Vector2 {Side2DPlayerMinX, Side2DPlayerMaxX};

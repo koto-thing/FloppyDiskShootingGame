@@ -23,6 +23,11 @@ constexpr float PlayerHitRadius3D = 0.38f;
  * @return HUDへ描画する操作案内
  */
 const char* HudControlHint(bool viewLocked) {
+    if (Input::IsSwitch2ProConnected()) {
+        return viewLocked ?
+            "MOVE: L STICK/DPAD  SHOT: A/R/ZR  3D MODE LOCKED  BOMB: Y  MENU: +" :
+            "MOVE: L STICK/DPAD  SHOT: A/R/ZR  MODE: X  BOMB: Y  MENU: +";
+    }
     if (Input::IsGamepadConnected()) {
         return viewLocked ?
             "MOVE: L STICK/DPAD  SHOT: A/RB/RT  3D MODE LOCKED  BOMB: Y  MENU: START" :
