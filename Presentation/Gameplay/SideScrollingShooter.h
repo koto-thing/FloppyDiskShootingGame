@@ -139,6 +139,12 @@ private:
     class CityBackgroundModule;
 
     struct Shot {
+#if defined(_DEBUG)
+        // 描画専用の問い合わせは命中を返さず、全有効部位の判定形状を列挙する
+        Renderer* hitboxRenderer = nullptr;
+        const Camera3D* hitboxCamera = nullptr;
+        float hitboxSideZ = SidePlaneZ;
+#endif
         float x = 0.0f;
         float y = 0.0f;
         float z = 0.0f;
@@ -689,6 +695,25 @@ private:
     /** @brief ボスマシンガンの単発音を再生する @return なし */
     void PlayBossMachineGunSound();
     static bool Hit(float ax, float ay, float ar, float bx, float by, float br);
+    /**
+     * @brief 自機弾と円の判定、またはDebug用の判定範囲描画を行う
+     * @param shot 判定対象の弾または描画専用の問い合わせ
+     * @param x 対象中心のゲーム座標X
+     * @param y 対象中心のゲーム座標Y
+     * @param radius 対象円のゲーム座標半径
+     * @return 命中時true、描画専用時false
+     */
+    static bool HitShotCircle(const Shot& shot, float x, float y, float radius);
+    /**
+     * @brief 自機弾の移動線分と球の判定、またはDebug用の判定範囲描画を行う
+     * @param shot 判定対象の弾または描画専用の問い合わせ
+     * @param x 対象中心のワールド座標X
+     * @param y 対象中心のワールド座標Y
+     * @param z 対象中心のワールド座標Z
+     * @param radius 対象球のワールド半径
+     * @return 命中時true、描画専用時false
+     */
+    static bool HitShotSphere(const Shot& shot, float x, float y, float z, float radius);
     static bool Hit3D(float ax, float ay, float az, float ar, float bx, float by, float bz, float br);
     /**
      * @brief 点と2D線分の最短距離を取得する
@@ -901,6 +926,24 @@ private:
         float x, float y, float z, bool visible,
         float yaw = 0.0f, float pitch = 0.0f, float roll = 0.0f) const;
     void DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw = 0.0f) const;
+#if defined(_DEBUG)
+    /**
+     * @brief ワールド座標の判定楕円体を半透明の赤で描画する
+     * @param query 描画先を設定した問い合わせ
+     * @param center 判定中心のワールド座標
+     * @param radii 各軸の半径
+     * @return なし
+     */
+    static void DrawHitboxEllipsoid(const Shot& query, const Vector3& center, const Vector3& radii);
+    /**
+     * @brief 敵の接触判定を半透明の赤で描画する
+     * @param renderer 描画先レンダラー
+     * @param camera 現在のカメラ
+     * @param enemy 表示座標へ変換済みの敵
+     * @return なし
+     */
+    void DrawEnemyHitbox(Renderer& renderer, const Camera3D& camera, const Enemy& enemy) const;
+#endif
     /**
      * @brief 接続レーザー敵の機体間レーザーを描画する
      * @param renderer 描画先レンダラー

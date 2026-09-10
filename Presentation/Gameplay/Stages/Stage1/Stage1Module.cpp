@@ -224,8 +224,8 @@ bool SideScrollingShooter::Stage1Module::HandleBossInteractionAfterTick(
 }
 
 bool SideScrollingShooter::Stage1Module::HitsHazard(const SideScrollingShooter& shooter,
-    float x, float y, float z, float radius) {
-    return FindMeteor(shooter, x, y, z, radius) >= 0;
+    float x, float y, float z, float radius, [[maybe_unused]] const Shot* debugQuery) {
+    return FindMeteor(shooter, x, y, z, radius, debugQuery) >= 0;
 }
 
 bool SideScrollingShooter::Stage1Module::TryDamageTarget(
@@ -501,7 +501,7 @@ void SideScrollingShooter::Stage1Module::TickBossDefeat(
 }
 
 int SideScrollingShooter::Stage1Module::FindMeteor(const SideScrollingShooter& shooter,
-    float x, float y, float z, float radius) {
+    float x, float y, float z, float radius, [[maybe_unused]] const Shot* debugQuery) {
     for (int i = 0; i < ShooterStages::Stage1::MeteorCount; ++i) {
         const ShooterStages::Stage1::Meteor& meteor = shooter.m_stage1.meteors[i];
         if (meteor.destroyed) continue;
@@ -511,6 +511,14 @@ int SideScrollingShooter::Stage1Module::FindMeteor(const SideScrollingShooter& s
             const float railX = std::sin(meteor.travel * 0.090f + meteor.pathPhase) * 7.0f;
             const float railY = 0.80f + std::sin(
                 meteor.travel * 0.135f + meteor.pathPhase * 1.37f) * 2.0f;
+#if defined(_DEBUG)
+            // 未破壊の隕石をすべて描画し、命中による途中終了を避ける
+            if (debugQuery) {
+                HitShotSphere(*debugQuery, railX, railY, 72.0f - meteor.travel,
+                    MeteorRailDiameter * 0.5f * meteor.scale);
+                continue;
+            }
+#endif
             if (Hit3D(ToWorldX(x), ToWorldY(y), z, radius * WorldXScale,
                 railX, railY, 72.0f - meteor.travel,
                 MeteorRailDiameter * 0.5f * meteor.scale)) {
@@ -524,6 +532,14 @@ int SideScrollingShooter::Stage1Module::FindMeteor(const SideScrollingShooter& s
             radius * WorldXScale;
         const float hitHeight = MeteorSideHeight * 0.5f * meteor.scale +
             radius * WorldYScale;
+#if defined(_DEBUG)
+        // 扁平な隕石の判定を同じ縦横半径の楕円として表示する
+        if (debugQuery) {
+            DrawHitboxEllipsoid(*debugQuery, {ToWorldX(sideX), ToWorldY(sideY), debugQuery->hitboxSideZ},
+                {hitWidth, hitHeight, hitHeight});
+            continue;
+        }
+#endif
         if (SideScrollingShooterShared::HitsEllipsoid(
             ToWorldX(x - sideX), ToWorldY(y - sideY), 0.0f,
             hitWidth, hitHeight, 1.0f)) return i;

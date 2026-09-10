@@ -134,10 +134,11 @@ public:
      * @param y 判定対象のゲーム座標Y
      * @param z 判定対象のレール座標Z
      * @param radius 判定対象の半径
+     * @param debugQuery Debug描画用の問い合わせ、通常判定時はnullptr
      * @return ボス本体へ接触している場合true、接触していない場合false
      */
     static bool HitsHazard(const SideScrollingShooter& shooter,
-        float x, float y, float z, float radius);
+        float x, float y, float z, float radius, [[maybe_unused]] const Shot* debugQuery = nullptr);
 
     /**
      * @brief Stage 4特殊弾を座標加算前に更新する

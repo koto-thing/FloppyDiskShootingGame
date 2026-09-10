@@ -10,11 +10,96 @@
 
 #include "SideScrollingShooterEnemies.h"
 #include "Stages/Common/StageDefinition.h"
+#if defined(_DEBUG)
+#include <cassert>
+#include "Stages/Stage3/Stage3Module.h"
+#include "Stages/Stage5/Stage5Module.h"
+#endif
 
 namespace {
 constexpr float PlayerHitboxColor[4] = {1.0f, 0.08f, 0.08f, 0.24f};
 constexpr float PlayerHitRadius2D = 0.050f;
 constexpr float PlayerHitRadius3D = 0.38f;
+}
+
+#if defined(_DEBUG)
+void SideScrollingShooter::DrawHitboxEllipsoid(
+    const Shot& query, const Vector3& center, const Vector3& radii) {
+    // 半径をプリミティブの直径へ変換して判定形状を表示する
+    assert(query.hitboxRenderer && query.hitboxCamera);
+    constexpr float color[4] = {1.0f, 0.0f, 0.0f, 0.24f};
+    DrawModelPrimitive(*query.hitboxRenderer, *query.hitboxCamera, 5,
+        center.x, center.y, center.z, radii.x * 2.0f, radii.y * 2.0f, radii.z * 2.0f, color);
+}
+
+void SideScrollingShooter::DrawEnemyHitbox(
+    Renderer& renderer, const Camera3D& camera, const Enemy& enemy) const {
+    // 描画専用問い合わせで実際のボス部位判定を最後まで走査する
+    Shot query;
+    query.hitboxRenderer = &renderer;
+    query.hitboxCamera = &camera;
+    query.hitboxSideZ = enemy.z;
+    if (enemy.type == 2 && (!m_chapterResultActive || enemy.collisionEnabled) &&
+        (enemy.collisionEnabled || StageDispatch::CanHitBossWhileCollisionDisabled(*this))) {
+        BossPart part = BossNose;
+        TryHitBossPart(query, enemy, part);
+        StageDispatch::TryHitBossBody(*this, query, enemy);
+        StageDispatch::BlocksPlayerShot(*this, query, enemy);
+    }
+
+    // 接触判定が無効なボスは共通球の表示対象から除外する
+    if (enemy.type == 2 && !enemy.collisionEnabled) return;
+    const auto& behavior = enemy.behavior ? *enemy.behavior : EnemyBehaviorForType(enemy.type);
+    constexpr float color[4] = {1.0f, 0.0f, 0.0f, 0.24f};
+
+    // 衝突処理と同じ半径を使い、2D判定は軸ごとのワールド倍率を反映する
+    const bool rail = IsRailGameplayActive();
+    const float diameter = 2.0f * (rail ? behavior.CollisionRadius3D(enemy) : behavior.CollisionRadius(enemy));
+    DrawModelPrimitive(renderer, camera, 5, ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z,
+        rail ? diameter : diameter * WorldXScale,
+        rail ? diameter : diameter * WorldYScale,
+        rail ? diameter : diameter * WorldYScale, color);
+
+    // 3Dでは接触範囲とは異なる自機弾の命中半径も表示する
+    if (rail && (!m_chapterResultActive || enemy.collisionEnabled)) {
+        float radius = behavior.ShotHitRadius3D(enemy);
+        if (m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase)) {
+            radius *= ShooterStages::Stage5::Part2EnemyScaleMultiplier(RailBlend());
+        }
+        HitShotSphere(query, ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z, radius);
+    }
+}
+#endif
+
+bool SideScrollingShooter::HitShotCircle(const Shot& shot, float x, float y, float radius) {
+#if defined(_DEBUG)
+    // 2Dの円を軸ごとのワールド倍率で描画し、命中による途中終了を防ぐ
+    if (shot.hitboxRenderer && shot.hitboxCamera) {
+        constexpr float color[4] = {1.0f, 0.0f, 0.0f, 0.24f};
+        DrawModelPrimitive(*shot.hitboxRenderer, *shot.hitboxCamera, 5,
+            ToWorldX(x), ToWorldY(y), shot.hitboxSideZ,
+            radius * WorldXScale * 2.0f, radius * WorldYScale * 2.0f,
+            radius * WorldYScale * 2.0f, color);
+        return false;
+    }
+#endif
+    // 通常の弾は従来と同じ円判定を使用する
+    return Hit(shot.x, shot.y, shot.hitRadius, x, y, radius);
+}
+
+bool SideScrollingShooter::HitShotSphere(const Shot& shot, float x, float y, float z, float radius) {
+#if defined(_DEBUG)
+    // 3Dの判定球を描画し、命中による途中終了を防ぐ
+    if (shot.hitboxRenderer && shot.hitboxCamera) {
+        constexpr float color[4] = {1.0f, 0.0f, 0.0f, 0.24f};
+        DrawModelPrimitive(*shot.hitboxRenderer, *shot.hitboxCamera, 5,
+            x, y, z, radius * 2.0f, radius * 2.0f, radius * 2.0f, color);
+        return false;
+    }
+#endif
+    // 通常の弾は従来と同じ移動線分判定を使用する
+    return Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
+        ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale, x, y, z, radius);
 }
 
 void SideScrollingShooter::Render(Renderer& renderer) const {
@@ -24,6 +109,71 @@ void SideScrollingShooter::Render(Renderer& renderer) const {
     } else {
         Render3D(renderer);
     }
+#if defined(_DEBUG)
+    // 初回描画で通常の命中判定と、状態を変えず全形状を描く問い合わせを自己検証する
+    static const bool hitboxCheck = [] {
+        Shot shot;
+        assert(HitShotCircle(shot, 0.0f, 0.0f, 0.1f));
+        assert(!HitShotCircle(shot, 1.0f, 0.0f, 0.1f));
+        shot.z = 2.0f;
+        shot.vz = 4.0f;
+        assert(HitShotSphere(shot, 0.0f, 0.0f, 0.0f, 0.1f));
+        assert(!HitShotSphere(shot, 1.0f, 0.0f, 0.0f, 0.1f));
+        Renderer checkRenderer;
+        Camera3D checkCamera;
+        shot.hitboxRenderer = &checkRenderer;
+        shot.hitboxCamera = &checkCamera;
+        assert(!HitShotCircle(shot, 0.0f, 0.0f, 0.1f));
+        assert(!HitShotSphere(shot, 0.0f, 0.0f, 0.0f, 0.1f));
+        assert(checkRenderer.CommandCount() == 2);
+
+        // 両視点で全関節が列挙され、破壊済み・水没中・ボス戦中は表示されないことを確認する
+        auto hazardCheck = std::make_unique<SideScrollingShooter>();
+        for (const ViewMode mode : {ViewMode::Side2D, ViewMode::Rail3D}) {
+            hazardCheck->m_viewMode = mode;
+            hazardCheck->m_stageNumber = 2;
+            hazardCheck->m_stage2.boneArchDestroyed = false;
+            checkRenderer.BeginFrame();
+            assert(!StageDispatch::HitsHazard(*hazardCheck, 0, 0, 0, 0, &shot));
+            assert(checkRenderer.CommandCount() == 13);
+            hazardCheck->m_stage2.boneArchDestroyed = true;
+            checkRenderer.BeginFrame();
+            assert(!StageDispatch::HitsHazard(*hazardCheck, 0, 0, 0, 0, &shot));
+            assert(checkRenderer.CommandCount() == 0);
+            hazardCheck->m_stageNumber = 3;
+            hazardCheck->m_frame = 0;
+            hazardCheck->m_bossBattle = false;
+            assert(!StageDispatch::HitsHazard(*hazardCheck, 0, 0, 0, 0, &shot));
+            assert(checkRenderer.CommandCount() == 0);
+            hazardCheck->m_frame = 120;
+            assert(!StageDispatch::HitsHazard(*hazardCheck, 0, 0, 0, 0, &shot));
+            assert(checkRenderer.CommandCount() > 1);
+            hazardCheck->m_bossBattle = true;
+            checkRenderer.BeginFrame();
+            assert(!StageDispatch::HitsHazard(*hazardCheck, 0, 0, 0, 0, &shot));
+            assert(checkRenderer.CommandCount() == 0);
+        }
+        return true;
+    }();
+    (void)hitboxCheck;
+    // 深度に隠れないオーバーレイとして、接触範囲と命中範囲を最後に描画する
+    Camera3D camera;
+    if (IsRailRenderActive()) ConfigureRailCamera(camera, renderer);
+    else ConfigureSideCamera(camera, renderer);
+    renderer.SetPipeline(PipelineId::Object);
+    for (const auto& enemy : m_enemies) {
+        if (!enemy.active) continue;
+        Enemy target = enemy;
+        if (!IsRailGameplayActive()) target.z = SidePlaneZ;
+        DrawEnemyHitbox(renderer, camera, target);
+    }
+    Shot query;
+    query.hitboxRenderer = &renderer;
+    query.hitboxCamera = &camera;
+    StageDispatch::HitsHazard(*this, 0.0f, 0.0f, 0.0f, 0.0f, &query);
+    if (m_stageNumber == 5) Stage5Module::DrawTargetHitboxes(*this, query);
+    if (m_stageNumber == 3) Stage3Module::DrawTargetHitboxes(*this, query);
+#endif
     DrawBossNameReveal(renderer);
     DrawMissionBanner(renderer);
     DrawBossWarning(renderer);

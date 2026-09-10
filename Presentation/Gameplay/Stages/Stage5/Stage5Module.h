@@ -10,6 +10,15 @@ struct TayamaModelState;
 class SideScrollingShooter::Stage5Module final {
 public:
     Stage5Module() = delete;
+#if defined(_DEBUG)
+    /**
+     * @brief 敵配列以外で管理する敵の判定範囲を描画する
+     * @param shooter 描画対象
+     * @param query 描画先を設定した問い合わせ
+     * @return なし
+     */
+    static void DrawTargetHitboxes(const SideScrollingShooter& shooter, const Shot& query);
+#endif
 
     /**
      * @brief Stage 5の不変ステージ定義を取得する

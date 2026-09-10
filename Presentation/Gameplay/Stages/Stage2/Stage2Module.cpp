@@ -473,7 +473,7 @@ void SideScrollingShooter::Stage2Module::SpawnMissile(
 }
 
 bool SideScrollingShooter::Stage2Module::HitsHazard(
-    const SideScrollingShooter& shooter, float x, float y, float z, float radius) {
+    const SideScrollingShooter& shooter, float x, float y, float z, float radius, [[maybe_unused]] const Shot* debugQuery) {
     constexpr int BoneCount = 13;
     constexpr float RailCenterY = -3.65f;
     constexpr float RailRadius = 10.0f;
@@ -486,6 +486,18 @@ bool SideScrollingShooter::Stage2Module::HitsHazard(
     for (int i = 0; i < BoneCount; ++i) {
         const float angle = Math::HalfPi * 2.0f * static_cast<float>(i) /
             static_cast<float>(BoneCount - 1);
+#if defined(_DEBUG)
+        // 破壊されていない全関節を、通常判定と同じ位置と半径で列挙する
+        if (debugQuery) {
+            if (shooter.IsRailGameplayActive()) {
+                HitShotSphere(*debugQuery, std::cos(angle) * RailRadius,
+                    RailCenterY + std::sin(angle) * RailRadius, railZ, 1.35f);
+            } else {
+                HitShotCircle(*debugQuery, sideCenterX, -1.30f + static_cast<float>(i) * 0.24f, 0.32f);
+            }
+            continue;
+        }
+#endif
         if (shooter.IsRailGameplayActive()) {
             if (Hit3D(ToWorldX(x), ToWorldY(y), z, radius * WorldXScale,
                 std::cos(angle) * RailRadius,
@@ -639,11 +651,8 @@ bool SideScrollingShooter::Stage2Module::TryHitBossBody(
             std::sin(yaw) * BodyLocalX * ModelScale
     };
     return railMode ?
-        Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
-            ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
-            center.x, center.y, center.z, BodyRadius) :
-        Hit(shot.x, shot.y, shot.hitRadius, FromWorldX(center.x), FromWorldY(center.y),
-            BodyRadius / WorldXScale);
+        HitShotSphere(shot, center.x, center.y, center.z, BodyRadius) :
+        HitShotCircle(shot, FromWorldX(center.x), FromWorldY(center.y), BodyRadius / WorldXScale);
 }
 
 bool SideScrollingShooter::Stage2Module::TryHitBossPart(
@@ -691,12 +700,8 @@ bool SideScrollingShooter::Stage2Module::TryHitBossPart(
                 (-local.x * sine + local.z * cosine) * ModelScale
         };
         const bool hit = railMode ?
-            Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
-                shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
-                shot.hitRadius * WorldXScale,
-                world.x, world.y, world.z, PartRadius[i]) :
-            Hit(shot.x, shot.y, shot.hitRadius,
-                FromWorldX(world.x), FromWorldY(world.y), PartRadius[i] / WorldXScale);
+            HitShotSphere(shot, world.x, world.y, world.z, PartRadius[i]) :
+            HitShotCircle(shot, FromWorldX(world.x), FromWorldY(world.y), PartRadius[i] / WorldXScale);
         if (!hit) continue;
         part = static_cast<BossPart>(i);
         return true;
@@ -719,11 +724,8 @@ bool SideScrollingShooter::Stage2Module::TryHitBossPart(
                 (-localX * sine + localZ * cosine) * ModelScale
         };
         const bool hit = railMode ?
-            Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
-                shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
-                shot.hitRadius * WorldXScale, world.x, world.y, world.z, 0.58f) :
-            Hit(shot.x, shot.y, shot.hitRadius,
-                FromWorldX(world.x), FromWorldY(world.y), 0.58f / WorldXScale);
+            HitShotSphere(shot, world.x, world.y, world.z, 0.58f) :
+            HitShotCircle(shot, FromWorldX(world.x), FromWorldY(world.y), 0.58f / WorldXScale);
         if (!hit) continue;
         part = static_cast<BossPart>(partIndex);
         return true;

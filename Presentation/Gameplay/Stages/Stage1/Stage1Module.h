@@ -46,10 +46,11 @@ public:
      * @param y 判定対象のゲーム座標Y
      * @param z 判定対象のレール座標Z
      * @param radius 判定対象の半径
+     * @param debugQuery Debug描画用の問い合わせ、通常判定時はnullptr
      * @return 隕石へ接触している場合true、接触していない場合false
      */
     static bool HitsHazard(const SideScrollingShooter& shooter,
-        float x, float y, float z, float radius);
+        float x, float y, float z, float radius, [[maybe_unused]] const Shot* debugQuery = nullptr);
 
     /**
      * @brief 自機弾がStage 1の隕石へ命中した場合にダメージを適用する
@@ -116,10 +117,11 @@ private:
      * @param y 判定対象のゲーム座標Y
      * @param z 判定対象のレール座標Z
      * @param radius 判定対象の半径
+     * @param debugQuery Debug描画用の問い合わせ、通常判定時はnullptr
      * @return 接触した隕石の番号、接触していない場合-1
      */
     static int FindMeteor(const SideScrollingShooter& shooter,
-        float x, float y, float z, float radius);
+        float x, float y, float z, float radius, [[maybe_unused]] const Shot* debugQuery = nullptr);
 
     /**
      * @brief 被弾または破壊された隕石から小隕石を飛散させる

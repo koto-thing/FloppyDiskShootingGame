@@ -1168,17 +1168,14 @@ bool SideScrollingShooter::TryHitDefaultBossPart(
             const float partX = ToWorldX(boss.x) + PartX[i] * ModelScale;
             const float partY = ToWorldY(boss.y) + PartY[i] * ModelScale;
             const float partZ = boss.z + PartZ[i] * ModelScale;
-            if (!Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
-                ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
-                partX, partY, partZ, PartRadius[i])) {
+            if (!HitShotSphere(shot, partX, partY, partZ, PartRadius[i])) {
                 continue;
             }
         } else {
             // 2D表示ではY軸回転済みモデルの奥行きを画面X座標へ投影する
             const float partX = boss.x + PartZ[i] * ModelScale / WorldXScale;
             const float partY = boss.y + PartY[i] * ModelScale / WorldYScale;
-            if (!Hit(shot.x, shot.y, shot.hitRadius, partX, partY,
-                PartRadius[i] / WorldXScale)) {
+            if (!HitShotCircle(shot, partX, partY, PartRadius[i] / WorldXScale)) {
                 continue;
             }
         }

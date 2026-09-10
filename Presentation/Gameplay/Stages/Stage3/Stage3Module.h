@@ -8,6 +8,15 @@
  */
 class SideScrollingShooter::Stage3Module final {
 public:
+#if defined(_DEBUG)
+    /**
+     * @brief 独立ファンネルの命中範囲を描画する
+     * @param shooter 描画対象
+     * @param query 描画先を設定した問い合わせ
+     * @return なし
+     */
+    static void DrawTargetHitboxes(const SideScrollingShooter& shooter, const Shot& query);
+#endif
     static constexpr int Phase2SurvivalFrames = 30 * 60;
     static constexpr int Phase3SurvivalFrames = 60 * 60;
 
@@ -109,10 +118,11 @@ public:
      * @param y 判定対象のゲーム座標Y
      * @param z 判定対象のレール座標Z
      * @param radius 判定対象の半径
+     * @param debugQuery Debug描画用の問い合わせ、通常判定時はnullptr
      * @return ウミヘビへ接触した場合true、接触していない場合false
      */
     static bool HitsHazard(const SideScrollingShooter& shooter,
-        float x, float y, float z, float radius);
+        float x, float y, float z, float radius, [[maybe_unused]] const Shot* debugQuery = nullptr);
 
     /**
      * @brief Stage3ボスを導入演出開始位置へ配置する

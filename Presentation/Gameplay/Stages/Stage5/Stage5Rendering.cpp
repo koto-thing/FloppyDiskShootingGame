@@ -14,6 +14,44 @@
 #include "Stage5CityModelView.h"
 #include "WallSecurityDroneModelView.h"
 
+#if defined(_DEBUG)
+void SideScrollingShooter::Stage5Module::DrawTargetHitboxes(
+    const SideScrollingShooter& shooter, const Shot& query) {
+    // 本体と弱点の双方が命中対象なので有効なグループ境界を一度ずつ描画する
+    if (shooter.m_stage5.phase >= Stage5Phase::TayamaFireControl &&
+        shooter.m_stage5.phase <= Stage5Phase::TayamaCommandCore) {
+        const auto bounds = TayamaModelView::AllGroupBounds(TayamaTransform(shooter),
+            shooter.m_stage5.tayamaTransformation, TayamaState(shooter));
+        for (const auto& group : bounds) {
+            if (!group.valid) continue;
+            HitShotSphere(query, group.center.x, group.center.y, group.center.z, group.radius);
+        }
+    }
+
+    // 龍形態は命中判定と接触判定で共有する節中心と半径を使用する
+    if (shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle) {
+        const float railWeight = shooter.RailBlend();
+        for (int index = 0; index < ShooterStages::Stage5::TayamaDragonSegmentCount; ++index) {
+            const Vector3 center = TayamaDragonSegmentPosition(shooter, index, railWeight);
+            HitShotSphere(query, center.x, center.y, center.z,
+                TayamaDragonSegmentRadius(index, railWeight));
+        }
+    }
+
+    // 壁面ライトは弾の奥行きに依存しない命中範囲を表示位置へ配置する
+    if (shooter.m_stage5.phase >= Stage5Phase::WallClimbLower &&
+        shooter.m_stage5.phase <= Stage5Phase::WallClimbUpper) {
+        const int count = shooter.m_stage5.phase == Stage5Phase::WallClimbLower ? 1 :
+            (shooter.m_stage5.phase == Stage5Phase::WallClimbMiddle ? 2 : 3);
+        for (int index = 0; index < count; ++index) {
+            if (shooter.m_stage5.searchlights[index].destroyed) continue;
+            HitShotSphere(query, ToWorldX((static_cast<float>(index) - 1.0f) * 0.72f),
+                ToWorldY(0.72f - static_cast<float>(index) * 0.22f), 46.0f, 0.72f);
+        }
+    }
+}
+#endif
+
 namespace {
 constexpr float TowerFacadeColor[4] = { 0.10f, 0.13f, 0.24f, 1.0f };
 constexpr float SatelliteLightColor[4] = { 0.82f, 0.94f, 1.0f, 1.0f };

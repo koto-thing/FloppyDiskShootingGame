@@ -1,4 +1,4 @@
-﻿#include "Stage5Module.h"
+#include "Stage5Module.h"
 
 #include <algorithm>
 #include <cmath>
@@ -518,10 +518,7 @@ bool SideScrollingShooter::Stage5Module::TryHitBossPart(
         if (boss.bossPartHp[index] <= 0) continue;
         const Stage5GroupBounds bounds = EastsourceModelView::GroupBounds(
             transform, state, Groups[index]);
-        if (!bounds.valid || !Hit3DSegment(
-            ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
-            ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
-            bounds.center.x, bounds.center.y, bounds.center.z, bounds.radius)) continue;
+        if (!bounds.valid || !HitShotSphere(shot, bounds.center.x, bounds.center.y, bounds.center.z, bounds.radius)) continue;
         part = static_cast<BossPart>(index);
         return true;
     }

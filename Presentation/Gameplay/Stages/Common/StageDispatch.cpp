@@ -154,12 +154,12 @@ bool SideScrollingShooter::StageDispatch::IsBossSpecialAttackActive(
 }
 
 bool SideScrollingShooter::StageDispatch::HitsHazard(const SideScrollingShooter& shooter,
-    float x, float y, float z, float radius) {
+    float x, float y, float z, float radius, [[maybe_unused]] const Shot* debugQuery) {
     switch (shooter.m_stageNumber) {
-    case 1: return Stage1Module::HitsHazard(shooter, x, y, z, radius);
-    case 2: return Stage2Module::HitsHazard(shooter, x, y, z, radius);
-    case 3: return Stage3Module::HitsHazard(shooter, x, y, z, radius);
-    case 4: return Stage4Module::HitsHazard(shooter, x, y, z, radius);
+    case 1: return Stage1Module::HitsHazard(shooter, x, y, z, radius, debugQuery);
+    case 2: return Stage2Module::HitsHazard(shooter, x, y, z, radius, debugQuery);
+    case 3: return Stage3Module::HitsHazard(shooter, x, y, z, radius, debugQuery);
+    case 4: return Stage4Module::HitsHazard(shooter, x, y, z, radius, debugQuery);
     default: return false;
     }
 }

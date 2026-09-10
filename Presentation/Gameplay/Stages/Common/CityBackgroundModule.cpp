@@ -499,7 +499,7 @@ void SideScrollingShooter::CityBackgroundModule::DrawTruck(
 
 bool SideScrollingShooter::CityBackgroundModule::HitsTruck(
     const SideScrollingShooter& shooter,
-    float x, float y, float z, float radius) {
+    float x, float y, float z, float radius, [[maybe_unused]] const Shot* debugQuery) {
     if (shooter.m_stageNumber != 4 || shooter.m_bossBattle) return false;
 
     // 描画と同じ循環座標と車体寸法で横視点とレール視点を判定する
@@ -508,6 +508,14 @@ bool SideScrollingShooter::CityBackgroundModule::HitsTruck(
         constexpr float RailY = -3.55f + TruckRailHeight * 0.5f;
         const float railZ = 12.0f + WrapDistance(
             37.0f - shooter.m_scroll * 92.0f, TruckRailCycleLength);
+#if defined(_DEBUG)
+        // 車体寸法に対応する接触判定楕円体を表示する
+        if (debugQuery) {
+            DrawHitboxEllipsoid(*debugQuery, {RailX, RailY, railZ},
+                {TruckRailWidth * 0.5f, TruckRailHeight * 0.5f, TruckRailDepth * 0.5f});
+            return false;
+        }
+#endif
         return SideScrollingShooterShared::HitsEllipsoid(
             ToWorldX(x) - RailX, ToWorldY(y) - RailY, z - railZ,
             TruckRailWidth * 0.5f + radius * WorldXScale,
@@ -517,6 +525,14 @@ bool SideScrollingShooter::CityBackgroundModule::HitsTruck(
 
     const float sideX = WrapNdcX(0.47f - shooter.m_scroll * 0.72f) * 18.0f;
     constexpr float SideY = -6.0f + TruckSideHeight * 0.5f;
+#if defined(_DEBUG)
+    // 横視点では画面上の車体幅と高さを判定楕円へ反映する
+    if (debugQuery) {
+        DrawHitboxEllipsoid(*debugQuery, {sideX, SideY, debugQuery->hitboxSideZ},
+            {TruckSideWidth * 0.5f, TruckSideHeight * 0.5f, TruckSideHeight * 0.5f});
+        return false;
+    }
+#endif
     const float dx = (ToWorldX(x) - sideX) /
         (TruckSideWidth * 0.5f + radius * WorldXScale);
     const float dy = (ToWorldY(y) - SideY) /

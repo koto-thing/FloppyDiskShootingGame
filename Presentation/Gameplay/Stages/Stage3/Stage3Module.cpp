@@ -1120,12 +1120,8 @@ bool SideScrollingShooter::Stage3Module::TryHitBossPart(
             transform.position.z + (-local.x * sine + local.z * cosine) * transform.scale
         };
         const bool hit = railMode ?
-            Hit3DSegment(
-                ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
-                ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
-                shot.hitRadius * WorldXScale, world.x, world.y, world.z, 1.05f) :
-            Hit(shot.x, shot.y, shot.hitRadius,
-                FromWorldX(world.x), FromWorldY(world.y), 1.05f / WorldXScale);
+            HitShotSphere(shot, world.x, world.y, world.z, 1.05f) :
+            HitShotCircle(shot, FromWorldX(world.x), FromWorldY(world.y), 1.05f / WorldXScale);
         if (!hit) continue;
         part = static_cast<BossPart>(partIndex);
         return true;
@@ -1137,6 +1133,22 @@ bool SideScrollingShooter::Stage3Module::BlocksPlayerShot(
     const SideScrollingShooter&, const Shot&, const Enemy&) {
     return false;
 }
+
+#if defined(_DEBUG)
+void SideScrollingShooter::Stage3Module::DrawTargetHitboxes(
+    const SideScrollingShooter& shooter, const Shot& query) {
+    // 生存戦フェーズで命中対象となるファンネルだけを描画する
+    if (shooter.m_enemies.empty() || shooter.m_enemies[0].phase != BossPhase3Survival) return;
+    for (const auto& funnel : shooter.m_stage3.reflectFunnels) {
+        if (!funnel.active) continue;
+        if (shooter.IsRailGameplayActive()) {
+            HitShotSphere(query, ToWorldX(funnel.x), ToWorldY(funnel.y), funnel.z, 0.72f);
+        } else {
+            HitShotCircle(query, funnel.x, funnel.y, 0.11f);
+        }
+    }
+}
+#endif
 
 bool SideScrollingShooter::Stage3Module::TryDamageStageTarget(
     SideScrollingShooter& shooter, Shot& shot) {
@@ -2469,7 +2481,7 @@ void SideScrollingShooter::Stage3Module::DrawBackground3D(
 }
 
 bool SideScrollingShooter::Stage3Module::HitsHazard(
-    const SideScrollingShooter& shooter, float x, float y, float z, float radius) {
+    const SideScrollingShooter& shooter, float x, float y, float z, float radius, [[maybe_unused]] const Shot* debugQuery) {
     if (shooter.m_bossBattle) return false;
     SeaSerpentMotion motion {};
     if (!GetSeaSerpentMotion(shooter.m_frame, motion)) {
@@ -2493,6 +2505,14 @@ bool SideScrollingShooter::Stage3Module::HitsHazard(
                 1.25f * visibleScale * SeaSerpentHitboxScale + movingRadius;
             const float verticalRadius =
                 visibleHeight * 0.5f * SeaSerpentHitboxScale + movingRadius;
+#if defined(_DEBUG)
+            // 水面より上の判定楕円体を全節について表示する
+            if (debugQuery) {
+                DrawHitboxEllipsoid(*debugQuery, {segment.railX, railY, segment.railZ},
+                    {horizontalRadius, verticalRadius, horizontalRadius});
+                continue;
+            }
+#endif
             if (SideScrollingShooterShared::HitsEllipsoid(
                 ToWorldX(x) - segment.railX, ToWorldY(y) - railY,
                 z - segment.railZ, horizontalRadius, verticalRadius,
@@ -2515,6 +2535,14 @@ bool SideScrollingShooter::Stage3Module::HitsHazard(
             const float sideY = -6.0f + (segment.elevation < sideHeight ?
                 visibleHeight * 0.5f : segment.elevation - sideHeight * 0.5f);
             const float dy = (ToWorldY(y) - sideY) / hitHeight;
+#if defined(_DEBUG)
+            // 横視点の楕円判定を共通の2D奥行きへ表示する
+            if (debugQuery) {
+                DrawHitboxEllipsoid(*debugQuery, {segment.sideX, sideY, debugQuery->hitboxSideZ},
+                    {hitWidth, hitHeight, hitHeight});
+                continue;
+            }
+#endif
             if (dx * dx + dy * dy <= 1.0f) {
                 return true;
             }

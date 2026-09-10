@@ -806,13 +806,8 @@ bool SideScrollingShooter::Stage4Module::TryHitBossPart(
     if (!IsWeaponSwapActive(shooter) && boss.bossPartHp[mainCannonPart] > 0) {
         const Vector3 world = LocalToWorld(shooter, boss, BossPartLocalPosition(mainCannonPart));
         const bool hit = shooter.IsRailGameplayActive() ?
-            Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
-                shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
-                shot.hitRadius * WorldXScale, world.x, world.y, world.z,
-                Stage4MainCannonHitRadius) :
-            Hit(shot.x, shot.y, shot.hitRadius,
-                FromWorldX(world.x), FromWorldY(world.y),
-                Stage4MainCannonHitRadius / WorldXScale);
+            HitShotSphere(shot, world.x, world.y, world.z, Stage4MainCannonHitRadius) :
+            HitShotCircle(shot, FromWorldX(world.x), FromWorldY(world.y), Stage4MainCannonHitRadius / WorldXScale);
         if (hit) {
             part = mainCannonPart;
             return true;
@@ -825,13 +820,8 @@ bool SideScrollingShooter::Stage4Module::TryHitBossPart(
         if (boss.bossPartHp[candidate] <= 0) continue;
         const Vector3 world = LocalToWorld(shooter, boss, BossPartLocalPosition(candidate));
         const bool hit = shooter.IsRailGameplayActive() ?
-            Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
-                shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
-                shot.hitRadius * WorldXScale, world.x, world.y, world.z,
-                Stage4SecondaryGunHitRadius) :
-            Hit(shot.x, shot.y, shot.hitRadius,
-                FromWorldX(world.x), FromWorldY(world.y),
-                Stage4SecondaryGunHitRadius / WorldXScale);
+            HitShotSphere(shot, world.x, world.y, world.z, Stage4SecondaryGunHitRadius) :
+            HitShotCircle(shot, FromWorldX(world.x), FromWorldY(world.y), Stage4SecondaryGunHitRadius / WorldXScale);
         if (!hit) continue;
         part = candidate;
         return true;
@@ -847,13 +837,8 @@ bool SideScrollingShooter::Stage4Module::BlocksPlayerShot(
     for (const Vector3& local : Stage4BodyHitLocal) {
         const Vector3 world = LocalToWorld(shooter, boss, local);
         const bool hit = shooter.IsRailGameplayActive() ?
-            Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
-                shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
-                shot.hitRadius * WorldXScale, world.x, world.y, world.z,
-                Stage4BodyHitRadius) :
-            Hit(shot.x, shot.y, shot.hitRadius,
-                FromWorldX(world.x), FromWorldY(world.y),
-                Stage4BodyHitRadius / WorldXScale);
+            HitShotSphere(shot, world.x, world.y, world.z, Stage4BodyHitRadius) :
+            HitShotCircle(shot, FromWorldX(world.x), FromWorldY(world.y), Stage4BodyHitRadius / WorldXScale);
         if (hit) return true;
     }
     return false;
@@ -987,8 +972,8 @@ void SideScrollingShooter::Stage4Module::TickSecondaryGunAttacks(
 }
 
 bool SideScrollingShooter::Stage4Module::HitsHazard(
-    const SideScrollingShooter& shooter, float x, float y, float z, float radius) {
-    if (CityBackgroundModule::HitsTruck(shooter, x, y, z, radius)) return true;
+    const SideScrollingShooter& shooter, float x, float y, float z, float radius, [[maybe_unused]] const Shot* debugQuery) {
+    if (CityBackgroundModule::HitsTruck(shooter, x, y, z, radius, debugQuery)) return true;
 
     for (const Enemy& enemy : shooter.m_enemies) {
         if (!enemy.active || enemy.type != 2 || !enemy.collisionEnabled) continue;
@@ -996,6 +981,18 @@ bool SideScrollingShooter::Stage4Module::HitsHazard(
         // 車体と砲塔の主要な塊を描画用ローカル座標と同じ基準で判定する
         for (const Vector3& local : Stage4BodyHitLocal) {
             const Vector3 world = LocalToWorld(shooter, enemy, local);
+#if defined(_DEBUG)
+            // 車体の接触判定を通常の部位命中範囲に加えて表示する
+            if (debugQuery) {
+                if (shooter.IsRailGameplayActive()) {
+                    HitShotSphere(*debugQuery, world.x, world.y, world.z, Stage4BodyHitRadius);
+                } else {
+                    HitShotCircle(*debugQuery, FromWorldX(world.x), FromWorldY(world.y),
+                        Stage4BodyHitRadius / WorldXScale);
+                }
+                continue;
+            }
+#endif
             const bool hit = shooter.IsRailGameplayActive() ?
                 Hit3D(ToWorldX(x), ToWorldY(y), z, radius * WorldXScale,
                     world.x, world.y, world.z, Stage4BodyHitRadius) :
