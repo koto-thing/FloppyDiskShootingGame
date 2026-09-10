@@ -17,11 +17,19 @@ public:
     using iterator = typename std::vector<T>::iterator;
     using const_iterator = typename std::vector<T>::const_iterator;
 
+    /**
+     * @brief 指定容量のオブジェクトプールを生成する
+     * @param capacity 保持する要素数
+     */
     explicit ObjectPool(std::size_t capacity) : m_items(capacity), m_used(capacity, false) {}
 
+    /** @brief コピー生成を禁止する */
     ObjectPool(const ObjectPool&) = delete;
+    /** @brief コピー代入を禁止する */
     ObjectPool& operator=(const ObjectPool&) = delete;
+    /** @brief 所有権を移動して生成する */
     ObjectPool(ObjectPool&&) noexcept = default;
+    /** @brief 所有権を移動して代入する */
     ObjectPool& operator=(ObjectPool&&) noexcept = default;
 
     /** @brief 未使用要素を取得する。上限到達時はnullptrを返す */
@@ -64,11 +72,17 @@ public:
         return count;
     }
 
+    /** @brief 先頭要素の反復子を取得する */
     iterator begin() { return m_items.begin(); }
+    /** @brief 終端要素の反復子を取得する */
     iterator end() { return m_items.end(); }
+    /** @brief 先頭要素の読み取り専用反復子を取得する */
     const_iterator begin() const { return m_items.begin(); }
+    /** @brief 終端要素の読み取り専用反復子を取得する */
     const_iterator end() const { return m_items.end(); }
+    /** @brief 指定位置の要素を取得する */
     T& operator[](std::size_t index) { return m_items[index]; }
+    /** @brief 指定位置の要素を読み取り専用で取得する */
     const T& operator[](std::size_t index) const { return m_items[index]; }
 
 private:

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+/** @brief マウスボタンの識別子 */
 enum class MouseButton : std::uint8_t
 {
     Left = 0,

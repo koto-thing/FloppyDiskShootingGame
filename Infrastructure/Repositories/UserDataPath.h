@@ -12,5 +12,5 @@ inline std::filesystem::path UserDataPath() {
     const DWORD length = GetEnvironmentVariableW(L"LOCALAPPDATA", localAppData, MAX_PATH);
     const std::filesystem::path base = length > 0 && length < MAX_PATH
         ? localAppData : std::filesystem::current_path();
-    return base / L"FloppyDiskShootingGame";
+    return base / L"SpaceYakuza";
 }

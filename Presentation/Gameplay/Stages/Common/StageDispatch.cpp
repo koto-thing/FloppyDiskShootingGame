@@ -193,15 +193,24 @@ bool SideScrollingShooter::StageDispatch::TryDamageStageTarget(
     }
 }
 
+/**
+ * @brief 未破壊部位への衝突判定または攻撃可能な部位中心の取得を行う
+ * @param shooter 判定対象のゲーム本体
+ * @param shot 判定する自機弾
+ * @param boss 判定するボス
+ * @param part 命中部位の出力先、座標取得時は部位番号の入力
+ * @param aimPosition 非nullなら衝突判定せず部位のワールド中心を出力する
+ * @return 命中または座標取得に成功した場合true
+ */
 bool SideScrollingShooter::StageDispatch::TryHitBossPart(
     const SideScrollingShooter& shooter, const Shot& shot,
-    const Enemy& boss, BossPart& part) {
+    const Enemy& boss, BossPart& part, Vector3* aimPosition) {
     switch (shooter.m_stageNumber) {
-    case 2: return Stage2Module::TryHitBossPart(shooter, shot, boss, part);
-    case 4: return Stage4Module::TryHitBossPart(shooter, shot, boss, part);
-    case 3: return Stage3Module::TryHitBossPart(shooter, shot, boss, part);
-    case 5: return Stage5Module::TryHitBossPart(shooter, shot, boss, part);
-    default: return shooter.TryHitDefaultBossPart(shot, boss, part);
+    case 2: return Stage2Module::TryHitBossPart(shooter, shot, boss, part, aimPosition);
+    case 4: return Stage4Module::TryHitBossPart(shooter, shot, boss, part, aimPosition);
+    case 3: return Stage3Module::TryHitBossPart(shooter, shot, boss, part, aimPosition);
+    case 5: return Stage5Module::TryHitBossPart(shooter, shot, boss, part, aimPosition);
+    default: return shooter.TryHitDefaultBossPart(shot, boss, part, aimPosition);
     }
 }
 
@@ -260,6 +269,15 @@ void SideScrollingShooter::StageDispatch::TickSpecialShotBeforeMove(
     case 3:
         Stage3Module::TickSpecialShotBeforeMove(shooter, shot);
         break;
+    case 5:
+        Stage4Module::TickSpecialShotBeforeMove(shooter, shot);
+        if (shot.stage2.kind == ShooterStages::Stage2::ShotKind::Funnel &&
+            shot.stage2.delayedEngine) {
+            // 通常敵ミサイルはStage3/4と同じ遅延点火を使う
+            Stage3Module::TickSpecialShotBeforeMove(shooter, shot);
+        }
+        Stage5Module::TickSpecialShotBeforeMove(shooter, shot);
+        break;
     }
 }
 
@@ -275,6 +293,9 @@ void SideScrollingShooter::StageDispatch::TickSpecialShotAfterMove(
             shooter, shot, previousX, previousY, previousZ);
         break;
     case 5:
+        Stage4Module::TickSpecialShotAfterMove(
+            shooter, shot, previousX, previousY, previousZ);
+        if (!shot.active) break;
         Stage5Module::TickSpecialShotAfterMove(shooter, shot);
         break;
     }
@@ -285,6 +306,8 @@ bool SideScrollingShooter::StageDispatch::IsShotCullProtected(
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::IsShotCullProtected(shot);
     case 4: return Stage4Module::IsShotCullProtected(shot);
+    case 5: return Stage4Module::IsShotCullProtected(shot) ||
+        Stage3Module::IsShotCullProtected(shot);
     case 3: return Stage3Module::IsShotCullProtected(shot);
     default: return false;
     }
@@ -295,6 +318,7 @@ float SideScrollingShooter::StageDispatch::EnemyShotHitRadius(
     switch (shooter.m_stageNumber) {
     case 2: return Stage2Module::EnemyShotHitRadius(shot, shooter.IsRailGameplayActive());
     case 4: return Stage4Module::EnemyShotHitRadius(shot, shooter.IsRailGameplayActive());
+    case 5:
     case 3: return Stage3Module::EnemyShotHitRadius(shot, shooter.IsRailGameplayActive());
     default: return shooter.IsRailGameplayActive() ? 0.28f : 0.022f;
     }
@@ -480,6 +504,9 @@ void SideScrollingShooter::StageDispatch::DrawStageWorld3D(
 void SideScrollingShooter::StageDispatch::DrawOverlay2D(
     const SideScrollingShooter& shooter, Renderer& renderer) {
     switch (shooter.m_stageNumber) {
+    case 2:
+        Stage2Module::DrawSandstormHaze(shooter, renderer);
+        break;
     case 5:
         Stage5Module::DrawOverlay2D(shooter, renderer);
         break;
@@ -489,6 +516,9 @@ void SideScrollingShooter::StageDispatch::DrawOverlay2D(
 void SideScrollingShooter::StageDispatch::DrawOverlay3D(
     const SideScrollingShooter& shooter, Renderer& renderer, const Camera3D& camera) {
     switch (shooter.m_stageNumber) {
+    case 2:
+        Stage2Module::DrawSandstormHaze(shooter, renderer);
+        break;
     case 5:
         Stage5Module::DrawOverlay3D(shooter, renderer, camera);
         break;
@@ -530,6 +560,10 @@ bool SideScrollingShooter::StageDispatch::DrawSpecialShot(
         if (Stage4Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw)) return true;
         return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
     case 3:
+        if (Stage3Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw)) return true;
+        return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
+    case 5:
+        if (Stage4Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw)) return true;
         if (Stage3Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw)) return true;
         return Stage2Module::DrawSpecialShot(shooter, renderer, camera, shot, yaw);
     default: return false;
@@ -606,6 +640,9 @@ void SideScrollingShooter::StageDispatch::TickBossIntroduction(SideScrollingShoo
 
 float SideScrollingShooter::StageDispatch::RailPlayerMaxY(
     const SideScrollingShooter& shooter) {
+    // ラスボス第2形態では上方向の回避範囲を広げる
+    if (shooter.m_stageNumber == 5 &&
+        ShooterStages::Stage5::IsTayamaDragonBattlePhase(shooter.m_stage5.phase)) return 3.5f;
     return shooter.m_stageNumber == 3 ? Stage3Module::RailPlayerMaxY(shooter) : 0.9f;
 }
 
@@ -616,6 +653,9 @@ float SideScrollingShooter::StageDispatch::SideCameraY(
 
 Vector2 SideScrollingShooter::StageDispatch::PlayerXRange(
     const SideScrollingShooter& shooter) {
+    // ラスボス第2形態の3D視点では左右の回避範囲を少し広げる
+    if (shooter.m_stageNumber == 5 && shooter.IsRailGameplayActive() &&
+        ShooterStages::Stage5::IsTayamaDragonBattlePhase(shooter.m_stage5.phase)) return {-1.35f, 1.35f};
     if (shooter.m_stageNumber == 3) return Stage3Module::PlayerXRange(shooter);
     return shooter.IsRailGameplayActive() ? Vector2 {-1.2f, 1.2f} :
         Vector2 {Side2DPlayerMinX, Side2DPlayerMaxX};
@@ -629,7 +669,8 @@ Vector2 SideScrollingShooter::StageDispatch::SidePlayerYRange(
 
 bool SideScrollingShooter::StageDispatch::CanEnemyShotDamagePlayer(
     const SideScrollingShooter& shooter, const Shot& shot) {
-    return shooter.m_stageNumber != 3 || Stage3Module::CanEnemyShotDamagePlayer(shot);
+    return (shooter.m_stageNumber != 3 && shooter.m_stageNumber != 5) ||
+        Stage3Module::CanEnemyShotDamagePlayer(shot);
 }
 
 int SideScrollingShooter::StageDispatch::BossIntroductionFrames(

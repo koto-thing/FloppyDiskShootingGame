@@ -17,13 +17,23 @@
  */
 class CreditScene : public IScene<SceneType, SceneSharedData> {
 public:
+    /** @brief クレジットシーンを生成する */
     CreditScene() = default;
+    /** @brief クレジットシーンを破棄する */
     ~CreditScene() override;
 
+    /** @brief クレジットシーンを初期化する */
     void Initialize() override;
+    /** @brief クレジットシーンの入力を処理する */
     void ProcessInput() override;
+    /** @brief クレジットシーンを更新する */
     void Tick() override;
+    /** @brief クレジットシーンのリソースを解放する */
     void Dispose() override;
+    /**
+     * @brief クレジットシーンを描画する
+     * @param renderer 描画コマンドを記録するRenderer
+     */
     void Render(Renderer& renderer) override;
 
 private:

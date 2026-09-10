@@ -1,8 +1,22 @@
 #pragma once
 
 #include <cstdint>
+#include <algorithm>
 
 namespace ShooterStages::Stage2 {
+
+/** @brief 砂嵐が最大濃度へ達するフレーム数 */
+inline constexpr int SandstormFadeFrames = 180;
+
+/**
+ * @brief ボスの生存状態に応じて砂嵐の濃度を一段階進める
+ * @param exposure 現在の濃度フレーム数
+ * @param active ボス戦中かつ未撃破の場合true
+ * @return 0からSandstormFadeFramesの濃度フレーム数
+ */
+constexpr int NextSandstormExposure(int exposure, bool active) {
+    return (std::clamp)(exposure + (active ? 1 : -1), 0, SandstormFadeFrames);
+}
 
 /** @brief Stage 2ボスの行動状態 */
 enum class BossAction {
@@ -45,21 +59,6 @@ constexpr int Phase3FunnelLaunchInterval(int hatch, int launchCount) {
     value *= 0x7feb352du;
     value ^= value >> 15;
     return 55 + static_cast<int>(value % 91u);
-}
-
-/**
- * @brief Phase 3主砲の予告中に使用する追従率を取得する
- * @param frame 予告開始からの経過フレーム
- * @param fireFrame 発射フレーム
- * @return 予告の前後で遅く中央で速い追従率
- */
-constexpr float Phase3MainGunTrackingRate(int frame, int fireFrame) {
-    const float progress = fireFrame > 0 ?
-        static_cast<float>(frame) / static_cast<float>(fireFrame) : 1.0f;
-    const float clamped = progress < 0.0f ? 0.0f : (progress > 1.0f ? 1.0f : progress);
-    const float triangle = clamped < 0.5f ? clamped * 2.0f : (1.0f - clamped) * 2.0f;
-    const float eased = triangle * triangle * (3.0f - 2.0f * triangle);
-    return 0.012f + eased * 0.078f;
 }
 
 /** @brief Stage 2特殊弾の種類 */
@@ -105,6 +104,8 @@ inline constexpr int BoneArchMaxHp = 12000;
 /** @brief Stage 2全体の永続状態 */
 struct State {
     BossState boss {};
+    int sandstormFrame = 0;
+    int sandstormExposure = 0;
     int boneArchHp = BoneArchMaxHp;
     bool boneArchDestroyed = false;
 };

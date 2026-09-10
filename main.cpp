@@ -15,7 +15,6 @@
 #include "Domain/ValueObjects/SceneType.h"
 #include "Infrastructure/ExternalServices/Win32WindowService.h"
 #include "Infrastructure/ExternalServices/AudioService.h"
-#include "Infrastructure/ExternalServices/MMLData.h"
 #include "Infrastructure/Repositories/SettingsRepository.h"
 #include "Infrastructure/ExternalServices/D3D12RenderingService.h"
 #include "Engine/Graphics/Renderer.h"
@@ -38,30 +37,44 @@ constexpr WORD APP_ICON_RESOURCE_ID = 101;
  * @param uMsg メッセージ識別子
  * @param wParam メッセージの最初のパラメータ
  * @param lParam メッセージの2番目のパラメータ
- * @return 
+ * @return ウィンドウメッセージの処理結果
  */
 LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) {
     // すべてのウィンドウメッセージを入力システムへ通知する
     Input::ProcessMessage(uMsg, wParam, lParam);
 
+    // ウィンドウの終了メッセージを処理する
     switch (uMsg) {
         case WM_CLOSE:
             DestroyWindow(hwnd);
             return 0;
+
         case WM_DESTROY:
             PostQuitMessage(0);
             return 0;
     }
+
+    // その他のウィンドウメッセージを既定処理へ渡す
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
 }
 
 /**
  * エントリーポイント
  * @param hInstance インスタンスハンドル
+ * @param hPrevInstance 前のインスタンスハンドル
+ * @param pCmdLine コマンドライン引数
  * @param nCmdShow ウィンドウの表示方法
- * @return 
+ * @return アプリケーションの終了コード
  */
-int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
+int WINAPI wWinMain(
+    HINSTANCE hInstance,
+    HINSTANCE hPrevInstance,
+    PWSTR pCmdLine,
+    int nCmdShow) {
+    UNREFERENCED_PARAMETER(hPrevInstance);
+    UNREFERENCED_PARAMETER(pCmdLine);
+
+    // COMとデバッグログを初期化する
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     Debug::Initialize();
     Debug::Log("Application starting");
@@ -100,27 +113,31 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
 
     // DirectX 12 レンダラーの初期化
     D3D12RenderingService renderer;
+
     if (!renderer.Initialize(hwnd, screenWidth, screenHeight)) {
         Debug::LogError("DirectX 12 initialization failed");
         MessageBox(NULL, L"DirectX 12 Initializing Failed", L"Error", MB_OK);
         Debug::Shutdown();
         return 0;
     }
+
     Renderer renderFacade(renderer);
 
+    // オーディオ設定を読み込む
     AudioService audio;
-    // 保存済み音量をオーディオ初期化前に反映する
     const GameSettings settings = SettingsRepository().Load();
+
+    // 保存済みの描画と音量設定を反映する
     renderer.SetRetroEffectEnabled(settings.retroEffectEnabled);
     audio.SetMasterVolume(settings.masterVolume);
     audio.SetBGMVolume(settings.bgmVolume);
     audio.SetSEVolume(settings.seVolume);
+
+    // オーディオを初期化する
     if (!audio.Initialize()) {
         MessageBox(NULL, L"Audio Initializing Failed", L"Error", MB_OK);
         return 0;
     }
-
-
 
     // 通常決定音は高く、キャンセル音は低く鳴らす
     Button::SetClickSoundHandler([&audio](Button::ClickSound sound) {
@@ -129,12 +146,10 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         audio.PlaySE(params);
     });
 
-    audio.PlayMMLBGM(std::string(MMLData::title), true);
-    
     // シーンマネージャを作成
     SceneManager<SceneType, SceneSharedData> app;
     app.getSharedData().audio = &audio;
-    
+
     // シーンを登録
     app.AddScene<TitleScene>(SceneType::Title);
     app.AddScene<ModeSelectionScene>(SceneType::ModeSelection);
@@ -146,25 +161,29 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
     app.AddScene<CreditScene>(SceneType::Credit);
     app.AddScene<EndingScene>(SceneType::Ending);
     app.AddScene<RankingScene>(SceneType::Ranking);
-    
+
     // 初期シーンの設定
     app.Initialize(SceneType::Title);
 
     // 初期化処理にかかった時間をゲーム時間へ含めない
     Time::Initialize();
-    
+
     // メインループ
     MSG msg = { };
     bool isRunning = true;
+
     while (isRunning) {
         // 前フレームの状態を保存して新しい入力の受付を開始する
         Input::BeginFrame();
 
+        // ウィンドウメッセージを処理する
         while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE)) {
             if (msg.message == WM_QUIT) {
                 isRunning = false;
                 break;
             }
+
+            // ウィンドウメッセージを各処理へ振り分ける
             TranslateMessage(&msg);
             DispatchMessage(&msg);
         }
@@ -176,15 +195,20 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
         // キーボードとマウスのメッセージ後にゲームパッドを取得する
         Input::PollGamepad();
 
+        // フレーム時間を更新する
         Time::BeginFrame();
 
+        // シーンへの入力を処理する
         app.ProcessInput();
 
+#ifdef _DEBUG
         // デバッグ確認用に現在位置を問わずチュートリアルへ移動する
         if (Input::GetKeyDown(KeyCode::F7)) {
             app.RequestTransition(SceneType::TutorialStage);
         }
+#endif
 
+        // 固定時間ステップでゲームを更新する
         constexpr int maxFixedStepsPerFrame = 8;
         int fixedStepCount = 0;
 
@@ -195,22 +219,28 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE, PWSTR, int nCmdShow) {
             ++fixedStepCount;
         }
 
+        // 処理落ち時に蓄積した余分なゲーム時間を破棄する
         if (fixedStepCount >= maxFixedStepsPerFrame &&
             Time::HasFixedStep()) {
             Time::DiscardExcessFixedTime();
         }
 
+        // シーン遷移とオーディオを更新する
         app.CommitTransitions();
         audio.Update();
 
+        // 現在のシーンを描画する
         renderFacade.BeginFrame();
         app.Render(renderFacade);
         renderFacade.EndFrame();
     }
 
+    // ゲーム終了時のリソースを解放する
     app.Dispose();
     audio.Shutdown();
     renderer.Cleanup();
+
+    // デバッグログとCOMを終了する
     Debug::Log("Application shutting down");
     Debug::Shutdown();
     CoUninitialize();

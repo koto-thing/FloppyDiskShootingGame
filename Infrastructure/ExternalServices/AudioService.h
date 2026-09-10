@@ -11,7 +11,14 @@
  */
 class AudioService {
 public:
+    /**
+     * @brief オーディオ管理サービスを生成する
+     */
     AudioService();
+
+    /**
+     * @brief オーディオ管理サービスを破棄する
+     */
     ~AudioService();
 
     /**
@@ -84,10 +91,18 @@ public:
     void PlayMMLBGM(const std::string& mml, bool loop = true);
 
     /**
+     * @brief MMLを事前にPCMへ生成し、以後の再生で再利用する
+     * @param mml MML文字列
+     * @return 有効なPCMをキャッシュできた場合true
+     */
+    bool PreloadMMLBGM(const std::string& mml);
+
+    /**
      * @brief MMLによるSEワンショット再生
      * @param mml MML文字列
+     * @param volume 個別音量 (0.0 ~ 2.0)
      */
-    void PlayMMLSE(const std::string& mml);
+    void PlayMMLSE(const std::string& mml, float volume = 1.0f);
 
     /**
      * @brief ファイルからのMML BGM再生
@@ -98,7 +113,7 @@ public:
     bool PlayMMLBGMFromFile(const std::string& filePath, bool loop = true);
 
     /**
-     * @brief BGM停止
+     * @brief BGMを短くフェードアウトして停止する
      */
     void StopBGM();
 
@@ -107,20 +122,58 @@ public:
     /**
      * @brief SFXR合成パラメータによるSEワンショット再生
      * @param params 合成パラメータ
+     * @param volume 個別音量 (0.0 ~ 1.0)
      */
-    void PlaySE(const Audio::SfxrParams& params);
+    void PlaySE(const Audio::SfxrParams& params, float volume = 1.0f);
 
     /**
      * @brief SFXRプリセットによるSEワンショット再生
      * @param preset プリセット種別
+     * @param volume 個別音量 (0.0 ~ 1.0)
      */
-    void PlaySE(Audio::SfxrPreset preset);
+    void PlaySE(Audio::SfxrPreset preset, float volume = 1.0f);
 
     /**
      * @brief Raw PCMバッファによるSEワンショット再生
      * @param pcmBuffer 16bit PCMデータ
+     * @param volume 個別音量 (0.0 ~ 1.0)
      */
-    void PlaySE(const std::vector<int16_t>& pcmBuffer);
+    void PlaySE(const std::vector<int16_t>& pcmBuffer, float volume = 1.0f);
+
+    /**
+     * @brief 通常SEに奪われない専用枠でセリフを再生する
+     * @param pcmBuffer モノラル44100Hzの16bit PCMデータ
+     * @param volume 個別音量 (0.0 ~ 1.0)
+     * @return なし
+     */
+    void PlayVoice(const std::vector<int16_t>& pcmBuffer, float volume = 1.0f);
+
+    /**
+     * @brief プリセットごとの基準音量を設定
+     * @param preset プリセット種別
+     * @param volume 音量 (0.0 ~ 2.0)
+     */
+    void SetPresetVolume(Audio::SfxrPreset preset, float volume);
+
+    /**
+     * @brief プリセットごとの基準音量を取得
+     * @param preset プリセット種別
+     * @return 音量 (0.0 ~ 2.0)
+     */
+    float GetPresetVolume(Audio::SfxrPreset preset) const;
+
+    /**
+     * @brief 最終出力リミッターの有効状態を設定
+     * @param enabled 有効にする場合true
+     * @return なし
+     */
+    void SetLimiterEnabled(bool enabled);
+
+    /**
+     * @brief 最終出力リミッターの有効状態を取得
+     * @return 有効な場合true
+     */
+    bool IsLimiterEnabled() const;
 
     /**
      * @brief すべてのSE発音を停止
@@ -128,6 +181,18 @@ public:
     void StopAllSE();
 
 private:
+    /**
+     * @brief 用途に対応する再生枠へPCMを登録する
+     * @param pcmBuffer モノラル44100Hzの16bit PCMデータ
+     * @param volume 個別音量
+     * @param dialogue セリフ用の再生枠を使う場合true
+     * @return なし
+     */
+    void PlayPCM(const std::vector<int16_t>& pcmBuffer, float volume, bool dialogue);
+
+#ifdef FLOPPY_AUDIO_TESTS
+    friend void RunAudioServiceTests();
+#endif
     struct Impl;
     Impl* impl;
 

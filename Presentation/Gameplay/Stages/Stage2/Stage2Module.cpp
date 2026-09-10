@@ -123,6 +123,16 @@ void SideScrollingShooter::Stage2Module::Reset(SideScrollingShooter& shooter) {
     shooter.m_stage2 = {};
 }
 
+void SideScrollingShooter::Stage2Module::TickSandstorm(SideScrollingShooter& shooter) {
+    // 会話で止まるm_frameから独立させ、撃破後は同じ濃度から晴らす
+    auto& state = shooter.m_stage2;
+    state.sandstormExposure = ShooterStages::Stage2::NextSandstormExposure(
+        state.sandstormExposure, shooter.m_bossBattle && !shooter.m_clear);
+    if (state.sandstormExposure > 0) {
+        state.sandstormFrame = (state.sandstormFrame + 1) % 7200;
+    }
+}
+
 const SideScrollingShooter::EnemyBehavior&
 SideScrollingShooter::Stage2Module::BossBehaviorInstance() {
     static const BossBehavior behavior;
@@ -207,7 +217,7 @@ bool SideScrollingShooter::Stage2Module::HandleBossInteractionAfterTick(
     // POST-incrementのactionAgeで発射フレームのレールガン判定を行う
     const int beamCycle = shooter.m_stage2.boss.actionAge % RailgunCycleFrames;
     if (boss.phase >= 3.0f && boss.bossPartHp[BossNose] > 0 &&
-        beamCycle == RailgunFireFrame && shooter.m_invincible == 0) {
+        beamCycle == RailgunFireFrame(shooter.m_difficulty) && shooter.m_invincible == 0) {
         constexpr float BossScale = 1.92f;
         const float yaw = shooter.IsRailGameplayActive() ? 0.0f : Math::HalfPi;
         const float cosine = std::cos(yaw);
@@ -338,22 +348,30 @@ void SideScrollingShooter::Stage2Module::TickBossPhase3(
         (SubmarineBuriedOffsetY - shooter.m_stage2.boss.sandSubmarineOffsetY) * 0.08f;
     const int beamCycle = shooter.m_stage2.boss.actionAge % RailgunCycleFrames;
     if (beamCycle == 0) {
-        boss.attackWarningFrames = RailgunFireFrame;
-        boss.actionX = boss.turretAimX;
-        boss.actionY = boss.turretAimY;
-        boss.actionZ = boss.turretAimZ;
+        boss.attackWarningFrames = RailgunFireFrame(shooter.m_difficulty);
     }
-    if (beamCycle < RailgunFireFrame) {
-        // 予告の前後はゆっくり、中央は素早く追従し、発射時に現在の照準へ固定する
-        const float trackingRate = ShooterStages::Stage2::Phase3MainGunTrackingRate(
-            beamCycle, RailgunFireFrame);
-        boss.actionX += (shooter.m_playerX - boss.actionX) * trackingRate;
-        boss.actionY += (shooter.m_playerY - boss.actionY) * trackingRate;
+    if (beamCycle < RailgunLockFrame || beamCycle >= RailgunFireFrame(shooter.m_difficulty) + RailgunVisualFrames) {
+        // 現在の入力を発射まで継続した位置を、低速・斜め補正・移動範囲込みで予測する
+        const float playerX = shooter.m_playerX;
+        const float playerY = shooter.m_playerY;
+        // HARDのみ発射時点を先読みし、確定後はHARDで0.5秒、他は1秒固定する
+        // 被弾判定はactionAge加算後なので、残り移動回数を1フレーム補正する
+        if (shooter.m_difficulty == Hard && beamCycle < RailgunLockFrame) {
+            for (int frame = beamCycle + 1; frame < RailgunFireFrame(shooter.m_difficulty); ++frame) {
+                shooter.TickPlayer();
+            }
+        }
+        // 入力の反転や予告開始でも照準を飛ばさず、予測位置へ滑らかに追従する
+        constexpr float MainGunTrackingRate = 0.08f;
         const float targetZ = shooter.IsRailGameplayActive() ?
             PlayerRailZ : ToRailZFromSideX(shooter.m_playerX);
-        boss.actionZ += (targetZ - boss.actionZ) * trackingRate;
+        boss.actionX += (shooter.m_playerX - boss.actionX) * MainGunTrackingRate;
+        boss.actionY += (shooter.m_playerY - boss.actionY) * MainGunTrackingRate;
+        boss.actionZ += (targetZ - boss.actionZ) * MainGunTrackingRate;
+        shooter.m_playerX = playerX;
+        shooter.m_playerY = playerY;
     }
-    if (beamCycle == RailgunFireFrame && boss.bossPartHp[BossNose] > 0) {
+    if (beamCycle == RailgunFireFrame(shooter.m_difficulty) && boss.bossPartHp[BossNose] > 0) {
         PlayRailgunSound(shooter);
     }
     // 各ハッチを独立したランダム間隔で待機させ、同一フレームの一斉射を避ける
@@ -634,7 +652,7 @@ float SideScrollingShooter::Stage2Module::BattleshipWorldY(
 }
 
 bool SideScrollingShooter::Stage2Module::TryHitBossBody(
-    const SideScrollingShooter& shooter, const Shot& shot, const Enemy& boss) {
+    const SideScrollingShooter& shooter, const Shot& shot, const Enemy& boss, Vector3* aimPosition) {
     constexpr float BodyLocalX = 0.55f;
     constexpr float BodyLocalY = 0.95f;
     constexpr float ModelScale = 1.92f;
@@ -650,14 +668,25 @@ bool SideScrollingShooter::Stage2Module::TryHitBossBody(
         boss.z + shooter.m_stage2.boss.landBattleshipOffsetZ -
             std::sin(yaw) * BodyLocalX * ModelScale
     };
+    // 部位破壊後の追尾でも分離済み上部船体の中心を使う
+    if (aimPosition) { *aimPosition = center; return true; }
     return railMode ?
         HitShotSphere(shot, center.x, center.y, center.z, BodyRadius) :
         HitShotCircle(shot, FromWorldX(center.x), FromWorldY(center.y), BodyRadius / WorldXScale);
 }
 
+/**
+ * @brief 未破壊部位への衝突判定または攻撃可能な部位中心の取得を行う
+ * @param shooter 判定対象のゲーム本体
+ * @param shot 判定する自機弾
+ * @param boss 判定するボス
+ * @param part 命中部位の出力先、座標取得時は部位番号の入力
+ * @param aimPosition 非nullなら衝突判定せず部位のワールド中心を出力する
+ * @return 命中または座標取得に成功した場合true
+ */
 bool SideScrollingShooter::Stage2Module::TryHitBossPart(
     const SideScrollingShooter& shooter, const Shot& shot,
-    const Enemy& boss, BossPart& part) {
+    const Enemy& boss, BossPart& part, Vector3* aimPosition) {
     constexpr float ModelScale = 1.92f;
     constexpr Vector3 PartPosition[] = {
         {-2.30f, 2.08f, 0.0f}, {-0.55f, 2.60f, -0.92f},
@@ -678,6 +707,7 @@ bool SideScrollingShooter::Stage2Module::TryHitBossPart(
     // 武装全破壊までは装甲内の接続コアを命中対象にしない
     for (int i = 0; i <= BossRightEngine; ++i) {
         if (boss.bossPartHp[i] <= 0 || (i == BossRightEngine && !weaponsDestroyed)) continue;
+        if (aimPosition && part != i) continue;
         const Vector3& local = PartPosition[i];
         const bool submarinePart = i == BossRightEngine;
         const float yaw = battleshipYaw +
@@ -699,6 +729,8 @@ bool SideScrollingShooter::Stage2Module::TryHitBossPart(
             boss.z + unitOffsetZ +
                 (-local.x * sine + local.z * cosine) * ModelScale
         };
+        // 追尾照準も命中判定と同じ変形済み部位中心を使用する
+        if (aimPosition) { *aimPosition = world; return true; }
         const bool hit = railMode ?
             HitShotSphere(shot, world.x, world.y, world.z, PartRadius[i]) :
             HitShotCircle(shot, FromWorldX(world.x), FromWorldY(world.y), PartRadius[i] / WorldXScale);
@@ -710,7 +742,7 @@ bool SideScrollingShooter::Stage2Module::TryHitBossPart(
     // 側面のオレンジ色の小窓十二基を描画と同じローカル座標で個別判定する
     for (int hatch = 0; hatch < BossFunnelHatchCount; ++hatch) {
         const int partIndex = BossFunnelHatch0 + hatch;
-        if (boss.bossPartHp[partIndex] <= 0) continue;
+        if (boss.bossPartHp[partIndex] <= 0 || (aimPosition && part != partIndex)) continue;
         const float localX = -2.65f + static_cast<float>(hatch % 6) * 1.05f;
         const float localZ = (hatch < 6 ? -1.0f : 1.0f) * 1.80f;
         const float submarineYaw = battleshipYaw + (separated ? Math::HalfPi : 0.0f);
@@ -723,6 +755,8 @@ bool SideScrollingShooter::Stage2Module::TryHitBossPart(
             boss.z + shooter.m_stage2.boss.sandSubmarineOffsetZ +
                 (-localX * sine + localZ * cosine) * ModelScale
         };
+        // 追尾照準も命中判定と同じ変形済み部位中心を使用する
+        if (aimPosition) { *aimPosition = world; return true; }
         const bool hit = railMode ?
             HitShotSphere(shot, world.x, world.y, world.z, 0.58f) :
             HitShotCircle(shot, FromWorldX(world.x), FromWorldY(world.y), 0.58f / WorldXScale);
@@ -757,6 +791,7 @@ void SideScrollingShooter::Stage2Module::FireBossPartBarrage(
         battleshipPosition, {}, yaw, ModelScale,
         boss.phase >= 3.0f && shooter.m_stage2.boss.action != BossAction::Separating, true
     };
+    battleship.secondaryGunsTrackTarget = true;
     battleship.secondaryAimTarget = {
         ToWorldX(boss.turretAimX), ToWorldY(boss.turretAimY),
         railMode ? boss.turretAimZ : SidePlaneZ
@@ -971,7 +1006,7 @@ bool SideScrollingShooter::Stage2Module::HandleBossDefeat(
     // LUMIの撃破音声を圧縮データからPCMへ復号して再生する
     static const auto lumiDeathVoice =
         VoiceCodec::DecodeForAudioService(VoiceSamples::lumiDeath);
-    if (shooter.m_audio) shooter.m_audio->PlaySE(lumiDeathVoice);
+    if (shooter.m_audio) shooter.m_audio->PlayVoice(lumiDeathVoice);
     PlayDefeatSound(shooter, false);
     return true;
 }

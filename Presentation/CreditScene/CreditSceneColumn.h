@@ -14,7 +14,7 @@ enum class CreditTextAlignment {
 
 /**
  * @brief クレジットで表示する1行分の情報を表す構造体
- * @details CreditSceneColumn内の並び順が、上から下へ並ぶ表示順になります
+ * @details CreditSceneColumn内の並び順が、上から下へ並ぶ表示順になる
  */
 struct CreditSceneLine {
     std::string text;
@@ -24,7 +24,7 @@ struct CreditSceneLine {
 
 /**
  * @brief クレジットのひとまとまりを表す構造体
- * @details 見出しと担当者名などの行をまとめ、次のまとまりまでの間隔を定義します
+ * @details 見出しと担当者名などの行をまとめ、次のまとまりまでの間隔を定義する
  */
 struct CreditSceneColumn {
     std::vector<CreditSceneLine> lines;

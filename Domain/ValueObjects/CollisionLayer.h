@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+/** @brief 衝突判定で使用するレイヤービット */
 enum class CollisionLayer : std::uint32_t {
     NONE        = 0,
     PLAYER      = 1 << 0,
@@ -11,6 +12,12 @@ enum class CollisionLayer : std::uint32_t {
     WALL        = 1 << 4,
 };
 
+/**
+ * @brief 2つの衝突レイヤーをビット論理和で結合する
+ * @param lhs 左側のレイヤー
+ * @param rhs 右側のレイヤー
+ * @return 結合後のレイヤー
+ */
 constexpr CollisionLayer operator | (
     CollisionLayer lhs,
     CollisionLayer rhs

@@ -22,6 +22,31 @@ public:
     static void Reset(SideScrollingShooter& shooter);
 
     /**
+     * @brief 登場と会話と撃破演出中も砂嵐の時間と濃度を更新する
+     * @param shooter 更新するゲーム本体
+     * @return なし
+     */
+    static void TickSandstorm(SideScrollingShooter& shooter);
+
+    /**
+     * @brief 現在の視錐台全体へ砂嵐のCube粒子を描画する
+     * @param shooter 描画するゲーム本体
+     * @param renderer 描画先
+     * @param camera 現在のカメラ
+     * @return なし
+     */
+    static void DrawSandstorm(const SideScrollingShooter& shooter,
+        Renderer& renderer, const Camera3D& camera);
+
+    /**
+     * @brief HUDの文字描画前に画面へ砂色のかすみを重ねる
+     * @param shooter 描画するゲーム本体
+     * @param renderer 描画先
+     * @return なし
+     */
+    static void DrawSandstormHaze(const SideScrollingShooter& shooter, Renderer& renderer);
+
+    /**
      * @brief Stage 2ボス専用Behaviorを取得する
      * @return Stage 2ボス専用Behavior
      */
@@ -88,20 +113,22 @@ public:
      * @param shot 判定する自機弾
      * @param boss 判定するStage 2ボス
      * @param part 命中部位の格納先
+     * @param aimPosition 非nullなら衝突判定せず指定部位の攻撃可能なワールド中心を取得する
      * @return 専用部位へ命中した場合true、命中していない場合false
      */
     static bool TryHitBossPart(const SideScrollingShooter& shooter,
-        const Shot& shot, const Enemy& boss, BossPart& part);
+        const Shot& shot, const Enemy& boss, BossPart& part, Vector3* aimPosition = nullptr);
 
     /**
      * @brief 自機弾とStage 2上部戦艦の船体との衝突を判定する
      * @param shooter 判定に使用するゲーム本体
      * @param shot 判定する自機弾
      * @param boss 判定するStage 2ボス
+     * @param aimPosition 非nullなら衝突判定せず指定部位の攻撃可能なワールド中心を取得する
      * @return 上部戦艦へ命中した場合true、命中していない場合false
      */
     static bool TryHitBossBody(const SideScrollingShooter& shooter,
-        const Shot& shot, const Enemy& boss);
+        const Shot& shot, const Enemy& boss, Vector3* aimPosition = nullptr);
 
     /**
      * @brief Stage 2ボスの生存部位から現在フェーズの弾幕を発射する
@@ -247,7 +274,15 @@ private:
     static constexpr int BossApproachFrames = 90;
     static constexpr int BossAssemblyFrames = 90;
     static constexpr int RailgunCycleFrames = 180;
-    static constexpr int RailgunFireFrame = 60;
+    static constexpr int RailgunLockFrame = 60;
+    /**
+     * @brief 難易度別の照準固定時間を含む発射フレームを取得する
+     * @param difficulty 使用する難易度
+     * @return HARDは90、それ以外は120フレーム
+     */
+    static constexpr int RailgunFireFrame(DifficultyType difficulty) {
+        return RailgunLockFrame + (difficulty == Hard ? 30 : 60);
+    }
     static constexpr int RailgunVisualFrames = 12;
     static constexpr int RailgunMirageFrames = 36;
     static constexpr int FirstSinkEndFrame = 108;
@@ -255,7 +290,7 @@ private:
     static constexpr int DustLifetimeFrames = 28;
 
     static_assert(BossApproachFrames + BossAssemblyFrames == 180);
-    static_assert(RailgunFireFrame + RailgunMirageFrames <= RailgunCycleFrames);
+    static_assert(RailgunLockFrame + 60 + RailgunMirageFrames <= RailgunCycleFrames);
     static_assert(FirstSinkEndFrame < ResurfaceStartFrame);
 
     /**

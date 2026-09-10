@@ -13,6 +13,7 @@
 #include "SideScrollingShooterShared.h"
 #include "Stages/Common/StageDispatch.h"
 #include "Stages/Stage1/Stage1Module.h"
+#include "Stages/Stage2/Stage2Module.h"
 #include "Stages/Stage4/Stage4Module.h"
 #include "Stages/Stage5/Stage5Module.h"
 #include "GameplayRandom.h"
@@ -22,8 +23,15 @@ namespace {
 using SideScrollingShooterShared::BossNameRevealFrames;
 using SideScrollingShooterShared::BossWarningSirenMml;
 
-constexpr float PowerAfterRestart(float power) {
-    return power > 0.05f ? power - 0.05f : 0.0f;
+/**
+ * @brief 難易度に応じた道中RESTART後のPowerを取得する
+ * @param power RESTART前のPower
+ * @param difficulty 選択中の難易度
+ * @return 減少後のPower
+ */
+constexpr float PowerAfterRestart(float power, DifficultyType difficulty) {
+    const float loss = difficulty == Easy ? 0.01f : (difficulty == Normal ? 0.5f : 1.0f);
+    return power > loss ? power - loss : 0.0f;
 }
 
 /**
@@ -66,17 +74,32 @@ constexpr int ChapterProgressPercentForFrame(int frame, int startFrame, int endF
     return elapsed * 100 / duration;
 }
 
-static_assert(PowerAfterRestart(3.25f) > 3.199f &&
-    PowerAfterRestart(3.25f) < 3.201f);
-static_assert(PowerAfterRestart(0.75f) > 0.699f &&
-    PowerAfterRestart(0.75f) < 0.701f);
-static_assert(PowerAfterRestart(0.05f) == 0.0f);
+/**
+ * @brief Stage 5第2部の現在区画に対応する進行フレーム数を取得する
+ * @param phase 現在のStage 5状態
+ * @return 第2部道中外は0、道中内は区画の総フレーム数
+ */
+constexpr int Stage5Part2ChapterFrames(ShooterStages::Stage5::Phase phase) {
+    using Phase = ShooterStages::Stage5::Phase;
+    if (phase == Phase::WallClimbLower) return ShooterStages::Stage5::WallClimbLowerFrames;
+    if (phase == Phase::WallClimbMiddle) return ShooterStages::Stage5::WallClimbMiddleFrames;
+    if (phase == Phase::WallClimbUpper) return ShooterStages::Stage5::WallClimbUpperFrames;
+    return 0;
+}
+
+static_assert(PowerAfterRestart(3.25f, Easy) > 3.239f &&
+    PowerAfterRestart(3.25f, Easy) < 3.241f);
+static_assert(PowerAfterRestart(3.25f, Normal) == 2.75f);
+static_assert(PowerAfterRestart(3.25f, Hard) == 2.25f);
+static_assert(PowerAfterRestart(0.5f, Normal) == 0.0f);
+static_assert(PowerAfterRestart(0.5f, Hard) == 0.0f);
 static_assert(PowerAfterDebugIncrease(2.25f, 4.0f) == 3.25f);
 static_assert(PowerAfterDebugIncrease(3.50f, 4.0f) == 4.0f);
 static_assert(EarnsChapterBombBonus(5, 6));
 static_assert(!EarnsChapterBombBonus(4, 5));
 static_assert(!EarnsChapterBombBonus(0, 0));
 static_assert(ScaleHpByPercent(10, 70) == 7);
+static_assert(ScaleHpByPercent(10, 50) == 5);
 static_assert(ScaleHpByPercent(10, 100) == 10);
 static_assert(ScaleHpByPercent(10, 150) == 15);
 static_assert(ScaleHpByPercent(1, 70) == 1);
@@ -84,6 +107,9 @@ static_assert(ChapterProgressPercentForFrame(0, 0, 1000, false) == 0);
 static_assert(ChapterProgressPercentForFrame(500, 0, 1000, false) == 50);
 static_assert(ChapterProgressPercentForFrame(1000, 0, 1000, false) == 100);
 static_assert(ChapterProgressPercentForFrame(1200, 1000, 2000, true) == 100);
+static_assert(Stage5Part2ChapterFrames(ShooterStages::Stage5::Phase::WallClimbLower) ==
+    ShooterStages::Stage5::WallClimbLowerFrames);
+static_assert(Stage5Part2ChapterFrames(ShooterStages::Stage5::Phase::Approach) == 0);
 
 /** @brief 無線風に加工した自機撃破音声群を取得する @return 44100Hz PCMデータ群 */
 const std::array<std::vector<std::int16_t>, 3>& MomijiDeathVoices() {
@@ -144,7 +170,8 @@ constexpr int SideScrollingShooter::ScaleHpForDifficulty(int hp, DifficultyType 
 
 /** @brief 敵機HPへ難易度倍率を適用する */
 void SideScrollingShooter::ApplyDifficultyToEnemyHp(Enemy& enemy) const {
-    enemy.hp = ScaleHpForDifficulty(enemy.hp, m_difficulty);
+    enemy.hp = m_difficulty == Easy ? ScaleHpByPercent(enemy.hp, 50) :
+        ScaleHpForDifficulty(enemy.hp, m_difficulty);
     enemy.maxHp = enemy.hp;
 }
 
@@ -425,6 +452,9 @@ void SideScrollingShooter::StartDebugCheckpoint(
 }
 
 void SideScrollingShooter::ProcessInput() {
+    // リスタート表示中の新しいキー入力でカウントダウンを終了する
+    if (m_restartTimer > 0 && Input::GetAnyKeyDown()) m_restartTimer = 0;
+
     m_moveLeft = Input::GetKey(KeyCode::LeftArrow) || Input::GetKey(KeyCode::A);
     m_moveRight = Input::GetKey(KeyCode::RightArrow) || Input::GetKey(KeyCode::D);
     m_moveUp = Input::GetKey(KeyCode::UpArrow) || Input::GetKey(KeyCode::W);
@@ -434,12 +464,14 @@ void SideScrollingShooter::ProcessInput() {
     m_bombRequested = Input::GetKeyDown(KeyCode::C);
     m_viewToggleRequested = Input::GetKeyDown(KeyCode::X) && CanToggleView();
 
+#ifdef _DEBUG
     // デバッグ用に任意の進行地点へ移動する
     if (Input::GetKeyDown(KeyCode::F1)) StartDebugCheckpoint(1, 1, false);
     if (Input::GetKeyDown(KeyCode::F2)) StartDebugCheckpoint(2, 1, false);
     if (Input::GetKeyDown(KeyCode::F3)) StartDebugCheckpoint(3, 1, false);
     if (Input::GetKeyDown(KeyCode::F4)) StartDebugCheckpoint(4, 1, false);
     if (Input::GetKeyDown(KeyCode::F5)) StartDebugCheckpoint(5, 1, false);
+    if (Input::GetKeyDown(KeyCode::F9)) Stage5Module::StartDebugPhase(*this, Stage5Phase::TayamaFireControl);
     if (Input::GetKeyDown(KeyCode::Alpha1)) StartDebugCheckpoint(m_stageNumber, 1, false);
     if (Input::GetKeyDown(KeyCode::Alpha2)) StartDebugCheckpoint(m_stageNumber, 2, false);
     if (Input::GetKeyDown(KeyCode::Alpha3)) StartDebugCheckpoint(m_stageNumber, 3, false);
@@ -451,6 +483,7 @@ void SideScrollingShooter::ProcessInput() {
     if (Input::GetKeyDown(KeyCode::B) && !StageDispatch::HandleDebugBossInput(*this)) {
         StartDebugCheckpoint(m_stageNumber, 3, true);
     }
+#endif
     StageDispatch::ProcessDebugInput(*this);
 
     if (m_clear && Input::GetKeyDown(KeyCode::R)) {
@@ -474,8 +507,8 @@ void SideScrollingShooter::Tick() {
             MissionBannerDisplayFrames);
         if (!m_tutorialMode && m_audio) {
             const int elapsedFrames = MissionBannerDisplayFrames - m_missionStartTimer;
-            if (elapsedFrames == 0) m_audio->PlaySE(MissionVoice());
-            else if (elapsedFrames == MissionStartSecondVoiceFrame) m_audio->PlaySE(StartVoice());
+            if (elapsedFrames == 0) m_audio->PlayVoice(MissionVoice());
+            else if (elapsedFrames == MissionStartSecondVoiceFrame) m_audio->PlayVoice(StartVoice());
         }
         --m_missionStartTimer;
         return;
@@ -484,6 +517,9 @@ void SideScrollingShooter::Tick() {
     const bool completingRailToSideTransition = m_viewTransitionTimer == 1 &&
         m_viewMode == ViewMode::Rail3D && m_nextViewMode == ViewMode::Side2D;
     TickViewTransition();
+
+    // 登場、会話、クリアの早期returnより前に砂嵐を進める
+    if (m_stageNumber == 2) Stage2Module::TickSandstorm(*this);
 
     // HUD用HPは実HPへ追従させ、ダメージ時の減少を視認できるようにする
     if (m_displayBossHp > static_cast<float>(m_bossHp)) {
@@ -498,8 +534,8 @@ void SideScrollingShooter::Tick() {
             ClearWaitFrames);
         if (!m_tutorialMode && m_audio && m_clearTimer > 0 && m_clearTimer <= ClearWaitFrames) {
             const int elapsedFrames = ClearWaitFrames - m_clearTimer;
-            if (elapsedFrames == 0) m_audio->PlaySE(SuspectVoice());
-            else if (elapsedFrames == MissionClearSecondVoiceFrame) m_audio->PlaySE(ArrestedVoice());
+            if (elapsedFrames == 0) m_audio->PlayVoice(SuspectVoice());
+            else if (elapsedFrames == MissionClearSecondVoiceFrame) m_audio->PlayVoice(ArrestedVoice());
         }
         StageDispatch::TickBossDefeat(*this);
         TickExplosions();
@@ -655,11 +691,25 @@ void SideScrollingShooter::TickChapterExitEnemies() {
     constexpr float SideExitSpeed = 0.10f;
     constexpr float RailExitSpeed = 1.4f;
     static_assert(SideExitSpeed > 0.0f && RailExitSpeed > 0.0f);
+    const bool exitsDownward = m_stageNumber == 5 &&
+        m_stage5.phase == ShooterStages::Stage5::Phase::WallClimbUpper;
+    const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
 
-    // 敵AIと射撃を止めたまま進行方向へ高速移動させる
+    // 敵AIと射撃を止めたまま画面外へ高速移動させる
     for (auto& enemy : m_enemies) {
         if (!enemy.active || enemy.type == 2) continue;
         enemy.collisionEnabled = false;
+        if (exitsDownward) {
+            // 第2部最終区間は屋上ムービー前に全敵を画面下へ高速退避させる
+            enemy.y = ShooterStages::Stage5::Part2EnemyExitY(
+                enemy.y, IsRailGameplayActive());
+            enemy.baseY = enemy.y;
+            const float exitY = IsRailGameplayActive() ?
+                ShooterStages::Stage5::Part2RailEnemyExitY :
+                sideYRange.x - Side2DShotCullMargin;
+            if (enemy.y < exitY) enemy.active = false;
+            continue;
+        }
         if (IsRailGameplayActive()) {
             enemy.z -= RailExitSpeed;
             if (enemy.z < 2.0f) enemy.active = false;
@@ -857,11 +907,11 @@ void SideScrollingShooter::InitializeRailObjects() {
         }
         if (!shot.enemy && UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase)) {
             // 第2部の自機弾は3Dへ切り替えても壁面上方向の速度を維持する
-            shot.z = PlayerRailZ + 2.0f;
+            shot.z = PlayerRailDepth() + 2.0f;
             shot.vz = 0.0f;
             continue;
         }
-        /** @brief 2D横移動をレール奥行きの移動量へ変換する */
+        // 2D横移動をレール奥行きの移動量へ変換する
         if (shot.enemy) {
             shot.vz = sideVx * 18.0f;
         }
@@ -1041,9 +1091,15 @@ void SideScrollingShooter::TickBossIntroduction() {
     const int entranceFrames = StageDispatch::BossIntroductionFrames(*this);
     if (m_bossIntroductionPhase == BossIntroductionPhase::Entrance &&
         m_bossIntroductionTimer >= entranceFrames) {
-        // 定位置を既存ステージ定義へ戻して会話へ移行する
-        if (IsRailGameplayActive()) m_stage->ConfigureBossRailAnchor(boss);
-        else m_stage->ConfigureBossSideAnchor(boss);
+        // TAYAMAはムービー状態を抜けてから、その他は定位置へ戻して会話へ移行する
+        if (m_stageNumber == 5 &&
+            m_stage5.phase == ShooterStages::Stage5::Phase::CarrierTransformation) {
+            Stage5Module::CompleteTayamaIntroduction(*this);
+        } else if (IsRailGameplayActive()) {
+            m_stage->ConfigureBossRailAnchor(boss);
+        } else {
+            m_stage->ConfigureBossSideAnchor(boss);
+        }
         m_bossIntroductionPhase = BossIntroductionPhase::Dialogue;
         m_bossIntroductionTimer = 0;
         m_bossStoryActive = true;
@@ -1112,7 +1168,7 @@ void SideScrollingShooter::DamagePlayer() {
     if (m_playerDestructionTimer > 0) return;
 
     // 被弾成立と同時に撃破音声を開始する
-    if (m_audio) m_audio->PlaySE(RandomMomijiDeathVoice());
+    if (m_audio) m_audio->PlayVoice(RandomMomijiDeathVoice());
     if (m_stageNumber == 4) Stage4Module::PlayDefeatVoice(*this);
 
     // 敵撃破と同じ破壊爆発を自機位置へ生成してから復帰を待つ
@@ -1293,8 +1349,8 @@ void SideScrollingShooter::RestartCurrentChapter() {
         return;
     }
 
-    // 通常戦では被弾時点のPowerから0.01だけ失い、0.0未満にはしない
-    m_power = PowerAfterRestart(m_power);
+    // 通常戦では被弾時点のPowerから難易度別の量を失い、0.0未満にはしない
+    m_power = PowerAfterRestart(m_power, m_difficulty);
     if (StageDispatch::TryRestartCheckpoint(*this)) return;
     ++m_chapterRetryCounts[m_chapterNumber - 1];
     m_shots = {};
@@ -1439,6 +1495,13 @@ int SideScrollingShooter::PowerLevel() const {
 int SideScrollingShooter::ChapterProgressPercent() const {
     if (m_stage == nullptr) return 0;
 
+    // Stage 5第2部は通常時間軸から独立しているため現在区画の専用タイマーを使う
+    const int stage5Part2Frames = Stage5Part2ChapterFrames(m_stage5.phase);
+    if (m_stageNumber == 5 && stage5Part2Frames > 0) {
+        return ChapterProgressPercentForFrame(
+            m_stage5.phaseTimer, 0, stage5Part2Frames, false);
+    }
+
     // 現在チャプターの開始/終了フレームから進行率を求める
     const int startFrame = m_stage->ChapterEndFrame(m_chapterNumber - 1);
     const int endFrame = m_stage->ChapterEndFrame(m_chapterNumber);
@@ -1478,7 +1541,7 @@ bool SideScrollingShooter::IsTayamaOrbitViewActive() const {
 
 Vector3 SideScrollingShooter::PlayerWorldPosition() const {
     if (!IsTayamaBattle()) {
-        return {ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailZ};
+        return {ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailDepth()};
     }
 
     // 3Dは周回角、2Dは切替時に固定した角と画面横位置から同じ円形アリーナへ配置する
@@ -1487,6 +1550,11 @@ Vector3 SideScrollingShooter::PlayerWorldPosition() const {
     const float sideOffset = IsTayamaOrbitViewActive() ? 0.0f : m_playerX;
     const Vector2 orbit = TayamaOrbitXZ(angle, sideOffset);
     return {orbit.x, ToWorldY(m_playerY), orbit.y};
+}
+
+float SideScrollingShooter::PlayerRailDepth() const {
+    return m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase) ?
+        ShooterStages::Stage5::Part2PlayerRailZ : PlayerRailZ;
 }
 
 bool SideScrollingShooter::IsRailGameplayActive() const {

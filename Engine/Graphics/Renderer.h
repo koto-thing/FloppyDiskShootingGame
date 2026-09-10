@@ -85,7 +85,12 @@ class Renderer {
 public:
     static constexpr std::size_t MaxCommands = 4096;
 
+    /** @brief バックエンドなしの描画ファサードを生成する */
     Renderer() = default;
+    /**
+     * @brief 描画バックエンド付きの描画ファサードを生成する
+     * @param backend 描画バックエンド
+     */
     explicit Renderer(IRenderBackend& backend) : m_backend(&backend) {}
 
     /** @brief フレームの描画記録を開始する */
@@ -163,7 +168,20 @@ public:
     const RenderCommand& Command(std::size_t index) const { return m_commands[index]; }
 
 private:
+    /**
+     * @brief 描画コマンドを記録領域へ追加する
+     * @param type 追加するコマンド種別
+     * @return 追加したコマンド。容量超過時はnullptr
+     */
     RenderCommand* TryAppend(RenderCommand::Type type);
+    /**
+     * @brief 文字列の配置基準から先頭文字位置を計算する
+     * @param text 描画する文字列
+     * @param alignment 配置基準
+     * @param size 文字サイズ
+     * @param characterSpacing 文字間隔
+     * @return 先頭文字の座標
+     */
     Vector2 CalculateTextPosition(std::string_view text, TextAlign alignment, float size,
                                   float characterSpacing) const;
 

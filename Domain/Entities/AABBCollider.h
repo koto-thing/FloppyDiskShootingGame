@@ -5,6 +5,10 @@
 
 class AABBCollider final : public Collider {
 public:
+    /**
+     * @brief 軸平行境界箱コライダーを生成する
+     * @param halfSize コライダーの半サイズ
+     */
     explicit AABBCollider(const Vector2& halfSize)
         : Collider(ColliderType::AABB),
           m_halfSize(halfSize) {

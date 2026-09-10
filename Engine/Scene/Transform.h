@@ -45,10 +45,33 @@ public:
     const Matrix4x4& WorldMatrix() const;
 
 private:
+    /**
+     * @brief 指定したTransformが子孫に含まれるか判定する
+     * @param candidate 判定対象のTransform
+     * @return 子孫に含まれる場合true
+     */
     bool IsDescendantOf(const Transform* candidate) const;
+
+    /**
+     * @brief 子Transformを一覧から削除する
+     * @param child 削除する子Transform
+     */
     void RemoveChild(Transform* child);
+
+    /**
+     * @brief ローカル行列を設定する
+     * @param matrix 設定するローカル行列
+     */
     void SetLocalMatrix(const Matrix4x4& matrix);
+
+    /**
+     * @brief ワールド行列を再計算する必要がある状態へ変更する
+     */
     void MarkDirty();
+
+    /**
+     * @brief ワールド行列を必要に応じて再計算する
+     */
     void RebuildWorldMatrix() const;
 
     Vector3 m_localPosition;

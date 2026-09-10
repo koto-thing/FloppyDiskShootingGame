@@ -6,6 +6,7 @@
 #include <windowsx.h>
 
 #include "Input.h"
+#include "Switch2ProInput.h"
 
 #pragma comment(lib, "xinput.lib")
 
@@ -18,6 +19,8 @@ bool gamepadNeedsNeutral = true;
 bool gamepadPointerActive = false;
 bool gamepadPrimaryWasPressed = false;
 bool nativeInputEnabled = true;
+unsigned switch2Connection = 0;
+bool switch2WasActive = false;
 
 constexpr ULONGLONG GamepadSearchIntervalMilliseconds = 1000;
 
@@ -68,6 +71,8 @@ bool WindowsInputBackend::Initialize(HWND hwnd) {
     gamepadPointerActive = false;
     gamepadPrimaryWasPressed = false;
     nativeInputEnabled = true;
+    switch2Connection = 0;
+    switch2WasActive = false;
 
     // 標準的なマウスとキーボードを対象ウィンドウへ登録する
     RAWINPUTDEVICE devices[] = {
@@ -94,7 +99,7 @@ bool WindowsInputBackend::Initialize(HWND hwnd) {
 }
 
 /**
- * @brief 接続中のXInputゲームパッドを取得して入力状態へ反映する
+ * @brief 接続中の対応ゲームパッドを取得して入力状態へ反映する
  * @return なし
  */
 void WindowsInputBackend::Update() {
@@ -136,7 +141,17 @@ void WindowsInputBackend::Update() {
             }
         }
     }
-    ProcessPolledGamepad(connected ? &state.Gamepad : nullptr, elapsedSeconds);
+    // XInputを優先し、未接続の場合はSwitch 2 Proの直接入力を使う
+    unsigned connection = 0;
+    const bool switch2Active = !connected && Switch2ProInput::Poll(state.Gamepad, connection);
+    if (switch2Active != switch2WasActive ||
+        (switch2Active && connection != switch2Connection)) {
+        ProcessPolledGamepad(nullptr, elapsedSeconds);
+    }
+    switch2WasActive = switch2Active;
+    switch2Connection = connection;
+    ProcessPolledGamepad(connected || switch2Active ? &state.Gamepad : nullptr, elapsedSeconds);
+    Input::m_switch2ProConnected = switch2Active;
 }
 
 /**
@@ -284,6 +299,9 @@ UINT WindowsInputBackend::NormalizeVirtualKey(const RAWKEYBOARD& keyboard) {
  */
 void WindowsInputBackend::ProcessPolledGamepad(
     const XINPUT_GAMEPAD* gamepad, float elapsedSeconds) {
+    // HUD案内が物理的な接続状態へ追従できるよう保存する
+    Input::m_gamepadConnected = gamepad != nullptr;
+    Input::m_switch2ProConnected = false;
     if (gamepad == nullptr) {
         gamepadNeedsNeutral = true;
         ProcessGamepad(nullptr, elapsedSeconds);

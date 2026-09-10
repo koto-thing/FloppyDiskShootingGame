@@ -5,10 +5,32 @@
 #include "../Presentation/Gameplay/Stages/Stage2/Stage2State.h"
 
 /**
- * @brief Stage2副砲の固定照準と追尾照準で砲口座標を検証する
+ * @brief Stage2の砂嵐の濃度と副砲の砲口座標を検証する
  * @return なし
  */
 void RunStage2BossModelViewTests() {
+    // 登場から3秒で最大となり、会話や形態変更を挟んでも維持し、撃破後は晴れる
+    using ShooterStages::Stage2::NextSandstormExposure;
+    using ShooterStages::Stage2::SandstormFadeFrames;
+    int exposure = 0;
+    assert(NextSandstormExposure(exposure, false) == 0);
+    for (int frame = 0; frame < SandstormFadeFrames; ++frame) {
+        const int next = NextSandstormExposure(exposure, true);
+        assert(next > exposure && next <= SandstormFadeFrames);
+        exposure = next;
+    }
+    assert(exposure == SandstormFadeFrames);
+    assert(NextSandstormExposure(exposure, true) == exposure);
+    for (int frame = 0; frame < SandstormFadeFrames; ++frame) {
+        const int next = NextSandstormExposure(exposure, false);
+        assert(next < exposure && next >= 0);
+        exposure = next;
+    }
+    assert(exposure == 0);
+    assert(NextSandstormExposure(45, false) == 44);
+    assert(ShooterStages::Stage2::State {}.sandstormExposure == 0);
+    assert(ShooterStages::Stage2::State {}.sandstormFrame == 0);
+
     // ハッチ別射出間隔が範囲内で変化することを確認する
     const int firstInterval = ShooterStages::Stage2::Phase3FunnelLaunchInterval(0, 0);
     const int nextInterval = ShooterStages::Stage2::Phase3FunnelLaunchInterval(0, 1);
@@ -17,14 +39,6 @@ void RunStage2BossModelViewTests() {
     assert(nextInterval >= 55 && nextInterval <= 145);
     assert(firstInterval != nextInterval);
     assert(firstInterval != otherHatchInterval);
-
-    // 主砲追従率が予告の中央で加速し、発射直前に減速することを確認する
-    const float trackingStart = ShooterStages::Stage2::Phase3MainGunTrackingRate(0, 60);
-    const float trackingMiddle = ShooterStages::Stage2::Phase3MainGunTrackingRate(30, 60);
-    const float trackingEnd = ShooterStages::Stage2::Phase3MainGunTrackingRate(60, 60);
-    assert(trackingMiddle > trackingStart);
-    assert(trackingMiddle > trackingEnd);
-    assert(std::fabs(trackingStart - trackingEnd) < 0.0001f);
 
     // Phase 1、2相当の固定照準では砲口が艦首方向へ砲身長分進むことを確認する
     BossModelTransform fixed {{10.0f, 20.0f, 30.0f}, {}, 0.0f, 2.0f};

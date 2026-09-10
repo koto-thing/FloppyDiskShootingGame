@@ -8,7 +8,7 @@
  */
 class SideScrollingShooter::EnemyBehavior {
 public:
-	// @brief 敵の初期配置候補
+	/** @brief 敵の初期配置候補 */
     // { 2DのX, 3DのX, 上下Y, 3DのZ }
     struct EntryCandidate {
         float sideX = 1.08f;
@@ -586,6 +586,7 @@ public:
         if (enemy.age < 36 || enemy.age % 72 != 0) {
             return;
         }
+        if (!shooter.CanSpawnEnemyProjectile(enemy.x, enemy.y, enemy.z)) return;
 
         constexpr int BulletCount = 8;
         if (shooter.IsRailGameplayActive()) {
@@ -683,6 +684,7 @@ public:
         if (enemy.age < 36 || enemy.age % 72 != 0) {
             return;
         }
+        if (!shooter.CanSpawnEnemyProjectile(enemy.x, enemy.y, enemy.z)) return;
 
         if (shooter.IsRailGameplayActive()) {
             // 3Dでは同一点から5x5の格子へ徐々に拡散させる
@@ -791,6 +793,8 @@ private:
      */
     static void SpawnStage2DelayedMissile(
         SideScrollingShooter& shooter, float x, float y, float z) {
+        if (!shooter.CanSpawnEnemyProjectile(x, y, z)) return;
+
         for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
             auto& shot = shooter.m_shots[shotIndex];
             if (shot.active) continue;
@@ -1029,6 +1033,8 @@ private:
      * @return なし
      */
     static void FireMachineGun(SideScrollingShooter& shooter, const Enemy& enemy) {
+        if (!shooter.CanSpawnEnemyProjectile(enemy.x, enemy.y, enemy.z)) return;
+
         const float dx = enemy.attackWarningTargetX - enemy.x;
         const float dy = enemy.attackWarningTargetY - enemy.y;
         const int shotIndex = (ShooterStages::Stage5::DroneMachineGunBurstFrames -
@@ -1045,7 +1051,7 @@ private:
         // 3Dではゲーム座標のXYをワールド比率へ変換して固定地点へ飛ばす
         const float worldDx = ToWorldX(enemy.attackWarningTargetX) - ToWorldX(enemy.x);
         const float worldDy = ToWorldY(enemy.attackWarningTargetY) - ToWorldY(enemy.y);
-        const float worldDz = SideScrollingShooter::PlayerRailZ - enemy.z;
+        const float worldDz = shooter.PlayerRailDepth() - enemy.z;
         const float length = (std::max)(0.001f,
             std::sqrt(worldDx * worldDx + worldDy * worldDy + worldDz * worldDz));
         shooter.SpawnShotDirect(enemy.x, enemy.y, enemy.z,
@@ -1062,7 +1068,7 @@ private:
     static constexpr float PatrolHeight = 0.22f;
     static constexpr float SideShotSpeed = 0.022f;
     static constexpr float RailShotSpeed = 0.68f;
-    static_assert(WallPatrolZ > SideScrollingShooter::PlayerRailZ);
+    static_assert(WallPatrolZ > ShooterStages::Stage5::Part2PlayerRailZ);
     static_assert(SideWallX > 0.0f);
     static_assert(PatrolWidth > 0.0f && PatrolHeight > 0.0f);
 };

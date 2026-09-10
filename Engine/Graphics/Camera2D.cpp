@@ -1,10 +1,12 @@
 #include "Camera2D.h"
 #include <cmath>
 
+/** @brief 2Dカメラのビュー行列を生成する */
 Matrix4x4 Camera2D::ViewMatrix() const {
     return Matrix4x4::RotationZ(-m_rotation) * Matrix4x4::Translation(Vector3{-m_position.x, -m_position.y, 0.0f});
 }
 
+/** @brief 2Dカメラの投影行列を生成する */
 Matrix4x4 Camera2D::ProjectionMatrix() const {
     if (!m_viewport.IsValid()) return Matrix4x4::Identity;
     const float halfWidth = static_cast<float>(m_viewport.width) / (2.0f * m_zoom);
@@ -12,8 +14,11 @@ Matrix4x4 Camera2D::ProjectionMatrix() const {
     return {1.0f / halfWidth, 0, 0, 0, 0, 1.0f / halfHeight, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
 }
 
+/** @brief ワールド座標をスクリーン座標へ変換する */
 Vector2 Camera2D::WorldToScreen(const Vector2& world) const { Vector2 result{}; TryWorldToScreen(world, result); return result; }
+/** @brief スクリーン座標をワールド座標へ変換する */
 Vector2 Camera2D::ScreenToWorld(const Vector2& screen) const { Vector2 result{}; TryScreenToWorld(screen, result); return result; }
+/** @brief ワールド座標をスクリーン座標へ安全に変換する */
 
 bool Camera2D::TryWorldToScreen(const Vector2& world, Vector2& screen) const {
     if (!m_viewport.IsValid()) return false;
@@ -25,6 +30,7 @@ bool Camera2D::TryWorldToScreen(const Vector2& world, Vector2& screen) const {
     return std::isfinite(screen.x) && std::isfinite(screen.y);
 }
 
+/** @brief スクリーン座標をワールド座標へ安全に変換する */
 bool Camera2D::TryScreenToWorld(const Vector2& screen, Vector2& world) const {
     if (!m_viewport.IsValid()) return false;
     const float x = (screen.x - m_viewport.x - m_viewport.width * 0.5f) / m_zoom;

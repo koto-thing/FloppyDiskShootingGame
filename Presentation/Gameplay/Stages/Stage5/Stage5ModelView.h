@@ -164,6 +164,8 @@ struct TayamaModelState {
     std::array<Stage5PartTransform, TayamaPartGroupCount> collapseOffsets {};
     std::array<Vector2, 2> searchlightAimRotations {};
     float armSpinAngle = 0.0f;
+    float headScaleMultiplier = 1.0f;
+    bool goldenHeadAdornment = false;
 
     /**
      * @brief 指定グループを描画および当たり判定へ含めるか判定する
@@ -196,8 +198,8 @@ struct TayamaBuildingPart {
 /** @brief 同じパーツ群を補間してビルから巨大メカへ変形するTAYAMAモデル */
 class TayamaModelView {
 public:
-    inline static constexpr Vector3 TowerBoundsMin {-7.2f, -11.0f, -3.7f};
-    inline static constexpr Vector3 TowerBoundsMax {7.2f, 8.0768f, 5.2f};
+    inline static constexpr Vector3 TowerBoundsMin {-7.3f, -11.0f, -3.8f};
+    inline static constexpr Vector3 TowerBoundsMax {7.3f, 8.3f, 5.2f};
     inline static constexpr Vector3 TowerSize {14.4f, 19.0768f, 8.9f};
     inline static constexpr ColorF Hull {0.15f, 0.17f, 0.21f, 1.0f};
     inline static constexpr ColorF Armor {0.24f, 0.27f, 0.32f, 1.0f};
@@ -212,7 +214,7 @@ public:
     /**
      * @brief 左右腕へ肩支点の回転行列を生成する
      * @param group 判定するパーツグループ
-     * @param angle 左腕のZ軸回転角度
+     * @param angle 水平なX軸を時計回りに回す角度
      * @return 腕グループなら肩支点回転、それ以外なら単位行列
      */
     static Matrix4x4 ArmMotion(TayamaPartGroup group, float angle) {
@@ -220,7 +222,7 @@ public:
         if (!left && group != TayamaPartGroup::RightFlightDeck) return Matrix4x4::Identity;
         const Vector3 pivot = left ? LeftArmShoulder : RightArmShoulder;
         return Matrix4x4::Translation(pivot) *
-            Matrix4x4::RotationZ(left ? angle : -angle) *
+            Matrix4x4::RotationX(angle) *
             Matrix4x4::Translation(-pivot);
     }
 
@@ -259,7 +261,7 @@ public:
      * @brief 腕の肩と先端を描画と同じ変換でワールド座標へ解決する
      * @param transform モデル全体のTransform
      * @param left 左腕を取得する場合true
-     * @param angle 左腕のZ軸回転角度
+     * @param angle 水平なX軸を時計回りに回す角度
      * @param shoulder 肩のワールド座標格納先
      * @param tip 先端のワールド座標格納先
      * @return なし
@@ -277,6 +279,7 @@ public:
     inline static constexpr ColorF Warning {1.0f, 0.30f, 0.035f, 1.0f};
     inline static constexpr ColorF Runway {0.08f, 0.72f, 1.0f, 1.0f};
     inline static constexpr ColorF Core {1.0f, 0.08f, 0.025f, 1.0f};
+    inline static constexpr ColorF HeadGold {2.40f, 1.35f, 0.15f, 1.0f};
     inline static constexpr ColorF Hit {1.0f, 0.04f, 0.03f, 1.0f};
 
     /**
@@ -355,18 +358,29 @@ public:
         {{2.0f, 0.5695f, 1.0259f}, {}, {0.3f, 1.4f, 1.33f}}
     }};
 
+    // 外装と装飾から表情、顔の芯へ崩れる撃破時の脱落順
+    inline static constexpr std::array<std::size_t, 34> HeadRemovalOrder {{
+        28, 29, 30, 31, 32, 33,
+        14, 15, 16, 18, 17, 19,
+        20, 24, 22, 27, 21, 25, 23, 26,
+        9, 10, 11, 12,
+        1, 2, 3, 4,
+        8, 7, 6, 5, 13, 0
+    }};
+
     inline static constexpr Stage5PartTransform TowerHead {
         {0.0f, 2.1055f, 0.2291f}};
     inline static constexpr Stage5PartTransform MechaHead {
         {0.0f, 16.0f, 0.0f}};
-    inline static constexpr float MechaHeadScale = 3.0f;
+    inline static constexpr float MechaHeadScale = 1.0f;
+    inline static constexpr float DragonHeadScale = 3.0f;
     inline static constexpr float DragonJointDiameterScale = 1.12f;
     inline static constexpr float HeadRearExtent = 1.6909f;
 
     /**
      * @brief 変形率に応じた頭部倍率を取得する
      * @param progress 0がビル、1が巨大メカとなる変形率
-     * @return ビル形態の等倍から巨大メカ形態の3倍までの倍率
+     * @return ビル形態と巨大メカ形態の頭部倍率
      */
     static constexpr float HeadScale(float progress) {
         return Math::LerpClamped(1.0f, MechaHeadScale, progress);
@@ -393,7 +407,51 @@ public:
      * @return 頭部背面が首装甲表面へ接する正面方向の距離
      */
     static constexpr float DragonHeadForwardOffset(float jointDiameter, float headScale) {
-        return jointDiameter * 0.5f + HeadRearExtent * MechaHeadScale * headScale;
+        return jointDiameter * 0.5f + HeadRearExtent * DragonHeadScale * headScale;
+    }
+
+    /**
+     * @brief 撃破演出で指定数脱落した後も頭部パーツが残るか判定する
+     * @param partIndex HeadParts内の部位番号
+     * @param removedCount 脱落済みパーツ数
+     * @return 描画対象として残る場合true
+     */
+    static constexpr bool IsHeadPartVisibleAfterRemoval(
+        std::size_t partIndex, int removedCount) {
+        for (int rank = 0; rank < removedCount; ++rank) {
+            if (HeadRemovalOrder[static_cast<std::size_t>(rank)] == partIndex) return false;
+        }
+        return true;
+    }
+
+    /**
+     * @brief 巨大メカ形態の頭部パーツ中心をワールド座標で取得する
+     * @param transform 頭部を含むモデルTransform
+     * @param partIndex HeadParts内の部位番号
+     * @param headScale 頭部の形態別倍率
+     * @return 指定パーツのワールド中心座標
+     */
+    static Vector3 HeadPartWorldPosition(const Stage5ModelTransform& transform,
+        std::size_t partIndex, float headScale = MechaHeadScale) {
+        const Matrix4x4 head = Stage5ModelDetail::Matrix(transform) *
+            Stage5ModelDetail::Matrix(MechaHead) * Matrix4x4::Scale({
+                headScale, headScale, headScale});
+        return head.TransformPoint(HeadParts[partIndex].position);
+    }
+
+    /**
+     * @brief 巨大メカ形態の左右の目をワールド座標で取得する
+     * @param transform モデル全体のTransform
+     * @param headScale 頭部の形態別倍率
+     * @return 左右の目のワールド座標
+     */
+    static std::array<Vector3, 2> EyeWorldPositions(
+        const Stage5ModelTransform& transform, float headScale = MechaHeadScale) {
+        const Matrix4x4 head = Stage5ModelDetail::Matrix(transform) *
+            Stage5ModelDetail::Matrix(MechaHead) * Matrix4x4::Scale({
+                headScale, headScale, headScale});
+        return {head.TransformPoint(HeadParts[11].position),
+            head.TransformPoint(HeadParts[12].position)};
     }
 
     /**
@@ -402,11 +460,8 @@ public:
      * @return 両目中央のワールド座標
      */
     static Vector3 EyeWorldCenter(const Stage5ModelTransform& transform) {
-        const Matrix4x4 head = HeadRoot(
-            Stage5ModelDetail::Matrix(transform), MechaHead, 1.0f);
-        const Vector3 left = head.TransformPoint(HeadParts[11].position);
-        const Vector3 right = head.TransformPoint(HeadParts[12].position);
-        return (left + right) * 0.5f;
+        const std::array<Vector3, 2> eyes = EyeWorldPositions(transform);
+        return (eyes[0] + eyes[1]) * 0.5f;
     }
 
     /**
@@ -434,6 +489,24 @@ public:
         if (toTarget.LengthSquared() <= Math::Epsilon ||
             forward.LengthSquared() <= Math::Epsilon) return false;
         return Vector3::Dot(toTarget.Normalized(), forward.Normalized()) >= minimumDot;
+    }
+
+    /**
+     * @brief 対象が巨大メカ頭部の背面扇形内にいるか判定する
+     * @param transform モデル全体のTransform
+     * @param target 判定するワールド座標
+     * @param minimumDot 背面方向との内積下限
+     * @return 背面扇形内の場合true
+     */
+    static bool IsBehindHead(const Stage5ModelTransform& transform,
+        const Vector3& target, float minimumDot) {
+        const Vector3 eye = EyeWorldCenter(transform);
+        Vector3 toTarget {target.x - eye.x, 0.0f, target.z - eye.z};
+        Vector3 backward = -HeadForward(transform);
+        backward.y = 0.0f;
+        if (toTarget.LengthSquared() <= Math::Epsilon ||
+            backward.LengthSquared() <= Math::Epsilon) return false;
+        return Vector3::Dot(toTarget.Normalized(), backward.Normalized()) >= minimumDot;
     }
 
     // FBXにないドリル、攻略用弱点、開閉装甲、発光部だけを追加Primitiveで補う
@@ -508,12 +581,17 @@ public:
     /**
      * @brief Blender頭部の部位番号から外装色を取得する
      * @param index HeadParts内の部位番号
+     * @param goldenAdornment 髪と眉毛を金色発光へ切り替える場合true
      * @return 顔、髪、眼鏡、目を区別する色
      */
-    static constexpr ColorF HeadPartColor(std::size_t index) {
+    static constexpr ColorF HeadPartColor(std::size_t index,
+        bool goldenAdornment = false) {
+        const bool eyebrow = index == 9 || index == 10;
+        const bool hair = (index >= 14 && index <= 19) || index >= 28;
+        if (goldenAdornment && (eyebrow || hair)) return HeadGold;
         if (index == 11 || index == 12) return Runway;
-        if (index == 8 || (index >= 20 && index <= 27)) return Dark;
-        if ((index >= 14 && index <= 19) || index >= 28) return Hull;
+        if (index == 8 || eyebrow || (index >= 20 && index <= 27)) return Dark;
+        if (hair) return Hull;
         if (index == 7 || index == 13) return LightArmor;
         return Armor;
     }
@@ -528,10 +606,11 @@ public:
      */
     static Matrix4x4 BuildingRoot(float centerX, float bottomY, float centerZ,
         const Vector3& size) {
+        const Vector3 modelSize = TowerBoundsMax - TowerBoundsMin;
         const Vector3 scale {
-            size.x / TowerSize.x,
-            size.y / TowerSize.y,
-            size.z / TowerSize.z
+            size.x / modelSize.x,
+            size.y / modelSize.y,
+            size.z / modelSize.z
         };
         const Vector3 localCenter = (TowerBoundsMin + TowerBoundsMax) * 0.5f;
         return Matrix4x4::Translation({
@@ -576,9 +655,12 @@ public:
             const Stage5PartTransform local =
                 Stage5ModelDetail::Lerp(TowerHead, MechaHead, progress);
             const Matrix4x4 headRoot = HeadRoot(root *
-                Stage5ModelDetail::Matrix(state.collapseOffsets[group]), local, progress);
+                Stage5ModelDetail::Matrix(state.collapseOffsets[group]), local, progress) *
+                Matrix4x4::Scale({state.headScaleMultiplier,
+                    state.headScaleMultiplier, state.headScaleMultiplier});
             for (std::size_t index = 0; index < HeadParts.size(); ++index) {
-                const ColorF color = state.hitFlash[group] ? Hit : HeadPartColor(index);
+                const ColorF color = state.hitFlash[group] ? Hit :
+                    HeadPartColor(index, state.goldenHeadAdornment);
                 drawPart(PrimitiveShape::Box,
                     headRoot * Stage5ModelDetail::Matrix(HeadParts[index]), color, HeadGroup);
             }

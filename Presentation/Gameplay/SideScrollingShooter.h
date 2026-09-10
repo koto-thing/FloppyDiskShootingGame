@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 
 #include <array>
 #include <cmath>
@@ -22,6 +22,8 @@ enum class PrimitiveShape;
  * @brief 固定長プールで動作する横スクロールシューティングのゲーム本体
  */
 class SideScrollingShooter {
+    friend struct HomingShotTests;
+    friend struct OrbitShotTests;
 public:
     /** @brief 自機弾の挙動を調整するパラメータ */
     struct PlayerShotParameters {
@@ -40,7 +42,7 @@ public:
     /** @brief 機体タイプ別の自機弾パラメータ */
     inline static constexpr std::array<PlayerShotParameters, 3> PlayerShotConfigs {{
         // HOMING
-        { 10, 2, 0.038f, 5.0f, 0.08f, 0.20f, 0.025f, 1, 0.100f, false },
+        { 10, 2, 0.038f, 5.0f, 0.08f, 0.20f, 0.025f, 1, 0.150f, false },
         // PIERCING
         { 18, 2, 0.052f, 0.0f, 0.12f, 0.09f, 0.032f, 1, 0.000f, true },
         // SPREAD
@@ -159,6 +161,7 @@ private:
         int barrageCount = 0;
         int age = 0;
         int hitCount = 0;
+        int homingTarget = -1;
         std::uint16_t bossCollisionIgnoreMask = 0;
         ShooterStages::Stage2::ShotState stage2 {};
         ShooterStages::Stage4::ShotState stage4 {};
@@ -168,6 +171,7 @@ private:
         bool piercing = false;
         bool grazed = false;
         bool firedByBoss = false;
+        bool tayamaDragonOrbit = false;
         bool bossCollisionInitialized = false;
         bool active = false;
 
@@ -317,6 +321,7 @@ private:
         int shrinkStartAge = 36;
         ShooterStages::Stage2::DebrisState stage2 {};
         bool gravity = false;
+        bool damagesPlayer = false;
         bool active = false;
     };
 
@@ -330,8 +335,11 @@ private:
         float x = 0.0f;
         float y = 0.0f;
         float z = 0.0f;
+        float vx = 0.0f;
+        float vy = 0.0f;
         float power = 0.25f;
         int score = 0;
+        int pickupDelay = 0;
         ItemType type = ItemType::Power;
         bool active = false;
     };
@@ -347,10 +355,8 @@ private:
         bool bombAwarded = false;
     };
 
-    static constexpr int DefaultShotCapacity = 128;
-    static constexpr int Stage5ShotCapacity = 256;
-    static_assert(Stage5ShotCapacity > DefaultShotCapacity);
-    static constexpr int ShotCapacity = Stage5ShotCapacity;
+    static constexpr int ShotCapacity = 512;
+    static constexpr int Stage5ShotCapacity = 1024;
     static constexpr int EnemyCapacity = 12;
     static constexpr int ItemCapacity = 48;
     static constexpr int ExplosionCapacity = ShotCapacity + 32;
@@ -399,6 +405,8 @@ private:
     static constexpr float PlayerRailZ = 8.0f;
     static constexpr float SidePlaneZ = 10.0f;
     static constexpr float EnemyRailFarZ = 60.0f;
+    /** @brief 3D時に敵発射体を生成しない自機中心の球半径 */
+    static constexpr float EnemyProjectileNoFireDistance3D = 16.0f;
 
     enum class ViewMode {
         Side2D,
@@ -588,8 +596,19 @@ private:
     void UnlockGallery(GalleryEntry entry);
     /** @brief 指定座標にPowerアイテムを生成する */
     void SpawnPowerItem(float x, float y, float z, float value);
-    /** @brief 指定座標にScoreアイテムを生成する */
-    void SpawnScoreItem(float x, float y, float z, int value);
+    /**
+     * @brief 指定座標にScoreアイテムを生成する
+     * @param x 2D座標系のX座標
+     * @param y 2D座標系のY座標
+     * @param z 3Dレール座標系のZ座標
+     * @param value 取得時に加算するScore
+     * @param vx 生成直後のX方向速度
+     * @param vy 生成直後のY方向速度
+     * @param pickupDelay 取得を開始するまでのフレーム数
+     * @return なし
+     */
+    void SpawnScoreItem(float x, float y, float z, int value,
+        float vx = 0.0f, float vy = 0.0f, int pickupDelay = 0);
     /**
      * @brief ボス戦開始状態を構築する
      * @param playWarningSound ボス登場警報を再生する場合true
@@ -618,11 +637,19 @@ private:
     void SpawnShot(float x, float y, float vx, float vy, bool enemy,
         float z = -1.0f, float railSpeed = -1.0f, int damage = 1);
     /**
-     * @brief 現在のStageで使用できる弾プール容量を取得する
-     * @return Stage5では拡張容量、それ以外では標準容量
+     * @brief 敵発射体の生成位置が3D時の自機接近禁止範囲外か判定する
+     * @param x 発射元ゲーム座標X
+     * @param y 発射元ゲーム座標Y
+     * @param z 発射元レール座標Z
+     * @return 2D時または自機から12ユニットより離れている場合true
+     */
+    bool CanSpawnEnemyProjectile(float x, float y, float z) const;
+    /**
+     * @brief 現在のStageで利用できる弾プール容量を取得する
+     * @return Stage 5は1024、それ以外は512
      */
     constexpr int ActiveShotCapacity() const {
-        return m_stageNumber == 5 ? Stage5ShotCapacity : DefaultShotCapacity;
+        return m_stageNumber == 5 ? Stage5ShotCapacity : ShotCapacity;
     }
     /**
      * @brief XYZ速度を指定して固定長プールへ弾を生成する
@@ -664,7 +691,8 @@ private:
     Debris* SpawnDebrisPiece(float x, float y, float z, float vx, float vy, float vz,
         float yaw, float spin, int shape, float width, float height, float depth,
         const float color[4], int lifetime = DebrisLifetimeFrames,
-        int shrinkStartAge = DebrisLifetimeFrames, bool gravity = false);
+        int shrinkStartAge = DebrisLifetimeFrames, bool gravity = false,
+        bool damagesPlayer = false);
     void FireSpecialShots();
     void UpdateHomingShot(Shot& shot);
     void DamagePlayer();
@@ -675,17 +703,19 @@ private:
      * @param shot 判定対象の自機弾
      * @param boss 判定対象のボス
      * @param part 命中した部位の格納先
+     * @param aimPosition 非nullなら衝突判定せず指定部位の攻撃可能なワールド中心を取得する
      * @return 部位へ命中した場合true、命中しない場合false
      */
-    bool TryHitBossPart(const Shot& shot, const Enemy& boss, BossPart& part) const;
+    bool TryHitBossPart(const Shot& shot, const Enemy& boss, BossPart& part, Vector3* aimPosition = nullptr) const;
     /**
      * @brief 共通または移行中のボス部位判定を行う
      * @param shot 判定対象の自機弾
      * @param boss 判定対象のボス
      * @param part 命中した部位の格納先
+     * @param aimPosition 非nullなら衝突判定せず指定部位の攻撃可能なワールド中心を取得する
      * @return 部位へ命中した場合true、命中しない場合false
      */
-    bool TryHitDefaultBossPart(const Shot& shot, const Enemy& boss, BossPart& part) const;
+    bool TryHitDefaultBossPart(const Shot& shot, const Enemy& boss, BossPart& part, Vector3* aimPosition = nullptr) const;
     void PlayShotSound();
     void PlayHitSound();
     /** @brief 敵のエネルギー弾発射音を再生する @return なし */
@@ -786,6 +816,11 @@ private:
      * @return 自機中心のワールド座標
      */
     Vector3 PlayerWorldPosition() const;
+    /**
+     * @brief 現在のステージ進行に対応する自機のレール奥行きを取得する
+     * @return 自機のレール座標Z
+     */
+    float PlayerRailDepth() const;
     bool IsRailGameplayActive() const;
     bool IsRailRenderActive() const;
     /**
@@ -1008,7 +1043,7 @@ private:
     /** @brief 文字表示領域へ共通の黒いHUD背景を描画する @param renderer 描画先 @return なし */
     void DrawHudBackground(Renderer& renderer) const;
 
-    std::array<Shot, ShotCapacity> m_shots {};
+    std::array<Shot, Stage5ShotCapacity> m_shots {};
     std::array<Enemy, EnemyCapacity> m_enemies {};
     std::array<Item, ItemCapacity> m_items {};
     std::array<Explosion, ExplosionCapacity> m_explosions {};
@@ -1101,6 +1136,6 @@ static_assert(!SideScrollingShooter::UsesVerticalPlayerShots(
 static_assert(SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
     SideScrollingShooter::TayamaWeakpoint::FireControlRadar,
     SideScrollingShooter::Stage5Phase::TayamaFireControl));
-static_assert(!SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
+static_assert(SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
     SideScrollingShooter::TayamaWeakpoint::CommandCore,
-    SideScrollingShooter::Stage5Phase::TayamaLiftEngines));
+    SideScrollingShooter::Stage5Phase::TayamaFireControl));

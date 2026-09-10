@@ -5,12 +5,20 @@
  */
 class Mesh {
 public:
+    /**
+     * @brief メッシュ定義を生成する
+     * @param shapeType 形状種別
+     * @param vertexCount 頂点数
+     */
     Mesh(int shapeType, int vertexCount) 
         : m_shapeType(shapeType), m_vertexCount(vertexCount) {}
     
+    /** @brief メッシュ定義を破棄する */
     ~Mesh() {}
 
+    /** @brief 形状種別を取得する */
     int GetShapeType() const { return m_shapeType; }
+    /** @brief 頂点数を取得する */
     int GetVertexCount() const { return m_vertexCount; }
 
 private:

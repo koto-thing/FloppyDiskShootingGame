@@ -44,6 +44,15 @@ public:
     static void PollGamepad();
 
     /**
+     * @brief 対応ゲームパッドが接続されているか取得する
+     * @return 接続中の場合はtrue
+     */
+    static bool IsGamepadConnected();
+
+    /** @brief Switch 2 Proの直接入力を使用中か取得する @return 使用中の場合はtrue */
+    static bool IsSwitch2ProConnected();
+
+    /**
      * @brief 指定したキーが押されているかを取得する
      * @param key 確認するキー
      * @return 押されている場合はtrue
@@ -56,6 +65,12 @@ public:
      * @return このフレームで押された場合はtrue
      */
     static bool GetKeyDown(KeyCode key);
+
+    /**
+     * @brief いずれかのキーがこのフレームで押されたかを取得する
+     * @return このフレームでいずれかのキーが押された場合はtrue
+     */
+    static bool GetAnyKeyDown();
 
     /**
      * @brief 指定したキーがこのフレームで離されたかを取得する
@@ -125,6 +140,8 @@ private:
     static std::array<unsigned char, static_cast<std::size_t>(MouseButton::Count)> m_frameStartMouseButtonSources;
     static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_mouseButtonDown;
     static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_mouseButtonUp;
+    static bool m_gamepadConnected;
+    static bool m_switch2ProConnected;
     static Vector2 m_mousePosition;
     static Vector2 m_mouseDelta;
     static float m_mouseWheelDelta;

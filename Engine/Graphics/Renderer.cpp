@@ -3,6 +3,11 @@
 #include <algorithm>
 #include <cstring>
 
+/**
+ * @brief 描画コマンドを記録領域へ追加する
+ * @param type 追加するコマンド種別
+ * @return 追加したコマンド。容量超過時はnullptr
+ */
 RenderCommand* Renderer::TryAppend(RenderCommand::Type type) {
     if (m_commandCount >= MaxCommands) {
         ++m_droppedCommandCount;
@@ -15,6 +20,7 @@ RenderCommand* Renderer::TryAppend(RenderCommand::Type type) {
     return &command;
 }
 
+/** @brief フレームの描画記録を初期化する */
 void Renderer::BeginFrame() {
     m_commandCount = 0;
     m_droppedCommandCount = 0;
@@ -23,6 +29,11 @@ void Renderer::BeginFrame() {
     if (m_backend != nullptr) m_backend->BeginFrame();
 }
 
+/**
+ * @brief 円の描画コマンドを記録する
+ * @param circle 描画する円
+ * @param color 描画色
+ */
 void Renderer::Draw(const Circle& circle, const ColorF& color) {
     RenderCommand* command = TryAppend(RenderCommand::Type::Circle);
     if (command == nullptr) return;
@@ -76,20 +87,20 @@ void Renderer::DrawText(std::string_view text, const Vector2& position, float si
 }
 
 void Renderer::Draw(const Rect& rect, RectAlign alignment, const ColorF& color) {
-    /** @brief 配置基準から描画用の中心座標と半サイズを計算して既存の矩形描画へ渡す */
+    // 配置基準から描画用の中心座標と半サイズを計算する
     const Rect bounds = CreateAlignedRect(rect.size * 2.0f, alignment, rect.position);
     Draw(Rect{bounds.Center(), bounds.size * 0.5f}, color);
 }
 
 void Renderer::DrawText(std::string_view text, TextAlign alignment, float size, const ColorF& color,
                         const Vector2& offset, float characterSpacing) {
-    /** @brief 配置基準から先頭文字の中心座標を計算して既存の文字描画へ渡す */
+    // 配置基準から先頭文字の中心座標を計算する
     DrawText(text, CalculateTextPosition(text, alignment, size, characterSpacing) + offset, size, color,
              characterSpacing);
 }
 
 Rect Renderer::CreateAlignedRect(const Vector2& size, RectAlign alignment, const Vector2& offset) {
-    /** @brief 矩形のサイズと配置基準から画面内の左下座標を計算する */
+    // 矩形のサイズと配置基準から画面内の左下座標を計算する
     Vector2 position = {-1.0f, 1.0f - size.y};
     switch (alignment) {
     case RectAlign::TopCenter:
@@ -126,7 +137,7 @@ Rect Renderer::CreateAlignedRect(const Vector2& size, RectAlign alignment, const
 
 Vector2 Renderer::CalculateTextPosition(std::string_view text, TextAlign alignment, float size,
                                         float characterSpacing) const {
-    /** @brief 改行を考慮して最長行の文字数と行数を求める */
+    // 改行を考慮して最長行の文字数と行数を求める
     std::size_t longestLineLength = 0;
     std::size_t currentLineLength = 0;
     std::size_t lineCount = 1;
@@ -141,7 +152,7 @@ Vector2 Renderer::CalculateTextPosition(std::string_view text, TextAlign alignme
     }
     longestLineLength = std::max(longestLineLength, currentLineLength);
 
-    /** @brief 文字列の幅と高さから各方向の先頭文字位置を決定する */
+    // 文字列の幅と高さから各方向の先頭文字位置を決定する
     const float glyphHalfWidth = size * AspectRatio();
     const float characterAdvance = size * 1.5f + characterSpacing;
     const float lineWidth = longestLineLength == 0 ? 0.0f :
@@ -183,6 +194,10 @@ Vector2 Renderer::CalculateTextPosition(std::string_view text, TextAlign alignme
     return {startX, startY};
 }
 
+/**
+ * @brief パイプライン切り替えコマンドを記録する
+ * @param pipeline 切り替えるパイプライン
+ */
 void Renderer::SetPipeline(PipelineId pipeline) {
     RenderCommand* command = TryAppend(RenderCommand::Type::Pipeline);
     if (command == nullptr) return;
@@ -201,8 +216,10 @@ void Renderer::SetCamera(const Camera3D& camera) {
     command->cameraMatrices = camera.Matrices(); command->viewport = camera.GetViewport();
 }
 
+/** @brief カメラ解除コマンドを記録する */
 void Renderer::ResetCamera() { TryAppend(RenderCommand::Type::ResetCamera); }
 
+/** @brief 記録済みコマンドをバックエンドへ送る */
 void Renderer::Flush() {
     if (m_flushed) return;
     m_flushed = true;
@@ -246,6 +263,7 @@ void Renderer::Flush() {
     }
 }
 
+/** @brief フレームの描画記録をバックエンドへ反映して終了する */
 void Renderer::EndFrame() {
     Flush();
     if (m_backend != nullptr) m_backend->EndFrame();

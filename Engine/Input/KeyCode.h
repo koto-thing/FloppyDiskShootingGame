@@ -2,6 +2,7 @@
 
 #include <cstdint>
 
+/** @brief キーボード入力の識別子 */
 enum class KeyCode : std::uint16_t
 {
     None = 0,

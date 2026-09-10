@@ -2,6 +2,24 @@
 
 namespace ShooterStages::Stage4 {
 
+/**
+ * @brief 前フレームから範囲外側へ境界を越えたか判定する
+ * @param previous 前フレームの座標
+ * @param current 現在フレームの座標
+ * @param minimum 範囲の下限
+ * @param maximum 範囲の上限
+ * @return 範囲内から外側へ境界を越えた場合true
+ */
+constexpr bool CrossedRangeEdge(float previous, float current,
+    float minimum, float maximum) {
+    return (previous >= minimum && current <= minimum && current < previous) ||
+        (previous <= maximum && current >= maximum && current > previous);
+}
+
+static_assert(CrossedRangeEdge(1.0f, 0.0f, 0.0f, 72.0f));
+static_assert(CrossedRangeEdge(71.0f, 72.0f, 0.0f, 72.0f));
+static_assert(!CrossedRangeEdge(108.0f, 107.0f, 0.0f, 72.0f));
+
 inline constexpr int BossEntranceFrames = 3 * 60;
 inline constexpr int BossApproachFrames = 120;
 inline constexpr int TrafficFadeFrames = 72;

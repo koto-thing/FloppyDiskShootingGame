@@ -3,42 +3,51 @@
 #include <cmath>
 #include <algorithm>
 
-// --- XMFLOAT3 / XMFLOAT4 の便利な算術演算子オーバーロード (Unity風の直感的な記述用) ---
+// XMFLOAT3の算術演算子を定義する
+/** @brief 3Dベクトルを加算する */
 inline DirectX::XMFLOAT3 operator+(const DirectX::XMFLOAT3& a, const DirectX::XMFLOAT3& b) {
     return DirectX::XMFLOAT3(a.x + b.x, a.y + b.y, a.z + b.z);
 }
 
+/** @brief 3Dベクトルを減算する */
 inline DirectX::XMFLOAT3 operator-(const DirectX::XMFLOAT3& a, const DirectX::XMFLOAT3& b) {
     return DirectX::XMFLOAT3(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
+/** @brief 3Dベクトルをスカラー倍する */
 inline DirectX::XMFLOAT3 operator*(const DirectX::XMFLOAT3& a, float scalar) {
     return DirectX::XMFLOAT3(a.x * scalar, a.y * scalar, a.z * scalar);
 }
 
+/** @brief 左辺のスカラーで3Dベクトルを乗算する */
 inline DirectX::XMFLOAT3 operator*(float scalar, const DirectX::XMFLOAT3& a) {
     return DirectX::XMFLOAT3(a.x * scalar, a.y * scalar, a.z * scalar);
 }
 
+/** @brief 3Dベクトルをスカラーで除算する */
 inline DirectX::XMFLOAT3 operator/(const DirectX::XMFLOAT3& a, float scalar) {
     return DirectX::XMFLOAT3(a.x / scalar, a.y / scalar, a.z / scalar);
 }
 
+/** @brief 3Dベクトルを加算して代入する */
 inline DirectX::XMFLOAT3& operator+=(DirectX::XMFLOAT3& a, const DirectX::XMFLOAT3& b) {
     a.x += b.x; a.y += b.y; a.z += b.z;
     return a;
 }
 
+/** @brief 3Dベクトルを減算して代入する */
 inline DirectX::XMFLOAT3& operator-=(DirectX::XMFLOAT3& a, const DirectX::XMFLOAT3& b) {
     a.x -= b.x; a.y -= b.y; a.z -= b.z;
     return a;
 }
 
+/** @brief 3Dベクトルをスカラー倍して代入する */
 inline DirectX::XMFLOAT3& operator*=(DirectX::XMFLOAT3& a, float scalar) {
     a.x *= scalar; a.y *= scalar; a.z *= scalar;
     return a;
 }
 
+/** @brief 3Dベクトルをスカラーで除算して代入する */
 inline DirectX::XMFLOAT3& operator/=(DirectX::XMFLOAT3& a, float scalar) {
     a.x /= scalar; a.y /= scalar; a.z /= scalar;
     return a;
@@ -51,9 +60,9 @@ namespace TransformUtils {
     // 円周率
     const float PI = 3.1415926535f;
 
-    // --- 角度変換 ---
+    // 角度変換
     /**
-     * 度をラジアンに変換する
+     * @brief 度をラジアンに変換する
      * @param degrees 度
      * @return ラジアン
      */
@@ -62,7 +71,7 @@ namespace TransformUtils {
     }
 
     /**
-     * ラジアンを度に変換する
+     * @brief ラジアンを度に変換する
      * @param radians ラジアン
      * @return 度
      */
@@ -70,7 +79,7 @@ namespace TransformUtils {
         return radians * (180.0f / PI);
     }
 
-    // --- 回転・オイラー角ユーティリティ ---
+    // 回転とオイラー角の変換
     /**
      * @brief オイラー角をクォータニオンに変換する
      * @param eulerDegrees オイラー角
@@ -153,7 +162,7 @@ namespace TransformUtils {
     }
 
     /**
-     * @brief 角度の線形補間 (Lerp) を行う。角度は360度でラップする。
+     * @brief 角度の線形補間 (Lerp) を行う。角度は360度でラップする
      * @param start 開始角度
      * @param end 終了角度
      * @param t 補間係数 (0.0f ~ 1.0f)
@@ -166,6 +175,13 @@ namespace TransformUtils {
         return start + difference * t;
     }
 
+    /**
+     * @brief XYZ各軸の角度を線形補間する
+     * @param start 開始角度
+     * @param end 終了角度
+     * @param t 補間係数
+     * @return 補間後のオイラー角
+     */
     inline DirectX::XMFLOAT3 LerpEuler(const DirectX::XMFLOAT3& start, const DirectX::XMFLOAT3& end, float t) {
         return DirectX::XMFLOAT3(
             LerpAngle(start.x, end.x, t),
@@ -174,7 +190,7 @@ namespace TransformUtils {
         );
     }
 
-    // --- 位置・ベクトル・座標変換ユーティリティ ---
+    // 位置、ベクトル、座標変換
 
     /**
      * @brief 2点間の距離を計算する

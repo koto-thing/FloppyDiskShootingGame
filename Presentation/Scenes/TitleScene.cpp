@@ -16,9 +16,9 @@
  */
 void TitleScene::Initialize() {
     if (getData().audio) {
-        getData().audio->PlayMMLBGM(std::string(MMLData::title), true);
+        getData().audio->PlayMMLBGM(std::string(MMLData::GetTitleBgm()), true);
     }
-    /** @brief 画面中央の少し上にゲーム開始ボタンを配置する */
+    // 画面中央の少し上にゲーム開始ボタンを配置する
     m_startButton = std::make_unique<Button>(
         Vector2 { 0.35f, 0.10f },
         RectAlign::Center,
@@ -27,7 +27,7 @@ void TitleScene::Initialize() {
     );
     m_startButton->SetOnClick([this]() { changeScene(SceneType::ModeSelection); });
 
-    /** @brief ゲーム開始ボタンの下にギャラリーボタンを配置する */
+    // ゲーム開始ボタンの下にギャラリーボタンを配置する
     m_galleryButton = std::make_unique<Button>(
         Vector2 { 0.35f, 0.10f },
         RectAlign::Center,
@@ -36,7 +36,7 @@ void TitleScene::Initialize() {
     );
     m_galleryButton->SetOnClick([this]() { changeScene(SceneType::Gallery); });
 
-    /** @brief モデルテストボタンの下にランキングボタンを配置する */
+    // モデルテストボタンの下にランキングボタンを配置する
     m_rankingButton = std::make_unique<Button>(
         Vector2 { 0.35f, 0.10f },
         RectAlign::Center,
@@ -45,7 +45,7 @@ void TitleScene::Initialize() {
     );
     m_rankingButton->SetOnClick([this]() { changeScene(SceneType::Ranking); });
 
-    /** @brief ランキングボタンの下にオプションボタンを配置する */
+    // ランキングボタンの下にオプションボタンを配置する
     m_optionButton = std::make_unique<Button>(
         Vector2 { 0.35f, 0.10f },
         RectAlign::Center,
@@ -54,7 +54,7 @@ void TitleScene::Initialize() {
     );
     m_optionButton->SetOnClick([this]() { changeScene(SceneType::Option); });
 
-    /** @brief オプションボタンの下にゲーム終了ボタンを配置する */
+    // オプションボタンの下にゲーム終了ボタンを配置する
     m_exitButton = std::make_unique<Button>(
         Vector2 { 0.35f, 0.10f },
         RectAlign::Center,
@@ -98,22 +98,22 @@ void TitleScene::ProcessInput() {
 
     UIInputState inputState = UIInput::Current(w, h);
 
-    /** @brief ゲーム開始ボタンにマウス入力を渡す */
+    // ゲーム開始ボタンにマウス入力を渡す
     if (m_startButton != nullptr) {
         m_startButton->Update(inputState);
     }
 
-    /** @brief ギャラリーボタンにマウス入力を渡す */
+    // ギャラリーボタンにマウス入力を渡す
     if (m_galleryButton != nullptr) {
         m_galleryButton->Update(inputState);
     }
 
-    /** @brief ランキングボタンにマウス入力を渡す */
+    // ランキングボタンにマウス入力を渡す
     if (m_rankingButton != nullptr) {
         m_rankingButton->Update(inputState);
     }
 
-    /** @brief ゲーム終了ボタンにマウス入力を渡す */
+    // ゲーム終了ボタンにマウス入力を渡す
     if (m_exitButton != nullptr) {
         m_exitButton->Update(inputState);
     }
@@ -152,12 +152,13 @@ void TitleScene::Render(Renderer& renderer) {
     // ゆっくり明滅する星空をUIの背面へ描画する
     SpaceBackground::Render(renderer, Time::unscaledTime);
 
-    // 画面上部に "TITLE" と表示
+    // 画面上部中央にタイトルを表示
     renderer.DrawText(
         "SPACE YAKUZA",
-        { -0.4f, 0.6f },
+        TextAlign::TopCenter,
         0.04f,
         { 1.0f, 1.0f, 1.0f, 1.0f },
+        { 0.0f, -0.36f },
         0.005f
     );
 

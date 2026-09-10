@@ -152,7 +152,7 @@ void TestStage::RenderPauseMenu(Renderer& renderer) const {
     renderer.Draw(Rect {{0.0f, 0.0f}, {0.62f, 0.72f}}, {0.02f, 0.04f, 0.10f, 0.92f});
 
     if (!m_optionsOpen) {
-        renderer.DrawText("PAUSED", {-0.18f, 0.42f}, 0.04f, ColorF::White());
+        renderer.DrawText("PAUSED", TextAlign::Center, 0.04f, ColorF::White(), {0.0f, 0.42f}, 0.01f);
         m_returnToTitleButton->Render(renderer);
         m_openOptionsButton->Render(renderer);
         m_closeMenuButton->Render(renderer);

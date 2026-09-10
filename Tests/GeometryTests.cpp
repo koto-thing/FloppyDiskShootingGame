@@ -6,26 +6,32 @@
 #include <stdexcept>
 
 namespace {
+/** @brief テスト条件を検証する */
 void Require(bool condition, const char* message) {
     if (!condition) throw std::runtime_error(message);
 }
+/** @brief 浮動小数点値を検証する */
 void RequireNear(float actual, float expected, const char* message) {
     if (std::abs(actual - expected) > 0.0001f) throw std::runtime_error(message);
 }
 }
 
+/** @brief 2D形状と色の基本動作を検証する */
 void RunGeometryTests() {
+    // 色の既定値を検証する
     const ColorF white = ColorF::White();
     Require(white.r == 1.0f && white.g == 1.0f && white.b == 1.0f && white.a == 1.0f,
             "White color must be opaque white");
     Require(ColorF::Transparent().a == 0.0f, "Transparent color must have zero alpha");
 
+    // 円の内部判定と交差判定を検証する
     const Circle circle{{0.0f, 0.0f}, 5.0f};
     Require(circle.Contains({3.0f, 4.0f}), "Circle must contain its boundary");
     Require(!circle.Contains({5.1f, 0.0f}), "Circle must exclude points outside");
     Require(circle.Intersects(Circle{{10.0f, 0.0f}, 5.0f}), "Touching circles must intersect");
     Require(!circle.Intersects(Circle{{10.1f, 0.0f}, 5.0f}), "Separated circles must not intersect");
 
+    // 矩形の正規化と交差判定を検証する
     const Rect rect{{-2.0f, -1.0f}, {4.0f, 2.0f}};
     RequireNear(rect.Center().x, 0.0f, "Rect center X must be correct");
     RequireNear(rect.Center().y, 0.0f, "Rect center Y must be correct");

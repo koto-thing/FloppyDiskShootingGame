@@ -275,6 +275,31 @@ VS_OUTPUT VSRailgun(uint vertexId : SV_VertexID)
 
 float4 PSRailgun(VS_OUTPUT input) : SV_TARGET
 {
+    if (u_shapeType > 4.5f)
+    {
+        // 金色レーザーの白熱した芯を脈動させる
+        float endMask = 1.0f - smoothstep(0.90f, 1.0f, abs(input.uv.x));
+        float core = 1.0f - smoothstep(0.015f, 0.085f, abs(input.uv.y));
+        float innerGlow = 1.0f - smoothstep(0.04f, 0.52f, abs(input.uv.y));
+        float pulse = 0.84f + 0.16f * sin(u_progress * 6.283185f);
+        float alpha = saturate(core + innerGlow * 0.76f) * endMask * pulse;
+        if (alpha < 0.01f) discard;
+        float3 color = lerp(float3(1.0f, 0.42f, 0.015f),
+            float3(1.0f, 1.0f, 0.82f), core);
+        return float4(color, alpha);
+    }
+
+    if (u_shapeType > 3.5f)
+    {
+        // 金色レーザーの外周へ広い加算発光を作る
+        float endMask = 1.0f - smoothstep(0.86f, 1.0f, abs(input.uv.x));
+        float halo = 1.0f - smoothstep(0.04f, 0.92f, abs(input.uv.y));
+        float ripple = 0.82f + 0.18f * sin(input.uv.x * 54.0f + u_progress * 6.283185f);
+        float alpha = halo * endMask * ripple * 0.38f;
+        if (alpha < 0.008f) discard;
+        return float4(1.0f, 0.55f, 0.035f, alpha);
+    }
+
     if (u_shapeType > 2.5f)
     {
         // チャージ進行に合わせて予告レーザーを濃くする
@@ -994,7 +1019,7 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
-    /** @brief C++文字列から自機弾専用シェーダーをコンパイルする */
+    // C++文字列から自機弾専用シェーダーをコンパイルする
     ComPtr<ID3DBlob> playerShotVertexShader;
     ComPtr<ID3DBlob> playerShotPixelShader;
     error.Reset();
@@ -1020,7 +1045,7 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
-    /** @brief 発光を重ねられる加算ブレンドの自機弾PSOを作成する */
+    // 発光を重ねられる加算ブレンドの自機弾PSOを作成する
     D3D12_GRAPHICS_PIPELINE_STATE_DESC playerShotPsoDesc = psoDesc;
     playerShotPsoDesc.VS = {
         playerShotVertexShader->GetBufferPointer(), playerShotVertexShader->GetBufferSize() };
@@ -1053,7 +1078,7 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
-    /** @brief C++文字列から命中爆発用シェーダーをコンパイルする */
+    // C++文字列から命中爆発用シェーダーをコンパイルする
     ComPtr<ID3DBlob> explosionVertexShader;
     ComPtr<ID3DBlob> explosionPixelShader;
     error.Reset();
@@ -1078,7 +1103,7 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
-    /** @brief 加算ブレンドで発光する爆発用PSOを作成する */
+    // 加算ブレンドで発光する爆発用PSOを作成する
     D3D12_GRAPHICS_PIPELINE_STATE_DESC explosionPsoDesc = playerShotPsoDesc;
     explosionPsoDesc.VS = { explosionVertexShader->GetBufferPointer(), explosionVertexShader->GetBufferSize() };
     explosionPsoDesc.PS = { explosionPixelShader->GetBufferPointer(), explosionPixelShader->GetBufferSize() };
@@ -1109,7 +1134,7 @@ bool D3D12RenderingService::InitPipeline() {
         return false;
     }
 
-    /** @brief C++文字列からレールガン軌跡シェーダーをコンパイルする */
+    // C++文字列からレールガン軌跡シェーダーをコンパイルする
     ComPtr<ID3DBlob> railgunVertexShader;
     ComPtr<ID3DBlob> railgunPixelShader;
     error.Reset();
@@ -1335,7 +1360,7 @@ D3D12_CPU_DESCRIPTOR_HANDLE D3D12RenderingService::GetRtvCpuDescriptorHandle() c
  * パイプラインステートを切り替える (0: Object, 1: Background, 2: SpellCircle, 3: Model3D, 4: PlayerShot, 5: Explosion)
  */
 void D3D12RenderingService::SetPipelineState(int type) {
-    /** @brief 文字描画後に元のパイプラインを復元するため選択を保持する */
+    // 文字描画後に元のパイプラインを復元するため選択を保持する
     m_currentPipelineType = type;
     if (type == 0) {
         m_commandList->SetPipelineState(m_pipelineStateObject.Get());
@@ -1419,7 +1444,7 @@ void D3D12RenderingService::DrawUiPrimitive(
     UINT vertexCount) {
     if (m_constantBufferCursor >= MAX_CONSTANT_BUFFER_ELEMENTS) return;
 
-    /** @brief 4頂点で構成するUIプリミティブ用の三角形ストリップを設定する */
+    // 4頂点で構成するUIプリミティブ用の三角形ストリップを設定する
     m_commandList->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP);
 
     // NDC上の中心、サイズを既存シェーダーの単位形状へ変換する
@@ -1511,7 +1536,7 @@ void D3D12RenderingService::DrawPrimitive3D(const Primitive3D& primitive) {
 void D3D12RenderingService::DrawPlayerShot(const PlayerShotVisual& shot) {
     if (m_constantBufferCursor >= MAX_CONSTANT_BUFFER_ELEMENTS) return;
 
-    /** @brief 自機弾の位置と大きさを定数バッファへ設定する */
+    // 自機弾の位置と大きさを定数バッファへ設定する
     auto* cbData = reinterpret_cast<RendererTransformBufferData*>(
         reinterpret_cast<char*>(m_cbvCpuData) + static_cast<size_t>(m_constantBufferCursor) * 256);
     const DirectX::XMMATRIX matrix = DirectX::XMMatrixScaling(shot.size.x, shot.size.y, 1.0f) *
@@ -1655,7 +1680,7 @@ void D3D12RenderingService::RenderText(const char* text, DirectX::XMFLOAT2 posit
     
     // 次のテキストが使用する位置を自動更新
     m_constantBufferCursor += static_cast<UINT>(length);
-    /** @brief フォント専用ルートシグネチャとPSOが後続のモデルやUIへ漏れないよう復元する */
+    // フォント専用ルートシグネチャとPSOが後続のモデルやUIへ漏れないよう復元する
     m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
     SetPipelineState(m_currentPipelineType);
 }

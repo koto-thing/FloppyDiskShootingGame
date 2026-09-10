@@ -6,7 +6,7 @@
 /**
  * @brief UI向けに正規化したポインター入力状態
  *
- * position はRendererと同じNDC座標系（左下=-1,-1、右上=1,1）を使用する。
+ * position はRendererと同じNDC座標系（左下=-1,-1、右上=1,1）を使用する
  */
 struct UIInputState {
     Vector2 position {};

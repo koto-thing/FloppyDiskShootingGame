@@ -5,7 +5,9 @@
 #include <cstdio>
 
 #include "../../Engine/Graphics/Renderer.h"
+#include "../../Engine/Input/Input.h"
 #include "Stages/Common/StageDispatch.h"
+#include "Stages/Stage2/Stage2Module.h"
 
 
 #include "SideScrollingShooterEnemies.h"
@@ -20,6 +22,27 @@ namespace {
 constexpr float PlayerHitboxColor[4] = {1.0f, 0.08f, 0.08f, 0.24f};
 constexpr float PlayerHitRadius2D = 0.050f;
 constexpr float PlayerHitRadius3D = 0.38f;
+
+/**
+ * @brief 接続中の入力機器に対応したHUD操作案内を取得する
+ * @param viewLocked 視点切替が禁止されている場合はtrue
+ * @return HUDへ描画する操作案内
+ */
+const char* HudControlHint(bool viewLocked) {
+    if (Input::IsSwitch2ProConnected()) {
+        return viewLocked ?
+            "MOVE: L STICK/DPAD  SHOT: A/R/ZR  3D MODE LOCKED  BOMB: Y  MENU: +" :
+            "MOVE: L STICK/DPAD  SHOT: A/R/ZR  MODE: X  BOMB: Y  MENU: +";
+    }
+    if (Input::IsGamepadConnected()) {
+        return viewLocked ?
+            "MOVE: L STICK/DPAD  SHOT: A/RB/RT  3D MODE LOCKED  BOMB: Y  MENU: START" :
+            "MOVE: L STICK/DPAD  SHOT: A/RB/RT  MODE: X  BOMB: Y  MENU: START";
+    }
+    return viewLocked ?
+        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  3D MODE LOCKED  BOMB: C  MENU: ESC" :
+        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  MODE: X  BOMB: C  MENU: ESC";
+}
 }
 
 #if defined(_DEBUG)
@@ -241,6 +264,8 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
             PlayerHitRadius2D * WorldYScale * 2.0f, PlayerHitboxColor);
     }
 
+    // 半透明の砂粒は船体と弾の描画後に重ねる
+    if (m_stageNumber == 2) Stage2Module::DrawSandstorm(*this, renderer, camera);
     renderer.ResetCamera();
     DrawHudBackground(renderer);
     StageDispatch::DrawOverlay2D(*this, renderer);
@@ -267,9 +292,8 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
     renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
     renderer.DrawText(bombStatus, TextAlign::TopCenter, 0.014f, { 0.55f, 0.85f, 1.0f, 1.0f }, { 0.0f, -0.025f });
-    renderer.DrawText(StageDispatch::IsViewLocked(*this) ?
-        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  3D MODE LOCKED  BOMB: C  MENU: ESC" :
-        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  MODE: X  BOMB: C  MENU: ESC", { -0.92f, -0.92f }, 0.012f,
+    renderer.DrawText(HudControlHint(StageDispatch::IsViewLocked(*this)),
+        { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
 
     DrawBossHud(renderer);
@@ -364,7 +388,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
         (cinematic || m_tutorialMode || m_invincible == 0 || (m_invincible / 5) % 2 == 0);
     Vector3 playerPosition = IsTayamaBattle() ? gameplayPlayerPosition :
         Vector3 {ToWorldX(m_playerX), ToWorldY(m_playerY),
-            Math::Lerp(SidePlaneZ, PlayerRailZ, railWeight)};
+            Math::Lerp(SidePlaneZ, PlayerRailDepth(), railWeight)};
     float playerPitch = 0.0f;
     StageDispatch::ApplyPlayerRenderCorrection(*this, playerPosition, playerPitch);
     if (!cinematic && railWeight > 0.01f && playerVisible) {
@@ -385,6 +409,8 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
             playerPosition.z,
             hitboxWidth, hitboxHeight, hitboxHeight, PlayerHitboxColor);
     }
+    // 遷移中も同じカメラから砂嵐を描画して2D終点と一致させる
+    if (m_stageNumber == 2) Stage2Module::DrawSandstorm(*this, renderer, camera);
     renderer.ResetCamera();
     DrawHudBackground(renderer);
     StageDispatch::DrawOverlay3D(*this, renderer, camera);
@@ -413,9 +439,8 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
     renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
     renderer.DrawText(bombStatus, TextAlign::TopCenter, 0.014f, { 0.55f, 0.85f, 1.0f, 1.0f }, { 0.0f, -0.025f });
-    renderer.DrawText(StageDispatch::IsViewLocked(*this) ?
-        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  3D MODE LOCKED  BOMB: C  MENU: ESC" :
-        "MOVE: ARROWS/WASD  SHOT: Z/SPACE  MODE: X  BOMB: C  MENU: ESC", { -0.92f, -0.92f }, 0.012f,
+    renderer.DrawText(HudControlHint(StageDispatch::IsViewLocked(*this)),
+        { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
     if (m_viewTransitionTimer > 0) {
         renderer.DrawText("CAMERA SHIFT", { -0.16f, -0.02f }, 0.026f,
