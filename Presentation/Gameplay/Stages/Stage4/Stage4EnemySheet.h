@@ -261,10 +261,10 @@ public:
 
         // 砲の通常照準は次の攻撃に向けて自機位置へ追従する
         if (rushedThisFrame) return;
-        boss.turretAimX += (shooter.m_playerX - boss.turretAimX) * TurretTrackingRate;
-        boss.turretAimY += (shooter.m_playerY - boss.turretAimY) * TurretTrackingRate;
+        boss.turretAimX += (shooter.Player().m_playerX - boss.turretAimX) * TurretTrackingRate;
+        boss.turretAimY += (shooter.Player().m_playerY - boss.turretAimY) * TurretTrackingRate;
         const float targetZ = shooter.IsRailGameplayActive() ?
-            PlayerRailZ : ToRailZFromSideX(shooter.m_playerX);
+            PlayerRailZ : ToRailZFromSideX(shooter.Player().m_playerX);
         boss.turretAimZ += (targetZ - boss.turretAimZ) * TurretTrackingRate;
     }
 

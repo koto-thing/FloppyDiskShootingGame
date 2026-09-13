@@ -12,7 +12,7 @@ struct HomingShotTests {
         using Game = SideScrollingShooter;
         auto game = std::make_unique<Game>();
         auto& g = *game;
-        g.m_playerX = g.m_playerY = 0.0f;
+        g.Player().m_playerX = g.Player().m_playerY = 0.0f;
         g.m_stageNumber = 1;
         auto& nearEnemy = g.m_enemies[0];
         nearEnemy.active = nearEnemy.collisionEnabled = true;
@@ -145,21 +145,24 @@ struct HomingShotTests {
         // Stage2主砲は入力の継続先を狙い、予測で実際の自機位置を変更しない
         g.m_stageNumber = 2;
         g.m_difficulty = Hard;
+        // 照準予測の検証中に発射される弾で移動状態を中断しない
+        g.Player().m_invincible = 9999;
+        g.Player().m_playerDestructionTimer = 0;
         for (bool rail : {false, true}) {
             g.m_viewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
             for (bool slow : {false, true}) {
                 for (int input = 0; input < 16; ++input) {
-                    g.m_moveLeft = (input & 1) != 0;
-                    g.m_moveRight = (input & 2) != 0;
-                    g.m_moveUp = (input & 4) != 0;
-                    g.m_moveDown = (input & 8) != 0;
-                    g.m_slowMove = slow;
+                    g.Player().m_moveLeft = (input & 1) != 0;
+                    g.Player().m_moveRight = (input & 2) != 0;
+                    g.Player().m_moveUp = (input & 4) != 0;
+                    g.Player().m_moveDown = (input & 8) != 0;
+                    g.Player().m_slowMove = slow;
                     for (int cycle : {0, 30, 59}) {
-                        g.m_playerX = g.m_playerY = 0.0f;
+                        g.Player().m_playerX = g.Player().m_playerY = 0.0f;
                         for (int frame = cycle + 1; frame < 90; ++frame) g.TickPlayer();
-                        const float expectedX = g.m_playerX;
-                        const float expectedY = g.m_playerY;
-                        g.m_playerX = g.m_playerY = 0.0f;
+                        const float expectedX = g.Player().m_playerX;
+                        const float expectedY = g.Player().m_playerY;
+                        g.Player().m_playerX = g.Player().m_playerY = 0.0f;
                         Game::Enemy boss {};
                         boss.phase = 3.0f;
                         boss.hp = 30;
@@ -168,7 +171,7 @@ struct HomingShotTests {
                         g.m_stage2.boss = {};
                         g.m_stage2.boss.actionAge = cycle;
                         Game::Stage2Module::TickBoss(g, boss);
-                        assert(g.m_playerX == 0.0f && g.m_playerY == 0.0f);
+                        assert(g.Player().m_playerX == 0.0f && g.Player().m_playerY == 0.0f);
                         if (cycle == 0) assert(boss.attackWarningFrames == 90);
                         // 一度に予測位置へ飛ばず、各軸で予測位置との間へ進む
                         assert(expectedX == 0.0f ? boss.actionX == 0.0f :
@@ -179,13 +182,13 @@ struct HomingShotTests {
                         const float aimY = boss.actionY;
                         const float aimZ = boss.actionZ;
                         // HARDは確定後の0.5秒間と発射中に照準を固定する
-                        g.m_moveRight = !g.m_moveRight;
+                        g.Player().m_moveRight = !g.Player().m_moveRight;
                         for (int lockedFrame = 60; lockedFrame < 102; ++lockedFrame) {
                             g.m_stage2.boss.actionAge = lockedFrame;
                             Game::Stage2Module::TickBoss(g, boss);
                             assert(boss.actionX == aimX && boss.actionY == aimY && boss.actionZ == aimZ);
                         }
-                        g.m_moveRight = !g.m_moveRight;
+                        g.Player().m_moveRight = !g.Player().m_moveRight;
                     }
                 }
             }
@@ -198,8 +201,8 @@ struct HomingShotTests {
             boss.maxHp = 100;
             boss.age = 1;
             boss.actionX = 1.0f;
-            g.m_playerX = g.m_playerY = 0.0f;
-            g.m_moveLeft = g.m_moveRight = g.m_moveUp = g.m_moveDown = false;
+            g.Player().m_playerX = g.Player().m_playerY = 0.0f;
+            g.Player().m_moveLeft = g.Player().m_moveRight = g.Player().m_moveUp = g.Player().m_moveDown = false;
             g.m_stage2.boss.actionAge = cycle;
             Game::Stage2Module::TickBoss(g, boss);
             assert(boss.actionX > 0.8f && boss.actionX < 1.0f);
@@ -207,21 +210,21 @@ struct HomingShotTests {
         // EASY/NORMALは移動入力があっても現在位置へ追従し、確定後は固定する
         for (auto difficulty : {Easy, Normal}) {
             g.m_difficulty = difficulty;
-            g.m_moveRight = true;
-            g.m_playerX = 0.5f;
+            g.Player().m_moveRight = true;
+            g.Player().m_playerX = 0.5f;
             Game::Enemy boss {};
             boss.phase = 3.0f;
             boss.hp = 30;
             boss.maxHp = 100;
             boss.age = 1;
-            boss.actionX = g.m_playerX;
+            boss.actionX = g.Player().m_playerX;
             g.m_stage2.boss.actionAge = 30;
             Game::Stage2Module::TickBoss(g, boss);
-            assert(boss.actionX == g.m_playerX);
+            assert(boss.actionX == g.Player().m_playerX);
             const float aimX = boss.actionX;
             const float aimY = boss.actionY;
             const float aimZ = boss.actionZ;
-            g.m_playerX = -0.5f;
+            g.Player().m_playerX = -0.5f;
             for (int frame = 60; frame < 132; ++frame) {
                 g.m_stage2.boss.actionAge = frame;
                 Game::Stage2Module::TickBoss(g, boss);
@@ -232,17 +235,17 @@ struct HomingShotTests {
         g.m_stageNumber = 5;
         g.m_stage5.phase = Game::Stage5Phase::TayamaDragonBattle;
         g.m_viewMode = g.m_nextViewMode = Game::ViewMode::Rail3D;
-        g.m_moveLeft = g.m_moveRight = g.m_moveUp = g.m_moveDown = false;
+        g.Player().m_moveLeft = g.Player().m_moveRight = g.Player().m_moveUp = g.Player().m_moveDown = false;
         for (float edge : {-1.35f, 1.35f}) {
-            g.m_playerX = edge * 2.0f;
-            g.m_playerY = 2.0f;
+            g.Player().m_playerX = edge * 2.0f;
+            g.Player().m_playerY = 4.0f;
             g.TickPlayer();
-            assert(g.m_playerX == edge && g.m_playerY == 1.3f);
+            assert(g.Player().m_playerX == edge && g.Player().m_playerY == 3.5f);
             g.m_shots.fill({});
             auto& edgeShot = g.m_shots[0];
             edgeShot.active = true;
             edgeShot.x = edge;
-            edgeShot.y = g.m_playerY;
+            edgeShot.y = g.Player().m_playerY;
             edgeShot.z = 10.0f;
             g.TickShots();
             assert(edgeShot.active);

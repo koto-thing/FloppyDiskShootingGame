@@ -175,7 +175,7 @@ void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, Renderer& rende
     const Vector2 shake = ScreenShakeOffset();
     const float sideCameraY = StageDispatch::SideCameraY(*this);
 
-    const Vector3 playerPosition{ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailDepth()};
+    const Vector3 playerPosition{ToWorldX(Player().m_playerX), ToWorldY(Player().m_playerY), PlayerRailDepth()};
     // 2Dモードと同じカメラ状態から、3Dレールの追従カメラへ補間する
     Vector3 sidePosition{0.0f, sideCameraY, SideCameraZ};
     Vector3 sideTarget{0.0f, sideCameraY, SidePlaneZ};
@@ -222,6 +222,21 @@ void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, Renderer& rende
     const Vector3 shakeOffset{shake.x, shake.y, 0.0f};
     camera.SetPosition(Vector3::Lerp(sidePosition, railPosition, railWeight) + shakeOffset);
     camera.LookAt(Vector3::Lerp(sideTarget, railTarget, railWeight) + shakeOffset);
+    // カメラ位置と当たり判定用の投影基準を維持し、2機が入る画角まで広げる
+    if (m_playerCount == 2 && !StageDispatch::IsCinematic(*this)) {
+        float halfAngleTangent = std::tan(camera.FieldOfView() * 0.5f);
+        ForEachPlayer([&] {
+            Vector3 position = PlayerWorldPosition();
+            if (!IsTayamaBattle()) position.z = Math::Lerp(SidePlaneZ, PlayerRailDepth(), railWeight);
+            const Vector3 local = camera.ViewMatrix().TransformPoint(position);
+            if (local.z <= 0.1f) return;
+            const float required = (std::max)((std::abs(local.x) + 1.0f) / camera.GetViewport().AspectRatio(),
+                std::abs(local.y) + 1.0f) / local.z;
+            halfAngleTangent = (std::max)(halfAngleTangent, required * 1.25f);
+        });
+        camera.SetFieldOfView(2.0f * std::atan(halfAngleTangent));
+    }
+
 }
 
 void SideScrollingShooter::DrawShape(Renderer& renderer,
@@ -369,7 +384,7 @@ void SideScrollingShooter::DrawPlayerModel(Renderer& renderer, const Camera3D& c
     float x, float y, float z, bool visible, float yaw, float pitch, float roll) const {
     if (!visible) return;
 
-    const bool canToggleView = CanToggleView();
+    const bool canToggleView = m_activePlayer == 0 && CanToggleView();
     const bool whiteGlow = ViewToggleNoseIsWhite(m_frame);
     constexpr float BlueNose[4] = {0.05f, 0.45f, 2.80f, 1.0f};
     constexpr float WhiteNose[4] = {2.40f, 2.40f, 3.00f, 1.0f};
@@ -382,7 +397,10 @@ void SideScrollingShooter::DrawPlayerModel(Renderer& renderer, const Camera3D& c
     auto drawPart = [&](int shape, const Vector3& partPosition, const Vector3& partScale,
         const float color[4], float partYaw, float partPitch) {
         const bool isNose = shape == 3;
-        const float* partColor = canToggleView && isNose ? noseColor : color;
+        const float coopColor[4] = {color[0] * 0.35f,
+            color[1] * (m_activePlayer == 0 ? 0.65f : 1.6f),
+            color[2] * (m_activePlayer == 0 ? 1.7f : 0.40f), color[3]};
+        const float* partColor = canToggleView && isNose ? noseColor : (m_playerCount == 2 ? coopColor : color);
         const bool transformed = pitch != 0.0f || roll != 0.0f;
         Vector3 transformedPosition = partPosition;
         if (!transformed) {
@@ -662,8 +680,8 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
         // 既存のグレイズ範囲へ入った通常敵弾を反転させ、弾ごとに位相をずらして小刻みに震わせる
         if (shot.enemy) {
             const Vector3 player = PlayerWorldPosition();
-            const float dx = IsRailGameplayActive() ? ToWorldX(shot.x) - player.x : shot.x - m_playerX;
-            const float dy = IsRailGameplayActive() ? ToWorldY(shot.y) - player.y : shot.y - m_playerY;
+            const float dx = IsRailGameplayActive() ? ToWorldX(shot.x) - player.x : shot.x - Player().m_playerX;
+            const float dy = IsRailGameplayActive() ? ToWorldY(shot.y) - player.y : shot.y - Player().m_playerY;
             const float dz = IsRailGameplayActive() ? shot.z - player.z : 0.0f;
             const float warningRadius = IsRailGameplayActive() ? 1.46f : 0.222f;
             if (dx * dx + dy * dy + dz * dz <= warningRadius * warningRadius) {
@@ -925,7 +943,7 @@ void SideScrollingShooter::DrawRestart(Renderer& renderer) const {
  */
 void SideScrollingShooter::DrawPowerUp(
     Renderer& renderer, const Camera3D& camera, float playerZ) const {
-    if (m_powerUpTimer <= 0 || (m_powerUpTimer / 8) % 2 == 0) return;
+    if (Player().m_powerUpTimer <= 0 || (Player().m_powerUpTimer / 8) % 2 == 0) return;
 
     // 自機上方のワールド座標を画面座標へ投影する
     Vector2 screenPosition;

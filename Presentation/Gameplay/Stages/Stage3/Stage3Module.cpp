@@ -1047,8 +1047,8 @@ void SideScrollingShooter::Stage3Module::TickBoss(
             if (!source.active || source.age < ReflectFunnelMineIntervalFrames ||
                 source.age % ReflectFunnelMineIntervalFrames != 0) continue;
             const Vector3 sourceWorld {ToWorldX(source.x), ToWorldY(source.y), source.z};
-            const Vector3 playerWorld {ToWorldX(shooter.m_playerX),
-                ToWorldY(shooter.m_playerY),
+            const Vector3 playerWorld {ToWorldX(shooter.Player().m_playerX),
+                ToWorldY(shooter.Player().m_playerY),
                 shooter.IsRailGameplayActive() ? PlayerRailZ : source.z};
             const float aimDx = playerWorld.x - sourceWorld.x;
             const float aimDy = playerWorld.y - sourceWorld.y;
@@ -1358,8 +1358,8 @@ void SideScrollingShooter::Stage3Module::FireBossPartBarrage(
 
         const BossModelTransform transform = BossTransform(shooter, boss);
         const Vector3 target {
-            ToWorldX(shooter.m_playerX),
-            ToWorldY(shooter.m_playerY),
+            ToWorldX(shooter.Player().m_playerX),
+            ToWorldY(shooter.Player().m_playerY),
             shooter.IsRailGameplayActive() ? PlayerRailZ : SidePlaneZ
         };
         auto WorldPosition = [&transform](const Vector3& local) {
@@ -1422,8 +1422,7 @@ void SideScrollingShooter::Stage3Module::FireBossPartBarrage(
         // チャージ開始と照射開始で周期長に一致する専用音を一度だけ再生する
         PlayBossLaserSound(shooter.m_audio, BossLaserSoundCueAt(cycle));
         if (cycle >= BossLaserChargeFrames &&
-            cycle < BossLaserChargeFrames + BossLaserFireFrames &&
-            shooter.m_invincible == 0) {
+            cycle < BossLaserChargeFrames + BossLaserFireFrames) {
             for (int i = 0; i < Stage3BossModelView::HeavyCannonCount; ++i) {
                 Vector3 mount = WorldPosition(
                     Stage3BossModelView::HeavyCannonMount(i).localPosition);
@@ -1435,18 +1434,21 @@ void SideScrollingShooter::Stage3Module::FireBossPartBarrage(
                 }
                 const Vector3 aim = BossWeaponAimRotation(transform,
                     Stage3BossModelView::HeavyCannonMount(i), laserTarget);
-                const Vector3 direction = (laserTarget - mount).Normalized();
                 mount = Stage3BossModelView::HeavyCannonMuzzleWorldPosition(
                     i, transform, aim);
                 if (!shooter.IsRailGameplayActive()) mount.z = SidePlaneZ;
+                // 砲塔基部からずれた砲口を始点として、照準点を通る光線へ揃える
+                const Vector3 direction = (laserTarget - mount).Normalized();
                 const Vector3 end = mount + direction *
                     ((laserTarget - mount).Length() + BossLaserExtraLength);
-                if (Hit3DSegment(mount.x, mount.y, mount.z,
-                    end.x, end.y, end.z, BossLaserRadius,
-                    target.x, target.y, target.z, 0.38f)) {
-                    shooter.DamagePlayer();
-                    break;
-                }
+                // 共通の照射位置を維持し、2Pだけが触れた場合も被弾させる
+                shooter.ForEachPlayer([&] {
+                    const Vector3 player {ToWorldX(shooter.Player().m_playerX), ToWorldY(shooter.Player().m_playerY),
+                        shooter.IsRailGameplayActive() ? PlayerRailZ : SidePlaneZ};
+                    if (Hit3DSegment(mount.x, mount.y, mount.z,
+                        end.x, end.y, end.z, BossLaserRadius,
+                        player.x, player.y, player.z, 0.38f)) shooter.DamagePlayer();
+                });
             }
         }
 
@@ -1481,8 +1483,8 @@ void SideScrollingShooter::Stage3Module::FireBossPartBarrage(
     const int section = static_cast<int>(boss.phase);
     const BossModelTransform transform = BossTransform(shooter, boss);
     const Vector3 target {
-        ToWorldX(shooter.m_playerX),
-        ToWorldY(shooter.m_playerY),
+        ToWorldX(shooter.Player().m_playerX),
+        ToWorldY(shooter.Player().m_playerY),
         shooter.IsRailGameplayActive() ? PlayerRailZ : SidePlaneZ
     };
     for (int slot = 0; slot < Stage3BossModelView::Phase1TurretsPerSection; ++slot) {
@@ -1533,8 +1535,8 @@ void SideScrollingShooter::Stage3Module::FireBossMachineGun(
     const int section = static_cast<int>(boss.phase);
     const BossModelTransform transform = BossTransform(shooter, boss);
     const Vector3 target {
-        ToWorldX(shooter.m_playerX),
-        ToWorldY(shooter.m_playerY),
+        ToWorldX(shooter.Player().m_playerX),
+        ToWorldY(shooter.Player().m_playerY),
         shooter.IsRailGameplayActive() ? PlayerRailZ : SidePlaneZ
     };
     bool fired = false;
@@ -1621,8 +1623,8 @@ void SideScrollingShooter::Stage3Module::TickSpecialShotBeforeMove(
 
         // 受け取ったファンネルから現在の自機位置へ反射する
         shot.x = funnel.x; shot.y = funnel.y; shot.z = funnel.z;
-        const float playerDx = ToWorldX(shooter.m_playerX - shot.x);
-        const float playerDy = ToWorldY(shooter.m_playerY - shot.y);
+        const float playerDx = ToWorldX(shooter.Player().m_playerX - shot.x);
+        const float playerDy = ToWorldY(shooter.Player().m_playerY - shot.y);
         const float playerDz = shooter.IsRailGameplayActive() ? PlayerRailZ - shot.z : 0.0f;
         const float playerLength = (std::max)(0.001f,
             std::sqrt(playerDx * playerDx + playerDy * playerDy + playerDz * playerDz));
@@ -1655,8 +1657,8 @@ void SideScrollingShooter::Stage3Module::TickSpecialShotBeforeMove(
             return;
         }
         if (shot.age == BossMissileEngineStartFrame) {
-            const float dx = ToWorldX(shooter.m_playerX - shot.x);
-            const float dy = ToWorldY(shooter.m_playerY - shot.y);
+            const float dx = ToWorldX(shooter.Player().m_playerX - shot.x);
+            const float dy = ToWorldY(shooter.Player().m_playerY - shot.y);
             const float dz = shooter.IsRailGameplayActive() ? PlayerRailZ - shot.z : 0.0f;
             const float length = (std::max)(
                 0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
@@ -1673,8 +1675,8 @@ void SideScrollingShooter::Stage3Module::TickSpecialShotBeforeMove(
     if (shot.age > BossDirectMissileHomingFrames) return;
 
     // 発射直後だけ現在の自機方向へ緩く旋回し、その後は得た進路を維持する
-    const float dx = ToWorldX(shooter.m_playerX - shot.x);
-    const float dy = ToWorldY(shooter.m_playerY - shot.y);
+    const float dx = ToWorldX(shooter.Player().m_playerX - shot.x);
+    const float dy = ToWorldY(shooter.Player().m_playerY - shot.y);
     const float dz = shooter.IsRailGameplayActive() ? PlayerRailZ - shot.z : 0.0f;
     const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
     const float speed = BossMissileSpeed *
@@ -1957,8 +1959,8 @@ bool SideScrollingShooter::Stage3Module::DrawBossModel(
     const int section = (std::clamp)(static_cast<int>(boss.phase), 0,
         Stage3BossModelView::Phase1SectionCount - 1);
     const Vector3 target {
-        ToWorldX(shooter.m_playerX),
-        ToWorldY(shooter.m_playerY),
+        ToWorldX(shooter.Player().m_playerX),
+        ToWorldY(shooter.Player().m_playerY),
         Math::Lerp(transform.position.z, PlayerRailZ, railWeight)
     };
     for (int topGunIndex = 0; topGunIndex < Stage3BossModelView::TopGunCount; ++topGunIndex) {
@@ -2000,25 +2002,13 @@ bool SideScrollingShooter::Stage3Module::DrawBossModel(
             const bool charging = cycle < BossLaserChargeFrames;
             const float chargeProgress = (std::min)(1.0f,
                 static_cast<float>(cycle + 1) / BossLaserChargeFrames);
-            const float cosine = std::cos(transform.yaw);
-            const float sine = std::sin(transform.yaw);
             for (int i = 0; i < Stage3BossModelView::HeavyCannonCount; ++i) {
-                const Vector3 local =
-                    Stage3BossModelView::HeavyCannonMount(i).localPosition;
-                const Vector3 worldMount {
-                    transform.position.x +
-                        (local.x * cosine + local.z * sine) * transform.scale,
-                    transform.position.y + local.y * transform.scale,
-                    transform.position.z +
-                        (-local.x * sine + local.z * cosine) * transform.scale
-                };
                 Vector3 mount = Stage3BossModelView::HeavyCannonMuzzleWorldPosition(
                     i, transform, BossWeaponAimRotation(transform,
                         Stage3BossModelView::HeavyCannonMount(i), laserTarget));
                 mount.z = Math::Lerp(transform.position.z, mount.z, railWeight);
                 const Vector3 delta = laserTarget - mount;
-                const Vector3 direction = (laserTarget - worldMount) /
-                    (std::max)(0.001f, (laserTarget - worldMount).Length());
+                const Vector3 direction = delta / (std::max)(0.001f, delta.Length());
                 const float beamLength = delta.Length() + BossLaserExtraLength;
                 const Vector3 beamCenter = mount + direction * (beamLength * 0.5f);
                 const float beamYaw = std::atan2(direction.z, -direction.x);
@@ -2092,7 +2082,7 @@ bool SideScrollingShooter::Stage3Module::DrawBossModel(
             if (!state.active) continue;
             const Vector3 position {ToWorldX(state.x), ToWorldY(state.y),
                 Math::Lerp(transform.position.z, state.z, railWeight)};
-            const Vector3 playerTarget {ToWorldX(shooter.m_playerX), ToWorldY(shooter.m_playerY),
+            const Vector3 playerTarget {ToWorldX(shooter.Player().m_playerX), ToWorldY(shooter.Player().m_playerY),
                 Math::Lerp(transform.position.z, PlayerRailZ, railWeight)};
             const float dx = playerTarget.x - position.x;
             const float dy = playerTarget.y - position.y;
@@ -2176,7 +2166,7 @@ void SideScrollingShooter::Stage3Module::ApplyCameraCorrection(
     const float focusZ = Phase1FocusZ(shooter.m_enemies[0]);
     const float advanceZ = Phase1AdvanceZ(shooter.m_enemies[0]);
     const Vector3 deckPosition {
-        ToWorldX(shooter.m_playerX) * 0.12f,
+        ToWorldX(shooter.m_players[0].m_playerX) * 0.12f,
         11.5f,
         -22.0f - advanceZ * BossCameraAdvanceRate
     };
@@ -2304,12 +2294,14 @@ void SideScrollingShooter::Stage3Module::TickBossIntroduction(
     }
 
     // 出現演出中も移動と射撃を受け付け、生成済みの自機弾と演出を進める
-    shooter.m_shotCooldown = (std::max)(0, shooter.m_shotCooldown - 1);
-    shooter.m_specialShotCooldown =
-        (std::max)(0, shooter.m_specialShotCooldown - 1);
-    shooter.m_invincible = (std::max)(0, shooter.m_invincible - 1);
-    shooter.TickPlayer();
-    shooter.TickPlayerWeapons();
+    shooter.ForEachPlayer([&] {
+        shooter.Player().m_shotCooldown = (std::max)(0, shooter.Player().m_shotCooldown - 1);
+        shooter.Player().m_specialShotCooldown =
+            (std::max)(0, shooter.Player().m_specialShotCooldown - 1);
+        shooter.Player().m_invincible = (std::max)(0, shooter.Player().m_invincible - 1);
+        shooter.TickPlayer();
+        shooter.TickPlayerWeapons();
+    });
     shooter.TickShots();
     shooter.TickExplosions();
     shooter.TickDebris();

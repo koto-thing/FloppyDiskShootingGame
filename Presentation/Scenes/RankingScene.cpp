@@ -26,16 +26,42 @@ UIInputState CurrentUIInput() {
 
 /** @brief ランキングシーンを初期化する */
 void RankingScene::Initialize() {
-    m_rankings = ScoreRepository {}.Load();
+    // 直前に遊んだ人数のランキングを最初に表示する
+    m_cooperative = getData().playerCount == 2;
+    m_rankings = ScoreRepository {}.Load(m_cooperative);
+    m_modeButton = std::make_unique<Button>(
+        Vector2 { 0.44f, 0.09f }, RectAlign::BottomLeft,
+        m_cooperative ? "SHOW SOLO" : "SHOW CO-OP", Vector2 { 0.04f, 0.04f });
+    m_modeButton->SetOnClick([this]() { ToggleMode(); });
     m_returnButton = std::make_unique<Button>(
         Vector2 { 0.34f, 0.09f }, RectAlign::BottomRight, "TITLE", Vector2 { -0.04f, 0.04f });
     m_returnButton->SetClickSound(Button::ClickSound::Cancel);
     m_returnButton->SetOnClick([this]() { changeScene(SceneType::Title); });
 }
 
-/** @brief ランキングのボタンへマウス入力を渡す */
+/** @brief ランキングの切替とタイトル復帰の入力を処理する */
 void RankingScene::ProcessInput() {
-    m_returnButton->Update(CurrentUIInput());
+    // キーボードと1Pコントローラーから切替と復帰を操作する
+    if (Input::GetKeyDown(KeyCode::Escape)) {
+        changeScene(SceneType::Title);
+        return;
+    }
+    if (Input::GetKeyDown(KeyCode::LeftArrow) || Input::GetKeyDown(KeyCode::RightArrow)) ToggleMode();
+
+    // マウスでも同じ操作を可能にする
+    const UIInputState input = CurrentUIInput();
+    m_modeButton->Update(input);
+    m_returnButton->Update(input);
+}
+
+/**
+ * @brief 表示するランキングを1人用と2人協力用で切り替える
+ * @return なし
+ */
+void RankingScene::ToggleMode() {
+    m_cooperative = !m_cooperative;
+    m_rankings = ScoreRepository {}.Load(m_cooperative);
+    m_modeButton->SetText(m_cooperative ? "SHOW SOLO" : "SHOW CO-OP");
 }
 
 /** @brief ランキングシーンを更新する */
@@ -44,6 +70,7 @@ void RankingScene::Tick() {
 
 /** @brief ランキングシーンが保持するUIを解放する */
 void RankingScene::Dispose() {
+    m_modeButton.reset();
     m_returnButton.reset();
 }
 
@@ -56,7 +83,8 @@ void RankingScene::Render(Renderer& renderer) {
     constexpr std::array<float, ScoreRepository::DifficultyCount> columnPositions {{ -0.62f, 0.0f, 0.62f }};
 
     renderer.Draw(Rect {{0.0f, 0.0f}, {2.0f, 2.0f}}, {0.01f, 0.02f, 0.07f, 1.0f});
-    renderer.DrawText("RANKING", TextAlign::Center, 0.052f, {1.0f, 0.78f, 0.18f, 1.0f}, {0.0f, 0.76f});
+    renderer.DrawText(m_cooperative ? "CO-OP RANKING" : "SOLO RANKING", TextAlign::Center, 0.046f,
+        {1.0f, 0.78f, 0.18f, 1.0f}, {0.0f, 0.76f});
     for (int difficulty = 0; difficulty < ScoreRepository::DifficultyCount; ++difficulty) {
         const float x = columnPositions[static_cast<size_t>(difficulty)];
         renderer.DrawText(difficultyNames[static_cast<size_t>(difficulty)], TextAlign::Center, 0.026f,
@@ -70,5 +98,8 @@ void RankingScene::Render(Renderer& renderer) {
                 {x, 0.32f - static_cast<float>(rank) * 0.16f});
         }
     }
+    renderer.DrawText("LEFT/RIGHT: SOLO / CO-OP   ESC/B: TITLE", TextAlign::Center, 0.012f,
+        {0.55f, 0.66f, 0.80f, 1.0f}, {0.0f, -0.66f});
+    m_modeButton->Render(renderer);
     m_returnButton->Render(renderer);
 }

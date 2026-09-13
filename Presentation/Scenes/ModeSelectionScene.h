@@ -9,7 +9,7 @@
 #include "../../Engine/UI/Button.h"
 #include "../ModeSelectionScene/ModeSelectionStateController.h"
 
-/** @brief 難易度とプレイヤー機体を順番に選択するシーン */
+/** @brief 人数、コントローラー、難易度、ショットタイプを選択するシーン */
 class ModeSelectionScene : public IScene<SceneType, SceneSharedData> {
 public:
     /** @brief モード選択シーンを生成する */
@@ -41,7 +41,14 @@ private:
      */
     void UpdatePlayerPreview();
 
+    /** @brief 各コントローラーの割り当てとショット選択を更新する @return なし */
+    void UpdateCooperativeInput();
+
+    /** @brief 2人用の割り当てまたはショット選択を描画する @param renderer 描画先 @return なし */
+    void RenderCooperativeSelection(Renderer& renderer) const;
+
     std::unique_ptr<ModeSelectionStateController> m_stateController;
+    std::array<std::unique_ptr<Button>, 2> m_playerCountButtons;
     std::array<std::unique_ptr<Button>, 3> m_difficultyButtons;
     std::array<std::unique_ptr<Button>, 3> m_playerTypeButtons;
     std::unique_ptr<Button> m_backButton;

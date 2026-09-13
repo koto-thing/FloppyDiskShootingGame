@@ -4,6 +4,7 @@
 #include <windows.h>
 
 #include "../../Engine/Graphics/Renderer.h"
+#include "../../Engine/Input/Input.h"
 #include "../../Engine/Time/Time.h"
 #include "../Common/SpaceBackground.h"
 #include "../Gameplay/Models/AircraftModelView.h"
@@ -123,8 +124,21 @@ void DrawWeaponDemo(Renderer& renderer, PlayerType playerType, float elapsedTime
 
 /** @brief モードセレクトシーンを初期化する */
 void ModeSelectionScene::Initialize() {
-    // 選択段階を難易度選択へ初期化する
+    // 人数を選び直してから各モードの開始条件を確認する
     m_stateController = std::make_unique<ModeSelectionStateController>();
+    getData().playerCount = 1;
+    constexpr const char* playerCountLabels[] = {"1 PLAYER", "2 PLAYERS LOCAL"};
+    for (int player = 0; player < 2; ++player) {
+        m_playerCountButtons[player] = std::make_unique<Button>(
+            Vector2 {0.48f, 0.12f}, RectAlign::Center,
+            playerCountLabels[player], Vector2 {0.0f, 0.16f - player * 0.24f});
+        m_playerCountButtons[player]->SetOnClick([this, count = player + 1]() {
+            getData().playerCount = count;
+            m_stateController = std::make_unique<ModeSelectionStateController>();
+            m_stateController->SetCurrentState(count == 2 ?
+                ModeSelectionState::ControllerSelect : ModeSelectionState::DifficultySelect);
+        });
+    }
 
     // 難易度選択ボタンを縦に配置する
     constexpr const char* difficultyLabels[] = { "EASY", "NORMAL", "HARD" };
@@ -158,11 +172,30 @@ void ModeSelectionScene::Initialize() {
     m_backButton = std::make_unique<Button>(
         Rect { { -0.95f, -0.90f }, { 0.30f, 0.10f } }, "BACK");
     m_backButton->SetClickSound(Button::ClickSound::Cancel);
-    m_backButton->SetOnClick([this]() { changeScene(SceneType::Title); });
+    m_backButton->SetOnClick([this]() {
+        const auto state = m_stateController->GetCurrentState();
+        if (state == ModeSelectionState::PlayerCountSelect) changeScene(SceneType::Title);
+        else m_stateController->SetCurrentState(state == ModeSelectionState::PlayerTypeSelect ?
+            ModeSelectionState::DifficultySelect : ModeSelectionState::PlayerCountSelect);
+    });
 }
 
 /** @brief モードセレクト画面の入力を処理する */
 void ModeSelectionScene::ProcessInput() {
+    // 2人用の個別入力は共有マウス入力と分離する
+    const auto state = m_stateController->GetCurrentState();
+    if (getData().playerCount == 2 && state != ModeSelectionState::PlayerCountSelect) {
+        UpdateCooperativeInput();
+        if (m_stateController->ArePlayersReady()) {
+            getData().playerType = m_stateController->GetPlayerType(0);
+            getData().secondPlayerType = m_stateController->GetPlayerType(1);
+            changeScene(SceneType::Story);
+            return;
+        }
+        // 決定の同じフレームを次の選択段階へ持ち越さない
+        if (state != m_stateController->GetCurrentState()) return;
+    }
+
     // 現在のクライアント領域からUI入力座標を取得する
     int width = 1280;
     int height = 720;
@@ -180,14 +213,42 @@ void ModeSelectionScene::ProcessInput() {
 
 /** @brief 現在表示中の選択肢だけ入力を受け付ける */
 void ModeSelectionScene::UpdateActiveButtons(const UIInputState& inputState) {
-    m_backButton->Update(inputState);
+    const auto state = m_stateController->GetCurrentState();
+    // 個別選択の決定ボタンを共有カーソルのBACKクリックとして扱わない
+    UIInputState backInput = inputState;
+    if (getData().playerCount == 2 &&
+        (state == ModeSelectionState::ControllerSelect || state == ModeSelectionState::PlayerTypeSelect) &&
+        (Input::GetGamepadKey(0, KeyCode::Space) || Input::GetGamepadKeyUp(0, KeyCode::Space))) {
+        backInput.primaryDown = backInput.primaryPressed = backInput.primaryReleased = false;
+    }
+    m_backButton->Update(backInput);
+    if (state != m_stateController->GetCurrentState()) return;
 
-    if (m_stateController->GetCurrentState() == ModeSelectionState::DifficultySelect) {
+    if (state == ModeSelectionState::PlayerCountSelect) {
+        for (const auto& button : m_playerCountButtons) button->Update(inputState);
+        return;
+    }
+    if (state == ModeSelectionState::DifficultySelect) {
         for (const auto& button : m_difficultyButtons) button->Update(inputState);
         return;
     }
 
+    // 2人用のショット選択は各自のコントローラーだけが変更できる
+    if (getData().playerCount == 2 || state != ModeSelectionState::PlayerTypeSelect) return;
     for (const auto& button : m_playerTypeButtons) button->Update(inputState);
+}
+
+void ModeSelectionScene::UpdateCooperativeInput() {
+    for (int player = 0; player < 2; ++player) {
+        const bool previous = Input::GetGamepadKeyDown(player, KeyCode::UpArrow) ||
+            Input::GetGamepadKeyDown(player, KeyCode::W);
+        const bool next = Input::GetGamepadKeyDown(player, KeyCode::DownArrow) ||
+            Input::GetGamepadKeyDown(player, KeyCode::S);
+        m_stateController->UpdatePlayerInput(player, Input::IsGamepadConnected(player),
+            static_cast<int>(next) - static_cast<int>(previous),
+            Input::GetGamepadKeyDown(player, KeyCode::Space),
+            Input::GetGamepadKeyDown(player, KeyCode::Escape));
+    }
 }
 
 void ModeSelectionScene::UpdatePlayerPreview() {
@@ -206,6 +267,7 @@ void ModeSelectionScene::Tick() {
 
 /** @brief モードセレクト画面が保持するUIを解放する */
 void ModeSelectionScene::Dispose() {
+    for (auto& button : m_playerCountButtons) button.reset();
     for (auto& button : m_difficultyButtons) button.reset();
     for (auto& button : m_playerTypeButtons) button.reset();
     m_backButton.reset();
@@ -214,22 +276,31 @@ void ModeSelectionScene::Dispose() {
 
 /** @brief 現在の選択段階に対応するUIを描画する */
 void ModeSelectionScene::Render(Renderer& renderer) {
+    const auto state = m_stateController->GetCurrentState();
     const bool selectingDifficulty =
-        m_stateController->GetCurrentState() == ModeSelectionState::DifficultySelect;
+        state == ModeSelectionState::DifficultySelect;
 
     // ゆっくり明滅する星空を選択UIの背面へ描画する
     SpaceBackground::Render(renderer, Time::unscaledTime);
 
     // 画面上部へ現在の選択内容を表示する
     renderer.DrawText(
-        selectingDifficulty ? "SELECT DIFFICULTY" : "SELECT PLAYER TYPE",
+        state == ModeSelectionState::PlayerCountSelect ? "SELECT PLAYERS" :
+        state == ModeSelectionState::ControllerSelect ? "ASSIGN CONTROLLERS" :
+        selectingDifficulty ? "SELECT DIFFICULTY" : "SELECT SHOT TYPE",
         TextAlign::TopCenter,
         0.025f,
         ColorF::White(),
         { 0.0f, -0.18f }, CharacterSpacing);
 
-    if (selectingDifficulty) {
+    if (state == ModeSelectionState::PlayerCountSelect) {
+        for (const auto& button : m_playerCountButtons) button->Render(renderer);
+        renderer.DrawText("LOCAL CO-OP REQUIRES TWO CONTROLLERS", TextAlign::Center,
+            0.014f, ColorF::White(), {0.0f, -0.40f}, CharacterSpacing);
+    } else if (selectingDifficulty) {
         for (const auto& button : m_difficultyButtons) button->Render(renderer);
+    } else if (getData().playerCount == 2) {
+        RenderCooperativeSelection(renderer);
     } else {
         for (const auto& button : m_playerTypeButtons) button->Render(renderer);
 
@@ -246,4 +317,39 @@ void ModeSelectionScene::Render(Renderer& renderer) {
     }
 
     m_backButton->Render(renderer);
+}
+
+void ModeSelectionScene::RenderCooperativeSelection(Renderer& renderer) const {
+    const bool assigning = m_stateController->GetCurrentState() == ModeSelectionState::ControllerSelect;
+    constexpr ColorF playerColors[] = {{0.18f, 0.58f, 1.0f, 1.0f}, {0.20f, 0.95f, 0.38f, 1.0f}};
+
+    // コントローラー番号と担当色を並べ、各自の決定状態を表示する
+    for (int player = 0; player < 2; ++player) {
+        const float x = player == 0 ? -0.50f : 0.50f;
+        DrawPanel(renderer, {x, -0.04f}, {0.45f, 0.63f});
+        renderer.DrawText(player == 0 ? "1P BLUE" : "2P GREEN", TextAlign::Center,
+            0.025f, playerColors[player], {x, 0.47f}, CharacterSpacing);
+        if (assigning) {
+            const char* status = !Input::IsGamepadConnected(player) ? "CONNECT CONTROLLER" :
+                m_stateController->IsControllerJoined(player) ? "READY" : "PRESS FIRE TO JOIN";
+            renderer.DrawText(status, TextAlign::Center, 0.018f, ColorF::White(), {x, 0.06f}, CharacterSpacing);
+            continue;
+        }
+
+        // 同じショットを選択できる独立した一覧を描画する
+        const int selected = static_cast<int>(m_stateController->GetPlayerType(player));
+        for (int shot = 0; shot < 3; ++shot) {
+            const float y = 0.24f - shot * 0.20f;
+            if (shot == selected)
+                renderer.Draw(Rect {{x, y}, {0.32f, 0.074f}}, playerColors[player]);
+            renderer.DrawText(PreviewContents[shot].name, TextAlign::Center,
+                0.020f, ColorF::White(), {x, y}, CharacterSpacing);
+        }
+        renderer.DrawText(PreviewContents[selected].effect, TextAlign::Center,
+            0.010f, ColorF::White(), {x, -0.34f}, 0.001f);
+        renderer.DrawText(m_stateController->IsPlayerReady(player) ? "READY" : "PRESS FIRE TO CONFIRM",
+            TextAlign::Center, 0.014f, playerColors[player], {x, -0.51f}, CharacterSpacing);
+    }
+    renderer.DrawText(assigning ? "CONFIRM ON EACH CONTROLLER" : "UP / DOWN: SELECT    FIRE: READY    PAUSE: CANCEL",
+        TextAlign::Center, 0.012f, ColorF::White(), {0.0f, -0.77f}, CharacterSpacing);
 }

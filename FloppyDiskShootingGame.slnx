@@ -1,5 +1,13 @@
 <Solution>
   <Configurations>
+    <BuildType Name="Debug" />
+    <BuildType Name="Release" />
+    <BuildType Name="FloppyDebug" />
+    <BuildType Name="FloppyRelease" />
+    <BuildType Name="OnlineDebug" />
+    <BuildType Name="OnlineRelease" />
+    <BuildType Name="SteamDebug" />
+    <BuildType Name="SteamRelease" />
     <Platform Name="x64" />
     <Platform Name="x86" />
   </Configurations>

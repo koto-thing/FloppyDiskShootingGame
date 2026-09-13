@@ -37,23 +37,38 @@ TestStage::TestStage() : m_game(std::make_unique<SideScrollingShooter>()) {
 TestStage::~TestStage() = default;
 
 void TestStage::Initialize() {
-    m_game->Initialize(getData().audio, getData().playerType, getData().difficulty);
+    m_game->Initialize(getData().audio, getData().playerType, getData().difficulty,
+        getData().playerCount, getData().secondPlayerType);
     m_allClearTimer = 0;
+    m_pauseMenuOpen = false;
+    m_optionsOpen = false;
     InitializePauseMenu();
 }
 
 void TestStage::ProcessInput() {
-    if (Input::GetKeyDown(KeyCode::Escape)) {
+    // 切断中は進行を止め、再接続後も明示的な再開を待つ
+    const bool connected = ControllersConnected();
+    if (!connected) m_pauseMenuOpen = true;
+    m_closeMenuButton->SetEnabled(connected);
+    if (connected && (Input::GetKeyDown(KeyCode::Escape) ||
+        (getData().playerCount == 2 && Input::GetGamepadKeyDown(1, KeyCode::Escape)))) {
         m_pauseMenuOpen = !m_pauseMenuOpen;
         m_optionsOpen = false;
     }
 
     if (m_pauseMenuOpen) {
         ProcessPauseMenuInput();
+        // 再開フレームは切断前の操作を持ち越さず、現在の入力を読み直す
+        if (!m_pauseMenuOpen) m_game->ProcessInput();
         return;
     }
 
     m_game->ProcessInput();
+}
+
+bool TestStage::ControllersConnected() const {
+    return getData().playerCount != 2 ||
+        (Input::IsGamepadConnected(0) && Input::IsGamepadConnected(1));
 }
 
 void TestStage::Tick() {
@@ -63,7 +78,7 @@ void TestStage::Tick() {
 
     // 最終クリア表示を見せてからスコアを保存し、エンディングへ遷移する
     if (++m_allClearTimer < FinalClearDisplayFrames) return;
-    ScoreRepository {}.Save(getData().difficulty, m_game->Score());
+    ScoreRepository {}.Save(getData().difficulty, m_game->Score(), getData().playerCount == 2);
     changeScene(SceneType::Ending);
 }
 
@@ -98,7 +113,7 @@ void TestStage::InitializePauseMenu() {
     m_closeMenuButton = std::make_unique<Button>(Vector2 {0.42f, 0.10f}, RectAlign::Center,
         "CLOSE MENU", Vector2 {0.0f, -0.20f});
     m_closeMenuButton->SetClickSound(Button::ClickSound::Cancel);
-    m_closeMenuButton->SetOnClick([this]() { m_pauseMenuOpen = false; });
+    m_closeMenuButton->SetOnClick([this]() { if (ControllersConnected()) m_pauseMenuOpen = false; });
 
     m_backToMenuButton = std::make_unique<Button>(Vector2 {0.42f, 0.10f}, RectAlign::Center,
         "BACK TO MENU", Vector2 {0.0f, -0.45f});
@@ -153,6 +168,9 @@ void TestStage::RenderPauseMenu(Renderer& renderer) const {
 
     if (!m_optionsOpen) {
         renderer.DrawText("PAUSED", TextAlign::Center, 0.04f, ColorF::White(), {0.0f, 0.42f}, 0.01f);
+        if (!ControllersConnected())
+            renderer.DrawText("RECONNECT BOTH CONTROLLERS", TextAlign::Center,
+                0.015f, {1.0f, 0.72f, 0.12f, 1.0f}, {0.0f, 0.29f}, 0.002f);
         m_returnToTitleButton->Render(renderer);
         m_openOptionsButton->Render(renderer);
         m_closeMenuButton->Render(renderer);

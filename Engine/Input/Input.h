@@ -49,6 +49,18 @@ public:
      */
     static bool IsGamepadConnected();
 
+    /** @brief 指定プレイヤーのパッド接続を取得する @param slot プレイヤー番号0または1 @return 接続中の場合はtrue */
+    static bool IsGamepadConnected(int slot);
+
+    /** @brief 指定パッドのキー状態を取得する @param slot プレイヤー番号0または1 @param key 確認するキー @return 押下中の場合はtrue */
+    static bool GetGamepadKey(int slot, KeyCode key);
+
+    /** @brief 指定パッドの押下イベントを取得する @param slot プレイヤー番号0または1 @param key 確認するキー @return このフレームで押された場合はtrue */
+    static bool GetGamepadKeyDown(int slot, KeyCode key);
+
+    /** @brief 指定パッドの解放イベントを取得する @param slot プレイヤー番号0または1 @param key 確認するキー @return このフレームで離された場合はtrue */
+    static bool GetGamepadKeyUp(int slot, KeyCode key);
+
     /** @brief Switch 2 Proの直接入力を使用中か取得する @return 使用中の場合はtrue */
     static bool IsSwitch2ProConnected();
 
@@ -141,6 +153,10 @@ private:
     static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_mouseButtonDown;
     static std::array<bool, static_cast<std::size_t>(MouseButton::Count)> m_mouseButtonUp;
     static bool m_gamepadConnected;
+    static std::array<bool, 2> m_gamepadConnections;
+    static std::array<std::array<bool, static_cast<std::size_t>(KeyCode::Count)>, 2> m_playerGamepadKeys;
+    static std::array<std::array<bool, static_cast<std::size_t>(KeyCode::Count)>, 2> m_playerGamepadDown;
+    static std::array<std::array<bool, static_cast<std::size_t>(KeyCode::Count)>, 2> m_playerGamepadUp;
     static bool m_switch2ProConnected;
     static Vector2 m_mousePosition;
     static Vector2 m_mouseDelta;
@@ -161,6 +177,9 @@ private:
      * @return なし
      */
     static void SetGamepadKeyState(KeyCode key, bool isPressed);
+
+    /** @brief プレイヤー別入力を反映し1Pだけ共通入力へ合成する @param slot プレイヤー番号0または1 @param key 対象キー @param isPressed 押下状態 @return なし */
+    static void SetGamepadKeyState(int slot, KeyCode key, bool isPressed);
 
     /**
      * @brief マウスボタンの状態を反映する

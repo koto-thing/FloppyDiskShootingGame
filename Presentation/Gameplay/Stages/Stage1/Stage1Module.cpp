@@ -386,7 +386,7 @@ bool SideScrollingShooter::Stage1Module::HandleBossDefeat(
     // 戦闘物を消して2D固定の撃破演出へ移り、ボス本体は段階破壊用に残す
     shooter.m_shots = {};
     shooter.m_items = {};
-    shooter.m_bomb = {};
+    shooter.ForEachPlayer([&] { shooter.Player().m_bomb = {}; });
     boss.hp = 0;
     boss.collisionEnabled = false;
     boss.age = 0;
@@ -423,8 +423,10 @@ void SideScrollingShooter::Stage1Module::TickBossDefeat(
     // 撃破演出を見やすくするため主人公機を2D移動範囲の左端へ自動退避させる
     static_assert((Side2DPlayerMaxX - Side2DPlayerMinX) / BossDefeatPlayerRetreatSpeed <
         BossDefeatMeteorRiseFrames);
-    shooter.m_playerX = (std::max)(Side2DPlayerMinX,
-        shooter.m_playerX - BossDefeatPlayerRetreatSpeed);
+    shooter.ForEachPlayer([&] {
+        shooter.Player().m_playerX = (std::max)(Side2DPlayerMinX,
+            shooter.Player().m_playerX - BossDefeatPlayerRetreatSpeed);
+    });
 
     Enemy& boss = shooter.m_enemies[0];
     if (!boss.active) return;

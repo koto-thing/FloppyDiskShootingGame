@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- IDEの構成名から版と既存の最適化設定を選ぶ -->
+  <PropertyGroup>
+    <BuildFlavor>$(Configuration)</BuildFlavor>
+    <BuildFlavor Condition="'$(BuildFlavor)'==''">Debug</BuildFlavor>
+    <ProfileDistribution Condition="'$(Configuration)'=='FloppyDebug' or '$(Configuration)'=='FloppyRelease'">Floppy</ProfileDistribution>
+    <ProfileDistribution Condition="'$(Configuration)'=='OnlineDebug' or '$(Configuration)'=='OnlineRelease'">Online</ProfileDistribution>
+    <ProfileDistribution Condition="'$(Configuration)'=='SteamDebug' or '$(Configuration)'=='SteamRelease'">Steam</ProfileDistribution>
+    <BuildFlavor Condition="'$(Configuration)'=='FloppyDebug' or '$(Configuration)'=='OnlineDebug' or '$(Configuration)'=='SteamDebug'">Debug</BuildFlavor>
+    <BuildFlavor Condition="'$(Configuration)'=='FloppyRelease' or '$(Configuration)'=='OnlineRelease' or '$(Configuration)'=='SteamRelease'">Release</BuildFlavor>
+    <Distribution Condition="'$(ProfileDistribution)'!=''">$(ProfileDistribution)</Distribution>
+  </PropertyGroup>
+</Project>

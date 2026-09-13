@@ -13,6 +13,10 @@ std::array<unsigned char, static_cast<std::size_t>(MouseButton::Count)> Input::m
 std::array<bool, static_cast<std::size_t>(MouseButton::Count)> Input::m_mouseButtonDown{};
 std::array<bool, static_cast<std::size_t>(MouseButton::Count)> Input::m_mouseButtonUp{};
 bool Input::m_gamepadConnected = false;
+std::array<bool, 2> Input::m_gamepadConnections{};
+std::array<std::array<bool, static_cast<std::size_t>(KeyCode::Count)>, 2> Input::m_playerGamepadKeys{};
+std::array<std::array<bool, static_cast<std::size_t>(KeyCode::Count)>, 2> Input::m_playerGamepadDown{};
+std::array<std::array<bool, static_cast<std::size_t>(KeyCode::Count)>, 2> Input::m_playerGamepadUp{};
 bool Input::m_switch2ProConnected = false;
 Vector2 Input::m_mousePosition{};
 Vector2 Input::m_mouseDelta{};
@@ -36,6 +40,10 @@ bool Input::Initialize(HWND hwnd) {
     m_mouseButtonDown.fill(false);
     m_mouseButtonUp.fill(false);
     m_gamepadConnected = false;
+    m_gamepadConnections = {};
+    m_playerGamepadKeys = {};
+    m_playerGamepadDown = {};
+    m_playerGamepadUp = {};
     m_switch2ProConnected = false;
 
     // フレーム内に蓄積するアナログ入力を初期化する
@@ -66,6 +74,8 @@ void Input::BeginFrame() {
     m_keyUp.fill(false);
     m_mouseButtonDown.fill(false);
     m_mouseButtonUp.fill(false);
+    m_playerGamepadDown = {};
+    m_playerGamepadUp = {};
 
     // フレーム単位で扱う移動量とホイール量をリセットする
     m_mouseDelta = {};
@@ -107,6 +117,29 @@ void Input::PollGamepad() {
  */
 bool Input::IsGamepadConnected() {
     return m_gamepadConnected;
+}
+
+/** @brief 指定プレイヤーのパッド接続を取得する @param slot プレイヤー番号0または1 @return 接続中の場合はtrue */
+bool Input::IsGamepadConnected(int slot) {
+    return slot >= 0 && slot < 2 && m_gamepadConnections[slot];
+}
+
+/** @brief 指定パッドのキー状態を取得する @param slot プレイヤー番号0または1 @param key 確認するキー @return 押下中の場合はtrue */
+bool Input::GetGamepadKey(int slot, KeyCode key) {
+    const auto index = static_cast<std::size_t>(key);
+    return slot >= 0 && slot < 2 && index < m_playerGamepadKeys[slot].size() && m_playerGamepadKeys[slot][index];
+}
+
+/** @brief 指定パッドの押下イベントを取得する @param slot プレイヤー番号0または1 @param key 確認するキー @return このフレームで押された場合はtrue */
+bool Input::GetGamepadKeyDown(int slot, KeyCode key) {
+    const auto index = static_cast<std::size_t>(key);
+    return slot >= 0 && slot < 2 && index < m_playerGamepadDown[slot].size() && m_playerGamepadDown[slot][index];
+}
+
+/** @brief 指定パッドの解放イベントを取得する @param slot プレイヤー番号0または1 @param key 確認するキー @return このフレームで離された場合はtrue */
+bool Input::GetGamepadKeyUp(int slot, KeyCode key) {
+    const auto index = static_cast<std::size_t>(key);
+    return slot >= 0 && slot < 2 && index < m_playerGamepadUp[slot].size() && m_playerGamepadUp[slot][index];
 }
 
 /** @brief Switch 2 Proの直接入力を使用中か取得する @return 使用中の場合はtrue */
@@ -262,6 +295,19 @@ void Input::SetGamepadKeyState(KeyCode key, bool isPressed) {
     }
 }
 
+/** @brief プレイヤー別入力を反映し1Pだけ共通入力へ合成する @param slot プレイヤー番号0または1 @param key 対象キー @param isPressed 押下状態 @return なし */
+void Input::SetGamepadKeyState(int slot, KeyCode key, bool isPressed) {
+    const auto index = static_cast<std::size_t>(key);
+    if (slot < 0 || slot >= 2 || index >= m_playerGamepadKeys[slot].size()) return;
+
+    // 2Pやキーボードの状態が他プレイヤーの入力イベントへ混ざらないようにする
+    if (m_playerGamepadKeys[slot][index] != isPressed) {
+        m_playerGamepadKeys[slot][index] = isPressed;
+        (isPressed ? m_playerGamepadDown : m_playerGamepadUp)[slot][index] = true;
+    }
+    if (slot == 0) SetGamepadKeyState(key, isPressed);
+}
+
 /**
  * @brief マウスボタンの状態を反映する
  * @param button 対象のマウスボタン
@@ -326,6 +372,8 @@ void Input::CancelNativeInputState() {
     m_currentKeys.fill(false);
     m_keyDown.fill(false);
     m_keyUp.fill(false);
+    m_playerGamepadDown = {};
+    m_playerGamepadUp = {};
     m_currentMouseButtons.fill(false);
     m_mouseButtonDown.fill(false);
     m_mouseButtonUp.fill(false);

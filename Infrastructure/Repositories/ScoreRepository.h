@@ -14,15 +14,17 @@ public:
 
     /**
      * @brief 保存済みランキングを取得する
+     * @param cooperative 2人協力プレイのランキングを取得するか
      * @return 難易度ごとの高得点順ランキング
      */
-    Rankings Load() const;
+    Rankings Load(bool cooperative = false) const;
     /**
      * @brief スコアを難易度別ランキングへ登録する
      * @param difficulty 登録先の難易度
      * @param score 登録するスコア
+     * @param cooperative 2人協力プレイのランキングへ登録するか
      */
-    void Save(DifficultyType difficulty, int score) const;
+    void Save(DifficultyType difficulty, int score, bool cooperative = false) const;
     /**
      * @brief スコアを上位5件へ挿入する
      * @param scores 挿入前の高得点順スコア

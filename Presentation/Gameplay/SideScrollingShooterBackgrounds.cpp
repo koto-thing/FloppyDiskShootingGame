@@ -76,11 +76,13 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
         sideShot.z = SidePlaneZ + (shot.enemy ? 1.0f : -0.4f);
         DrawShotModel(renderer, camera, sideShot, Math::HalfPi);
     }
-    if (m_bomb.active) {
-        Bomb sideBomb = m_bomb;
-        sideBomb.z = SidePlaneZ - 0.5f;
-        DrawBomb(renderer, camera, sideBomb);
-    }
+    ForEachPlayer([&] {
+        if (Player().m_bomb.active) {
+            Bomb sideBomb = Player().m_bomb;
+            sideBomb.z = SidePlaneZ - 0.5f;
+            DrawBomb(renderer, camera, sideBomb);
+        }
+    });
     for (const auto& explosion : m_explosions) {
         if (!explosion.active) continue;
         Explosion sideExplosion = explosion;
@@ -99,27 +101,29 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
         sideItem.z = SidePlaneZ - 0.2f;
         DrawItemModel(renderer, camera, sideItem, 0.0f);
     }
-    const bool playerVisible = m_playerDestructionTimer == 0 &&
-        (m_tutorialMode || m_invincible == 0 || (m_invincible / 5) % 2 == 0);
-    const bool verticalSide = m_stageNumber == 5 &&
-        ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase);
-    DrawPlayerModel(renderer, camera, ToWorldX(m_playerX), ToWorldY(m_playerY),
-        SidePlaneZ, playerVisible, Math::HalfPi, 0.0f,
-        verticalSide ? Math::HalfPi : 0.0f);
-    if (m_slowMove && playerVisible) {
-        // 2D判定の画面比率をワールド寸法へ変換して表示する
-        DrawModelPrimitive(renderer, camera, 5, ToWorldX(m_playerX), ToWorldY(m_playerY), SidePlaneZ,
-            PlayerHitRadius2D * WorldXScale * 2.0f,
-            PlayerHitRadius2D * WorldYScale * 2.0f,
-            PlayerHitRadius2D * WorldYScale * 2.0f, PlayerHitboxColor);
-    }
+    ForEachPlayer([&] {
+        const bool playerVisible = Player().m_playerDestructionTimer == 0 &&
+            (m_tutorialMode || Player().m_invincible == 0 || (Player().m_invincible / 5) % 2 == 0);
+        const bool verticalSide = m_stageNumber == 5 &&
+            ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase);
+        DrawPlayerModel(renderer, camera, ToWorldX(Player().m_playerX), ToWorldY(Player().m_playerY),
+            SidePlaneZ, playerVisible, Math::HalfPi, 0.0f,
+            verticalSide ? Math::HalfPi : 0.0f);
+        if (Player().m_slowMove && playerVisible) {
+            // 2D判定の画面比率をワールド寸法へ変換して表示する
+            DrawModelPrimitive(renderer, camera, 5, ToWorldX(Player().m_playerX), ToWorldY(Player().m_playerY), SidePlaneZ,
+                PlayerHitRadius2D * WorldXScale * 2.0f,
+                PlayerHitRadius2D * WorldYScale * 2.0f,
+                PlayerHitRadius2D * WorldYScale * 2.0f, PlayerHitboxColor);
+        }
 
+    });
     // 半透明の砂粒は船体と弾の描画後に重ねる
     if (m_stageNumber == 2) Stage2Module::DrawSandstorm(*this, renderer, camera);
     renderer.ResetCamera();
     DrawHudBackground(renderer);
     StageDispatch::DrawOverlay2D(*this, renderer);
-    DrawPowerUp(renderer, camera, SidePlaneZ);
+    ForEachPlayer([&] { DrawPowerUp(renderer, camera, SidePlaneZ); });
     DrawTutorialControlHint(renderer, camera, SidePlaneZ);
     DrawViewToggleCooldownHud(renderer, camera, SidePlaneZ);
 
@@ -134,15 +138,25 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     const int progress = ChapterProgressPercent();
     std::snprintf(stageStatus, sizeof(stageStatus), "STAGE %d/5  CHAPTER %d/3", m_stageNumber, m_chapterNumber);
     std::snprintf(scoreStatus, sizeof(scoreStatus), "SCORE %06d", m_score);
-    std::snprintf(powerStatus, sizeof(powerStatus), "POWER %.2f / %.2f", m_power, MaxPower);
+    std::snprintf(powerStatus, sizeof(powerStatus), "POWER %.2f / %.2f", Player().m_power, MaxPower);
     std::snprintf(progressStatus, sizeof(progressStatus), "DIST %03d%%", progress);
-    std::snprintf(bombStatus, sizeof(bombStatus), "BOMB %d", m_bombCount);
+    std::snprintf(bombStatus, sizeof(bombStatus), "BOMB %d", Player().m_bombCount);
     renderer.DrawText(stageStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.025f });
     renderer.DrawText(scoreStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.025f });
-    renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
-    renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
-    renderer.DrawText(bombStatus, TextAlign::TopCenter, 0.014f, { 0.55f, 0.85f, 1.0f, 1.0f }, { 0.0f, -0.025f });
-    renderer.DrawText(HudControlHint(StageDispatch::IsViewLocked(*this)),
+    if (m_playerCount == 1) renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
+    if (m_playerCount == 1) renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
+    if (m_playerCount == 1) renderer.DrawText(bombStatus, TextAlign::TopCenter, 0.014f, { 0.55f, 0.85f, 1.0f, 1.0f }, { 0.0f, -0.025f });
+    if (m_playerCount == 2) {
+        ForEachPlayer([&] {
+            char status[64];
+            std::snprintf(status, sizeof(status), "%dP  POWER %.2f  BOMB %d", m_activePlayer + 1,
+                Player().m_power, Player().m_bombCount);
+            const ColorF color = m_activePlayer == 0 ? ColorF {0.25f, 0.65f, 1.0f, 1.0f} : ColorF {0.25f, 1.0f, 0.40f, 1.0f};
+            renderer.DrawText(status, TextAlign::TopCenter, 0.014f, color,
+                {m_activePlayer == 0 ? -0.48f : 0.48f, -0.085f});
+        });
+    }
+    renderer.DrawText(m_playerCount == 2 ? "LOCAL CO-OP  SHARED SCORE  VIEW: 1P  PAUSE: START/+" : HudControlHint(StageDispatch::IsViewLocked(*this)),
         { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
 
@@ -217,7 +231,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
         drawShot.z = Math::Lerp(SidePlaneZ + (shot.enemy ? 1.0f : -0.4f), shot.z, railWeight);
         DrawShotModel(renderer, camera, drawShot, shot.enemy ? enemyYaw : playerYaw);
     }
-    if (m_bomb.active) DrawBomb(renderer, camera, m_bomb);
+    ForEachPlayer([&] { if (Player().m_bomb.active) DrawBomb(renderer, camera, Player().m_bomb); });
     for (const auto& explosion : m_explosions) {
         if (!explosion.active) continue;
         // 2Dではレール変換済みの奥行きで船体背後へ隠れないよう前景面へ寄せる
@@ -233,40 +247,46 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
         if (!item.active) continue;
         DrawItemModel(renderer, camera, item, 0.0f);
     }
-    const bool cinematic = StageDispatch::IsCinematic(*this);
-    const bool playerVisible = m_playerDestructionTimer == 0 &&
-        (cinematic || m_tutorialMode || m_invincible == 0 || (m_invincible / 5) % 2 == 0);
-    Vector3 playerPosition = IsTayamaBattle() ? gameplayPlayerPosition :
-        Vector3 {ToWorldX(m_playerX), ToWorldY(m_playerY),
-            Math::Lerp(SidePlaneZ, PlayerRailDepth(), railWeight)};
-    float playerPitch = 0.0f;
-    StageDispatch::ApplyPlayerRenderCorrection(*this, playerPosition, playerPitch);
-    if (!cinematic && railWeight > 0.01f && playerVisible) {
-        const float groundTopY = StageDispatch::RailGroundY(*this);
-        DrawBlobShadow(renderer, camera, playerPosition.x,
-            playerPosition.z, groundTopY,
-            1.05f, 0.82f, railWeight * 0.30f);
-    }
-    DrawPlayerModel(renderer, camera, playerPosition.x, playerPosition.y,
-        playerPosition.z, playerVisible, playerYaw, playerPitch, playerRoll);
-    if (!cinematic && m_slowMove && playerVisible) {
-        // 視点遇移中も実際の2D/3D被弾半径に連続して追従する
-        const float hitboxWidth = Math::Lerp(
-            PlayerHitRadius2D * WorldXScale * 2.0f, PlayerHitRadius3D * 2.0f, railWeight);
-        const float hitboxHeight = Math::Lerp(
-            PlayerHitRadius2D * WorldYScale * 2.0f, PlayerHitRadius3D * 2.0f, railWeight);
-        DrawModelPrimitive(renderer, camera, 5, playerPosition.x, playerPosition.y,
-            playerPosition.z,
-            hitboxWidth, hitboxHeight, hitboxHeight, PlayerHitboxColor);
-    }
+    ForEachPlayer([&] {
+        const bool cinematic = StageDispatch::IsCinematic(*this);
+        const Vector3 gameplayPlayerPosition = PlayerWorldPosition();
+        const float playerYaw = IsTayamaBattle() ? std::atan2(-gameplayPlayerPosition.x,
+            ShooterStages::Stage5::TayamaArenaCenterZ - gameplayPlayerPosition.z) :
+            Math::Lerp(Math::HalfPi, 0.0f, railWeight);
+        const bool playerVisible = Player().m_playerDestructionTimer == 0 &&
+            (cinematic || m_tutorialMode || Player().m_invincible == 0 || (Player().m_invincible / 5) % 2 == 0);
+        Vector3 playerPosition = IsTayamaBattle() ? gameplayPlayerPosition :
+            Vector3 {ToWorldX(Player().m_playerX), ToWorldY(Player().m_playerY),
+                Math::Lerp(SidePlaneZ, PlayerRailDepth(), railWeight)};
+        float playerPitch = 0.0f;
+        StageDispatch::ApplyPlayerRenderCorrection(*this, playerPosition, playerPitch);
+        if (!cinematic && railWeight > 0.01f && playerVisible) {
+            const float groundTopY = StageDispatch::RailGroundY(*this);
+            DrawBlobShadow(renderer, camera, playerPosition.x,
+                playerPosition.z, groundTopY,
+                1.05f, 0.82f, railWeight * 0.30f);
+        }
+        DrawPlayerModel(renderer, camera, playerPosition.x, playerPosition.y,
+            playerPosition.z, playerVisible, playerYaw, playerPitch, playerRoll);
+        if (!cinematic && Player().m_slowMove && playerVisible) {
+            // 視点遇移中も実際の2D/3D被弾半径に連続して追従する
+            const float hitboxWidth = Math::Lerp(
+                PlayerHitRadius2D * WorldXScale * 2.0f, PlayerHitRadius3D * 2.0f, railWeight);
+            const float hitboxHeight = Math::Lerp(
+                PlayerHitRadius2D * WorldYScale * 2.0f, PlayerHitRadius3D * 2.0f, railWeight);
+            DrawModelPrimitive(renderer, camera, 5, playerPosition.x, playerPosition.y,
+                playerPosition.z,
+                hitboxWidth, hitboxHeight, hitboxHeight, PlayerHitboxColor);
+        }
+    });
     // 遷移中も同じカメラから砂嵐を描画して2D終点と一致させる
     if (m_stageNumber == 2) Stage2Module::DrawSandstorm(*this, renderer, camera);
     renderer.ResetCamera();
     DrawHudBackground(renderer);
     StageDispatch::DrawOverlay3D(*this, renderer, camera);
     if (StageDispatch::IsCinematic(*this)) return;
-    const float playerZ = playerPosition.z;
-    DrawPowerUp(renderer, camera, playerZ);
+    const float playerZ = IsTayamaBattle() ? PlayerWorldPosition().z : Math::Lerp(SidePlaneZ, PlayerRailDepth(), railWeight);
+    ForEachPlayer([&] { DrawPowerUp(renderer, camera, IsTayamaBattle() ? PlayerWorldPosition().z : playerZ); });
     DrawTutorialControlHint(renderer, camera, playerZ);
     DrawViewToggleCooldownHud(renderer, camera, playerZ);
 
@@ -281,15 +301,25 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     const int progress = ChapterProgressPercent();
     std::snprintf(stageStatus, sizeof(stageStatus), "STAGE %d/5  CHAPTER %d/3", m_stageNumber, m_chapterNumber);
     std::snprintf(scoreStatus, sizeof(scoreStatus), "SCORE %06d", m_score);
-    std::snprintf(powerStatus, sizeof(powerStatus), "POWER %.2f / %.2f", m_power, MaxPower);
+    std::snprintf(powerStatus, sizeof(powerStatus), "POWER %.2f / %.2f", Player().m_power, MaxPower);
     std::snprintf(progressStatus, sizeof(progressStatus), "DIST %03d%%", progress);
-    std::snprintf(bombStatus, sizeof(bombStatus), "BOMB %d", m_bombCount);
+    std::snprintf(bombStatus, sizeof(bombStatus), "BOMB %d", Player().m_bombCount);
     renderer.DrawText(stageStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.025f });
     renderer.DrawText(scoreStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.025f });
-    renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
-    renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
-    renderer.DrawText(bombStatus, TextAlign::TopCenter, 0.014f, { 0.55f, 0.85f, 1.0f, 1.0f }, { 0.0f, -0.025f });
-    renderer.DrawText(HudControlHint(StageDispatch::IsViewLocked(*this)),
+    if (m_playerCount == 1) renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
+    if (m_playerCount == 1) renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
+    if (m_playerCount == 1) renderer.DrawText(bombStatus, TextAlign::TopCenter, 0.014f, { 0.55f, 0.85f, 1.0f, 1.0f }, { 0.0f, -0.025f });
+    if (m_playerCount == 2) {
+        ForEachPlayer([&] {
+            char status[64];
+            std::snprintf(status, sizeof(status), "%dP  POWER %.2f  BOMB %d", m_activePlayer + 1,
+                Player().m_power, Player().m_bombCount);
+            const ColorF color = m_activePlayer == 0 ? ColorF {0.25f, 0.65f, 1.0f, 1.0f} : ColorF {0.25f, 1.0f, 0.40f, 1.0f};
+            renderer.DrawText(status, TextAlign::TopCenter, 0.014f, color,
+                {m_activePlayer == 0 ? -0.48f : 0.48f, -0.085f});
+        });
+    }
+    renderer.DrawText(m_playerCount == 2 ? "LOCAL CO-OP  SHARED SCORE  VIEW: 1P  PAUSE: START/+" : HudControlHint(StageDispatch::IsViewLocked(*this)),
         { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
     if (m_viewTransitionTimer > 0) {
