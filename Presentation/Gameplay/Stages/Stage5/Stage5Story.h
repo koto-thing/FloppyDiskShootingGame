@@ -18,11 +18,11 @@ inline constexpr BossStoryLine EastsourceStoryLines[] = {
     {"HITMAN EASTSOURCE", "I'm the syndicate's crazy dog, EASTSOURCE-sama!", true},                                        // EASTSOURCE: ワシは組の狂犬、EASTSOURCE様やぞ！
     {"HITMAN EASTSOURCE", "The Patriarch is chillin' inside. I ain't lettin' a cheap cop ruin his buzz!", true},           // EASTSOURCE: 奥でお待ちのオヤジのシマ荒らされてたまるかい！
     {"MOMIJI", "So you're the last stray dog on the leash, huh.", false},                                                  // MOMIJI: ボスの前で尻尾振る、最後の番犬ってわけか
-    {"MOMIJI", "Fine. I'll put you to sleep right here.", false},                                                          // MOMIJI: 上等だ。ここでまとめて眠らせてやるよ
+    {"MOMIJI", "Fine. I'll put you to sleep right here.", false},                                                          // MOMIJI: 上等だ、ここでまとめて眠らせてやるよ
     {"HITMAN EASTSOURCE", "Gyaahahaha! That's the spirit, lady!!", true},                                                  // EASTSOURCE: ギャーッハハハ！ ええ面構えや、最高やんけぇ！！
     {"HITMAN EASTSOURCE", "'DOTONBORI' thrusters, full throttle! Break off the limiter!!", true},                          // EASTSOURCE: 愛機『DOTONBORI号』、全開バリバリ！ リミッター外したれェ！
     {"HITMAN EASTSOURCE", "Let's party 'til one of us turns into cold scrap, MOMIJI-chan!!", true},                        // EASTSOURCE: どっちが鉄クズになるか、ド派手に踊り狂おうやァ、MOMIJIちゃぁぁん！！
-    {"MOMIJI", "Thrusters maximum output. Target: Hostile interceptor, engaging!", false},                                 // MOMIJI: スラスター最大出力。迎撃機、叩き落とす！
+    {"MOMIJI", "Thrusters maximum output. Target: Hostile interceptor, engaging!", false},                                 // MOMIJI: スラスター最大出力、迎撃機、叩き落とす！
     {"HITMAN EASTSOURCE", "HYAHAHAHA! LET'S GET NUTS!! DIE, COP DOGGY!!", true},                                           // EASTSOURCE: ヒャハハハ！ 狂い咲いたるわァ！ 死に晒せェ、サツの犬コロォォッ！！
 };
 
@@ -38,7 +38,7 @@ inline constexpr BossStoryLine TayamaStoryLines[] = {
     {"MOMIJI", "...Hah, hah... Finally made it to the rooftop.", false},                                              // MOMIJI: ……はぁ、はぁ……ようやく本部の屋上まで追いつめたぞ
     {"MOMIJI", "Come out, Chairman TAYAMA! There's nowhere left to run!", false},                                      // MOMIJI: 姿を現しな、TAYAMA会長！ もう逃げ場はないよ！
     {"CHAIRMAN TAYAMA", "...Run? Who is running from whom, you insolent whelp?", true},                               // TAYAMA: ……逃げる？ 誰が誰から逃げるというのじゃ、身の程知らずの小娘が
-    {"CHAIRMAN TAYAMA", "Look upon this night sky. The neon lights below look just like an offering of lotus flowers.", true}, // TAYAMA: 見下ろしてみせい、この夜景を。眼下に広がるネオンは、まるで散華した極楽の蓮の花よ
+    {"CHAIRMAN TAYAMA", "Look upon this night sky. The neon lights below look just like an offering of lotus flowers.", true}, // TAYAMA: 見下ろしてみせい、この夜景を、眼下に広がるネオンは、まるで散華した極楽の蓮の花よ
     {"MOMIJI", "...What the hell is that massive machine behind you?!", false},                                       // MOMIJI: ……その背後にある巨大な機体、一体何なんだ？！
     {"CHAIRMAN TAYAMA", "Ku... Kuhahaha! Splendid, is it not?", true},                                                // TAYAMA: クッ……クハハハハ！ 壮観であろう？
     {"CHAIRMAN TAYAMA", "Behold my heavenly soul, the Super-Dreadnought Titan 'DARUTANYAN'!", true},                   // TAYAMA: これぞ我が極道魂の具現、超巨大決戦機甲『堕流多虐（DARUTANYAN）』じゃ！

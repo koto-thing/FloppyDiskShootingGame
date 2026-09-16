@@ -40,6 +40,8 @@ x86/
 [Bb]in/
 [Oo]bj/
 dist/
+.buildnumbers/
+Steamworks.local.props
 *.user
 *.suo
 *.userosscache

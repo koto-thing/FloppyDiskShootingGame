@@ -7,6 +7,8 @@
 #include "../Engine/Input/Input.h"
 #include "../Engine/Graphics/Renderer.h"
 #include "../Presentation/Gameplay/SideScrollingShooter.h"
+#include "../Presentation/Gameplay/GameplayRandom.h"
+#include "../Application/UseCases/CooperativeFrames.h"
 
 /** @brief 全ステージの協力プレイ経路を検証する @return なし */
 void RunCoopStageTests();
@@ -262,6 +264,79 @@ struct CoopGameplayTests {
         }
     }
 
+    /** @brief 通信入力が実機入力に依存せず両機に適用されることを検証する @param game 検証対象 @return なし */
+    static void CheckNetworkInput(Game& game) {
+        Prepare(game);
+        InputTestAccess::SetPad(0, {KeyCode::RightArrow});
+        InputTestAccess::SetPad(1, {KeyCode::LeftArrow});
+        std::array<CooperativeInput, 2> inputs {};
+        inputs[0].held = CooperativeInput::Left | CooperativeInput::Fire;
+        inputs[1].held = CooperativeInput::Right | CooperativeInput::Slow;
+        inputs[1].pressed = CooperativeInput::Bomb;
+        game.ApplyNetworkInput(inputs);
+        assert(game.m_players[0].m_moveLeft && !game.m_players[0].m_moveRight);
+        assert(game.m_players[0].m_fire && !game.m_players[0].m_bombRequested);
+        assert(game.m_players[1].m_moveRight && !game.m_players[1].m_moveLeft);
+        assert(game.m_players[1].m_slowMove && game.m_players[1].m_bombRequested);
+
+        // 次の同期フレームで一度きりのボム操作を繰り返さない
+        inputs[1].pressed = 0;
+        game.ApplyNetworkInput(inputs);
+        assert(!game.m_players[1].m_bombRequested);
+        game.Initialize(nullptr, Homing, Easy, 1);
+        assert(!game.m_networkGame);
+    }
+
+    /** @brief 欠落待機・順序検証・リング再利用を確認する @return なし */
+    static void CheckNetworkFrames() {
+        CooperativeFrames frames;
+        frames.Reset();
+        std::array<CooperativeInput, 2> output {};
+        for (unsigned i = 0; i < CooperativeFrames::Delay; ++i) assert(frames.Pop(output));
+        assert(!frames.Pop(output));
+        assert(!frames.Push(1, CooperativeFrames::Delay + 1, {}));
+        assert(!frames.Push(1, CooperativeFrames::Delay, {65535, 0}));
+        for (unsigned frame = CooperativeFrames::Delay; frame < 1024; ++frame) {
+            assert(frames.Push(0, frame, {CooperativeInput::Left, 0}));
+            assert(!frames.Pop(output));
+            assert(frames.Push(1, frame, {CooperativeInput::Right, CooperativeInput::Bomb}));
+            assert(!frames.Push(1, frame, {}));
+            assert(frames.Pop(output));
+            assert(output[0].held == CooperativeInput::Left && output[1].pressed == CooperativeInput::Bomb);
+        }
+    }
+
+    /** @brief 同じ乱数種と入力で別インスタンスの進行が一致することを検証する @return なし */
+    static void CheckNetworkSimulation() {
+        auto host = std::make_unique<Game>();
+        auto guest = std::make_unique<Game>();
+        GameplayRandom::State = 12345;
+        host->Initialize(nullptr, Homing, Normal, 2, Spread);
+        unsigned hostRandom = GameplayRandom::State;
+        GameplayRandom::State = 12345;
+        guest->Initialize(nullptr, Homing, Normal, 2, Spread);
+        unsigned guestRandom = GameplayRandom::State;
+        for (int frame = 0; frame < 1800; ++frame) {
+            std::array<CooperativeInput, 2> inputs {};
+            inputs[0].held = CooperativeInput::Fire | (frame % 120 < 60 ? CooperativeInput::Up : CooperativeInput::Down);
+            inputs[1].held = CooperativeInput::Fire | CooperativeInput::Slow;
+            inputs[0].pressed = frame % 180 == 0 ? CooperativeInput::Bomb : CooperativeInput::Confirm;
+            GameplayRandom::State = hostRandom;
+            host->ApplyNetworkInput(inputs); host->Tick();
+            hostRandom = GameplayRandom::State;
+            GameplayRandom::State = guestRandom;
+            guest->ApplyNetworkInput(inputs); guest->Tick();
+            guestRandom = GameplayRandom::State;
+            assert(hostRandom == guestRandom && host->m_frame == guest->m_frame);
+            assert(host->Score() == guest->Score() && host->m_bossHp == guest->m_bossHp);
+            for (int i = 0; i < 2; ++i) {
+                assert(host->m_players[i].m_playerX == guest->m_players[i].m_playerX);
+                assert(host->m_players[i].m_playerY == guest->m_players[i].m_playerY);
+                assert(host->m_players[i].m_power == guest->m_players[i].m_power);
+            }
+        }
+    }
+
     /** @brief ローカル協力プレイの主要ルールを検証する @return なし */
     static void Run() {
         auto game = std::make_unique<Game>();
@@ -270,6 +345,9 @@ struct CoopGameplayTests {
         CheckBombs(*game);
         CheckRespawn(*game);
         CheckCamera(*game);
+        CheckNetworkInput(*game);
+        CheckNetworkFrames();
+        CheckNetworkSimulation();
         RunCoopStageTests();
         std::puts("CoopGameplayTests passed");
     }

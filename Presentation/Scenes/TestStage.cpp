@@ -10,6 +10,14 @@
 
 #include <cstdio>
 #include <windows.h>
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+#if defined(SPACEYAKUZA_EDITION_Steam)
+#include "../../Infrastructure/ExternalServices/SteamCoopSession.h"
+#else
+#include "../../Infrastructure/ExternalServices/OnlineCoopSession.h"
+#endif
+#include "../Gameplay/GameplayRandom.h"
+#endif
 
 namespace {
 constexpr int FinalClearDisplayFrames = 180;
@@ -37,8 +45,21 @@ TestStage::TestStage() : m_game(std::make_unique<SideScrollingShooter>()) {
 TestStage::~TestStage() = default;
 
 void TestStage::Initialize() {
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    // 両PCの初期配置と敵出現に同じ乱数列を使う
+    if (getData().onlineGame) GameplayRandom::State = getData().coop->Seed();
+#endif
     m_game->Initialize(getData().audio, getData().playerType, getData().difficulty,
         getData().playerCount, getData().secondPlayerType);
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    // 通信プレイの初期入力を適用する
+    if (getData().onlineGame) m_game->ApplyNetworkInput({});
+#endif
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    // 通信プレイの待機状態を初期化する
+    m_networkInput = {};
+    m_waitingForPeer = m_peerPaused = false;
+#endif
     m_allClearTimer = 0;
     m_pauseMenuOpen = false;
     m_optionsOpen = false;
@@ -46,6 +67,43 @@ void TestStage::Initialize() {
 }
 
 void TestStage::ProcessInput() {
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    if (getData().onlineGame) {
+        // 各PCのキーボードまたは1台目のパッドを自分の操作として送る
+
+        // 接続異常やSteamオーバーレイをポーズ状態へ反映する
+        if (getData().coop->Failed() || getData().coop->OverlayActive()) m_pauseMenuOpen = true;
+        m_closeMenuButton->SetEnabled(!getData().coop->Failed());
+
+        // Escapeでポーズメニューを切り替える
+        if (!getData().coop->Failed() && !getData().coop->OverlayActive() && Input::GetKeyDown(KeyCode::Escape)) {
+            m_pauseMenuOpen = !m_pauseMenuOpen;
+            m_optionsOpen = false;
+        }
+
+        // ポーズ中のメニュー入力を処理する
+        if (m_pauseMenuOpen && !getData().coop->OverlayActive()) ProcessPauseMenuInput();
+
+        // ポーズ状態または通常操作を通信入力へ変換する
+        if (m_pauseMenuOpen) {
+            m_networkInput = {CooperativeInput::Pause, 0};
+        } else {
+            m_networkInput.held =
+                (Input::GetKey(KeyCode::LeftArrow) || Input::GetKey(KeyCode::A) ? CooperativeInput::Left : 0) |
+                (Input::GetKey(KeyCode::RightArrow) || Input::GetKey(KeyCode::D) ? CooperativeInput::Right : 0) |
+                (Input::GetKey(KeyCode::UpArrow) || Input::GetKey(KeyCode::W) ? CooperativeInput::Up : 0) |
+                (Input::GetKey(KeyCode::DownArrow) || Input::GetKey(KeyCode::S) ? CooperativeInput::Down : 0) |
+                (Input::GetKey(KeyCode::LeftShift) || Input::GetKey(KeyCode::RightShift) ? CooperativeInput::Slow : 0) |
+                (Input::GetKey(KeyCode::Z) || Input::GetKey(KeyCode::Space) ? CooperativeInput::Fire : 0);
+            m_networkInput.pressed |=
+                (Input::GetKeyDown(KeyCode::C) ? CooperativeInput::Bomb : 0) |
+                (Input::GetKeyDown(KeyCode::X) ? CooperativeInput::View : 0) |
+                (Input::GetKeyDown(KeyCode::Z) || Input::GetKeyDown(KeyCode::Space) ? CooperativeInput::Confirm : 0) |
+                (Input::GetKeyDown(KeyCode::R) ? CooperativeInput::Restart : 0);
+        }
+        return;
+    }
+#endif
     // 切断中は進行を止め、再接続後も明示的な再開を待つ
     const bool connected = ControllersConnected();
     if (!connected) m_pauseMenuOpen = true;
@@ -67,18 +125,43 @@ void TestStage::ProcessInput() {
 }
 
 bool TestStage::ControllersConnected() const {
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    if (getData().onlineGame) return !getData().coop->Failed();
+#endif
     return getData().playerCount != 2 ||
         (Input::IsGamepadConnected(0) && Input::IsGamepadConnected(1));
 }
 
 void TestStage::Tick() {
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    if (getData().onlineGame) {
+        // 入力不足時はシミュレーションを進めず、ポーズ中も通信は継続する
+        std::array<CooperativeInput, 2> inputs {};
+
+        // 同期済み入力を取得する
+        m_waitingForPeer = !getData().coop->Step(m_networkInput, inputs);
+        if (m_waitingForPeer) return;
+
+        // 相手のポーズ状態を確認する
+        m_peerPaused = (inputs[getData().coop->IsHost() ? 1 : 0].held & CooperativeInput::Pause) != 0;
+        if ((inputs[0].held | inputs[1].held) & CooperativeInput::Pause) return;
+
+        // 同期済み入力でゲームを更新する
+        m_game->ApplyNetworkInput(inputs);
+    } else
+#endif
     if (m_pauseMenuOpen) return;
     m_game->Tick();
     if (!m_game->IsAllStagesCleared()) return;
 
     // 最終クリア表示を見せてからスコアを保存し、エンディングへ遷移する
-    if (++m_allClearTimer < FinalClearDisplayFrames) return;
+    if (++m_allClearTimer != FinalClearDisplayFrames) return;
     ScoreRepository {}.Save(getData().difficulty, m_game->Score(), getData().playerCount == 2);
+#if defined(SPACEYAKUZA_EDITION_Online)
+    // 協力スコアはホストだけ送信して二重登録を防ぐ
+    if (!getData().onlineGame || getData().coop->IsHost())
+        getData().coop->SubmitScore(static_cast<int>(getData().difficulty), m_game->Score(), getData().playerCount == 2);
+#endif
     changeScene(SceneType::Ending);
 }
 
@@ -97,6 +180,13 @@ void TestStage::Render(Renderer& renderer) {
 
     // ステージ本体が背景、3Dオブジェクト、UIを一つのRenderer経路へ登録する
     m_game->Render(renderer);
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    if (getData().onlineGame && !m_pauseMenuOpen && (m_waitingForPeer || m_peerPaused)) {
+        // 相手待ちまたは相手ポーズの状態を表示する
+        renderer.DrawText(m_peerPaused ? "FRIEND PAUSED" : "WAITING FOR FRIEND",
+            TextAlign::Center, 0.025f, ColorF::White());
+    }
+#endif
     if (m_pauseMenuOpen) RenderPauseMenu(renderer);
 }
 
@@ -169,7 +259,11 @@ void TestStage::RenderPauseMenu(Renderer& renderer) const {
     if (!m_optionsOpen) {
         renderer.DrawText("PAUSED", TextAlign::Center, 0.04f, ColorF::White(), {0.0f, 0.42f}, 0.01f);
         if (!ControllersConnected())
-            renderer.DrawText("RECONNECT BOTH CONTROLLERS", TextAlign::Center,
+            renderer.DrawText(
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+                getData().onlineGame ? getData().coop->Status() :
+#endif
+                "RECONNECT BOTH CONTROLLERS", TextAlign::Center,
                 0.015f, {1.0f, 0.72f, 0.12f, 1.0f}, {0.0f, 0.29f}, 0.002f);
         m_returnToTitleButton->Render(renderer);
         m_openOptionsButton->Render(renderer);

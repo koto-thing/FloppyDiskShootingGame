@@ -4,7 +4,7 @@
 
 namespace ShooterStages::Stage3 {
 inline constexpr BossStoryLine StoryLines[] = {
-    {"MOMIJI", "Found you. RYOTA, Wakagashira of the PandD-kai.", false},                                          // MOMIJI: 見つけたよ。『PANDD会』若頭、RYOTA
+    {"MOMIJI", "Found you. RYOTA, Wakagashira of the PandD-kai.", false},                                          // MOMIJI: 見つけたよ、『PANDD会』若頭、RYOTA
     {"WAKAGASHIRA RYOTA", "...Huh?", true},                                                                        // RYOTA: ……あァ？
     {"WAKAGASHIRA RYOTA", "So you're the cop who's been sniffing around my boys lately.", true},                   // RYOTA: 誰かと思えば、最近ウチの若い衆を嗅ぎ回ってるサツか
     {"MOMIJI", "Sniffing around, huh.", false},                                                                    // MOMIJI: 嗅ぎ回ってる、ね
@@ -12,7 +12,7 @@ inline constexpr BossStoryLine StoryLines[] = {
     {"WAKAGASHIRA RYOTA", "...That damn KOTO.", true},                                                             // RYOTA: ……KOTOの野郎
     {"WAKAGASHIRA RYOTA", "I told that idiot not to pull any unnecessary crap.", true},                            // RYOTA: あれほど余計な真似すんなっつったのによ
     {"MOMIJI", "Sounds like raising your subordinates is tough work, Wakagashira.", false},                        // MOMIJI: 部下の教育には苦労してるみたいだね、若頭
-    {"WAKAGASHIRA RYOTA", "Hah. You've got some nerve.", true},                                                    // RYOTA: ハッ。言ってくれるじゃねぇか
+    {"WAKAGASHIRA RYOTA", "Hah. You've got some nerve.", true},                                                    // RYOTA: ハッ、言ってくれるじゃねぇか
     {"WAKAGASHIRA RYOTA", "But I'll give you credit for having the guts to come this far.", true},                 // RYOTA: だが、ここまで来た度胸だけは褒めてやるよ
     {"MOMIJI", "I'm honored.", false},                                                                             // MOMIJI: お褒めにあずかり光栄だね
     {"MOMIJI", "I'd be even happier if you'd surrender nice and quietly.", false},                                 // MOMIJI: じゃあ、そのまま大人しく投降してくれるともっと嬉しいんだけど
@@ -28,7 +28,7 @@ inline constexpr BossStoryLine StoryLines[] = {
     {"MOMIJI", "You've really thrown your life down a rough path.", false},                                        // MOMIJI: 随分と荒れた人生を投げてきたもんだ
     {"WAKAGASHIRA RYOTA", "...You bitch.", true},                                                                  // RYOTA: ……テメェ
     {"WAKAGASHIRA RYOTA", "You got a problem with the way I've lived my life?", true},                             // RYOTA: 俺の人生にケチつける気か？
-    {"MOMIJI", "Not a problem. Just an official ruling from the police.", false},                                  // MOMIJI: ケチじゃない。警察としての判定だよ
+    {"MOMIJI", "Not a problem. Just an official ruling from the police.", false},                                  // MOMIJI: ケチじゃない、警察としての判定だよ
     {"MOMIJI", "You've been three strikes out for a long time now.", false},                                       // MOMIJI: あんたはもう、とっくにスリーアウトだ
     {"WAKAGASHIRA RYOTA", "...Fine by me.", true},                                                                 // RYOTA: ……上等じゃねぇか
     {"WAKAGASHIRA RYOTA", "Then play umpire and try calling me out yourself!", true},                              // RYOTA: だったらテメェが審判気取りで、俺に引導を渡してみろ！

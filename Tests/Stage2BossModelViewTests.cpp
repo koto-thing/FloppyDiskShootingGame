@@ -30,6 +30,7 @@ void RunStage2BossModelViewTests() {
     assert(NextSandstormExposure(45, false) == 44);
     assert(ShooterStages::Stage2::State {}.sandstormExposure == 0);
     assert(ShooterStages::Stage2::State {}.sandstormFrame == 0);
+    assert(ShooterStages::Stage2::SandstormParticlesPerLayer == 24);
 
     // ハッチ別射出間隔が範囲内で変化することを確認する
     const int firstInterval = ShooterStages::Stage2::Phase3FunnelLaunchInterval(0, 0);

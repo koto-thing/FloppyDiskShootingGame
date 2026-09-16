@@ -171,7 +171,7 @@ private:
     /**
      * @brief 描画コマンドを記録領域へ追加する
      * @param type 追加するコマンド種別
-     * @return 追加したコマンド。容量超過時はnullptr
+     * @return 追加したコマンド、容量超過時はnullptr
      */
     RenderCommand* TryAppend(RenderCommand::Type type);
     /**

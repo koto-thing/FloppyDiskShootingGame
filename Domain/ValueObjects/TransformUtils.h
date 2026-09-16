@@ -162,7 +162,7 @@ namespace TransformUtils {
     }
 
     /**
-     * @brief 角度の線形補間 (Lerp) を行う。角度は360度でラップする
+     * @brief 角度の線形補間 (Lerp) を行う、角度は360度でラップする
      * @param start 開始角度
      * @param end 終了角度
      * @param t 補間係数 (0.0f ~ 1.0f)

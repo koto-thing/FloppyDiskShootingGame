@@ -9,10 +9,10 @@ inline constexpr BossStoryLine StoryLines[] = {
     {"HONBUCHO BOTAMOCHI", "...(Evil laughter) Bota-mo~chi-mochi-mochi.", true},                                      // BOTAMOCHI: （邪悪な笑い声）……ぼたも～ちもちもち
     {"HONBUCHO BOTAMOCHI", "You've got some nerve stepping into my fortress, rogue cop.", true},                      // BOTAMOCHI: よくぞここまで嗅ぎつけてきたな、はぐれマッポが
     {"HONBUCHO BOTAMOCHI", "I hear KOTO and RYOTA both fell to your hands.", true},                                   // BOTAMOCHI: KOTOを叩き潰した腕前、見事なもんだ
-    {"MOMIJI", "They put up a fight, but they're in custody now.", false},                                            // MOMIJI: 派手に暴れてくれたけどね。今はブタ箱ん中だ
+    {"MOMIJI", "They put up a fight, but they're in custody now.", false},                                            // MOMIJI: 派手に暴れてくれたけどね、今はブタ箱ん中だ
     {"MOMIJI", "Now it's time to take down the brain behind the whole syndicate.", false},                            // MOMIJI: 次は組織の頭脳である、お前の番だよ
     {"HONBUCHO BOTAMOCHI", "(Evil laughter) Bota-mochi-mochi...", true},                                              // BOTAMOCHI: （邪悪な笑い声）ぼたもちもち……
-    {"HONBUCHO BOTAMOCHI", "Those two were good men. True pillars of the PandD-kai.", true},                          // BOTAMOCHI: あいつらは優秀な舎弟だった。我がPANDD会を支える立派な柱よ
+    {"HONBUCHO BOTAMOCHI", "Those two were good men. True pillars of the PandD-kai.", true},                          // BOTAMOCHI: あいつらは優秀な舎弟だった、我がPANDD会を支える立派な柱よ
     {"HONBUCHO BOTAMOCHI", "And you crushed their pride.", true},                                                     // BOTAMOCHI: その男たちの誇りを、テメェは土足で踏みにじった
     {"MOMIJI", "Pride built on smuggling and violence is just crime.", false},                                        // MOMIJI: 密輸と暴力の上に成り立つ誇りなんて、ただの犯罪だ
     {"MOMIJI", "Don't try to dress it up as chivalry.", false},                                                       // MOMIJI: 仁義面して誤魔化せると思うなよ

@@ -28,11 +28,18 @@
 #include "Presentation/Scenes/StoryScene.h"
 #include "Presentation/Scenes/EndingScene.h"
 #include "Presentation/Scenes/RankingScene.h"
+#if defined(SPACEYAKUZA_EDITION_Steam)
+#include "Infrastructure/ExternalServices/SteamCoopSession.h"
+#include "Presentation/Scenes/SteamLobbyScene.h"
+#elif defined(SPACEYAKUZA_EDITION_Online)
+#include "Infrastructure/ExternalServices/OnlineCoopSession.h"
+#include "Presentation/Scenes/OnlineLobbyScene.h"
+#endif
 
 constexpr WORD APP_ICON_RESOURCE_ID = 101;
 
 /**
- * ウィンドウプロシージャ
+ * @brief ウィンドウプロシージャ
  * @param hwnd ウィンドウハンドル
  * @param uMsg メッセージ識別子
  * @param wParam メッセージの最初のパラメータ
@@ -59,7 +66,7 @@ LRESULT CALLBACK WindowProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) 
 }
 
 /**
- * エントリーポイント
+ * @brief エントリーポイント
  * @param hInstance インスタンスハンドル
  * @param hPrevInstance 前のインスタンスハンドル
  * @param pCmdLine コマンドライン引数
@@ -78,6 +85,15 @@ int WINAPI wWinMain(
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     Debug::Initialize();
     Debug::Log("Application starting");
+
+    // オンラインサービスを初期化する
+#if defined(SPACEYAKUZA_EDITION_Steam)
+    // オーバーレイが描画初期化を追跡できるようSteamを先に開始する
+    SteamCoopSession steam;
+    steam.Initialize(pCmdLine);
+#elif defined(SPACEYAKUZA_EDITION_Online)
+    OnlineCoopSession online;
+#endif
 
     // プライマリモニターの解像度を取得する
     const int screenWidth = GetSystemMetrics(SM_CXSCREEN);
@@ -149,6 +165,13 @@ int WINAPI wWinMain(
     // シーンマネージャを作成
     SceneManager<SceneType, SceneSharedData> app;
     app.getSharedData().audio = &audio;
+#if defined(SPACEYAKUZA_EDITION_Steam)
+    app.getSharedData().coop = &steam;
+    app.AddScene<SteamLobbyScene>(SceneType::SteamLobby);
+#elif defined(SPACEYAKUZA_EDITION_Online)
+    app.getSharedData().coop = &online;
+    app.AddScene<OnlineLobbyScene>(SceneType::OnlineLobby);
+#endif
 
     // シーンを登録
     app.AddScene<TitleScene>(SceneType::Title);
@@ -197,13 +220,27 @@ int WINAPI wWinMain(
 
         // フレーム時間を更新する
         Time::BeginFrame();
+#if defined(SPACEYAKUZA_EDITION_Steam)
+        // 招待はプレイ中には受理せず、メニュー中だけロビーへ遷移する
+        steam.Poll();
+        if (steam.TakeLobbyRequest()) {
+            app.RequestTransition(SceneType::SteamLobby);
+            app.CommitTransitions();
+        }
+#elif defined(SPACEYAKUZA_EDITION_Online)
+        online.Poll();
+#endif
 
         // シーンへの入力を処理する
         app.ProcessInput();
 
 #ifdef _DEBUG
         // デバッグ確認用に現在位置を問わずチュートリアルへ移動する
-        if (Input::GetKeyDown(KeyCode::F7)) {
+        if (Input::GetKeyDown(KeyCode::F7)
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+            && !app.getSharedData().onlineGame
+#endif
+        ) {
             app.RequestTransition(SceneType::TutorialStage);
         }
 #endif

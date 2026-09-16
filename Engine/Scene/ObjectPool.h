@@ -32,7 +32,7 @@ public:
     /** @brief 所有権を移動して代入する */
     ObjectPool& operator=(ObjectPool&&) noexcept = default;
 
-    /** @brief 未使用要素を取得する。上限到達時はnullptrを返す */
+    /** @brief 未使用要素を取得する、上限到達時はnullptrを返す */
     T* Spawn() {
         for (std::size_t index = 0; index < m_items.size(); ++index) {
             if (m_used[index] && HasBecomeInactive(m_items[index])) m_used[index] = false;

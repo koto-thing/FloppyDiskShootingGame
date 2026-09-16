@@ -127,7 +127,11 @@ void ModeSelectionScene::Initialize() {
     // 人数を選び直してから各モードの開始条件を確認する
     m_stateController = std::make_unique<ModeSelectionStateController>();
     getData().playerCount = 1;
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    constexpr const char* playerCountLabels[] = {"1 PLAYER", "2 PLAYERS ONLINE"};
+#else
     constexpr const char* playerCountLabels[] = {"1 PLAYER", "2 PLAYERS LOCAL"};
+#endif
     for (int player = 0; player < 2; ++player) {
         m_playerCountButtons[player] = std::make_unique<Button>(
             Vector2 {0.48f, 0.12f}, RectAlign::Center,
@@ -139,6 +143,15 @@ void ModeSelectionScene::Initialize() {
                 ModeSelectionState::ControllerSelect : ModeSelectionState::DifficultySelect);
         });
     }
+
+#if defined(SPACEYAKUZA_EDITION_Steam)
+    // Steam版の2人用は実機2台の割り当てを通らず招待ロビーへ進む
+    getData().onlineGame = false;
+    m_playerCountButtons[1]->SetOnClick([this] { changeScene(SceneType::SteamLobby); });
+#elif defined(SPACEYAKUZA_EDITION_Online)
+    getData().onlineGame = false;
+    m_playerCountButtons[1]->SetOnClick([this] { changeScene(SceneType::OnlineLobby); });
+#endif
 
     // 難易度選択ボタンを縦に配置する
     constexpr const char* difficultyLabels[] = { "EASY", "NORMAL", "HARD" };
@@ -295,7 +308,11 @@ void ModeSelectionScene::Render(Renderer& renderer) {
 
     if (state == ModeSelectionState::PlayerCountSelect) {
         for (const auto& button : m_playerCountButtons) button->Render(renderer);
+#if defined(SPACEYAKUZA_EDITION_Steam)
+        renderer.DrawText("ONLINE CO-OP WITH A STEAM FRIEND", TextAlign::Center,
+#else
         renderer.DrawText("LOCAL CO-OP REQUIRES TWO CONTROLLERS", TextAlign::Center,
+#endif
             0.014f, ColorF::White(), {0.0f, -0.40f}, CharacterSpacing);
     } else if (selectingDifficulty) {
         for (const auto& button : m_difficultyButtons) button->Render(renderer);

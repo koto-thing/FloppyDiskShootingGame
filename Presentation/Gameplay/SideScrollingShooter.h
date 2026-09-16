@@ -5,6 +5,7 @@
 #include <cstdint>
 
 #include "../../Domain/ValueObjects/DifficultyType.h"
+#include "../../Domain/ValueObjects/CooperativeInput.h"
 #include "../../Domain/ValueObjects/GalleryEntry.h"
 #include "../../Domain/ValueObjects/PlayerType.h"
 #include "../../Engine/Graphics/Camera3D.h"
@@ -68,10 +69,17 @@ public:
         int playerCount = 1, PlayerType secondPlayerType = Homing);
     /** @brief チュートリアル用のゲーム状態を初期化する @param audio 効果音サービス @param playerType 使用機体 @param difficulty 難易度 @return なし */
     void InitializeTutorial(AudioService* audio, PlayerType playerType, DifficultyType difficulty);
+    /** @brief 現在のステージBGMを再生する @param force 同じ曲でも再生し直すか @return なし */
     void PlayCurrentStageBgm(bool force = false);
+    /** @brief 現在のボスBGMを再生する @param force 同じ曲でも再生し直すか @return なし */
     void PlayCurrentBossBgm(bool force = false);
+    /** @brief 実機入力を現在のプレイヤーへ反映する @return なし */
     void ProcessInput();
+    /** @brief 同期済みの2人分の操作を適用する @param inputs 固定更新1回分の操作 @return なし */
+    void ApplyNetworkInput(const std::array<CooperativeInput, 2>& inputs);
+    /** @brief ゲーム状態を固定更新する @return なし */
     void Tick();
+    /** @brief ゲーム画面を描画する @param renderer 描画先 @return なし */
     void Render(Renderer& renderer) const;
     /**
      * @brief ゲーム画面の揺れを開始する
@@ -98,6 +106,10 @@ public:
     void NextTutorialStep();
 
 private:
+    /** @brief 現在のプレイヤーに操作を適用する @param input 操作状態 @return なし */
+    void ApplyPlayerInput(const CooperativeInput& input);
+    bool m_networkGame = false;
+    CooperativeInput m_networkHostInput {};
     /** @brief チュートリアル専用進行を更新する */
     void TickTutorial();
     /** @brief 現在のチュートリアル課題を準備する */

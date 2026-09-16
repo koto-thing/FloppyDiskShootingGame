@@ -1,4 +1,7 @@
 #include "RankingScene.h"
+#if defined(SPACEYAKUZA_EDITION_Online)
+#include "../../Infrastructure/ExternalServices/OnlineCoopSession.h"
+#endif
 
 #include <cstdio>
 #include <windows.h>
@@ -28,7 +31,12 @@ UIInputState CurrentUIInput() {
 void RankingScene::Initialize() {
     // 直前に遊んだ人数のランキングを最初に表示する
     m_cooperative = getData().playerCount == 2;
+#if defined(SPACEYAKUZA_EDITION_Online)
+    getData().coop->FetchRankings(m_cooperative);
+    m_rankings = getData().coop->Rankings(m_cooperative);
+#else
     m_rankings = ScoreRepository {}.Load(m_cooperative);
+#endif
     m_modeButton = std::make_unique<Button>(
         Vector2 { 0.44f, 0.09f }, RectAlign::BottomLeft,
         m_cooperative ? "SHOW SOLO" : "SHOW CO-OP", Vector2 { 0.04f, 0.04f });
@@ -60,12 +68,20 @@ void RankingScene::ProcessInput() {
  */
 void RankingScene::ToggleMode() {
     m_cooperative = !m_cooperative;
+#if defined(SPACEYAKUZA_EDITION_Online)
+    getData().coop->FetchRankings(m_cooperative);
+    m_rankings = getData().coop->Rankings(m_cooperative);
+#else
     m_rankings = ScoreRepository {}.Load(m_cooperative);
+#endif
     m_modeButton->SetText(m_cooperative ? "SHOW SOLO" : "SHOW CO-OP");
 }
 
 /** @brief ランキングシーンを更新する */
 void RankingScene::Tick() {
+#if defined(SPACEYAKUZA_EDITION_Online)
+    m_rankings = getData().coop->Rankings(m_cooperative);
+#endif
 }
 
 /** @brief ランキングシーンが保持するUIを解放する */
@@ -100,6 +116,12 @@ void RankingScene::Render(Renderer& renderer) {
     }
     renderer.DrawText("LEFT/RIGHT: SOLO / CO-OP   ESC/B: TITLE", TextAlign::Center, 0.012f,
         {0.55f, 0.66f, 0.80f, 1.0f}, {0.0f, -0.66f});
+#if defined(SPACEYAKUZA_EDITION_Online)
+    renderer.DrawText(getData().coop->RankingStatus(m_cooperative), TextAlign::Center, 0.010f,
+        ColorF::White(), {0.0f, -0.48f});
+    renderer.DrawText(getData().coop->ScoreStatus(), TextAlign::Center, 0.010f,
+        ColorF::White(), {0.0f, -0.56f});
+#endif
     m_modeButton->Render(renderer);
     m_returnButton->Render(renderer);
 }

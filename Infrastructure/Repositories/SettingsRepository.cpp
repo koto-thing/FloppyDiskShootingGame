@@ -44,6 +44,9 @@ GameSettings SettingsRepository::Load() const {
     input >> settings.galleryUnlocks;
     int tutorialCompleted = 0;
     if (input >> tutorialCompleted) settings.tutorialCompleted = tutorialCompleted != 0;
+    // 旧形式では自動マッチングを既定のONにする
+    int automaticMatchmaking = 1;
+    if (input >> automaticMatchmaking) settings.automaticMatchmaking = automaticMatchmaking != 0;
     return Sanitize(settings);
 }
 
@@ -66,7 +69,8 @@ void SettingsRepository::Save(const GameSettings& settings) const {
            << sanitized.seVolume << '\n'
            << (sanitized.retroEffectEnabled ? 1 : 0) << '\n'
            << sanitized.galleryUnlocks << '\n'
-           << (sanitized.tutorialCompleted ? 1 : 0) << '\n';
+           << (sanitized.tutorialCompleted ? 1 : 0) << '\n'
+           << (sanitized.automaticMatchmaking ? 1 : 0) << '\n';
     output.close();
     if (!output) return;
 

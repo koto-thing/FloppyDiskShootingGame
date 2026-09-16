@@ -8,6 +8,9 @@ namespace ShooterStages::Stage2 {
 /** @brief 砂嵐が最大濃度へ達するフレーム数 */
 inline constexpr int SandstormFadeFrames = 180;
 
+/** @brief 砂嵐の各奥行き層へ描画する粒子数 */
+inline constexpr int SandstormParticlesPerLayer = 24;
+
 /**
  * @brief ボスの生存状態に応じて砂嵐の濃度を一段階進める
  * @param exposure 現在の濃度フレーム数

@@ -901,7 +901,7 @@ bool SideScrollingShooter::Stage2Module::TickSpecialDebris(
         ResurfaceStartFrame);
     if (!debris.active || debris.stage2.kind == DebrisKind::None) return false;
 
-    // ponytail: 固定長プールの先頭船体を都度探索する。容量拡大時はTickDebris開始時の参照キャッシュへ置換する
+    // ponytail: 固定長プールの先頭船体を都度探索する、容量拡大時はTickDebris開始時の参照キャッシュへ置換する
     Debris* lowerHull = nullptr;
     for (auto& candidate : shooter.m_debris) {
         if (candidate.active && candidate.stage2.kind == DebrisKind::Sink) {

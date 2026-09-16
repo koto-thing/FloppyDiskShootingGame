@@ -306,7 +306,7 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
                 {m_activePlayer == 0 ? -0.48f : 0.48f, -0.085f});
         });
     }
-    renderer.DrawText(m_playerCount == 2 ? "LOCAL CO-OP  SHARED SCORE  VIEW: 1P  PAUSE: START/+" : HudControlHint(StageDispatch::IsViewLocked(*this)),
+    renderer.DrawText(m_networkGame ? "ONLINE CO-OP  SHARED SCORE  VIEW: HOST" : m_playerCount == 2 ? "LOCAL CO-OP  SHARED SCORE  VIEW: 1P  PAUSE: START/+" : HudControlHint(StageDispatch::IsViewLocked(*this)),
         { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
 
@@ -469,7 +469,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
                 {m_activePlayer == 0 ? -0.48f : 0.48f, -0.085f});
         });
     }
-    renderer.DrawText(m_playerCount == 2 ? "LOCAL CO-OP  SHARED SCORE  VIEW: 1P  PAUSE: START/+" : HudControlHint(StageDispatch::IsViewLocked(*this)),
+    renderer.DrawText(m_networkGame ? "ONLINE CO-OP  SHARED SCORE  VIEW: HOST" : m_playerCount == 2 ? "LOCAL CO-OP  SHARED SCORE  VIEW: 1P  PAUSE: START/+" : HudControlHint(StageDispatch::IsViewLocked(*this)),
         { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
     if (m_viewTransitionTimer > 0) {

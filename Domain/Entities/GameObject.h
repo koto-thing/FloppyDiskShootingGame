@@ -124,7 +124,7 @@ public:
     /**
      * @brief 指定型のコンポーネントを取得する
      * @tparam T 取得するコンポーネント型
-     * @return 見つかったコンポーネント。なければnullptr
+     * @return 見つかったコンポーネント、なければnullptr
      */
     template <typename T>
     std::shared_ptr<T> GetComponent() {

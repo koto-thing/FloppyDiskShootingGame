@@ -39,7 +39,7 @@ public:
     Transform* Parent() const;
     /** @brief 子の数を取得する */
     std::size_t ChildCount() const;
-    /** @brief 子を取得する。範囲外ならnullptrを返す */
+    /** @brief 子を取得する、範囲外ならnullptrを返す */
     Transform* Child(std::size_t index) const;
     /** @brief 遅延計算されたワールド行列を取得する */
     const Matrix4x4& WorldMatrix() const;
