@@ -60,7 +60,7 @@ public:
     /** @brief 値変更時のコールバックを設定する */
     void SetOnValueChanged(std::function<void(float)> callback) { m_onValueChanged = std::move(callback); }
 
-    /** @brief UI入力を処理する。トラック上のクリックとドラッグをサポートする */
+    /** @brief UI入力を処理する、トラック上のクリックとドラッグをサポートする */
     void Update(const UIInputState& input);
     /** @brief 背景トラック、塗りつぶし、つまみを描画する */
     void Render(Renderer& renderer) const;

@@ -1,4 +1,5 @@
 #include "TitleScene.h"
+#include "BuildVersion.h"
 #include "../../Infrastructure/ExternalServices/MMLData.h"
 #include "../../Infrastructure/ExternalServices/AudioService.h"
 #include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
@@ -6,6 +7,13 @@
 #include "../../Engine/Graphics/Renderer.h"
 #include "../../Engine/Time/Time.h"
 #include "../Common/SpaceBackground.h"
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+#if defined(SPACEYAKUZA_EDITION_Steam)
+#include "../../Infrastructure/ExternalServices/SteamCoopSession.h"
+#else
+#include "../../Infrastructure/ExternalServices/OnlineCoopSession.h"
+#endif
+#endif
 
 #ifdef DrawText
 #undef DrawText
@@ -15,6 +23,11 @@
  * @brief タイトルシーンの初期化処理
  */
 void TitleScene::Initialize() {
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    // エンディングへ先行した側も相手の最終フレーム受信まではロビーを維持する
+    if (getData().onlineGame) getData().coop->Leave();
+    getData().onlineGame = false;
+#endif
     if (getData().audio) {
         getData().audio->PlayMMLBGM(std::string(MMLData::GetTitleBgm()), true);
     }
@@ -151,6 +164,10 @@ void TitleScene::Dispose() {
 void TitleScene::Render(Renderer& renderer) {
     // ゆっくり明滅する星空をUIの背面へ描画する
     SpaceBackground::Render(renderer, Time::unscaledTime);
+
+    // 右下に配布版とビルド番号を表示する
+    renderer.DrawText(SPACEYAKUZA_BUILD_LABEL, TextAlign::BottomRight, 0.014f,
+        { 0.7f, 0.7f, 0.7f, 1.0f }, { -0.04f, 0.04f });
 
     // 画面上部中央にタイトルを表示
     renderer.DrawText(

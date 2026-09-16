@@ -14,4 +14,6 @@ enum class SceneType {
     Gallery,
     Ending,
     Ranking,
+    SteamLobby,
+    OnlineLobby,
 };

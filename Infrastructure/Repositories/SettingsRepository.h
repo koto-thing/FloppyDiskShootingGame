@@ -12,6 +12,7 @@ struct GameSettings {
     bool retroEffectEnabled = true;
     std::uint32_t galleryUnlocks = DefaultGalleryUnlocks;
     bool tutorialCompleted = false;
+    bool automaticMatchmaking = true;
 };
 
 /** @brief ゲーム設定をユーザーの永続データ領域へ保存するリポジトリ */

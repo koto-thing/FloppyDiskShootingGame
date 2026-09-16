@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="Steamworks.local.props" Condition="Exists('Steamworks.local.props')" />
   <!-- 配布版ごとに生成物を分離し、未指定時はFloppy版を選ぶ -->
   <PropertyGroup>
     <Distribution Condition="'$(Distribution)'==''">Floppy</Distribution>
@@ -9,9 +10,70 @@
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
+      <AdditionalIncludeDirectories Condition="'$(MSBuildProjectName)'=='FloppyDiskShootingGame'">$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>SPACEYAKUZA_EDITION_$(Distribution)=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
+    <!-- MSVCの増分LTCGキャッシュ再利用で発生するLNK1143を避け、Releaseは全体を最適化し直す -->
+    <Link Condition="'$(MSBuildProjectName)'=='FloppyDiskShootingGame' and '$(BuildFlavor)'=='Release'">
+      <LinkTimeCodeGeneration>UseLinkTimeCodeGeneration</LinkTimeCodeGeneration>
+    </Link>
   </ItemDefinitionGroup>
+  <!-- IDEの最新判定でもビルドを省略せず、ゲームだけを採番する -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)'=='FloppyDiskShootingGame'">
+    <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
+  </PropertyGroup>
+  <!-- Goサーバー用の通信とロビーはOnline版だけに含める -->
+  <ItemDefinitionGroup Condition="'$(MSBuildProjectName)'=='FloppyDiskShootingGame' and '$(Distribution)'=='Online'">
+    <ClCompile>
+      <FloatingPointModel>Strict</FloatingPointModel>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>winhttp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(MSBuildProjectName)'=='FloppyDiskShootingGame' and '$(Distribution)'=='Online'">
+    <ClCompile Include="Infrastructure\ExternalServices\OnlineCoopSession.cpp" />
+    <ClCompile Include="Presentation\Scenes\OnlineLobbyScene.cpp" />
+    <ClInclude Include="Infrastructure\ExternalServices\OnlineCoopSession.h" />
+    <ClInclude Include="Presentation\Scenes\OnlineLobbyScene.h" />
+  </ItemGroup>
+  <!-- Steam APIの依存はゲームのSteam版だけに含める -->
+  <PropertyGroup Condition="'$(MSBuildProjectName)'=='FloppyDiskShootingGame' and '$(Distribution)'=='Steam'">
+    <SteamworksSdkRoot Condition="'$(SteamworksSdkRoot)'==''">$(STEAMWORKS_SDK_ROOT)</SteamworksSdkRoot>
+    <SteamAppId Condition="'$(SteamAppId)'==''">480</SteamAppId>
+    <SteamLibrary>$(SteamworksSdkRoot)\redistributable_bin\steam_api.lib</SteamLibrary>
+    <SteamRuntime>$(SteamworksSdkRoot)\redistributable_bin\steam_api.dll</SteamRuntime>
+    <SteamLibrary Condition="'$(Platform)'=='x64'">$(SteamworksSdkRoot)\redistributable_bin\win64\steam_api64.lib</SteamLibrary>
+    <SteamRuntime Condition="'$(Platform)'=='x64'">$(SteamworksSdkRoot)\redistributable_bin\win64\steam_api64.dll</SteamRuntime>
+    <LocalDebuggerWorkingDirectory>$(OutDir)</LocalDebuggerWorkingDirectory>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(MSBuildProjectName)'=='FloppyDiskShootingGame' and '$(Distribution)'=='Steam'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(SteamworksSdkRoot)\public;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>SPACEYAKUZA_STEAM_APP_ID=$(SteamAppId);%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <FloatingPointModel>Strict</FloatingPointModel>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>$(SteamLibrary);%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(MSBuildProjectName)'=='FloppyDiskShootingGame' and '$(Distribution)'=='Steam'">
+    <ClCompile Include="Infrastructure\ExternalServices\SteamCoopSession.cpp" />
+    <ClCompile Include="Presentation\Scenes\SteamLobbyScene.cpp" />
+    <DistributionFile Include="$(SteamRuntime)" />
+    <DistributionFile Include="$(OutDir)steam_appid.txt" Condition="'$(SteamAppId)'=='480'" />
+  </ItemGroup>
+  <Target Name="ValidateSteamSdk" BeforeTargets="PrepareForBuild" Condition="'$(MSBuildProjectName)'=='FloppyDiskShootingGame' and '$(Distribution)'=='Steam'">
+    <Error Condition="!Exists('$(SteamworksSdkRoot)\public\steam\steam_api.h') or !Exists('$(SteamLibrary)') or !Exists('$(SteamRuntime)')" Text="Set SteamworksSdkRoot in Steamworks.local.props or /p:SteamworksSdkRoot=... to your Steamworks SDK directory" />
+    <Error Condition="!$([System.Text.RegularExpressions.Regex]::IsMatch('$(SteamAppId)', '^[1-9][0-9]{0,8}$'))" Text="SteamAppId must be a positive numeric Steam App ID" />
+  </Target>
+  <Target Name="CopySteamRuntime" AfterTargets="Link" BeforeTargets="PackageDistribution" Condition="'$(MSBuildProjectName)'=='FloppyDiskShootingGame' and '$(Distribution)'=='Steam'">
+    <Copy SourceFiles="$(SteamRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+    <WriteLinesToFile File="$(OutDir)steam_appid.txt" Lines="$(SteamAppId)" Overwrite="true" WriteOnlyWhenDifferent="true" Encoding="ASCII" />
+  </Target>
+  <Target Name="GenerateBuildVersion" BeforeTargets="ClCompile" DependsOnTargets="ValidateDistribution" Condition="'$(MSBuildProjectName)'=='FloppyDiskShootingGame' and '$(DesignTimeBuild)'!='true'">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)Scripts\GenerateBuildVersion.ps1&quot; -Distribution &quot;$(Distribution)&quot; -CounterDirectory &quot;$(MSBuildThisFileDirectory).buildnumbers&quot; -HeaderPath &quot;$(IntDir)BuildVersion.h&quot;" />
+  </Target>
   <Target Name="ValidateDistribution" BeforeTargets="PrepareForBuild">
     <Error Condition="'$(ProfileDistribution)'!='' and '$(Distribution)'!='$(ProfileDistribution)'" Text="Distribution conflicts with the selected IDE configuration" />
     <Error Condition="'$(Distribution)'!='Floppy' and '$(Distribution)'!='Online' and '$(Distribution)'!='Steam'" Text="Distribution must be Floppy, Online, or Steam" />

@@ -46,11 +46,14 @@ void SideScrollingShooter::Stage2Module::DrawSandstorm(
         ShooterStages::Stage2::SandstormFadeFrames);
 
     // 現在のカメラ基準で3層に分散し、双方向の視点遷移でも画面端を覆う
-    constexpr int ParticleCount = 240;
+    constexpr int LayerCount = 3;
+    constexpr int ParticleCount =
+        ShooterStages::Stage2::SandstormParticlesPerLayer * LayerCount;
     constexpr float ViewMargin = 1.18f;
-    static_assert(ViewMargin > 1.0f);
+    static_assert(ViewMargin > 1.0f && ParticleCount <= 72);
     for (int index = 0; index < ParticleCount; ++index) {
-        const int layer = 2 - index / (ParticleCount / 3);
+        const int layer = LayerCount - 1 -
+            index / ShooterStages::Stage2::SandstormParticlesPerLayer;
         const float depth = 10.0f + static_cast<float>(layer) * 16.0f;
         const float halfHeight = depth * std::tan(camera.FieldOfView() * 0.5f);
         const float halfWidth = halfHeight * renderer.AspectRatio();

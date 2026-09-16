@@ -304,6 +304,8 @@ void SideScrollingShooter::Initialize(AudioService* audio, PlayerType playerType
     (void)SuspectVoice();
     (void)ArrestedVoice();
     m_audio = audio;
+    m_networkGame = false;
+    m_networkHostInput = {};
     m_activePlayer = 0;
     m_playerCount = playerCount == 2 ? 2 : 1;
     m_players = {};
@@ -474,14 +476,16 @@ void SideScrollingShooter::ProcessInput() {
             Input::GetGamepadKey(m_activePlayer, key) : Input::GetKey(key); };
         const auto pressed = [&](KeyCode key) { return m_playerCount == 2 ?
             Input::GetGamepadKeyDown(m_activePlayer, key) : Input::GetKeyDown(key); };
-        Player().m_moveLeft = held(KeyCode::LeftArrow) || held(KeyCode::A);
-        Player().m_moveRight = held(KeyCode::RightArrow) || held(KeyCode::D);
-        Player().m_moveUp = held(KeyCode::UpArrow) || held(KeyCode::W);
-        Player().m_moveDown = held(KeyCode::DownArrow) || held(KeyCode::S);
-        Player().m_slowMove = held(KeyCode::LeftShift) || held(KeyCode::RightShift);
-        Player().m_fire = held(KeyCode::Z) || held(KeyCode::Space);
-        Player().m_bombRequested = pressed(KeyCode::C);
-        if (m_activePlayer == 0) m_viewToggleRequested = pressed(KeyCode::X) && CanToggleView();
+        CooperativeInput input;
+        input.held = (held(KeyCode::LeftArrow) || held(KeyCode::A) ? CooperativeInput::Left : 0) |
+            (held(KeyCode::RightArrow) || held(KeyCode::D) ? CooperativeInput::Right : 0) |
+            (held(KeyCode::UpArrow) || held(KeyCode::W) ? CooperativeInput::Up : 0) |
+            (held(KeyCode::DownArrow) || held(KeyCode::S) ? CooperativeInput::Down : 0) |
+            (held(KeyCode::LeftShift) || held(KeyCode::RightShift) ? CooperativeInput::Slow : 0) |
+            (held(KeyCode::Z) || held(KeyCode::Space) ? CooperativeInput::Fire : 0);
+        input.pressed = (pressed(KeyCode::C) ? CooperativeInput::Bomb : 0) |
+            (pressed(KeyCode::X) ? CooperativeInput::View : 0);
+        ApplyPlayerInput(input);
     });
 
 #ifdef _DEBUG
@@ -509,6 +513,29 @@ void SideScrollingShooter::ProcessInput() {
     if (m_clear && Input::GetKeyDown(KeyCode::R)) {
         Reset(false);
     }
+}
+
+/** @brief 現在のプレイヤーに操作を適用する @param input 操作状態 @return なし */
+void SideScrollingShooter::ApplyPlayerInput(const CooperativeInput& input) {
+    // ローカルと通信で移動・射撃・視点切替の処理を共有する
+    Player().m_moveLeft = (input.held & CooperativeInput::Left) != 0;
+    Player().m_moveRight = (input.held & CooperativeInput::Right) != 0;
+    Player().m_moveUp = (input.held & CooperativeInput::Up) != 0;
+    Player().m_moveDown = (input.held & CooperativeInput::Down) != 0;
+    Player().m_slowMove = (input.held & CooperativeInput::Slow) != 0;
+    Player().m_fire = (input.held & CooperativeInput::Fire) != 0;
+    Player().m_bombRequested = (input.pressed & CooperativeInput::Bomb) != 0;
+    if (m_activePlayer == 0) m_viewToggleRequested = (input.pressed & CooperativeInput::View) != 0 && CanToggleView();
+}
+
+/** @brief 同期済みの2人分の操作を適用する @param inputs 固定更新1回分の操作 @return なし */
+void SideScrollingShooter::ApplyNetworkInput(const std::array<CooperativeInput, 2>& inputs) {
+    // 通信中は実機入力やデバッグキーを参照せず、ホストの会話操作を保持する
+    m_networkGame = true;
+    m_networkHostInput = inputs[0];
+    ForEachPlayer([&] { ApplyPlayerInput(inputs[m_activePlayer]); });
+    if (m_restartTimer > 0 && (inputs[0].pressed || inputs[1].pressed)) m_restartTimer = 0;
+    if (m_clear && (inputs[0].pressed & CooperativeInput::Restart)) Reset(false);
 }
 
 void SideScrollingShooter::Tick() {
@@ -1099,8 +1126,12 @@ void SideScrollingShooter::TickBossStory() {
     }
 
     // Xキーで会話全体を飛ばし、Zキーで次の台詞へ進める
-    if (Input::GetKeyDown(KeyCode::X)) m_bossStoryLine = story.lineCount;
-    else if (Input::GetKeyDown(KeyCode::Z)) ++m_bossStoryLine;
+    const bool skip = m_networkGame ? (m_networkHostInput.pressed & CooperativeInput::View) != 0 :
+        Input::GetKeyDown(KeyCode::X);
+    const bool next = m_networkGame ? (m_networkHostInput.pressed & CooperativeInput::Confirm) != 0 :
+        Input::GetKeyDown(KeyCode::Z);
+    if (skip) m_bossStoryLine = story.lineCount;
+    else if (next) ++m_bossStoryLine;
     else return;
 
     m_bossStoryActive = m_bossStoryLine < story.lineCount;

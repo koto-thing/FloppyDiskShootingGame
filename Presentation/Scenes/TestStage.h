@@ -5,6 +5,9 @@
 #include "../../Engine/UI/Button.h"
 #include "../../Engine/UI/Slider.h"
 #include <memory>
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+#include "../../Domain/ValueObjects/CooperativeInput.h"
+#endif
 
 class SideScrollingShooter;
 
@@ -56,5 +59,10 @@ private:
     bool m_pauseMenuOpen = false;
     bool m_optionsOpen = false;
     int m_allClearTimer = 0;
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    CooperativeInput m_networkInput {};
+    bool m_waitingForPeer = false;
+    bool m_peerPaused = false;
+#endif
 };
 
