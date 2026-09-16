@@ -90,24 +90,25 @@ static_assert(HomingTargetScore(4.0f, true) > HomingTargetScore(1.0f, false));
 }
 
 void SideScrollingShooter::TickPlayer() {
-    float dx = static_cast<float>(m_moveRight) - static_cast<float>(m_moveLeft);
-    float dy = static_cast<float>(m_moveUp) - static_cast<float>(m_moveDown);
+    if (Player().m_playerDestructionTimer > 0) return;
+    float dx = static_cast<float>(Player().m_moveRight) - static_cast<float>(Player().m_moveLeft);
+    float dy = static_cast<float>(Player().m_moveUp) - static_cast<float>(Player().m_moveDown);
     if (dx != 0.0f && dy != 0.0f) {
         dx *= 0.7071f;
         dy *= 0.7071f;
     }
-    const float speedScale = m_slowMove ? 0.5f : 1.0f;
+    const float speedScale = Player().m_slowMove ? 0.5f : 1.0f;
     if (IsTayamaBattle()) {
         // 3Dはボス中心の周回、2Dは切替時に固定したカメラ面内の横移動として扱う
-        if (IsTayamaOrbitViewActive()) {
+        if (IsTayamaOrbitViewActive() && m_activePlayer == 0) {
             m_stage5.tayamaOrbitAngle = std::remainder(
                 m_stage5.tayamaOrbitAngle + dx * ShooterStages::Stage5::TayamaOrbitSpeed * speedScale,
                 Math::TwoPi);
-            m_playerX = 0.0f;
+            Player().m_playerX = 0.0f;
         } else {
-            m_playerX = (std::clamp)(m_playerX + dx * 0.023f * speedScale, -1.2f, 1.2f);
+            Player().m_playerX = (std::clamp)(Player().m_playerX + dx * 0.023f * speedScale, -1.2f, 1.2f);
         }
-        m_playerY = (std::clamp)(m_playerY + dy * 0.058f * speedScale,
+        Player().m_playerY = (std::clamp)(Player().m_playerY + dy * 0.058f * speedScale,
             ShooterStages::Stage5::TayamaPlayerMinY,
             ShooterStages::Stage5::TayamaPlayerMaxY);
         return;
@@ -123,8 +124,8 @@ void SideScrollingShooter::TickPlayer() {
         (IsRailGameplayActive() ? PlayerRailMinY() : sideYRange.x);
     const float maxY = fullScreenRailMovement ? ShooterStages::Stage5::Part2RailPlayerMaxY :
         (IsRailGameplayActive() ? StageDispatch::RailPlayerMaxY(*this) : sideYRange.y);
-    m_playerX = (std::clamp)(m_playerX + dx * 0.023f * speedScale, xRange.x, xRange.y);
-    m_playerY = (std::clamp)(m_playerY + dy * 0.029f * speedScale, minY, maxY);
+    Player().m_playerX = (std::clamp)(Player().m_playerX + dx * 0.023f * speedScale, xRange.x, xRange.y);
+    Player().m_playerY = (std::clamp)(Player().m_playerY + dy * 0.029f * speedScale, minY, maxY);
 }
 
 /**
@@ -132,22 +133,23 @@ void SideScrollingShooter::TickPlayer() {
  * @return なし
  */
 void SideScrollingShooter::TickPlayerWeapons() {
+    if (Player().m_playerDestructionTimer > 0) return;
     // 通常弾と選択機体の特殊弾をそれぞれのクールダウンで発射する
     bool firedPlayerShot = false;
-    if (m_fire && m_shotCooldown == 0) {
+    if (Player().m_fire && Player().m_shotCooldown == 0) {
         const bool verticalRoute = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
-        SpawnShot(m_playerX + (IsRailGameplayActive() || verticalRoute ? 0.0f : 0.12f),
-            m_playerY + (verticalRoute ? 0.12f : 0.0f),
+        SpawnShot(Player().m_playerX + (IsRailGameplayActive() || verticalRoute ? 0.0f : 0.12f),
+            Player().m_playerY + (verticalRoute ? 0.12f : 0.0f),
             IsRailGameplayActive() || verticalRoute ? 0.0f : 0.045f,
             verticalRoute ? 0.045f : 0.0f, false,
             -1.0f, -1.0f, 1 + PowerLevel());
-        m_shotCooldown = (std::max)(3, 7 - PowerLevel());
+        Player().m_shotCooldown = (std::max)(3, 7 - PowerLevel());
         PlayShotSound();
     }
-    if (m_fire && m_specialShotCooldown == 0) {
+    if (Player().m_fire && Player().m_specialShotCooldown == 0) {
         FireSpecialShots();
-        const auto& config = PlayerShotConfigs[static_cast<size_t>(m_playerType)];
-        m_specialShotCooldown = config.fireIntervalFrames;
+        const auto& config = PlayerShotConfigs[static_cast<size_t>(Player().m_playerType)];
+        Player().m_specialShotCooldown = config.fireIntervalFrames;
         firedPlayerShot = true;
     }
     if (firedPlayerShot) PlayShotSound();
@@ -158,22 +160,22 @@ void SideScrollingShooter::TickPlayerWeapons() {
  * @return なし
  */
 void SideScrollingShooter::TickBomb() {
-    // 同時に存在できるボムは一個だけとする
-    if (m_bombRequested && !m_bomb.active && m_bombCount > 0) {
+    // 各自機が一個ずつボムを保持する
+    if (Player().m_playerDestructionTimer == 0 && Player().m_bombRequested && !Player().m_bomb.active && Player().m_bombCount > 0) {
         const Vector3 player = PlayerWorldPosition();
-        const float playerX = IsTayamaBattle() ? FromWorldX(player.x) : m_playerX;
-        const float playerY = IsTayamaBattle() ? FromWorldY(player.y) : m_playerY;
-        m_bomb = {playerX, playerY, playerX, playerY,
+        const float playerX = IsTayamaBattle() ? FromWorldX(player.x) : Player().m_playerX;
+        const float playerY = IsTayamaBattle() ? FromWorldY(player.y) : Player().m_playerY;
+        Player().m_bomb = {playerX, playerY, playerX, playerY,
             player.z + 6.0f, 0, true};
-        --m_bombCount;
+        --Player().m_bombCount;
     }
-    if (!m_bomb.active) return;
+    if (!Player().m_bomb.active) return;
 
     // 発射位置から画面中央へ直線移動し、到達後は短時間発光させる
-    ++m_bomb.age;
-    m_bomb.x = BombTravelCoordinate(m_bomb.startX, m_bomb.age, BombTravelFrames);
-    m_bomb.y = BombTravelCoordinate(m_bomb.startY, m_bomb.age, BombTravelFrames);
-    if (m_bomb.age >= BombTravelFrames + BombChargeFrames) DetonateBomb();
+    ++Player().m_bomb.age;
+    Player().m_bomb.x = BombTravelCoordinate(Player().m_bomb.startX, Player().m_bomb.age, BombTravelFrames);
+    Player().m_bomb.y = BombTravelCoordinate(Player().m_bomb.startY, Player().m_bomb.age, BombTravelFrames);
+    if (Player().m_bomb.age >= BombTravelFrames + BombChargeFrames) DetonateBomb();
 }
 
 /**
@@ -207,13 +209,13 @@ void SideScrollingShooter::DetonateBomb() {
     // 中央に青い爆発エフェクトを生成する
     for (auto& explosion : m_explosions) {
         if (explosion.active) continue;
-        explosion = {0.0f, 0.0f, m_bomb.z, 0, false, true,
+        explosion = {0.0f, 0.0f, Player().m_bomb.z, 0, false, true,
             BombExplosionEffectType};
         break;
     }
     if (m_audio) m_audio->PlaySE(Audio::SfxrPreset::Explosion);
     ShakeScreen(0.24f, 20);
-    m_bomb = {};
+    Player().m_bomb = {};
 }
 
 void SideScrollingShooter::TickEnemies() {
@@ -281,8 +283,8 @@ void SideScrollingShooter::TickEnemies() {
         if (aimedShotInterval > AttackWarningFrames && canUseAimedShot && canSpawnAimedProjectile &&
             enemy.age % aimedShotInterval == aimedShotInterval - AttackWarningFrames) {
             // 発射時の追尾を防ぐため、予告した地点を狙い弾の目標として固定する
-            enemy.attackWarningTargetX = m_playerX;
-            enemy.attackWarningTargetY = m_playerY;
+            enemy.attackWarningTargetX = Player().m_playerX;
+            enemy.attackWarningTargetY = Player().m_playerY;
             enemy.attackWarningFrames = AttackWarningFrames;
         }
         if (aimedShotInterval > 0 && enemy.age % aimedShotInterval == 0 &&
@@ -317,26 +319,30 @@ void SideScrollingShooter::TickEnemies() {
         }
         if (enemy.type != 2 && IsRailGameplayActive() && enemy.z < 2.0f) enemy.active = false;
         if (enemy.type == 2 && !enemy.collisionEnabled) continue;
-        const float enemyRadius = enemy.behavior->CollisionRadius(enemy);
-        const bool playerHit = IsRailGameplayActive() ?
-            Hit3D(playerPosition.x, playerPosition.y, playerPosition.z, 0.42f,
-                ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z, enemy.behavior->CollisionRadius3D(enemy)) :
-            Hit(m_playerX, m_playerY, 0.055f, enemy.x, enemy.y, enemyRadius);
-        if (enemy.active && m_invincible == 0 && playerHit) {
-            if (enemy.type != 2) {
-                SpawnExplosion(enemy.x, enemy.y, enemy.z, true);
-                SpawnEnemyDebris(enemy);
-                enemy.active = false;
+        ForEachPlayer([&] {
+            if (Player().m_playerDestructionTimer > 0) return;
+            const Vector3 playerPosition = PlayerWorldPosition();
+            const float enemyRadius = enemy.behavior->CollisionRadius(enemy);
+            const bool playerHit = IsRailGameplayActive() ?
+                Hit3D(playerPosition.x, playerPosition.y, playerPosition.z, 0.42f,
+                    ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z, enemy.behavior->CollisionRadius3D(enemy)) :
+                Hit(Player().m_playerX, Player().m_playerY, 0.055f, enemy.x, enemy.y, enemyRadius);
+            if (enemy.active && Player().m_invincible == 0 && playerHit) {
+                if (enemy.type != 2) {
+                    SpawnExplosion(enemy.x, enemy.y, enemy.z, true);
+                    SpawnEnemyDebris(enemy);
+                    enemy.active = false;
+                }
+                DamagePlayer();
+                return;
             }
-            DamagePlayer();
-            return;
-        }
+        });
     }
-    TickLinkedEnemyLasers();
+    ForEachPlayer([&] { TickLinkedEnemyLasers(); });
 }
 
 void SideScrollingShooter::TickLinkedEnemyLasers() {
-    if (m_invincible > 0) return;
+    if (Player().m_invincible > 0 || Player().m_playerDestructionTimer > 0) return;
     const Vector3 playerPosition = PlayerWorldPosition();
 
     for (const auto& upper : m_enemies) {
@@ -349,7 +355,7 @@ void SideScrollingShooter::TickLinkedEnemyLasers() {
                     {ToWorldX(upper.x), ToWorldY(upper.y), upper.z},
                     {ToWorldX(lower.x), ToWorldY(lower.y), lower.z}) <=
                         LinkedLaserEnemyBehavior::LaserRadius3D() + 0.38f :
-                DistancePointToSegment2D({m_playerX, m_playerY},
+                DistancePointToSegment2D({Player().m_playerX, Player().m_playerY},
                     {upper.x, upper.y}, {lower.x, lower.y}) <=
                         LinkedLaserEnemyBehavior::LaserRadius2D() + 0.050f;
             if (playerHit) {
@@ -383,7 +389,7 @@ void SideScrollingShooter::TickShots() {
 
         // 追尾弾を最寄りの前方敵へ旋回させる
         if (!shot.enemy && shot.special && shot.playerType == Homing) {
-            UpdateHomingShot(shot);
+            ForEachPlayer([&] { if (m_activePlayer == shot.owner) UpdateHomingShot(shot); });
         }
 
         shot.x += shot.vx;
@@ -444,36 +450,40 @@ void SideScrollingShooter::TickShots() {
         }
 
         if (shot.enemy) {
-            const bool playerHit = StageDispatch::CanEnemyShotDamagePlayer(*this, shot) &&
-                (IsRailGameplayActive() ?
-                Hit3D(playerPosition.x, playerPosition.y, playerPosition.z, 0.38f,
-                    ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
-                    StageDispatch::EnemyShotHitRadius(*this, shot)) :
-                Hit(m_playerX, m_playerY, 0.050f, shot.x, shot.y,
-                    StageDispatch::EnemyShotHitRadius(*this, shot)));
-            const bool grazed = IsRailGameplayActive() ?
-                Hit3D(playerPosition.x, playerPosition.y, playerPosition.z, 1.18f,
-                    ToWorldX(shot.x), ToWorldY(shot.y), shot.z, 0.28f) :
-                Hit(m_playerX, m_playerY, 0.200f, shot.x, shot.y, 0.022f);
-            if (!playerHit && grazed && !shot.grazed) {
-                shot.grazed = true;
-                ++m_chapterResult.grazeCount;
+            ForEachPlayer([&] {
+                if (!shot.active || Player().m_playerDestructionTimer > 0) return;
+                const Vector3 playerPosition = PlayerWorldPosition();
+                const bool playerHit = StageDispatch::CanEnemyShotDamagePlayer(*this, shot) &&
+                    (IsRailGameplayActive() ?
+                    Hit3D(playerPosition.x, playerPosition.y, playerPosition.z, 0.38f,
+                        ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
+                        StageDispatch::EnemyShotHitRadius(*this, shot)) :
+                    Hit(Player().m_playerX, Player().m_playerY, 0.050f, shot.x, shot.y,
+                        StageDispatch::EnemyShotHitRadius(*this, shot)));
+                const bool grazed = IsRailGameplayActive() ?
+                    Hit3D(playerPosition.x, playerPosition.y, playerPosition.z, 1.18f,
+                        ToWorldX(shot.x), ToWorldY(shot.y), shot.z, 0.28f) :
+                    Hit(Player().m_playerX, Player().m_playerY, 0.200f, shot.x, shot.y, 0.022f);
+                if (!playerHit && grazed && !shot.grazed) {
+                    shot.grazed = true;
+                    ++m_chapterResult.grazeCount;
 
-                // 自機の内側方向へ交互に飛ばし、グレイズ直後も見える時間を確保する
-                constexpr float GrazeScoreSpeedX = 0.040f;
-                constexpr float GrazeScoreSpeedY = 0.045f;
-                constexpr int GrazeScorePickupDelay = 12;
-                const float scoreVx = (m_chapterResult.grazeCount & 1) != 0 ?
-                    GrazeScoreSpeedX : -GrazeScoreSpeedX;
-                const float scoreVy = m_playerY <= 0.0f ? GrazeScoreSpeedY : -GrazeScoreSpeedY;
-                SpawnScoreItem(m_playerX, m_playerY, playerPosition.z, 100,
-                    scoreVx, scoreVy, GrazeScorePickupDelay);
-            }
-            if (m_invincible == 0 && playerHit) {
-                DeactivateShot(shot);
-                DamagePlayer();
-                return;
-            }
+                    // 自機の内側方向へ交互に飛ばし、グレイズ直後も見える時間を確保する
+                    constexpr float GrazeScoreSpeedX = 0.040f;
+                    constexpr float GrazeScoreSpeedY = 0.045f;
+                    constexpr int GrazeScorePickupDelay = 12;
+                    const float scoreVx = (m_chapterResult.grazeCount & 1) != 0 ?
+                        GrazeScoreSpeedX : -GrazeScoreSpeedX;
+                    const float scoreVy = Player().m_playerY <= 0.0f ? GrazeScoreSpeedY : -GrazeScoreSpeedY;
+                    SpawnScoreItem(Player().m_playerX, Player().m_playerY, playerPosition.z, 100,
+                        scoreVx, scoreVy, GrazeScorePickupDelay);
+                }
+                if (Player().m_invincible == 0 && playerHit) {
+                    DeactivateShot(shot);
+                    DamagePlayer();
+                    return;
+                }
+            });
             continue;
         }
 
@@ -543,8 +553,8 @@ void SideScrollingShooter::TickShots() {
             if (verticalRouteShot && shot.special) {
                 // 敵を自機弾の奥行き平面へ透視投影し、画面上で重なった場合だけ命中させる
                 const Vector3 cameraPosition {
-                    ToWorldX(m_playerX) * 0.18f,
-                    ToWorldY(m_playerY) * 0.12f + 1.72f,
+                    ToWorldX(m_players[0].m_playerX) * 0.18f,
+                    ToWorldY(m_players[0].m_playerY) * 0.12f + 1.72f,
                     PlayerRailDepth() - 21.5f
                 };
                 const float projectionScale = PerspectiveDepthScale(
@@ -645,35 +655,51 @@ void SideScrollingShooter::TickItems() {
             continue;
         }
 
-        // 自機が近づいたアイテムだけを強く追尾させる
-        const float dx = FromWorldX(playerPosition.x) - item.x;
-        const float dy = FromWorldY(playerPosition.y) - item.y;
-        const bool followsPlayer = IsRailGameplayActive() ?
-            Hit3D(playerPosition.x, playerPosition.y, playerPosition.z, 3.5f,
-                ToWorldX(item.x), ToWorldY(item.y), item.z, 0.0f) :
-            Hit(m_playerX, m_playerY, 0.45f, item.x, item.y, 0.0f);
-        if (followsPlayer && item.pickupDelay == 0) {
-            item.x += dx * 0.45f;
-            item.y += dy * 0.45f;
-            if (IsRailGameplayActive()) {
-                item.z += (playerPosition.z - item.z) * 0.45f;
+        // 生存中の最寄り自機へ寄せ、一つのアイテムを一人だけに渡す
+        int recipient = -1;
+        float nearest = 1.0e30f;
+        ForEachPlayer([&] {
+            if (Player().m_playerDestructionTimer > 0) return;
+            const Vector3 position = PlayerWorldPosition();
+            const float dx = IsRailGameplayActive() ? position.x - ToWorldX(item.x) : Player().m_playerX - item.x;
+            const float dy = IsRailGameplayActive() ? position.y - ToWorldY(item.y) : Player().m_playerY - item.y;
+            const float dz = IsRailGameplayActive() ? position.z - item.z : 0.0f;
+            const float distance = dx * dx + dy * dy + dz * dz;
+            if (distance < nearest) { nearest = distance; recipient = m_activePlayer; }
+        });
+        ForEachPlayer([&] {
+            if (m_activePlayer != recipient) return;
+            const Vector3 playerPosition = PlayerWorldPosition();
+            // 自機が近づいたアイテムだけを強く追尾させる
+            const float dx = FromWorldX(playerPosition.x) - item.x;
+            const float dy = FromWorldY(playerPosition.y) - item.y;
+            const bool followsPlayer = IsRailGameplayActive() ?
+                Hit3D(playerPosition.x, playerPosition.y, playerPosition.z, 3.5f,
+                    ToWorldX(item.x), ToWorldY(item.y), item.z, 0.0f) :
+                Hit(Player().m_playerX, Player().m_playerY, 0.45f, item.x, item.y, 0.0f);
+            if (followsPlayer && item.pickupDelay == 0) {
+                item.x += dx * 0.45f;
+                item.y += dy * 0.45f;
+                if (IsRailGameplayActive()) {
+                    item.z += (playerPosition.z - item.z) * 0.45f;
+                }
             }
-        }
-        const bool collected = IsRailGameplayActive() ?
-            Hit3D(playerPosition.x, playerPosition.y, playerPosition.z, 0.52f,
-                ToWorldX(item.x), ToWorldY(item.y), item.z, 0.38f) :
-            Hit(m_playerX, m_playerY, 0.075f, item.x, item.y, 0.045f);
-        if (!collected || item.pickupDelay > 0) continue;
+            const bool collected = IsRailGameplayActive() ?
+                Hit3D(playerPosition.x, playerPosition.y, playerPosition.z, 0.52f,
+                    ToWorldX(item.x), ToWorldY(item.y), item.z, 0.38f) :
+                Hit(Player().m_playerX, Player().m_playerY, 0.075f, item.x, item.y, 0.045f);
+            if (!collected || item.pickupDelay > 0) return;
 
-        if (item.type == ItemType::Power) {
-            const int previousPowerLevel = PowerLevel();
-            m_power = (std::min)(MaxPower, m_power + item.power);
-            if (PowerLevel() > previousPowerLevel) m_powerUpTimer = 120;
-        } else {
-            m_chapterResult.score += item.score;
-            m_score += item.score;
-        }
-        item.active = false;
+            if (item.type == ItemType::Power) {
+                const int previousPowerLevel = PowerLevel();
+                Player().m_power = (std::min)(MaxPower, Player().m_power + item.power);
+                if (PowerLevel() > previousPowerLevel) Player().m_powerUpTimer = 120;
+            } else {
+                m_chapterResult.score += item.score;
+                m_score += item.score;
+            }
+            item.active = false;
+        });
     }
 }
 
@@ -867,6 +893,7 @@ void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool 
         auto& shot = m_shots[shotIndex];
         if (shot.active) continue;
         shot = {};
+        shot.owner = m_activePlayer;
         shot.x = x;
         shot.y = y;
         const bool verticalRoute = !enemy &&
@@ -896,8 +923,8 @@ void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool 
         if (IsRailGameplayActive() && !verticalRoute) {
             if (enemy) {
                 const Vector3 player = PlayerWorldPosition();
-                const float targetX = IsTayamaBattle() ? FromWorldX(player.x) : m_playerX + vx * 12.0f;
-                const float targetY = IsTayamaBattle() ? FromWorldY(player.y) : m_playerY + vy * 12.0f;
+                const float targetX = IsTayamaBattle() ? FromWorldX(player.x) : Player().m_playerX + vx * 12.0f;
+                const float targetY = IsTayamaBattle() ? FromWorldY(player.y) : Player().m_playerY + vy * 12.0f;
                 const float targetZ = player.z;
                 const float dx = ToWorldX(targetX) - ToWorldX(x);
                 const float dy = ToWorldY(targetY) - ToWorldY(y);
@@ -927,10 +954,15 @@ bool SideScrollingShooter::CanSpawnEnemyProjectile(float x, float y, float z) co
     if (!IsRailGameplayActive()) return true;
 
     // ゲーム座標のXYをワールド座標へ揃えて自機との3D距離を判定する
-    const Vector3 player = PlayerWorldPosition();
-    return IsOutsideEnemyProjectileNoFireRange(
-        ToWorldX(x) - player.x, ToWorldY(y) - player.y, z - player.z,
-        EnemyProjectileNoFireDistance3D);
+    bool outside = true;
+    ForEachPlayer([&] {
+        if (Player().m_playerDestructionTimer > 0) return;
+        const Vector3 player = PlayerWorldPosition();
+        outside = outside && IsOutsideEnemyProjectileNoFireRange(
+            ToWorldX(x) - player.x, ToWorldY(y) - player.y, z - player.z,
+            EnemyProjectileNoFireDistance3D);
+    });
+    return outside;
 }
 
 /**
@@ -1028,6 +1060,7 @@ void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, 
 
     Shot& shot = *available;
     shot = {};
+    shot.owner = m_activePlayer;
     shot.x = x;
     shot.y = y;
     shot.z = z;
@@ -1052,9 +1085,9 @@ void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, 
 
 /** @brief 選択中の機体タイプに対応する特殊弾を生成する */
 void SideScrollingShooter::FireSpecialShots() {
-    const auto& config = PlayerShotConfigs[static_cast<size_t>(m_playerType)];
+    const auto& config = PlayerShotConfigs[static_cast<size_t>(Player().m_playerType)];
     const int powerLevel = PowerLevel();
-    const int projectileCount = m_playerType == Spread ? config.projectileCount + powerLevel : config.projectileCount + powerLevel;
+    const int projectileCount = Player().m_playerType == Spread ? config.projectileCount + powerLevel : config.projectileCount + powerLevel;
     const int damage = config.damage;
     constexpr float DegreesToRadians = 3.1415926535f / 180.0f;
 
@@ -1068,9 +1101,9 @@ void SideScrollingShooter::FireSpecialShots() {
         const float angle = centeredIndex * angleStep * DegreesToRadians;
         const bool railGameplay = IsRailGameplayActive();
         const bool verticalRoute = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
-        const float spawnY = verticalRoute ? m_playerY + config.spawnOffsetX :
-            (railGameplay ? m_playerY :
-                m_playerY + centeredIndex * config.spawnOffsetY);
+        const float spawnY = verticalRoute ? Player().m_playerY + config.spawnOffsetX :
+            (railGameplay ? Player().m_playerY :
+                Player().m_playerY + centeredIndex * config.spawnOffsetY);
         const float railSpawnOffsetX = config.spawnOffsetY > 0.0f ? config.spawnOffsetY : 0.05f;
 
         // 空きスロットへ機体タイプ固有の属性を設定する
@@ -1078,6 +1111,7 @@ void SideScrollingShooter::FireSpecialShots() {
             auto& shot = m_shots[shotIndex];
             if (shot.active) continue;
             shot = {};
+            shot.owner = m_activePlayer;
             if (IsTayamaBattle()) {
                 // ボス方向とその接線を基準に、周回位置から左右対称の弾道を作る
                 const Vector3 player = PlayerWorldPosition();
@@ -1101,9 +1135,9 @@ void SideScrollingShooter::FireSpecialShots() {
                 shot.vz = velocity.z;
             } else {
                 // 3Dレールでは翼の左右から、2Dでは従来どおり機首の上下から発射する
-                shot.x = verticalRoute ? m_playerX + centeredIndex * config.spawnOffsetY :
-                    (railGameplay ? m_playerX + centeredIndex * railSpawnOffsetX :
-                        m_playerX + config.spawnOffsetX);
+                shot.x = verticalRoute ? Player().m_playerX + centeredIndex * config.spawnOffsetY :
+                    (railGameplay ? Player().m_playerX + centeredIndex * railSpawnOffsetX :
+                        Player().m_playerX + config.spawnOffsetX);
                 shot.y = spawnY;
                 shot.z = railGameplay ? PlayerRailDepth() + 2.0f : ToRailZFromSideX(shot.x);
                 shot.transitionSideX = shot.x;
@@ -1127,7 +1161,7 @@ void SideScrollingShooter::FireSpecialShots() {
             }
             shot.hitRadius = config.hitRadius;
             shot.damage = damage;
-            shot.playerType = m_playerType;
+            shot.playerType = Player().m_playerType;
             shot.special = true;
             shot.piercing = config.piercing;
             shot.active = true;
@@ -1146,7 +1180,7 @@ void SideScrollingShooter::UpdateHomingShot(Shot& shot) {
     const bool spatial = (IsRailGameplayActive() && !verticalRoute) || IsTayamaBattle();
     const Vector3 origin {ToWorldX(shot.x), ToWorldY(shot.y), spatial ? shot.z : 0.0f};
     Vector3 player = PlayerWorldPosition();
-    if (!spatial) player = {ToWorldX(m_playerX), ToWorldY(m_playerY), 0.0f};
+    if (!spatial) player = {ToWorldX(Player().m_playerX), ToWorldY(Player().m_playerY), 0.0f};
     Vector3 forward = IsTayamaBattle() ?
         Vector3 {-player.x, 0.0f, ShooterStages::Stage5::TayamaArenaCenterZ - player.z} :
         spatial ? Vector3 {0.0f, 0.0f, 1.0f} :
@@ -1196,8 +1230,8 @@ void SideScrollingShooter::UpdateHomingShot(Shot& shot) {
         Vector3 position {ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z};
         // 第2部の特殊弾は衝突判定と同じ自機弾平面へ透視投影する
         if (verticalRoute && IsRailGameplayActive()) {
-            const Vector3 camera {ToWorldX(m_playerX) * 0.18f,
-                ToWorldY(m_playerY) * 0.12f + 1.72f, PlayerRailDepth() - 21.5f};
+            const Vector3 camera {ToWorldX(m_players[0].m_playerX) * 0.18f,
+                ToWorldY(m_players[0].m_playerY) * 0.12f + 1.72f, PlayerRailDepth() - 21.5f};
             position = camera + (position - camera) * PerspectiveDepthScale(camera.z, enemy.z, shot.z);
         }
         consider(position, baseId);
@@ -1427,23 +1461,26 @@ void SideScrollingShooter::PlayBossMachineGunSound() {
 void SideScrollingShooter::TickExplosions() {
     for (auto& explosion : m_explosions) {
         if (!explosion.active) continue;
-        if (explosion.effectType == 1 && !explosion.damagedPlayer &&
-            explosion.age <= AttackWarningFrames && m_invincible == 0) {
-            const Vector3 player = PlayerWorldPosition();
-            const float depthDistance = std::abs(player.z - explosion.z);
-            const bool playerHit = IsRailGameplayActive() ?
-                depthDistance <= MortarExplosionDepthHitRadius &&
-                    Hit(player.x, player.y, 0.38f,
-                        ToWorldX(explosion.x), ToWorldY(explosion.y),
-                        explosion.hitRadius * WorldXScale) :
-                Hit(m_playerX, m_playerY, 0.050f, explosion.x, explosion.y,
-                    explosion.hitRadius);
-            if (playerHit) {
-                explosion.damagedPlayer = true;
-                DamagePlayer();
-                return;
+        ForEachPlayer([&] {
+            if (Player().m_playerDestructionTimer > 0) return;
+            if (explosion.effectType == 1 && (explosion.damagedPlayerMask & (1 << m_activePlayer)) == 0 &&
+                explosion.age <= AttackWarningFrames && Player().m_invincible == 0) {
+                const Vector3 player = PlayerWorldPosition();
+                const float depthDistance = std::abs(player.z - explosion.z);
+                const bool playerHit = IsRailGameplayActive() ?
+                    depthDistance <= MortarExplosionDepthHitRadius &&
+                        Hit(player.x, player.y, 0.38f,
+                            ToWorldX(explosion.x), ToWorldY(explosion.y),
+                            explosion.hitRadius * WorldXScale) :
+                    Hit(Player().m_playerX, Player().m_playerY, 0.050f, explosion.x, explosion.y,
+                        explosion.hitRadius);
+                if (playerHit) {
+                    explosion.damagedPlayerMask |= static_cast<unsigned char>(1 << m_activePlayer);
+                    DamagePlayer();
+                    return;
+                }
             }
-        }
+        });
         const int lifetime = explosion.effectType == BombExplosionEffectType ?
             BombExplosionLifetimeFrames : explosion.effectType == 1 ? MortarExplosionLifetimeFrames :
             (explosion.destruction ? DestructionExplosionLifetimeFrames : ExplosionLifetimeFrames);
@@ -1463,18 +1500,21 @@ void SideScrollingShooter::TickDebris() {
         debris.yaw += debris.spin;
 
         // 危険ながれきだけを回転Boxの包含球で連続判定する
-        if (debris.damagesPlayer && m_invincible == 0) {
-            const Vector3 player = PlayerWorldPosition();
-            const float debrisRadius = std::sqrt(debris.width * debris.width +
-                debris.height * debris.height + debris.depth * debris.depth) * 0.5f;
-            if (Hit3DSegment(previous.x, previous.y, previous.z,
-                debris.x, debris.y, debris.z, debrisRadius,
-                player.x, player.y, player.z, 0.38f)) {
-                debris.active = false;
-                DamagePlayer();
-                return;
+        ForEachPlayer([&] {
+            if (Player().m_playerDestructionTimer > 0) return;
+            if (debris.active && debris.damagesPlayer && Player().m_invincible == 0) {
+                const Vector3 player = PlayerWorldPosition();
+                const float debrisRadius = std::sqrt(debris.width * debris.width +
+                    debris.height * debris.height + debris.depth * debris.depth) * 0.5f;
+                if (Hit3DSegment(previous.x, previous.y, previous.z,
+                    debris.x, debris.y, debris.z, debrisRadius,
+                    player.x, player.y, player.z, 0.38f)) {
+                    debris.active = false;
+                    DamagePlayer();
+                    return;
+                }
             }
-        }
+        });
         if (++debris.age >= debris.lifetime) debris.active = false;
     }
 }

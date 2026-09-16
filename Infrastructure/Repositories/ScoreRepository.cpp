@@ -10,20 +10,22 @@
 namespace {
 /**
  * @brief ユーザーごとのランキング保存先を取得する
+ * @param cooperative 2人協力プレイの保存先を取得するか
  * @return Application.persistentDataPath相当のランキングファイルパス
  */
-std::filesystem::path RankingPath() {
-    return UserDataPath() / L"rankings.dat";
+std::filesystem::path RankingPath(bool cooperative) {
+    return UserDataPath() / (cooperative ? L"rankings-coop.dat" : L"rankings.dat");
 }
 }
 
 /**
  * @brief 保存済みランキングを取得する
+ * @param cooperative 2人協力プレイのランキングを取得するか
  * @return 難易度ごとの高得点順ランキング
  */
-ScoreRepository::Rankings ScoreRepository::Load() const {
+ScoreRepository::Rankings ScoreRepository::Load(bool cooperative) const {
     Rankings rankings {};
-    std::ifstream input(RankingPath());
+    std::ifstream input(RankingPath(cooperative));
     for (Scores& scores : rankings) {
         for (int& score : scores) {
             if (!(input >> score) || score < 0) return Rankings {};
@@ -37,19 +39,21 @@ ScoreRepository::Rankings ScoreRepository::Load() const {
  * @brief スコアを難易度別ランキングへ登録する
  * @param difficulty 登録先の難易度
  * @param score 登録するスコア
+ * @param cooperative 2人協力プレイのランキングへ登録するか
  */
-void ScoreRepository::Save(DifficultyType difficulty, int score) const {
-    Rankings rankings = Load();
+void ScoreRepository::Save(DifficultyType difficulty, int score, bool cooperative) const {
+    Rankings rankings = Load(cooperative);
     const int difficultyIndex = (std::clamp)(static_cast<int>(difficulty), 0, DifficultyCount - 1);
     rankings[static_cast<size_t>(difficultyIndex)] = InsertScore(
         rankings[static_cast<size_t>(difficultyIndex)], score);
 
-    const std::filesystem::path path = RankingPath();
+    const std::filesystem::path path = RankingPath(cooperative);
     std::error_code error;
     std::filesystem::create_directories(path.parent_path(), error);
     if (error) return;
 
-    const std::filesystem::path temporaryPath = path.parent_path() / L"rankings.tmp";
+    std::filesystem::path temporaryPath = path;
+    temporaryPath.replace_extension(L".tmp");
     std::ofstream output(temporaryPath, std::ios::trunc);
     if (!output) return;
     for (const Scores& scores : rankings) {

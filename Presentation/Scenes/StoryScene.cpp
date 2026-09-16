@@ -79,7 +79,8 @@ void StoryScene::Tick() {
  * @return ゲームプレイシーン
  */
 SceneType StoryScene::NextScene() const {
-    return SettingsRepository {}.Load().tutorialCompleted ?
+    // 2人用は本編へ直接進み、初回チュートリアルは1人用に残す
+    return getData().playerCount == 2 || SettingsRepository {}.Load().tutorialCompleted ?
         SceneType::TestStage : SceneType::TutorialStage;
 }
 

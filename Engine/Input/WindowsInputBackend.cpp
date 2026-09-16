@@ -14,13 +14,12 @@ namespace {
 HWND inputWindow = nullptr;
 ULONGLONG previousGamepadPollTime = 0;
 ULONGLONG nextGamepadSearchTime = 0;
-DWORD activeGamepadIndex = XUSER_MAX_COUNT;
-bool gamepadNeedsNeutral = true;
+std::array<int, 2> gamepadSources {-1, -1};
+std::array<bool, 2> gamepadNeedsNeutral {true, true};
 bool gamepadPointerActive = false;
 bool gamepadPrimaryWasPressed = false;
 bool nativeInputEnabled = true;
-unsigned switch2Connection = 0;
-bool switch2WasActive = false;
+std::array<unsigned, 2> switch2Connections {};
 
 constexpr ULONGLONG GamepadSearchIntervalMilliseconds = 1000;
 
@@ -66,13 +65,12 @@ bool WindowsInputBackend::Initialize(HWND hwnd) {
     inputWindow = hwnd;
     previousGamepadPollTime = GetTickCount64();
     nextGamepadSearchTime = 0;
-    activeGamepadIndex = XUSER_MAX_COUNT;
-    gamepadNeedsNeutral = true;
+    gamepadSources = {-1, -1};
+    gamepadNeedsNeutral = {true, true};
     gamepadPointerActive = false;
     gamepadPrimaryWasPressed = false;
     nativeInputEnabled = true;
-    switch2Connection = 0;
-    switch2WasActive = false;
+    switch2Connections = {};
 
     // 標準的なマウスとキーボードを対象ウィンドウへ登録する
     RAWINPUTDEVICE devices[] = {
@@ -115,43 +113,40 @@ void WindowsInputBackend::Update() {
     const bool isForeground = GetForegroundWindow() == inputWindow;
     nativeInputEnabled = isForeground;
     if (!isForeground) {
-        ProcessPolledGamepad(nullptr, elapsedSeconds);
+        for (int slot = 0; slot < 2; ++slot) ProcessPolledGamepad(nullptr, elapsedSeconds, slot);
         Input::CancelNativeInputState();
         return;
     }
 
-    // 使用中のパッドは切断されるまで固定して毎フレーム取得する
-    XINPUT_STATE state {};
-    bool connected = activeGamepadIndex < XUSER_MAX_COUNT &&
-        XInputGetState(activeGamepadIndex, &state) == ERROR_SUCCESS;
-    if (activeGamepadIndex < XUSER_MAX_COUNT && !connected) {
-        activeGamepadIndex = XUSER_MAX_COUNT;
-        nextGamepadSearchTime = 0;
-        ProcessPolledGamepad(nullptr, elapsedSeconds);
-    }
-
-    // 空スロットは毎フレーム走査せず1秒ごとに再検出する
-    if (!connected && currentTime >= nextGamepadSearchTime) {
-        nextGamepadSearchTime = currentTime + GamepadSearchIntervalMilliseconds;
-        for (DWORD index = 0; index < XUSER_MAX_COUNT; ++index) {
-            if (XInputGetState(index, &state) == ERROR_SUCCESS) {
-                activeGamepadIndex = index;
-                connected = true;
-                break;
-            }
+    // 割り当て済みXInputは毎フレーム、それ以外は1秒ごとに探索する
+    std::array<XINPUT_GAMEPAD, XUSER_MAX_COUNT + 2> states {};
+    std::array<const XINPUT_GAMEPAD*, XUSER_MAX_COUNT + 2> available {};
+    const bool search = currentTime >= nextGamepadSearchTime;
+    if (search) nextGamepadSearchTime = currentTime + GamepadSearchIntervalMilliseconds;
+    for (DWORD source = 0; source < XUSER_MAX_COUNT; ++source) {
+        if (!search && gamepadSources[0] != static_cast<int>(source) &&
+            gamepadSources[1] != static_cast<int>(source)) continue;
+        XINPUT_STATE state {};
+        if (XInputGetState(source, &state) == ERROR_SUCCESS) {
+            states[source] = state.Gamepad;
+            available[source] = &states[source];
         }
     }
-    // XInputを優先し、未接続の場合はSwitch 2 Proの直接入力を使う
-    unsigned connection = 0;
-    const bool switch2Active = !connected && Switch2ProInput::Poll(state.Gamepad, connection);
-    if (switch2Active != switch2WasActive ||
-        (switch2Active && connection != switch2Connection)) {
-        ProcessPolledGamepad(nullptr, elapsedSeconds);
+
+    // Nintendoの直接接続も独立した入力元として読み取り、再接続時はニュートラルを待つ
+    // ponytail: XInputは物理IDを公開しないため仮想パッド変換との併用は対象外、必要時はデバイスIDを取得するバックエンドへ置き換える
+    for (int native = 0; native < 2; ++native) {
+        const int source = XUSER_MAX_COUNT + native;
+        unsigned connection = 0;
+        if (Switch2ProInput::Poll(states[source], connection, native)) available[source] = &states[source];
+        if (connection != switch2Connections[native]) {
+            for (int slot = 0; slot < 2; ++slot) {
+                if (gamepadSources[slot] == source) ProcessPolledGamepad(nullptr, elapsedSeconds, slot);
+            }
+            switch2Connections[native] = connection;
+        }
     }
-    switch2WasActive = switch2Active;
-    switch2Connection = connection;
-    ProcessPolledGamepad(connected || switch2Active ? &state.Gamepad : nullptr, elapsedSeconds);
-    Input::m_switch2ProConnected = switch2Active;
+    ProcessAvailableGamepads(available.data(), elapsedSeconds);
 }
 
 /**
@@ -165,7 +160,7 @@ void WindowsInputBackend::ProcessMessage(UINT message, WPARAM wParam, LPARAM lPa
     if (message == WM_KILLFOCUS || (message == WM_ACTIVATEAPP && wParam == FALSE)) {
         // フォーカス外で届かない解放を補い、途中のUI操作はクリックせず破棄する
         nativeInputEnabled = false;
-        ProcessPolledGamepad(nullptr, 0.0f);
+        for (int slot = 0; slot < 2; ++slot) ProcessPolledGamepad(nullptr, 0.0f, slot);
         Input::CancelNativeInputState();
         return;
     }
@@ -295,56 +290,81 @@ UINT WindowsInputBackend::NormalizeVirtualKey(const RAWKEYBOARD& keyboard) {
  * @brief 再接続時の押下を抑止して取得済みゲームパッド状態を反映する
  * @param gamepad ゲームパッド状態、未接続の場合はnullptr
  * @param elapsedSeconds 前回取得からの秒数
+ * @param slot プレイヤー番号0または1
  * @return なし
  */
 void WindowsInputBackend::ProcessPolledGamepad(
-    const XINPUT_GAMEPAD* gamepad, float elapsedSeconds) {
+    const XINPUT_GAMEPAD* gamepad, float elapsedSeconds, int slot) {
+    if (slot < 0 || slot >= 2) return;
     // HUD案内が物理的な接続状態へ追従できるよう保存する
-    Input::m_gamepadConnected = gamepad != nullptr;
-    Input::m_switch2ProConnected = false;
+    Input::m_gamepadConnections[slot] = gamepad != nullptr;
+    if (slot == 0) {
+        Input::m_gamepadConnected = gamepad != nullptr;
+        Input::m_switch2ProConnected = false;
+    }
     if (gamepad == nullptr) {
-        gamepadNeedsNeutral = true;
-        ProcessGamepad(nullptr, elapsedSeconds);
+        gamepadNeedsNeutral[slot] = true;
+        ProcessGamepad(nullptr, elapsedSeconds, slot);
         return;
     }
 
     // 復帰や接続直後に保持されていたボタンを新規押下として扱わない
-    if (gamepadNeedsNeutral) {
+    if (gamepadNeedsNeutral[slot]) {
         if (!IsGamepadNeutral(*gamepad)) {
-            ProcessGamepad(nullptr, elapsedSeconds);
+            ProcessGamepad(nullptr, elapsedSeconds, slot);
             return;
         }
-        gamepadNeedsNeutral = false;
+        gamepadNeedsNeutral[slot] = false;
     }
-    ProcessGamepad(gamepad, elapsedSeconds);
+    ProcessGamepad(gamepad, elapsedSeconds, slot);
+}
+
+/** @brief 接続済みの入力元を空きプレイヤーへ割り当てる @param gamepads XInput4台とNintendo2台の状態 @param elapsedSeconds 経過秒数 @return なし */
+void WindowsInputBackend::ProcessAvailableGamepads(const XINPUT_GAMEPAD* const* gamepads, float elapsedSeconds) {
+    // 切断中も割り当てを保持し、残った2Pのパッドを1Pへ移動しない
+    for (int slot = 0; slot < 2; ++slot) {
+        if (gamepadSources[slot] < 0) {
+            for (int source = 0; source < XUSER_MAX_COUNT + 2; ++source) {
+                if (gamepads[source] != nullptr && source != gamepadSources[1 - slot]) {
+                    gamepadSources[slot] = source;
+                    break;
+                }
+            }
+        }
+        const int source = gamepadSources[slot];
+        ProcessPolledGamepad(source >= 0 ? gamepads[source] : nullptr, elapsedSeconds, slot);
+    }
+    Input::m_switch2ProConnected = Input::m_gamepadConnected && gamepadSources[0] >= XUSER_MAX_COUNT;
 }
 
 /**
  * @brief XInput状態を既存のキーとポインター操作へ割り当てる
  * @param gamepad ゲームパッド状態、未接続の場合はnullptr
  * @param elapsedSeconds 前回取得からの秒数
+ * @param slot プレイヤー番号0または1
  * @return なし
  */
-void WindowsInputBackend::ProcessGamepad(const XINPUT_GAMEPAD* gamepad, float elapsedSeconds) {
+void WindowsInputBackend::ProcessGamepad(const XINPUT_GAMEPAD* gamepad, float elapsedSeconds, int slot) {
+    if (slot < 0 || slot >= 2) return;
     const XINPUT_GAMEPAD emptyState {};
     const XINPUT_GAMEPAD& state = gamepad != nullptr ? *gamepad : emptyState;
     const auto isPressed = [&state](WORD button) { return (state.wButtons & button) != 0; };
 
     // 切断またはフォーカス喪失時は古いUIポインター操作を引き継がない
-    if (gamepad == nullptr) gamepadPointerActive = false;
+    if (slot == 0 && gamepad == nullptr) gamepadPointerActive = false;
 
     // D-padと左スティックを既存の移動キーへ割り当てる
-    Input::SetGamepadKeyState(KeyCode::LeftArrow, isPressed(XINPUT_GAMEPAD_DPAD_LEFT));
-    Input::SetGamepadKeyState(KeyCode::RightArrow, isPressed(XINPUT_GAMEPAD_DPAD_RIGHT));
-    Input::SetGamepadKeyState(KeyCode::UpArrow, isPressed(XINPUT_GAMEPAD_DPAD_UP));
-    Input::SetGamepadKeyState(KeyCode::DownArrow, isPressed(XINPUT_GAMEPAD_DPAD_DOWN));
-    Input::SetGamepadKeyState(KeyCode::A,
+    Input::SetGamepadKeyState(slot, KeyCode::LeftArrow, isPressed(XINPUT_GAMEPAD_DPAD_LEFT));
+    Input::SetGamepadKeyState(slot, KeyCode::RightArrow, isPressed(XINPUT_GAMEPAD_DPAD_RIGHT));
+    Input::SetGamepadKeyState(slot, KeyCode::UpArrow, isPressed(XINPUT_GAMEPAD_DPAD_UP));
+    Input::SetGamepadKeyState(slot, KeyCode::DownArrow, isPressed(XINPUT_GAMEPAD_DPAD_DOWN));
+    Input::SetGamepadKeyState(slot, KeyCode::A,
         state.sThumbLX < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
-    Input::SetGamepadKeyState(KeyCode::D,
+    Input::SetGamepadKeyState(slot, KeyCode::D,
         state.sThumbLX > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
-    Input::SetGamepadKeyState(KeyCode::W,
+    Input::SetGamepadKeyState(slot, KeyCode::W,
         state.sThumbLY > XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
-    Input::SetGamepadKeyState(KeyCode::S,
+    Input::SetGamepadKeyState(slot, KeyCode::S,
         state.sThumbLY < -XINPUT_GAMEPAD_LEFT_THUMB_DEADZONE);
 
     // 右スティックをマウス専用UIでも使えるポインターへ割り当てる
@@ -353,7 +373,7 @@ void WindowsInputBackend::ProcessGamepad(const XINPUT_GAMEPAD* gamepad, float el
         state.sThumbRX, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
     const float pointerY = NormalizeThumbAxis(
         state.sThumbRY, XINPUT_GAMEPAD_RIGHT_THUMB_DEADZONE);
-    if (pointerX != 0.0f || pointerY != 0.0f) {
+    if (slot == 0 && (pointerX != 0.0f || pointerY != 0.0f)) {
         MoveGamepadPointer(pointerX, pointerY, elapsedSeconds);
         gamepadPointerActive = true;
     }
@@ -362,16 +382,19 @@ void WindowsInputBackend::ProcessGamepad(const XINPUT_GAMEPAD* gamepad, float el
     const bool pointerClickPressed = primaryPressed && gamepadPointerActive;
     const bool firePressed = primaryPressed || isPressed(XINPUT_GAMEPAD_RIGHT_SHOULDER) ||
         state.bRightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
-    Input::SetGamepadKeyState(KeyCode::Z, firePressed);
-    Input::SetGamepadKeyState(KeyCode::Space, primaryPressed);
-    Input::SetGamepadKeyState(KeyCode::X, isPressed(XINPUT_GAMEPAD_X));
-    Input::SetGamepadKeyState(KeyCode::C, isPressed(XINPUT_GAMEPAD_Y));
-    Input::SetGamepadKeyState(KeyCode::LeftShift,
+    Input::SetGamepadKeyState(slot, KeyCode::Z, firePressed);
+    Input::SetGamepadKeyState(slot, KeyCode::Space, primaryPressed);
+    Input::SetGamepadKeyState(slot, KeyCode::X, isPressed(XINPUT_GAMEPAD_X));
+    Input::SetGamepadKeyState(slot, KeyCode::C, isPressed(XINPUT_GAMEPAD_Y));
+    Input::SetGamepadKeyState(slot, KeyCode::LeftShift,
         isPressed(XINPUT_GAMEPAD_LEFT_SHOULDER) ||
         state.bLeftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD);
-    Input::SetGamepadKeyState(KeyCode::Escape,
+    Input::SetGamepadKeyState(slot, KeyCode::Escape,
         isPressed(XINPUT_GAMEPAD_B) || isPressed(XINPUT_GAMEPAD_START) ||
         isPressed(XINPUT_GAMEPAD_BACK));
+
+    // ポインター操作は1Pだけが担当する
+    if (slot != 0) return;
 
     // Aは右スティックでポインターを動かした後だけUIクリックにも使用する
     if (gamepad != nullptr) {

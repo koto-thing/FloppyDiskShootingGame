@@ -638,7 +638,7 @@ void SideScrollingShooter::Stage5Module::Reset(SideScrollingShooter& shooter) {
     shooter.m_stage5.phase = Stage5Phase::Approach;
     shooter.m_stage5.checkpoint = Stage5Checkpoint::Chapter1;
     shooter.m_stage5.phaseTimer = 0;
-    shooter.m_stage5.checkpointPower = shooter.m_power;
+    shooter.m_stage5.checkpointPower = shooter.Player().m_power;
     shooter.m_stage5.checkpointScore = shooter.m_score;
     shooter.m_stage5.checkpointKills = shooter.m_kills;
     shooter.m_stage5.soundCooldown = 0;
@@ -720,7 +720,9 @@ void SideScrollingShooter::Stage5Module::StartDebugPhase(SideScrollingShooter& s
     StartPhase(shooter, phase);
 #ifdef _DEBUG
     // デバッグ直行後に各フェーズの演出と当たり判定を確認できる時間を確保する
-    shooter.m_invincible = (std::max)(shooter.m_invincible, 600);
+    shooter.ForEachPlayer([&] {
+        shooter.Player().m_invincible = (std::max)(shooter.Player().m_invincible, 600);
+    });
 #endif
 }
 
@@ -732,7 +734,7 @@ void SideScrollingShooter::Stage5Module::StartDebugPhase(SideScrollingShooter& s
  */
 void SideScrollingShooter::Stage5Module::SaveCheckpoint(SideScrollingShooter& shooter, Stage5Checkpoint checkpoint) {
     shooter.m_stage5.checkpoint = checkpoint;
-    shooter.m_stage5.checkpointPower = shooter.m_power;
+    shooter.m_stage5.checkpointPower = shooter.Player().m_power;
     shooter.m_stage5.checkpointScore = shooter.m_score;
     shooter.m_stage5.checkpointKills = shooter.m_kills;
 }
@@ -754,8 +756,8 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
     shooter.m_stage5.tayamaDragonHitFlashFrames = 0;
     shooter.m_stage5.tayamaReflectFunnels = {};
     shooter.m_stage5.tayamaCollisionBoundsFrame = -1;
-    shooter.m_stage5.coreTargetX = shooter.m_playerX;
-    shooter.m_stage5.coreTargetY = shooter.m_playerY;
+    shooter.m_stage5.coreTargetX = shooter.Player().m_playerX;
+    shooter.m_stage5.coreTargetY = shooter.Player().m_playerY;
     shooter.m_stage5.coreTargetZ = PlayerRailZ;
     shooter.m_stage5.guardSpawnCooldown = 0;
 
@@ -800,7 +802,7 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
         shooter.m_bossBattle = false;
         shooter.m_shots = {};
         shooter.m_items = {};
-        shooter.m_bomb = {};
+        shooter.ForEachPlayer([&] { shooter.Player().m_bomb = {}; });
         PlayCue(shooter, ShooterStages::Stage5::SignalLost);
         return;
     }
@@ -828,33 +830,41 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
             shooter.m_stage5.tayamaTransformation = 0.0f;
         } else if (phase == Stage5Phase::RooftopArrival) {
             shooter.m_stage5.tayamaTransformation = 0.0f;
-            shooter.m_playerX = 0.0f;
-            shooter.m_playerY = 0.0f;
+            shooter.ForEachPlayer([&] {
+                shooter.Player().m_playerX = static_cast<float>(shooter.m_activePlayer) * 0.36f;
+                shooter.Player().m_playerY = 0.0f;
+            });
         } else if (phase == Stage5Phase::CarrierTransformation) {
             shooter.m_stage5.tayamaTransformation = 0.0f;
-            shooter.m_playerX = 0.0f;
-            shooter.m_playerY = FromWorldY(
-                TayamaModelView::EyeWorldCenter(TayamaTransform(shooter)).y);
+            shooter.ForEachPlayer([&] {
+                shooter.Player().m_playerX = static_cast<float>(shooter.m_activePlayer) * 0.36f;
+                shooter.Player().m_playerY = FromWorldY(
+                    TayamaModelView::EyeWorldCenter(TayamaTransform(shooter)).y);
+            });
             PlayCue(shooter, ShooterStages::Stage5::Transformation);
         }
         ResetWallSearchlights(shooter, lightCount);
         if (phase == Stage5Phase::WallClimbTransition) {
             shooter.PlayCurrentStageBgm(true);
-            shooter.m_playerX = 0.0f;
-            shooter.m_playerY = 0.0f;
-            shooter.m_bomb = {};
+            shooter.ForEachPlayer([&] {
+                shooter.Player().m_playerX = static_cast<float>(shooter.m_activePlayer) * 0.36f;
+                shooter.Player().m_playerY = 0.0f;
+                shooter.Player().m_bomb = {};
+            });
         }
         if (startsPart2) {
             // EASTSOURCE戦までの集計を切り離し、第2部を新しい3チャプターとして開始する
             shooter.m_chapterNumber = ShooterStages::Stage5::Part2ChapterNumber(phase);
             shooter.m_chapterRetryCounts = {};
             shooter.m_chapterResult = {};
-            shooter.m_chapterStartPower = shooter.m_power;
+            shooter.m_chapterStartPower = shooter.Player().m_power;
             shooter.m_chapterStartScore = shooter.m_score;
             shooter.m_chapterStartKills = shooter.m_kills;
         }
         if (saveCheckpoint && wallCheckpoint) SaveCheckpoint(shooter, checkpoint);
-        shooter.m_invincible = (std::max)(shooter.m_invincible, 60);
+        shooter.ForEachPlayer([&] {
+            shooter.Player().m_invincible = (std::max)(shooter.Player().m_invincible, 60);
+        });
         return;
     }
 
@@ -866,7 +876,7 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
         for (auto& shot : shooter.m_shots) {
             if (shot.enemy) shot.active = false;
         }
-        shooter.m_invincible = TayamaCollapseFrames + 60;
+        shooter.ForEachPlayer([&] { shooter.Player().m_invincible = TayamaCollapseFrames + 60; });
         PlayCue(shooter, ShooterStages::Stage5::ChainExplosion);
         return;
     }
@@ -874,10 +884,12 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
     if (phase == Stage5Phase::CloudSea) {
         shooter.m_shots = {};
         shooter.m_items = {};
-        shooter.m_bomb = {};
-        shooter.m_playerX = 0.0f;
-        shooter.m_playerY = 0.0f;
-        shooter.m_invincible = ShooterStages::Stage5::CloudSeaAssemblyFrames + 30;
+        shooter.ForEachPlayer([&] {
+            shooter.Player().m_bomb = {};
+            shooter.Player().m_playerX = static_cast<float>(shooter.m_activePlayer) * 0.36f;
+            shooter.Player().m_playerY = 0.0f;
+            shooter.Player().m_invincible = ShooterStages::Stage5::CloudSeaAssemblyFrames + 30;
+        });
         PlayCue(shooter, ShooterStages::Stage5::Transformation);
         return;
     }
@@ -889,7 +901,9 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
         shooter.m_bossHp = shooter.m_stage5.tayamaHp;
         shooter.m_displayBossHp = static_cast<float>(shooter.m_bossHp);
         if (saveCheckpoint) SaveCheckpoint(shooter, Stage5Checkpoint::TayamaDragonBattle);
-        shooter.m_invincible = (std::max)(shooter.m_invincible, 75);
+        shooter.ForEachPlayer([&] {
+            shooter.Player().m_invincible = (std::max)(shooter.Player().m_invincible, 75);
+        });
         PlayCue(shooter, ShooterStages::Stage5::CoreWarning);
         shooter.ShakeScreen(0.12f, 36);
         return;
@@ -902,7 +916,9 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
         for (auto& shot : shooter.m_shots) {
             if (shot.enemy) shot.active = false;
         }
-        shooter.m_invincible = ShooterStages::Stage5::TayamaDragonCollapseFrames + 60;
+        shooter.ForEachPlayer([&] {
+            shooter.Player().m_invincible = ShooterStages::Stage5::TayamaDragonCollapseFrames + 60;
+        });
         PlayCue(shooter, ShooterStages::Stage5::ChainExplosion);
         return;
     }
@@ -939,7 +955,9 @@ void SideScrollingShooter::Stage5Module::StartEastsourceBattle(SideScrollingShoo
     eastsource.baseZ = eastsource.z;
     shooter.m_bossHp = eastsource.hp;
     shooter.m_displayBossHp = static_cast<float>(shooter.m_bossHp);
-    shooter.m_invincible = (std::max)(shooter.m_invincible, 60);
+    shooter.ForEachPlayer([&] {
+        shooter.Player().m_invincible = (std::max)(shooter.Player().m_invincible, 60);
+    });
     shooter.PlayCurrentBossBgm(true);
 }
 
@@ -1033,8 +1051,8 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
             ShooterStages::Stage5::EastsourceDamagedNoseWarningFrames;
         if (cycle == 0) {
             const float error = nose ? 0.0f : std::sin(static_cast<float>(eastsource.age) * 0.37f) * 0.24f;
-            eastsource.attackWarningTargetX = shooter.m_playerX + error;
-            eastsource.attackWarningTargetY = shooter.m_playerY - error * 0.45f;
+            eastsource.attackWarningTargetX = shooter.Player().m_playerX + error;
+            eastsource.attackWarningTargetY = shooter.Player().m_playerY - error * 0.45f;
             eastsource.attackWarningFrames = warningFrames;
             PlayCue(shooter, ShooterStages::Stage5::BarrageWarning);
         }
@@ -1058,7 +1076,7 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
             for (int lane = -4; lane <= 4; ++lane) {
                 if (lane == 0) continue;
                 SpawnEnemyShotAt(shooter, eastsource.x - 0.42f, eastsource.y + 0.12f, eastsource.z,
-                    shooter.m_playerX + 0.25f, static_cast<float>(lane) * 0.16f, PlayerRailZ, 0.68f);
+                    shooter.Player().m_playerX + 0.25f, static_cast<float>(lane) * 0.16f, PlayerRailZ, 0.68f);
             }
             shooter.PlayEnemyShotSound();
         }
@@ -1066,7 +1084,7 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
             for (int lane = -4; lane <= 4; ++lane) {
                 if (lane == 0) continue;
                 SpawnEnemyShotAt(shooter, eastsource.x + 0.42f, eastsource.y - 0.12f, eastsource.z,
-                    shooter.m_playerX - 0.25f, static_cast<float>(lane) * 0.16f, PlayerRailZ, 0.68f);
+                    shooter.Player().m_playerX - 0.25f, static_cast<float>(lane) * 0.16f, PlayerRailZ, 0.68f);
             }
             shooter.PlayEnemyShotSound();
         }
@@ -1076,8 +1094,8 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
         const int cycle = eastsource.age %
             ShooterStages::Stage5::EastsourcePursuitCycleFrames;
         if (cycle == ShooterStages::Stage5::EastsourcePursuitAimFrame) {
-            eastsource.attackWarningTargetX = shooter.m_playerX;
-            eastsource.attackWarningTargetY = shooter.m_playerY;
+            eastsource.attackWarningTargetX = shooter.Player().m_playerX;
+            eastsource.attackWarningTargetY = shooter.Player().m_playerY;
             eastsource.attackWarningFrames = 30;
         }
         if (cycle >= ShooterStages::Stage5::EastsourcePursuitShotStartFrame &&
@@ -1185,7 +1203,6 @@ void SideScrollingShooter::Stage5Module::TickSearchlights(SideScrollingShooter& 
         shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::FireControlRadar)].destroyed;
     const int difficultyOffset = shooter.m_difficulty == Easy ? 9 : (shooter.m_difficulty == Hard ? -9 : 0);
     const int lockFrames = SearchlightLockFrames + difficultyOffset + (radarDestroyed ? 18 : 0);
-    const Vector3 player = shooter.PlayerWorldPosition();
 
     for (int i = 0; i < activeCount; ++i) {
         SearchlightState& light = shooter.m_stage5.searchlights[i];
@@ -1195,6 +1212,27 @@ void SideScrollingShooter::Stage5Module::TickSearchlights(SideScrollingShooter& 
             light.destroyed = shooter.m_stage5.tayamaWeakpoints[static_cast<int>(type)].destroyed;
         }
         if (light.destroyed) continue;
+
+        // 照射中心に近い生存中の自機を追い、2P単独の侵入も検知する
+        Vector3 player = shooter.PlayerWorldPosition();
+        float playerX = shooter.Player().m_playerX;
+        float playerY = shooter.Player().m_playerY;
+        float nearestDistance = 1.0e30f;
+        bool hasTarget = false;
+        shooter.ForEachPlayer([&] {
+            if (shooter.Player().m_playerDestructionTimer > 0) return;
+            const Vector3 candidate = shooter.PlayerWorldPosition();
+            const float distance = tayamaWeakpoints ?
+                (candidate - Vector3 {ToWorldX(light.beamX), ToWorldY(light.beamY), light.beamZ}).LengthSquared() :
+                Vector2 {shooter.Player().m_playerX - light.beamX,
+                    shooter.Player().m_playerY - light.beamY}.LengthSquared();
+            if (distance >= nearestDistance) return;
+            nearestDistance = distance;
+            hasTarget = true;
+            player = candidate;
+            playerX = shooter.Player().m_playerX;
+            playerY = shooter.Player().m_playerY;
+        });
 
         const float scanWaveX = std::sin(static_cast<float>(shooter.m_stage5.phaseTimer + i * 67) *
             (0.018f + static_cast<float>(i) * 0.002f));
@@ -1213,12 +1251,12 @@ void SideScrollingShooter::Stage5Module::TickSearchlights(SideScrollingShooter& 
             light.beamZ = MoveTowards(light.beamZ, scanTargetZ, trackingLimit * WorldXScale);
         }
 
-        const bool illuminated = tayamaWeakpoints ?
+        const bool illuminated = hasTarget && (tayamaWeakpoints ?
             Hit3D(player.x, player.y, player.z, 0.38f,
                 ToWorldX(light.beamX), ToWorldY(light.beamY), light.beamZ,
                 SearchlightDetectionRadius * WorldXScale) :
-            Hit(shooter.m_playerX, shooter.m_playerY, 0.055f,
-                light.beamX, light.beamY, SearchlightDetectionRadius);
+            Hit(playerX, playerY, 0.055f,
+                light.beamX, light.beamY, SearchlightDetectionRadius));
         if (light.phase == SearchlightPhase::Searching) {
             if (illuminated) {
                 light.phase = SearchlightPhase::Detecting;
@@ -1233,8 +1271,8 @@ void SideScrollingShooter::Stage5Module::TickSearchlights(SideScrollingShooter& 
             if (light.detectionFrames == 0) {
                 light.phase = SearchlightPhase::Searching;
             } else if (light.detectionFrames >= lockFrames) {
-                light.lockedX = tayamaWeakpoints ? FromWorldX(player.x) : shooter.m_playerX;
-                light.lockedY = tayamaWeakpoints ? FromWorldY(player.y) : shooter.m_playerY;
+                light.lockedX = tayamaWeakpoints ? FromWorldX(player.x) : playerX;
+                light.lockedY = tayamaWeakpoints ? FromWorldY(player.y) : playerY;
                 light.lockedZ = player.z;
                 light.phase = SearchlightPhase::Locked;
                 light.timer = SearchlightWarningFrames;
@@ -1650,8 +1688,11 @@ Vector3 SideScrollingShooter::Stage5Module::TayamaDragonSegmentPosition(
         shooter.m_stage5.tayamaDragonAttack == ShooterStages::Stage5::TayamaDragonAttack::Orbit &&
         ShooterStages::Stage5::IsTayamaDragonOrbitActive(
             attackTimeline)) {
-        // 各節へ位相差を付け、自機を中心とする同一円周上へ連続配置する
-        const Vector3 player = shooter.PlayerWorldPosition();
+        // 各節の共通位置を1P基準に固定し、2Pの弾判定でも龍本体を動かさない
+        Vector3 player;
+        shooter.ForEachPlayer([&] {
+            if (shooter.m_activePlayer == 0) player = shooter.PlayerWorldPosition();
+        });
         const float angle = ShooterStages::Stage5::TayamaDragonOrbitAngle(
             attackTimeline) - segment *
             ShooterStages::Stage5::TayamaDragonOrbitSegmentAngle;
@@ -1750,7 +1791,12 @@ Vector3 SideScrollingShooter::Stage5Module::TayamaReflectFunnelTarget(
     offset.y = offset.x * std::sin(angle) + offset.y * std::cos(angle);
     offset.x = x;
     offset.z *= railWeight;
-    return shooter.PlayerWorldPosition() + offset;
+    // 操作中の自機を切り替えてもファンネルの展開先を共有する
+    Vector3 player;
+    shooter.ForEachPlayer([&] {
+        if (shooter.m_activePlayer == 0) player = shooter.PlayerWorldPosition();
+    });
+    return player + offset;
 }
 
 /**
@@ -1877,9 +1923,11 @@ void SideScrollingShooter::Stage5Module::StartTayamaPhase(SideScrollingShooter& 
     if (ShooterStages::Stage5::ShouldResetTayamaPlayer(phase, resetCurrentHp)) {
         shooter.m_stage5.tayamaOrbitAngle = 0.0f;
         shooter.m_stage5.tayamaSideViewAngle = 0.0f;
-        shooter.m_playerX = 0.0f;
-        shooter.m_playerY = FromWorldY(
-            TayamaModelView::EyeWorldCenter(TayamaTransform(shooter)).y);
+        shooter.ForEachPlayer([&] {
+            shooter.Player().m_playerX = static_cast<float>(shooter.m_activePlayer) * 0.36f;
+            shooter.Player().m_playerY = FromWorldY(
+                TayamaModelView::EyeWorldCenter(TayamaTransform(shooter)).y);
+        });
     }
     const Vector3 player = shooter.PlayerWorldPosition();
     shooter.m_stage5.coreTargetX = FromWorldX(player.x);
@@ -1903,7 +1951,9 @@ void SideScrollingShooter::Stage5Module::StartTayamaPhase(SideScrollingShooter& 
     SaveCheckpoint(shooter, Stage5Checkpoint::TayamaFireControl);
     UpdateTayamaBossHp(shooter);
     shooter.m_displayBossHp = static_cast<float>(shooter.m_bossHp);
-    shooter.m_invincible = (std::max)(shooter.m_invincible, 75);
+    shooter.ForEachPlayer([&] {
+        shooter.Player().m_invincible = (std::max)(shooter.Player().m_invincible, 75);
+    });
     shooter.ShakeScreen(0.08f, 24);
 }
 
@@ -2105,12 +2155,10 @@ void SideScrollingShooter::Stage5Module::TickTayama(SideScrollingShooter& shoote
                 (shooter.m_stage5.headLaserTarget - eye).Normalized();
             const Vector3 laserEnd = eye + direction *
                 ShooterStages::Stage5::TayamaHeadLaserLength;
-            if (shooter.m_invincible == 0 &&
-                shooter.DistancePointToSegment3D(playerPosition, eye, laserEnd) <=
-                    ShooterStages::Stage5::TayamaHeadLaserHitRadius + 0.38f) {
-                shooter.DamagePlayer();
-                break;
-            }
+            shooter.ForEachPlayer([&] {
+                if (shooter.DistancePointToSegment3D(shooter.PlayerWorldPosition(), eye, laserEnd) <=
+                    ShooterStages::Stage5::TayamaHeadLaserHitRadius + 0.38f) shooter.DamagePlayer();
+            });
         }
     }
 
@@ -2124,12 +2172,10 @@ void SideScrollingShooter::Stage5Module::TickTayama(SideScrollingShooter& shoote
             Vector3 shoulder;
             Vector3 tip;
             TayamaModelView::ArmWorldSegment(transform, left, angle, shoulder, tip);
-            if (shooter.m_invincible == 0 &&
-                shooter.DistancePointToSegment3D(playerPosition, shoulder, tip) <=
-                    ShooterStages::Stage5::TayamaArmSpinHitRadius + 0.38f) {
-                shooter.DamagePlayer();
-                break;
-            }
+            shooter.ForEachPlayer([&] {
+                if (shooter.DistancePointToSegment3D(shooter.PlayerWorldPosition(), shoulder, tip) <=
+                    ShooterStages::Stage5::TayamaArmSpinHitRadius + 0.38f) shooter.DamagePlayer();
+            });
         }
     }
 
@@ -2433,12 +2479,10 @@ void SideScrollingShooter::Stage5Module::TickTayamaDragon(
                 (shooter.m_stage5.headLaserTarget - eye).Normalized();
             const Vector3 end = eye + direction *
                 ShooterStages::Stage5::TayamaHeadLaserLength;
-            if (shooter.m_invincible == 0 &&
-                shooter.DistancePointToSegment3D(player, eye, end) <=
-                    ShooterStages::Stage5::TayamaHeadLaserHitRadius + 0.38f) {
-                shooter.DamagePlayer();
-                break;
-            }
+            shooter.ForEachPlayer([&] {
+                if (shooter.DistancePointToSegment3D(shooter.PlayerWorldPosition(), eye, end) <=
+                    ShooterStages::Stage5::TayamaHeadLaserHitRadius + 0.38f) shooter.DamagePlayer();
+            });
         }
     }
 
@@ -2489,18 +2533,19 @@ void SideScrollingShooter::Stage5Module::TickTayamaDragon(
         sweepFrame >= ShooterStages::Stage5::TayamaDragonSweepWarningFrames &&
         sweepFrame < ShooterStages::Stage5::TayamaDragonSweepWarningFrames +
             ShooterStages::Stage5::TayamaDragonSweepActiveFrames;
-    if ((!sweeping && !rushing) || shooter.m_invincible > 0) return;
+    if (!sweeping && !rushing) return;
     const int firstHitSegment = rushing ? 0 : 1;
     for (int index = firstHitSegment;
         index < ShooterStages::Stage5::TayamaDragonSegmentCount; ++index) {
         const Vector3 center = TayamaDragonSegmentPosition(shooter, index, railWeight);
         const float radius = TayamaDragonSegmentRadius(index, railWeight) + 0.38f;
-        const bool hit = railWeight <= Math::Epsilon ?
-            Vector2::Distance({player.x, player.y}, {center.x, center.y}) <= radius :
-            Vector3::Distance(player, center) <= radius;
-        if (!hit) continue;
-        shooter.DamagePlayer();
-        break;
+        shooter.ForEachPlayer([&] {
+            const Vector3 position = shooter.PlayerWorldPosition();
+            const bool hit = railWeight <= Math::Epsilon ?
+                Vector2::Distance({position.x, position.y}, {center.x, center.y}) <= radius :
+                Vector3::Distance(position, center) <= radius;
+            if (hit) shooter.DamagePlayer();
+        });
     }
 }
 
@@ -2631,8 +2676,11 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
         const float approach = SmoothStep(Math::Clamp01(
             static_cast<float>(shooter.m_stage5.phaseTimer) /
             ShooterStages::Stage5::WallClimbApproachFrames));
-        shooter.m_playerX = Math::Lerp(-0.18f, 0.0f, approach);
-        shooter.m_playerY = 0.0f;
+        shooter.ForEachPlayer([&] {
+            shooter.Player().m_playerX = Math::Lerp(-0.18f, 0.0f, approach) +
+                static_cast<float>(shooter.m_activePlayer) * 0.36f;
+            shooter.Player().m_playerY = 0.0f;
+        });
         if (shooter.m_stage5.phaseTimer >= WallClimbTransitionFrames) {
             StartPhase(shooter, Stage5Phase::WallClimbLower);
         }
@@ -2663,7 +2711,9 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
             for (auto& shot : shooter.m_shots) {
                 if (shot.enemy) shot.active = false;
             }
-            shooter.m_playerY += ShooterStages::Stage5::Part2PlayerFlyAwaySpeed;
+            shooter.ForEachPlayer([&] {
+                shooter.Player().m_playerY += ShooterStages::Stage5::Part2PlayerFlyAwaySpeed;
+            });
         } else {
             TickWallEnemyWave(shooter, 64, 180);
         }
@@ -2804,19 +2854,19 @@ void SideScrollingShooter::Stage5Module::RestartCheckpoint(SideScrollingShooter&
     shooter.m_debris = {};
     shooter.m_score = shooter.m_stage5.checkpointScore;
     shooter.m_kills = shooter.m_stage5.checkpointKills;
-    shooter.m_power = shooter.m_stage5.checkpointPower;
+    shooter.Player().m_power = shooter.m_stage5.checkpointPower;
     shooter.m_chapterResult = {};
     shooter.m_chapterStartScore = shooter.m_score;
     shooter.m_chapterStartKills = shooter.m_kills;
-    shooter.m_playerX = 0.0f;
-    shooter.m_playerY = 0.0f;
+    shooter.Player().m_playerX = 0.0f;
+    shooter.Player().m_playerY = 0.0f;
     shooter.m_stage5.tayamaOrbitAngle = 0.0f;
     shooter.m_stage5.tayamaSideViewAngle = 0.0f;
     shooter.m_viewMode = ViewMode::Rail3D;
     shooter.m_nextViewMode = ViewMode::Rail3D;
     shooter.m_viewTransitionTimer = 0;
     shooter.m_viewTransitionProgress = 0.0f;
-    shooter.m_invincible = 120;
+    shooter.Player().m_invincible = 120;
     shooter.m_restartTimer = RestartDisplayFrames;
 
     if (shooter.m_stage5.checkpoint == Stage5Checkpoint::Eastsource) {

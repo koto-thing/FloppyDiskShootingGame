@@ -15,8 +15,8 @@ struct OrbitShotTests {
         g.m_stage5.phase = Game::Stage5Phase::TayamaDragonBattle;
         g.m_stage5.tayamaDragonAttack = Attack::Orbit;
         g.m_viewMode = g.m_nextViewMode = Game::ViewMode::Rail3D;
-        g.m_playerX = g.m_playerY = 0.0f;
-        g.m_invincible = 999;
+        g.Player().m_playerX = g.Player().m_playerY = 0.0f;
+        g.Player().m_invincible = 999;
 
         // 実際の5回の発射位置から自機へ到達し、通過後には消滅する
         for (int frame : {36, 48, 60, 72, 84}) {

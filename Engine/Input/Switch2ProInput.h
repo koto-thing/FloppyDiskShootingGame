@@ -33,7 +33,8 @@ namespace Switch2ProInput {
  * @brief 非同期で取得したSwitch 2 Proの入力を読み出す
  * @param state 最新入力の出力先
  * @param connection 接続を識別する通し番号の出力先
+ * @param slot 直接接続スロット0または1
  * @return 有効な接続と新鮮な入力がある場合はtrue
  */
-bool Poll(XINPUT_GAMEPAD& state, unsigned& connection);
+bool Poll(XINPUT_GAMEPAD& state, unsigned& connection, int slot = 0);
 }

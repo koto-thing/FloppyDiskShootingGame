@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <!-- 配布版ごとに生成物を分離し、未指定時はFloppy版を選ぶ -->
+  <PropertyGroup>
+    <Distribution Condition="'$(Distribution)'==''">Floppy</Distribution>
+    <OutDir>$(MSBuildThisFileDirectory)bin\$(Distribution)\$(Platform)\$(Configuration)\</OutDir>
+    <IntDir>$(MSBuildThisFileDirectory)obj\$(Distribution)\$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
+    <DistributionDir>$(MSBuildThisFileDirectory)dist\$(Distribution)\$(Platform)\$(Configuration)\</DistributionDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup>
+    <ClCompile>
+      <PreprocessorDefinitions>SPACEYAKUZA_EDITION_$(Distribution)=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <Target Name="ValidateDistribution" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(ProfileDistribution)'!='' and '$(Distribution)'!='$(ProfileDistribution)'" Text="Distribution conflicts with the selected IDE configuration" />
+    <Error Condition="'$(Distribution)'!='Floppy' and '$(Distribution)'!='Online' and '$(Distribution)'!='Steam'" Text="Distribution must be Floppy, Online, or Steam" />
+  </Target>
+  <!-- 配布に必要なファイルだけをコピーし、Floppy版のRelease配布物全体を検査する -->
+  <Target Name="PackageDistribution" AfterTargets="Build" Condition="'$(MSBuildProjectName)'=='FloppyDiskShootingGame' and '$(BuildFlavor)'=='Release'">
+    <ItemGroup>
+      <DistributionFile Include="$(TargetPath)" />
+    </ItemGroup>
+    <Copy SourceFiles="@(DistributionFile)" DestinationFolder="$(DistributionDir)" SkipUnchangedFiles="true" />
+    <Exec Condition="'$(Distribution)'=='Floppy'" Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildThisFileDirectory)Scripts\CheckDistributionSize.ps1&quot; -Path &quot;$(DistributionDir).&quot;" />
+  </Target>
+</Project>

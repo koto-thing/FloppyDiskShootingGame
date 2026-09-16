@@ -33,6 +33,9 @@ public:
     void Render(Renderer& renderer) override;
 
 private:
+    /** @brief 2人用の両コントローラーが接続中か取得する @return 開始時の台数を満たすならtrue */
+    bool ControllersConnected() const;
+
     /** @brief ポーズメニュー用のUIを初期化する */
     void InitializePauseMenu();
     /** @brief ポーズメニュー用のUI入力を処理する */

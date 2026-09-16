@@ -11,5 +11,7 @@ struct SceneSharedData {
     AudioService* audio = nullptr;
     DifficultyType difficulty = Easy;
     PlayerType playerType = Homing;
+    int playerCount = 1;
+    PlayerType secondPlayerType = Homing;
     bool showRankingAfterCredits = false;
 };

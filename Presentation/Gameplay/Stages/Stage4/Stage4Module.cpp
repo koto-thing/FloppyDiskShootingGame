@@ -1066,7 +1066,7 @@ void SideScrollingShooter::Stage4Module::TickSecondaryGunAttacks(
     if (!firesMissile && !firesSpread && !firesAimed) return;
 
     const Vector3 player {
-        ToWorldX(shooter.m_playerX), ToWorldY(shooter.m_playerY),
+        ToWorldX(shooter.Player().m_playerX), ToWorldY(shooter.Player().m_playerY),
         shooter.IsRailGameplayActive() ? PlayerRailZ : SidePlaneZ
     };
     auto DirectionTo = [&](const Vector3& source, const Vector3& target) {

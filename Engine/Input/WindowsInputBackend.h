@@ -61,17 +61,22 @@ private:
      * @brief 再接続時の押下を抑止して取得済みゲームパッド状態を反映する
      * @param gamepad ゲームパッド状態、未接続の場合はnullptr
      * @param elapsedSeconds 前回取得からの秒数
+     * @param slot プレイヤー番号0または1
      * @return なし
      */
-    static void ProcessPolledGamepad(const XINPUT_GAMEPAD* gamepad, float elapsedSeconds);
+    static void ProcessPolledGamepad(const XINPUT_GAMEPAD* gamepad, float elapsedSeconds, int slot = 0);
+
+    /** @brief 接続済みの入力元を空きプレイヤーへ割り当てる @param gamepads XInput4台とNintendo2台の状態 @param elapsedSeconds 経過秒数 @return なし */
+    static void ProcessAvailableGamepads(const XINPUT_GAMEPAD* const* gamepads, float elapsedSeconds);
 
     /**
      * @brief XInput状態を既存のキーとポインター操作へ割り当てる
      * @param gamepad ゲームパッド状態、未接続の場合はnullptr
      * @param elapsedSeconds 前回取得からの秒数
+     * @param slot プレイヤー番号0または1
      * @return なし
      */
-    static void ProcessGamepad(const XINPUT_GAMEPAD* gamepad, float elapsedSeconds);
+    static void ProcessGamepad(const XINPUT_GAMEPAD* gamepad, float elapsedSeconds, int slot = 0);
 
     /**
      * @brief 右スティックでUI用ポインターを移動する

@@ -34,7 +34,8 @@ Not lazy about: understanding the problem (read it fully and trace the real flow
 (Yes, this file also applies to agents working on the ponytail repo itself. Especially to them.)
 
 ## 1. ファイルサイズの制約
-* The final build size should be 1.44MB, which is the size of a floppy disk, including the resources required for the game
+* Floppy edition only: the final distribution size must be at most 1,474,560 bytes (1.44MB floppy disk capacity), including the resources required for the game
+* Online and Steam editions have no build size restriction; all three editions share one codebase and use the Distribution build property
 * There are no restrictions on memory or GPU
 * Data compression within the game is permitted
 

@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <filesystem>
+#include <fstream>
 #include <limits>
 #include <stdexcept>
 #include <string>
@@ -59,10 +60,42 @@ void RunScoreRepositoryTests() {
     const bool duplicateUnlock = repository.UnlockGalleryEntry(GalleryEntry::LightEnemy);
     const GameSettings unlockedSettings = repository.Load();
 
+    // 既存の1人用ファイル形式を読み取り、協力プレイの保存先から隔離する
+    const std::filesystem::path soloPath = testRoot / L"SpaceYakuza" / L"rankings.dat";
+    std::ofstream legacyScores(soloPath);
+    for (int difficulty = 0; difficulty < ScoreRepository::DifficultyCount; ++difficulty) {
+        for (int rank = 0; rank < ScoreRepository::RankCount; ++rank) {
+            legacyScores << (difficulty == static_cast<int>(Normal) ? scores[rank] : 0) << '\n';
+        }
+    }
+    legacyScores.close();
+    const ScoreRepository scoreRepository;
+    const ScoreRepository::Rankings legacyRankings = scoreRepository.Load();
+    const ScoreRepository::Rankings emptyCoopRankings = scoreRepository.Load(true);
+    scoreRepository.Save(Easy, 1200);
+    scoreRepository.Save(Easy, 9000, true);
+    scoreRepository.Save(Hard, 4200, true);
+    scoreRepository.Save(Easy, 6000, true);
+    scoreRepository.Save(Normal, 8000);
+    const ScoreRepository::Rankings soloRankings = scoreRepository.Load();
+    const ScoreRepository::Rankings coopRankings = scoreRepository.Load(true);
+    const bool separateRankingFiles = std::filesystem::exists(soloPath) &&
+        std::filesystem::exists(testRoot / L"SpaceYakuza" / L"rankings-coop.dat");
+
     SetEnvironmentVariableW(L"LOCALAPPDATA",
         originalLength > 0 && originalLength < std::size(originalLocalAppData)
             ? originalLocalAppData : nullptr);
     std::filesystem::remove_all(testRoot, error);
+    ScoreRepository::Rankings expectedSoloRankings {};
+    expectedSoloRankings[Easy][0] = 1200;
+    expectedSoloRankings[Normal] = {{ 9000, 8000, 7000, 5000, 3000 }};
+    ScoreRepository::Rankings expectedCoopRankings {};
+    expectedCoopRankings[Easy] = {{ 9000, 6000, 0, 0, 0 }};
+    expectedCoopRankings[Hard][0] = 4200;
+    if (legacyRankings[Normal] != scores || emptyCoopRankings != ScoreRepository::Rankings {} ||
+        soloRankings != expectedSoloRankings || coopRankings != expectedCoopRankings || !separateRankingFiles) {
+        throw std::runtime_error("Solo rankings must retain legacy scores and remain separate from co-op rankings");
+    }
     if (loadedSettings.masterVolume != expectedSettings.masterVolume ||
         loadedSettings.bgmVolume != expectedSettings.bgmVolume ||
         loadedSettings.seVolume != expectedSettings.seVolume ||

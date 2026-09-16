@@ -1,4 +1,4 @@
-﻿#include "SideScrollingShooter.h"
+#include "SideScrollingShooter.h"
 
 #include <algorithm>
 #include <array>
@@ -291,9 +291,12 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorFo
  * @param audio 効果音を再生するサービス
  * @param playerType 使用する自機タイプ
  * @param difficulty 使用する敵出現難易度
+ * @param playerCount 同時に操作する人数
+ * @param secondPlayerType 2Pのショットタイプ
  * @return なし
  */
-void SideScrollingShooter::Initialize(AudioService* audio, PlayerType playerType, DifficultyType difficulty) {
+void SideScrollingShooter::Initialize(AudioService* audio, PlayerType playerType, DifficultyType difficulty,
+    int playerCount, PlayerType secondPlayerType) {
     // プレイ開始前に音声をデコードして初回再生時の処理待ちをなくす
     (void)MomijiDeathVoices();
     (void)MissionVoice();
@@ -301,7 +304,11 @@ void SideScrollingShooter::Initialize(AudioService* audio, PlayerType playerType
     (void)SuspectVoice();
     (void)ArrestedVoice();
     m_audio = audio;
-    m_playerType = playerType;
+    m_activePlayer = 0;
+    m_playerCount = playerCount == 2 ? 2 : 1;
+    m_players = {};
+    Player().m_playerType = static_cast<PlayerType>((std::clamp)(static_cast<int>(playerType), 0, 2));
+    m_players[1].m_playerType = static_cast<PlayerType>((std::clamp)(static_cast<int>(secondPlayerType), 0, 2));
     m_difficulty = difficulty;
     m_galleryUnlocks = SettingsRepository {}.Load().galleryUnlocks;
     Reset(true);
@@ -313,18 +320,25 @@ void SideScrollingShooter::InitializeTutorial(
     Initialize(audio, playerType, difficulty);
     m_tutorialMode = true;
     m_missionStartTimer = MissionBannerDisplayFrames;
-    m_invincible = 999999;
+    Player().m_invincible = 999999;
     m_tutorialStep = 0;
     BeginTutorialStep();
 }
 
 void SideScrollingShooter::Reset(bool resetRetryCounts) {
+    ForEachPlayer([&] {
+        const PlayerType type = Player().m_playerType;
+        Player() = {};
+        Player().m_playerType = type;
+        Player().m_invincible = 90;
+        if (m_playerCount == 2) Player().m_playerY = m_activePlayer == 0 ? 0.25f : -0.25f;
+    });
     m_shots = {};
     m_enemies = {};
     m_items = {};
     m_explosions = {};
     m_debris = {};
-    m_bomb = {};
+    Player().m_bomb = {};
     StageDispatch::ResetGimmicks(*this);
     m_stageNumber = 1;
     m_chapterNumber = 1;
@@ -335,19 +349,19 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
     m_chapterStartKills = 0;
     m_chapterResultTimer = 0;
     m_missionStartTimer = MissionBannerDisplayFrames;
-    m_power = 0.0f;
+    Player().m_power = 0.0f;
     m_stage = &StageForNumber(m_stageNumber, m_difficulty);
-    m_playerX = -0.72f;
-    m_playerY = 0.0f;
+    Player().m_playerX = -0.72f;
+    Player().m_playerY = m_playerCount == 2 ? 0.25f : 0.0f;
     m_scroll = 0.0f;
     m_frame = 0;
     m_spawnCooldown = 35;
-    m_shotCooldown = 0;
-    m_specialShotCooldown = 0;
-    m_invincible = 90;
+    Player().m_shotCooldown = 0;
+    Player().m_specialShotCooldown = 0;
+    Player().m_invincible = 90;
     m_score = 0;
     m_kills = 0;
-    m_bombCount = InitialBombCount;
+    Player().m_bombCount = InitialBombCount;
     m_bossHp = 0;
     m_displayBossHp = 0.0f;
     m_bossStoryLine = 0;
@@ -362,10 +376,10 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
     m_bossBattle = false;
     m_bossBattlePending = false;
     m_chapterResultActive = false;
-    m_playerDestructionTimer = 0;
-    m_powerUpTimer = 0;
+    Player().m_playerDestructionTimer = 0;
+    Player().m_powerUpTimer = 0;
     m_viewToggleRequested = false;
-    m_bombRequested = false;
+    Player().m_bombRequested = false;
     m_viewMode = ViewMode::Side2D;
     m_nextViewMode = ViewMode::Side2D;
     m_viewTransitionTimer = 0;
@@ -393,7 +407,7 @@ void SideScrollingShooter::StartDebugCheckpoint(
     m_items = {};
     m_explosions = {};
     m_debris = {};
-    m_bomb = {};
+    Player().m_bomb = {};
     StageDispatch::ResetGimmicks(*this);
 
     // 指定範囲をゲーム内の進行範囲へ収める
@@ -402,7 +416,7 @@ void SideScrollingShooter::StartDebugCheckpoint(
     m_stage = &StageForNumber(m_stageNumber, m_difficulty);
     m_chapterRetryCounts = {};
     m_chapterResult = {};
-    m_chapterStartPower = m_power;
+    m_chapterStartPower = Player().m_power;
     m_chapterStartScore = m_score;
     m_chapterStartKills = m_kills;
     m_chapterResultTimer = 0;
@@ -410,9 +424,9 @@ void SideScrollingShooter::StartDebugCheckpoint(
     m_frame = bossBattle ? m_stage->ChapterEndFrame(3) : m_stage->ChapterEndFrame(m_chapterNumber - 1);
     m_scroll = static_cast<float>(m_frame) * 0.008f;
     m_spawnCooldown = 35;
-    m_shotCooldown = 0;
-    m_specialShotCooldown = 0;
-    m_invincible = 90;
+    Player().m_shotCooldown = 0;
+    Player().m_specialShotCooldown = 0;
+    Player().m_invincible = 90;
     m_bossHp = 0;
     m_displayBossHp = 0.0f;
     m_bossStoryLine = 0;
@@ -424,18 +438,18 @@ void SideScrollingShooter::StartDebugCheckpoint(
     m_bossBattle = false;
     m_bossBattlePending = false;
     m_chapterResultActive = false;
-    m_playerDestructionTimer = 0;
+    Player().m_playerDestructionTimer = 0;
     m_restartTimer = 0;
     m_viewToggleRequested = false;
-    m_bombRequested = false;
+    Player().m_bombRequested = false;
     m_viewMode = ViewMode::Side2D;
     m_nextViewMode = ViewMode::Side2D;
     m_viewTransitionTimer = 0;
     m_viewToggleCooldown = 0;
     m_viewTransitionProgress = 0.0f;
-    m_playerX = -0.72f;
-    m_playerY = 0.0f;
-    m_slowMove = false;
+    Player().m_playerX = -0.72f;
+    Player().m_playerY = 0.0f;
+    Player().m_slowMove = false;
     StageDispatch::ResetScriptState(*this);
 
     if (bossBattle) {
@@ -455,14 +469,20 @@ void SideScrollingShooter::ProcessInput() {
     // リスタート表示中の新しいキー入力でカウントダウンを終了する
     if (m_restartTimer > 0 && Input::GetAnyKeyDown()) m_restartTimer = 0;
 
-    m_moveLeft = Input::GetKey(KeyCode::LeftArrow) || Input::GetKey(KeyCode::A);
-    m_moveRight = Input::GetKey(KeyCode::RightArrow) || Input::GetKey(KeyCode::D);
-    m_moveUp = Input::GetKey(KeyCode::UpArrow) || Input::GetKey(KeyCode::W);
-    m_moveDown = Input::GetKey(KeyCode::DownArrow) || Input::GetKey(KeyCode::S);
-    m_slowMove = Input::GetKey(KeyCode::LeftShift) || Input::GetKey(KeyCode::RightShift);
-    m_fire = Input::GetKey(KeyCode::Z) || Input::GetKey(KeyCode::Space);
-    m_bombRequested = Input::GetKeyDown(KeyCode::C);
-    m_viewToggleRequested = Input::GetKeyDown(KeyCode::X) && CanToggleView();
+    ForEachPlayer([&] {
+        const auto held = [&](KeyCode key) { return m_playerCount == 2 ?
+            Input::GetGamepadKey(m_activePlayer, key) : Input::GetKey(key); };
+        const auto pressed = [&](KeyCode key) { return m_playerCount == 2 ?
+            Input::GetGamepadKeyDown(m_activePlayer, key) : Input::GetKeyDown(key); };
+        Player().m_moveLeft = held(KeyCode::LeftArrow) || held(KeyCode::A);
+        Player().m_moveRight = held(KeyCode::RightArrow) || held(KeyCode::D);
+        Player().m_moveUp = held(KeyCode::UpArrow) || held(KeyCode::W);
+        Player().m_moveDown = held(KeyCode::DownArrow) || held(KeyCode::S);
+        Player().m_slowMove = held(KeyCode::LeftShift) || held(KeyCode::RightShift);
+        Player().m_fire = held(KeyCode::Z) || held(KeyCode::Space);
+        Player().m_bombRequested = pressed(KeyCode::C);
+        if (m_activePlayer == 0) m_viewToggleRequested = pressed(KeyCode::X) && CanToggleView();
+    });
 
 #ifdef _DEBUG
     // デバッグ用に任意の進行地点へ移動する
@@ -477,8 +497,8 @@ void SideScrollingShooter::ProcessInput() {
     if (Input::GetKeyDown(KeyCode::Alpha3)) StartDebugCheckpoint(m_stageNumber, 3, false);
     if (Input::GetKeyDown(KeyCode::P)) {
         const int previousPowerLevel = PowerLevel();
-        m_power = PowerAfterDebugIncrease(m_power, MaxPower);
-        if (PowerLevel() > previousPowerLevel) m_powerUpTimer = 120;
+        Player().m_power = PowerAfterDebugIncrease(Player().m_power, MaxPower);
+        if (PowerLevel() > previousPowerLevel) Player().m_powerUpTimer = 120;
     }
     if (Input::GetKeyDown(KeyCode::B) && !StageDispatch::HandleDebugBossInput(*this)) {
         StartDebugCheckpoint(m_stageNumber, 3, true);
@@ -494,7 +514,11 @@ void SideScrollingShooter::ProcessInput() {
 void SideScrollingShooter::Tick() {
     // 進行停止中も画面演出を終了へ進める
     m_screenShakeFrames = (std::max)(0, m_screenShakeFrames - 1);
-    m_powerUpTimer = (std::max)(0, m_powerUpTimer - 1);
+    ForEachPlayer([&] {
+        Player().m_powerUpTimer = (std::max)(0, Player().m_powerUpTimer - 1);
+        if (m_playerCount == 2 && Player().m_playerDestructionTimer > 0 &&
+            --Player().m_playerDestructionTimer == 0) Player().m_invincible = 90;
+    });
 
     if (m_tutorialMode) {
         TickTutorial();
@@ -544,17 +568,17 @@ void SideScrollingShooter::Tick() {
         if (m_clearTimer <= 0 && StageDispatch::HasNextStage(*this)) StartNextStage();
         return;
     }
-    if (m_playerDestructionTimer > 0) {
+    if (m_playerCount == 1 && Player().m_playerDestructionTimer > 0) {
         // 自機の破壊演出中は戦闘進行を止め、爆発と飛散物だけを更新する
         TickExplosions();
         TickDebris();
-        if (--m_playerDestructionTimer == 0) RestartCurrentChapter();
+        if (--Player().m_playerDestructionTimer == 0) RestartCurrentChapter();
         return;
     }
     if (m_restartTimer > 0) {
         --m_restartTimer;
         // リスタート表示中は距離とチャプター進行を止め、画面上の弾と演出だけを更新する
-        TickPlayer();
+        ForEachPlayer([&] { TickPlayer(); });
         TickShots();
         TickExplosions();
         TickItems();
@@ -564,7 +588,7 @@ void SideScrollingShooter::Tick() {
         TickChapterResult();
         if (m_chapterResultActive) {
             // 戦闘進行は止めたまま、画面上の弾・破壊演出・アイテムを動かす
-            TickPlayer();
+            ForEachPlayer([&] { TickPlayer(); });
             TickChapterExitEnemies();
             TickShots();
             TickExplosions();
@@ -592,9 +616,11 @@ void SideScrollingShooter::Tick() {
 
     ++m_frame;
     if (StageDispatch::ShouldAdvanceStageScroll(*this)) m_scroll += 0.008f;
-    m_shotCooldown = (std::max)(0, m_shotCooldown - 1);
-    m_specialShotCooldown = (std::max)(0, m_specialShotCooldown - 1);
-    m_invincible = (std::max)(0, m_invincible - 1);
+    ForEachPlayer([&] {
+        Player().m_shotCooldown = (std::max)(0, Player().m_shotCooldown - 1);
+        Player().m_specialShotCooldown = (std::max)(0, Player().m_specialShotCooldown - 1);
+        Player().m_invincible = (std::max)(0, Player().m_invincible - 1);
+    });
     m_viewToggleCooldown = (std::max)(0, m_viewToggleCooldown - 1);
     StageDispatch::TickAfterFrame(*this);
     if (!m_bossBattle && !m_chapterResultActive &&
@@ -604,19 +630,18 @@ void SideScrollingShooter::Tick() {
     }
 
     const bool cinematic = StageDispatch::IsCinematic(*this);
-    if (!cinematic) TickPlayer();
+    if (!cinematic) ForEachPlayer([&] { TickPlayer(); });
     StageDispatch::TickWorld(*this);
 
     // 3Dから2Dへ確定するフレームだけは、座標変換直後の特殊障害物との誤接触を除外する
-    const Vector3 playerPosition = PlayerWorldPosition();
-    if (!completingRailToSideTransition &&
-        StageDispatch::HitsHazard(*this, FromWorldX(playerPosition.x),
-            FromWorldY(playerPosition.y), playerPosition.z, 0.055f)) {
-        DamagePlayer();
-        return;
-    }
-
-    if (!cinematic) TickPlayerWeapons();
+    ForEachPlayer([&] {
+        const Vector3 playerPosition = PlayerWorldPosition();
+        if (!completingRailToSideTransition &&
+            StageDispatch::HitsHazard(*this, FromWorldX(playerPosition.x),
+                FromWorldY(playerPosition.y), playerPosition.z, 0.055f)) DamagePlayer();
+    });
+    if (m_playerCount == 1 && Player().m_playerDestructionTimer > 0) return;
+    if (!cinematic) ForEachPlayer([&] { TickPlayerWeapons(); });
 
     if (!m_bossBattle && !m_chapterResultActive &&
         StageDispatch::UsesChapterTimeline(*this)) {
@@ -629,7 +654,7 @@ void SideScrollingShooter::Tick() {
         }
     }
 
-    if (!cinematic) TickBomb();
+    if (!cinematic) ForEachPlayer([&] { TickBomb(); });
     TickEnemies();
     TickShots();
     TickExplosions();
@@ -677,7 +702,7 @@ void SideScrollingShooter::TickChapterResult() {
 
     ++m_chapterNumber;
     m_chapterResult = {};
-    m_chapterStartPower = m_power;
+    m_chapterStartPower = Player().m_power;
     m_chapterStartScore = m_score;
     m_chapterStartKills = m_kills;
     StageDispatch::OnChapterStarted(*this);
@@ -727,9 +752,14 @@ void SideScrollingShooter::TickChapterExitEnemies() {
 void SideScrollingShooter::FinishChapter() {
     m_chapterResult.retryCount = m_chapterRetryCounts[m_chapterNumber - 1];
     m_chapterResult.totalScore = CalculateChapterTotalScore(m_chapterResult);
-    m_chapterResult.bombAwarded = m_bombCount < MaxBombCount && EarnsChapterBombBonus(
+    m_chapterResult.bombAwarded = false;
+    const bool earnedBomb = EarnsChapterBombBonus(
         m_chapterResult.enemyDefeatCount, m_chapterResult.enemySpawnCount);
-    if (m_chapterResult.bombAwarded) ++m_bombCount;
+    ForEachPlayer([&] {
+        if (!earnedBomb || Player().m_bombCount >= MaxBombCount) return;
+        ++Player().m_bombCount;
+        m_chapterResult.bombAwarded = true;
+    });
     m_chapterResultTimer = 0;
     m_chapterResultActive = true;
 
@@ -783,23 +813,24 @@ void SideScrollingShooter::RequestViewMode(ViewMode mode) {
     m_viewTransitionProgress = 0.0f;
 
     // 切り替え開始から3秒間の無敵と8秒間の再入力待ちを付与する
-    m_invincible = (std::max)(m_invincible, ViewToggleInvincibleFrames);
+    ForEachPlayer([&] { Player().m_invincible = (std::max)(Player().m_invincible, ViewToggleInvincibleFrames); });
     m_viewToggleCooldown = ViewToggleCooldownFrames;
     if (IsTayamaBattle()) {
         // 2Dでは切替地点の周回角を固定し、3D復帰時は画面内の横位置を周回角へ戻す
         if (mode == ViewMode::Side2D) {
             m_stage5.tayamaSideViewAngle = m_stage5.tayamaOrbitAngle;
-            m_playerX = 0.0f;
+            Player().m_playerX = 0.0f;
         } else {
+            if (m_playerCount == 2) m_players[1].m_playerX -= Player().m_playerX;
             m_stage5.tayamaOrbitAngle = m_stage5.tayamaSideViewAngle +
-                std::atan2(ToWorldX(m_playerX), ShooterStages::Stage5::TayamaOrbitRadius);
-            m_playerX = 0.0f;
+                std::atan2(ToWorldX(Player().m_playerX), ShooterStages::Stage5::TayamaOrbitRadius);
+            Player().m_playerX = 0.0f;
         }
         return;
     }
     if (mode == ViewMode::Rail3D) {
         // 遷移中はTickPlayerを通らないため、開始時点で機体を地面上へ戻す
-        m_playerY = (std::max)(m_playerY, PlayerRailMinY());
+        ForEachPlayer([&] { Player().m_playerY = (std::max)(Player().m_playerY, PlayerRailMinY()); });
         InitializeRailObjects();
     } else {
         InitializeSideObjects();
@@ -1035,7 +1066,7 @@ void SideScrollingShooter::StartBossBattle(bool playWarningSound) {
     m_bossHp = boss.hp;
     m_displayBossHp = static_cast<float>(m_bossHp);
     boss.bossPhase = BossNormalPhase1;
-    m_invincible = (std::max)(m_invincible, 60);
+    ForEachPlayer([&] { Player().m_invincible = (std::max)(Player().m_invincible, 60); });
 
     if (m_audio && playWarningSound) {
         m_audio->PlayMMLSE(BossWarningSirenMml);
@@ -1122,18 +1153,23 @@ void SideScrollingShooter::StartNextStage() {
     ++m_stageNumber;
 
     // スコアと残機を維持したまま、次のステージ用に戦闘オブジェクトを初期化する
-    m_bombCount = (std::max)(m_bombCount, InitialBombCount);
+    ForEachPlayer([&] {
+        Player().m_bombCount = (std::max)(Player().m_bombCount, InitialBombCount);
+        Player().m_bomb = {};
+        Player().m_invincible = (std::max)(Player().m_invincible, 90);
+        Player().m_playerDestructionTimer = 0;
+    });
     m_shots = {};
     m_enemies = {};
     m_explosions = {};
     m_debris = {};
-    m_bomb = {};
+    Player().m_bomb = {};
     StageDispatch::ResetGimmicks(*this);
     m_stage = &StageForNumber(m_stageNumber, m_difficulty);
     m_chapterNumber = 1;
     m_chapterRetryCounts = {};
     m_chapterResult = {};
-    m_chapterStartPower = m_power;
+    m_chapterStartPower = Player().m_power;
     m_chapterStartScore = m_score;
     m_chapterStartKills = m_kills;
     m_chapterResultTimer = 0;
@@ -1141,8 +1177,8 @@ void SideScrollingShooter::StartNextStage() {
     m_scroll = 0.0f;
     m_frame = 0;
     m_spawnCooldown = 35;
-    m_shotCooldown = 0;
-    m_specialShotCooldown = 0;
+    Player().m_shotCooldown = 0;
+    Player().m_specialShotCooldown = 0;
     m_bossHp = 0;
     m_displayBossHp = 0.0f;
     m_bossStoryLine = 0;
@@ -1154,7 +1190,7 @@ void SideScrollingShooter::StartNextStage() {
     m_bossBattle = false;
     m_bossBattlePending = false;
     m_chapterResultActive = false;
-    m_invincible = (std::max)(m_invincible, 90);
+    Player().m_invincible = (std::max)(Player().m_invincible, 90);
     StageDispatch::ResetScriptState(*this);
     PlayCurrentStageBgm(true);
 }
@@ -1165,7 +1201,8 @@ void SideScrollingShooter::StartNextStage() {
  */
 void SideScrollingShooter::DamagePlayer() {
     if (StageDispatch::IsPlayerDamageIgnored(*this)) return;
-    if (m_playerDestructionTimer > 0) return;
+    if (Player().m_playerDestructionTimer > 0 || Player().m_invincible > 0) return;
+    if (m_playerCount == 2) Player().m_power = PowerAfterRestart(Player().m_power, m_difficulty);
 
     // 被弾成立と同時に撃破音声を開始する
     if (m_audio) m_audio->PlayVoice(RandomMomijiDeathVoice());
@@ -1175,29 +1212,29 @@ void SideScrollingShooter::DamagePlayer() {
     const Vector3 player = PlayerWorldPosition();
     SpawnExplosion(FromWorldX(player.x), FromWorldY(player.y), player.z, true);
     PlayHitSound();
-    m_playerDestructionTimer = PlayerDestructionWaitFrames;
+    Player().m_playerDestructionTimer = PlayerDestructionWaitFrames;
 }
 
 /** @brief 現在のチュートリアル課題を準備する */
 void SideScrollingShooter::BeginTutorialStep() {
     m_shots = {};
     m_enemies = {};
-    m_bomb = {};
+    Player().m_bomb = {};
     for (auto& meteor : m_stage1.meteors) meteor.destroyed = true;
     m_tutorialStepFrame = 0;
     m_tutorialSlowUsed = false;
-    m_invincible = m_tutorialStep == 0 ? 0 : 999999;
+    Player().m_invincible = m_tutorialStep == 0 ? 0 : 999999;
 
     // 移動課題には正面を横切る隕石、低速移動課題には狭い上下の隕石を置く
     if (m_tutorialStep == 0) {
-        m_playerX = -0.72f;
-        m_playerY = 0.0f;
+        Player().m_playerX = -0.72f;
+        Player().m_playerY = 0.0f;
         m_stage1.meteors[0] = {-85.0f, 1.65f, 0.0f, 0.018f, 0.0f, 99, false, 0.85f, true};
         m_stage1.meteors[1] = {-45.0f, 1.65f, 0.7f, -0.018f, 0.0f, 99, false, 0.00f, true};
         m_stage1.meteors[2] = {-85.0f, 1.65f, 1.4f, 0.018f, 0.0f, 99, false, -0.85f, true};
     } else if (m_tutorialStep == 1) {
-        m_playerX = -0.72f;
-        m_playerY = 0.0f;
+        Player().m_playerX = -0.72f;
+        Player().m_playerY = 0.0f;
         constexpr float SlowMeteorSpeed = 0.85f;
         // 上下3組の隙間を交互にずらし、低速移動で抜ける蛇行通路を作る
         m_stage1.meteors[0] = {-20.0f, 1.65f, 0.0f, 0.018f, 0.0f, 99, false, 0.90f, true, SlowMeteorSpeed};
@@ -1249,21 +1286,21 @@ void SideScrollingShooter::TickTutorial() {
     }
 
     // 隕石へ接触した場合は撃破演出後に同じ課題を最初からやり直す
-    if (m_playerDestructionTimer > 0) {
+    if (Player().m_playerDestructionTimer > 0) {
         TickExplosions();
         TickDebris();
-        if (--m_playerDestructionTimer == 0) BeginTutorialStep();
+        if (--Player().m_playerDestructionTimer == 0) BeginTutorialStep();
         return;
     }
     ++m_tutorialStepFrame;
     m_scroll += 0.008f;
-    m_shotCooldown = (std::max)(0, m_shotCooldown - 1);
-    m_specialShotCooldown = (std::max)(0, m_specialShotCooldown - 1);
+    Player().m_shotCooldown = (std::max)(0, Player().m_shotCooldown - 1);
+    Player().m_specialShotCooldown = (std::max)(0, Player().m_specialShotCooldown - 1);
     m_viewToggleCooldown = (std::max)(0, m_viewToggleCooldown - 1);
     TickViewTransition();
     TickPlayer();
-    if (m_tutorialStep == 1 && m_slowMove &&
-        (m_moveLeft || m_moveRight || m_moveUp || m_moveDown)) m_tutorialSlowUsed = true;
+    if (m_tutorialStep == 1 && Player().m_slowMove &&
+        (Player().m_moveLeft || Player().m_moveRight || Player().m_moveUp || Player().m_moveDown)) m_tutorialSlowUsed = true;
     TickPlayerWeapons();
 
     // ショット課題の標的機は右画面外から指定位置まで進入して停止する
@@ -1293,7 +1330,7 @@ void SideScrollingShooter::TickTutorial() {
 
     if (m_tutorialStep <= 1) {
         Stage1Module::TickWorld(*this);
-        if (Stage1Module::HitsHazard(*this, m_playerX, m_playerY, PlayerRailZ, 0.055f)) {
+        if (Stage1Module::HitsHazard(*this, Player().m_playerX, Player().m_playerY, PlayerRailZ, 0.055f)) {
             DamagePlayer();
             return;
         }
@@ -1350,7 +1387,7 @@ void SideScrollingShooter::RestartCurrentChapter() {
     }
 
     // 通常戦では被弾時点のPowerから難易度別の量を失い、0.0未満にはしない
-    m_power = PowerAfterRestart(m_power, m_difficulty);
+    Player().m_power = PowerAfterRestart(Player().m_power, m_difficulty);
     if (StageDispatch::TryRestartCheckpoint(*this)) return;
     ++m_chapterRetryCounts[m_chapterNumber - 1];
     m_shots = {};
@@ -1358,19 +1395,19 @@ void SideScrollingShooter::RestartCurrentChapter() {
     m_items = {};
     m_explosions = {};
     m_debris = {};
-    m_bomb = {};
+    Player().m_bomb = {};
     StageDispatch::ResetGimmicks(*this);
     m_chapterResult = {};
     m_score = m_chapterStartScore;
     m_kills = m_chapterStartKills;
-    m_playerX = -0.72f;
-    m_playerY = 0.0f;
+    Player().m_playerX = -0.72f;
+    Player().m_playerY = 0.0f;
     m_frame = m_stage->ChapterEndFrame(m_chapterNumber - 1);
     m_scroll = static_cast<float>(m_frame) * 0.008f;
     m_spawnCooldown = 35;
-    m_shotCooldown = 0;
-    m_specialShotCooldown = 0;
-    m_invincible = 90;
+    Player().m_shotCooldown = 0;
+    Player().m_specialShotCooldown = 0;
+    Player().m_invincible = 90;
     m_bossHp = 0;
     m_displayBossHp = 0.0f;
     m_bossStoryLine = 0;
@@ -1380,7 +1417,7 @@ void SideScrollingShooter::RestartCurrentChapter() {
     m_bossBattle = false;
     m_bossBattlePending = false;
     m_chapterResultActive = false;
-    m_playerDestructionTimer = 0;
+    Player().m_playerDestructionTimer = 0;
     m_restartTimer = RestartDisplayFrames;
 }
 
@@ -1485,7 +1522,7 @@ float SideScrollingShooter::PlayerRailMinY() const {
  * @return 0から4までの弾強化段階
  */
 int SideScrollingShooter::PowerLevel() const {
-    return static_cast<int>(m_power);
+    return static_cast<int>(Player().m_power);
 }
 
 /**
@@ -1541,15 +1578,15 @@ bool SideScrollingShooter::IsTayamaOrbitViewActive() const {
 
 Vector3 SideScrollingShooter::PlayerWorldPosition() const {
     if (!IsTayamaBattle()) {
-        return {ToWorldX(m_playerX), ToWorldY(m_playerY), PlayerRailDepth()};
+        return {ToWorldX(Player().m_playerX), ToWorldY(Player().m_playerY), PlayerRailDepth()};
     }
 
     // 3Dは周回角、2Dは切替時に固定した角と画面横位置から同じ円形アリーナへ配置する
     const float angle = IsTayamaOrbitViewActive() ?
         m_stage5.tayamaOrbitAngle : m_stage5.tayamaSideViewAngle;
-    const float sideOffset = IsTayamaOrbitViewActive() ? 0.0f : m_playerX;
+    const float sideOffset = IsTayamaOrbitViewActive() && m_activePlayer == 0 ? 0.0f : Player().m_playerX;
     const Vector2 orbit = TayamaOrbitXZ(angle, sideOffset);
-    return {orbit.x, ToWorldY(m_playerY), orbit.y};
+    return {orbit.x, ToWorldY(Player().m_playerY), orbit.y};
 }
 
 float SideScrollingShooter::PlayerRailDepth() const {

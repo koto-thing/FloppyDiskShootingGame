@@ -28,6 +28,14 @@ public:
     void Render(Renderer& renderer) override;
 
 private:
+    /**
+     * @brief 表示するランキングを1人用と2人協力用で切り替える
+     * @return なし
+     */
+    void ToggleMode();
+
+    bool m_cooperative = false;
     ScoreRepository::Rankings m_rankings {};
+    std::unique_ptr<Button> m_modeButton;
     std::unique_ptr<Button> m_returnButton;
 };

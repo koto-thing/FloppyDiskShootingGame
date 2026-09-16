@@ -169,10 +169,10 @@ void SideScrollingShooter::Stage2Module::TickBoss(
     SideScrollingShooter& shooter, Enemy& boss) {
     // 砲塔の照準だけを遅れて追従させ、戦艦本体と主人公の動きから慣性を感じられるようにする
     constexpr float TurretTrackingRate = 0.06f;
-    boss.turretAimX += (shooter.m_playerX - boss.turretAimX) * TurretTrackingRate;
-    boss.turretAimY += (shooter.m_playerY - boss.turretAimY) * TurretTrackingRate;
+    boss.turretAimX += (shooter.Player().m_playerX - boss.turretAimX) * TurretTrackingRate;
+    boss.turretAimY += (shooter.Player().m_playerY - boss.turretAimY) * TurretTrackingRate;
     const float turretTargetZ = shooter.IsRailGameplayActive() ?
-        PlayerRailZ : ToRailZFromSideX(shooter.m_playerX);
+        PlayerRailZ : ToRailZFromSideX(shooter.Player().m_playerX);
     boss.turretAimZ += (turretTargetZ - boss.turretAimZ) * TurretTrackingRate;
 
     // HP割合で三つの船体状態を切り替える
@@ -217,7 +217,7 @@ bool SideScrollingShooter::Stage2Module::HandleBossInteractionAfterTick(
     // POST-incrementのactionAgeで発射フレームのレールガン判定を行う
     const int beamCycle = shooter.m_stage2.boss.actionAge % RailgunCycleFrames;
     if (boss.phase >= 3.0f && boss.bossPartHp[BossNose] > 0 &&
-        beamCycle == RailgunFireFrame(shooter.m_difficulty) && shooter.m_invincible == 0) {
+        beamCycle == RailgunFireFrame(shooter.m_difficulty)) {
         constexpr float BossScale = 1.92f;
         const float yaw = shooter.IsRailGameplayActive() ? 0.0f : Math::HalfPi;
         const float cosine = std::cos(yaw);
@@ -236,15 +236,21 @@ bool SideScrollingShooter::Stage2Module::HandleBossInteractionAfterTick(
         const float targetZ = shooter.IsRailGameplayActive() ? boss.actionZ : SidePlaneZ;
         const Vector3 direction = Vector3 {
             targetX - startX, targetY - startY, targetZ - startZ}.Normalized();
-        if (Hit3DSegment(startX, startY, startZ,
-            targetX + direction.x * 18.0f,
-            targetY + direction.y * 18.0f,
-            targetZ + direction.z * 18.0f, 0.52f,
-            ToWorldX(shooter.m_playerX), ToWorldY(shooter.m_playerY),
-            shooter.IsRailGameplayActive() ? PlayerRailZ : SidePlaneZ, 0.38f)) {
-            shooter.DamagePlayer();
-            return true;
-        }
+        // 発射は一度だけ行い、同じ光線への接触を各自機で判定する
+        bool hitPlayer = false;
+        shooter.ForEachPlayer([&] {
+            const Vector3 player {ToWorldX(shooter.Player().m_playerX), ToWorldY(shooter.Player().m_playerY),
+                shooter.IsRailGameplayActive() ? PlayerRailZ : SidePlaneZ};
+            if (shooter.Player().m_invincible == 0 && Hit3DSegment(startX, startY, startZ,
+                targetX + direction.x * 18.0f,
+                targetY + direction.y * 18.0f,
+                targetZ + direction.z * 18.0f, 0.52f,
+                player.x, player.y, player.z, 0.38f)) {
+                shooter.DamagePlayer();
+                hitPlayer = true;
+            }
+        });
+        if (hitPlayer && shooter.m_playerCount == 1) return true;
     }
 
     // 全Phaseで上部戦艦の船体と骨アーチとの接触を判定する
@@ -308,7 +314,7 @@ void SideScrollingShooter::Stage2Module::TickBossPhase2(
     shooter.m_stage2.boss.sandSubmarineOffsetY +=
         (SubmarineBuriedOffsetY - shooter.m_stage2.boss.sandSubmarineOffsetY) * 0.08f;
     shooter.m_stage2.boss.sandSubmarineOffsetX +=
-        (shooter.m_playerX - boss.x - shooter.m_stage2.boss.sandSubmarineOffsetX) * 0.025f;
+        (shooter.Player().m_playerX - boss.x - shooter.m_stage2.boss.sandSubmarineOffsetX) * 0.025f;
     const float targetZ = shooter.IsRailGameplayActive() ? PlayerRailZ - boss.z : 0.0f;
     shooter.m_stage2.boss.sandSubmarineOffsetZ +=
         (targetZ - shooter.m_stage2.boss.sandSubmarineOffsetZ) * 0.025f;
@@ -352,8 +358,8 @@ void SideScrollingShooter::Stage2Module::TickBossPhase3(
     }
     if (beamCycle < RailgunLockFrame || beamCycle >= RailgunFireFrame(shooter.m_difficulty) + RailgunVisualFrames) {
         // 現在の入力を発射まで継続した位置を、低速・斜め補正・移動範囲込みで予測する
-        const float playerX = shooter.m_playerX;
-        const float playerY = shooter.m_playerY;
+        const float playerX = shooter.Player().m_playerX;
+        const float playerY = shooter.Player().m_playerY;
         // HARDのみ発射時点を先読みし、確定後はHARDで0.5秒、他は1秒固定する
         // 被弾判定はactionAge加算後なので、残り移動回数を1フレーム補正する
         if (shooter.m_difficulty == Hard && beamCycle < RailgunLockFrame) {
@@ -364,12 +370,12 @@ void SideScrollingShooter::Stage2Module::TickBossPhase3(
         // 入力の反転や予告開始でも照準を飛ばさず、予測位置へ滑らかに追従する
         constexpr float MainGunTrackingRate = 0.08f;
         const float targetZ = shooter.IsRailGameplayActive() ?
-            PlayerRailZ : ToRailZFromSideX(shooter.m_playerX);
-        boss.actionX += (shooter.m_playerX - boss.actionX) * MainGunTrackingRate;
-        boss.actionY += (shooter.m_playerY - boss.actionY) * MainGunTrackingRate;
+            PlayerRailZ : ToRailZFromSideX(shooter.Player().m_playerX);
+        boss.actionX += (shooter.Player().m_playerX - boss.actionX) * MainGunTrackingRate;
+        boss.actionY += (shooter.Player().m_playerY - boss.actionY) * MainGunTrackingRate;
         boss.actionZ += (targetZ - boss.actionZ) * MainGunTrackingRate;
-        shooter.m_playerX = playerX;
-        shooter.m_playerY = playerY;
+        shooter.Player().m_playerX = playerX;
+        shooter.Player().m_playerY = playerY;
     }
     if (beamCycle == RailgunFireFrame(shooter.m_difficulty) && boss.bossPartHp[BossNose] > 0) {
         PlayRailgunSound(shooter);
@@ -472,8 +478,8 @@ void SideScrollingShooter::Stage2Module::SpawnMissile(
         shot.z = z;
         shot.transitionSideX = x;
         shot.transitionSideY = y;
-        const float dx = ToWorldX(shooter.m_playerX - x);
-        const float dy = ToWorldY(shooter.m_playerY - y);
+        const float dx = ToWorldX(shooter.Player().m_playerX - x);
+        const float dy = ToWorldY(shooter.Player().m_playerY - y);
         const float dz = shooter.IsRailGameplayActive() ? PlayerRailZ - z : 0.0f;
         const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
         constexpr float MissileSpeed = 0.68f;
@@ -842,8 +848,8 @@ void SideScrollingShooter::Stage2Module::TickSpecialShotBeforeMove(
             constexpr float EngineAcceleration = 0.085f;
             if (shot.age == Phase3FunnelEngineStartFrame) {
                 // 点火時の自機位置から進行方向を一度だけ固定する
-                const float dx = ToWorldX(shooter.m_playerX - shot.x);
-                const float dy = ToWorldY(shooter.m_playerY - shot.y);
+                const float dx = ToWorldX(shooter.Player().m_playerX - shot.x);
+                const float dy = ToWorldY(shooter.Player().m_playerY - shot.y);
                 const float dz = shooter.IsRailGameplayActive() ? PlayerRailZ - shot.z : 0.0f;
                 const float length = (std::max)(
                     0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));

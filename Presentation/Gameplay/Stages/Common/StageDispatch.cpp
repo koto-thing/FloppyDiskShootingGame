@@ -85,6 +85,7 @@ void SideScrollingShooter::StageDispatch::TickBeforeFrame(SideScrollingShooter& 
 }
 
 void SideScrollingShooter::StageDispatch::TickAfterFrame(SideScrollingShooter& shooter) {
+    // ponytail: 協力プレイの敵照準は1P基準、狙い分散が必要になれば共通の標的選択を追加する
     switch (shooter.m_stageNumber) {
     case 3:
         Stage3Module::TickAfterFrame(shooter);

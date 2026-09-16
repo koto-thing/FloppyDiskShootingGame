@@ -10,6 +10,9 @@
 #include <vector>
 #include <hidsdi.h>
 #include <setupapi.h>
+#define INITGUID
+#include <devpkey.h>
+#undef INITGUID
 #include <winusb.h>
 #include <winrt/Windows.Foundation.h>
 #include <winrt/Windows.Foundation.Collections.h>
@@ -110,6 +113,13 @@ constexpr GUID UsbInterface {0x6f13725e, 0xef0e, 0x4fd3, {0xae, 0x5f, 0xb2, 0xde
 constexpr winrt::guid InputService {"ab7de9be-89fe-49ad-828f-118f09df7fd0"};
 constexpr winrt::guid InputCharacteristic {"7492866c-ec3e-4619-8258-32755ffcc0f8"};
 
+// 切断中の所有者も保持し、もう一方の受信スレッドによる再割り当てを防ぐ
+// ponytail: 起動中は接続方式やパッド交換を固定し、必要時はゲーム開始前の再割り当て操作を追加する
+std::mutex deviceAssignmentMutex;
+std::array<std::wstring, 2> nativeDevicePaths;
+std::array<GUID, 2> nativeContainers {};
+std::array<uint64_t, 2> nativeBluetoothAddresses {};
+
 /** @brief 接続単位の通知状態、古いBLEコールバックは新しい接続へ書き込めない */
 struct Sample {
     std::mutex mutex;
@@ -143,9 +153,13 @@ struct Sample {
  * @brief Nintendo純正Switch 2 ProのUSBインターフェイスを列挙する
  * @param guid 列挙するデバイスインターフェイス
  * @param productId 検出するNintendo製品ID
+ * @param slot 直接接続スロット0または1
+ * @param wake 入力開始用のWinUSBインターフェイスを検索する場合はtrue
  * @return 対象のデバイスパス、未検出時は空文字列
  */
-std::wstring FindUsbPath(const GUID& guid, USHORT productId = 0x2069) {
+std::wstring FindUsbPath(const GUID& guid, USHORT productId, int slot, bool wake = false) {
+    std::lock_guard lock(deviceAssignmentMutex);
+    if (nativeBluetoothAddresses[slot] != 0) return {};
     // Bluetoothや初代Proを誤って初期化しない
     const HDEVINFO devices = SetupDiGetClassDevsW(&guid, nullptr, nullptr,
         DIGCF_PRESENT | DIGCF_DEVICEINTERFACE);
@@ -159,12 +173,26 @@ std::wstring FindUsbPath(const GUID& guid, USHORT productId = 0x2069) {
         std::vector<unsigned char> buffer(size);
         auto* detail = reinterpret_cast<SP_DEVICE_INTERFACE_DETAIL_DATA_W*>(buffer.data());
         detail->cbSize = sizeof(*detail);
-        if (!SetupDiGetDeviceInterfaceDetailW(devices, &entry, detail, size, nullptr, nullptr)) continue;
+        SP_DEVINFO_DATA info {sizeof(info)};
+        if (!SetupDiGetDeviceInterfaceDetailW(devices, &entry, detail, size, nullptr, &info)) continue;
         std::wstring path = detail->DevicePath;
         std::transform(path.begin(), path.end(), path.begin(), towlower);
         const wchar_t* product = productId == 0x2009 ? L"vid_057e&pid_2009" : L"vid_057e&pid_2069";
         if (path.find(product) != std::wstring::npos || (productId == 0x2009 &&
             path.find(L"vid&0002057e_pid&2009") != std::wstring::npos)) {
+            GUID container {};
+            DEVPROPTYPE propertyType = 0;
+            SetupDiGetDevicePropertyW(devices, &info, &DEVPKEY_Device_ContainerId, &propertyType,
+                reinterpret_cast<BYTE*>(&container), sizeof(container), nullptr, 0);
+            if (wake) {
+                if (container == GUID{} || container != nativeContainers[slot]) continue;
+            } else {
+                if ((!nativeDevicePaths[slot].empty() && nativeDevicePaths[slot] != path) ||
+                    nativeDevicePaths[1 - slot] == path || (container != GUID{} &&
+                    container == nativeContainers[1 - slot])) continue;
+                nativeDevicePaths[slot] = path;
+                nativeContainers[slot] = container;
+            }
             result = detail->DevicePath;
             break;
         }
@@ -175,10 +203,11 @@ std::wstring FindUsbPath(const GUID& guid, USHORT productId = 0x2069) {
 
 /**
  * @brief WinUSBでUSB入力の送信を開始する
+ * @param slot 直接接続スロット0または1
  * @return 初期化コマンドを書き込めた場合はtrue
  */
-bool WakeUsb() {
-    const auto path = FindUsbPath(UsbInterface);
+bool WakeUsb(int slot) {
+    const auto path = FindUsbPath(UsbInterface, 0x2069, slot, true);
     if (path.empty()) return false;
     HANDLE file = CreateFileW(path.c_str(), GENERIC_READ | GENERIC_WRITE,
         FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
@@ -262,14 +291,14 @@ struct UsbReader {
         return success && count == outputLength;
     }
 
-    /** @brief 対応するProのHIDを開いて入力を開始する @return 成功時はtrue */
-    bool Open() {
+    /** @brief 対応するProのHIDを開いて入力を開始する @param slot 直接接続スロット0または1 @return 成功時はtrue */
+    bool Open(int slot) {
         GUID hidGuid {};
         HidD_GetHidGuid(&hidGuid);
-        auto path = FindUsbPath(hidGuid);
+        auto path = FindUsbPath(hidGuid, 0x2069, slot);
         originalPro = path.empty();
-        if (originalPro) path = FindUsbPath(hidGuid, 0x2009);
-        if (path.empty() || (!originalPro && !WakeUsb())) return false;
+        if (originalPro) path = FindUsbPath(hidGuid, 0x2009, slot);
+        if (path.empty() || (!originalPro && !WakeUsb(slot))) return false;
         file = CreateFileW(path.c_str(), originalPro ? GENERIC_READ | GENERIC_WRITE : GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
             nullptr, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
         if (file == INVALID_HANDLE_VALUE) return false;
@@ -346,6 +375,7 @@ class NativeController {
     std::mutex mutex;
     std::shared_ptr<Sample> current;
     unsigned generation = 0;
+    int slot;
     std::jthread worker;
 
     /**
@@ -374,14 +404,19 @@ class NativeController {
             winrt::init_apartment();
             apartment = true;
             watcher = BluetoothLEAdvertisementWatcher();
-            discovery = watcher.Received(winrt::auto_revoke, [address](auto const&, auto const& args) {
+            discovery = watcher.Received(winrt::auto_revoke, [address, slot = slot](auto const&, auto const& args) {
                 // NintendoのメーカーIDと製品IDの一致した広告だけに接続する
                 for (auto const& manufacturer : args.Advertisement().ManufacturerData()) {
                     auto data = manufacturer.Data();
                     if (manufacturer.CompanyId() != 0x0553 || data.Length() < 7) continue;
                     const auto* p = data.data();
                     if (p[3] == 0x7e && p[4] == 0x05 && p[5] == 0x69 && p[6] == 0x20) {
-                        address->store(args.BluetoothAddress());
+                        std::lock_guard lock(deviceAssignmentMutex);
+                        const uint64_t target = args.BluetoothAddress();
+                        if (!nativeDevicePaths[slot].empty() || nativeBluetoothAddresses[1 - slot] == target ||
+                            (nativeBluetoothAddresses[slot] != 0 && nativeBluetoothAddresses[slot] != target)) continue;
+                        nativeBluetoothAddresses[slot] = target;
+                        address->store(target);
                     }
                 }
             });
@@ -423,7 +458,7 @@ class NativeController {
                             status == BluetoothLEAdvertisementWatcherStatus::Stopped) watcher.Start();
                     } catch (winrt::hresult_error const&) {}
                 }
-                if (usb.Open()) {
+                if (usb.Open(slot)) {
                     closeBluetooth();
                     sample = std::make_shared<Sample>();
                     started = now;
@@ -508,8 +543,8 @@ class NativeController {
     }
 
 public:
-    /** @brief 入力受信スレッドを開始する @return なし */
-    NativeController() : worker([this](std::stop_token stop) { Run(stop); }) {}
+    /** @brief 入力受信スレッドを開始する @param index 直接接続スロット0または1 @return なし */
+    explicit NativeController(int index) : slot(index), worker([this](std::stop_token stop) { Run(stop); }) {}
 
     /**
      * @brief 接続単位の入力をゲームスレッドへコピーする
@@ -533,9 +568,11 @@ public:
  * @brief 非同期で取得したSwitch 2 Proの入力を読み出す
  * @param state 最新入力の出力先
  * @param connection 接続を識別する通し番号の出力先
+ * @param slot 直接接続スロット0または1
  * @return 有効な接続と新鮮な入力がある場合はtrue
  */
-bool Switch2ProInput::Poll(XINPUT_GAMEPAD& state, unsigned& connection) {
-    static NativeController controller;
-    return controller.Poll(state, connection);
+bool Switch2ProInput::Poll(XINPUT_GAMEPAD& state, unsigned& connection, int slot) {
+    if (slot < 0 || slot >= 2) return false;
+    static NativeController controllers[] {NativeController(0), NativeController(1)};
+    return controllers[slot].Poll(state, connection);
 }

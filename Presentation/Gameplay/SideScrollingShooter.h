@@ -24,6 +24,8 @@ enum class PrimitiveShape;
 class SideScrollingShooter {
     friend struct HomingShotTests;
     friend struct OrbitShotTests;
+    friend struct CoopGameplayTests;
+    friend struct CoopStageTests;
 public:
     /** @brief 自機弾の挙動を調整するパラメータ */
     struct PlayerShotParameters {
@@ -59,8 +61,11 @@ public:
      * @param audio 効果音を再生するサービス
      * @param playerType 使用する自機タイプ
      * @param difficulty 使用する敵出現難易度
+     * @param playerCount 同時に操作する人数（1または2）
+     * @param secondPlayerType 2Pのショットタイプ
      */
-    void Initialize(AudioService* audio, PlayerType playerType, DifficultyType difficulty);
+    void Initialize(AudioService* audio, PlayerType playerType, DifficultyType difficulty,
+        int playerCount = 1, PlayerType secondPlayerType = Homing);
     /** @brief チュートリアル用のゲーム状態を初期化する @param audio 効果音サービス @param playerType 使用機体 @param difficulty 難易度 @return なし */
     void InitializeTutorial(AudioService* audio, PlayerType playerType, DifficultyType difficulty);
     void PlayCurrentStageBgm(bool force = false);
@@ -162,6 +167,7 @@ private:
         int age = 0;
         int hitCount = 0;
         int homingTarget = -1;
+        int owner = 0;
         std::uint16_t bossCollisionIgnoreMask = 0;
         ShooterStages::Stage2::ShotState stage2 {};
         ShooterStages::Stage4::ShotState stage4 {};
@@ -287,7 +293,7 @@ private:
         bool active = false;
         int effectType = 0;
         float hitRadius = 0.0f;
-        bool damagedPlayer = false;
+        unsigned char damagedPlayerMask = 0;
     };
 
     /** @brief 自機から画面中央へ投げるボム */
@@ -1043,12 +1049,47 @@ private:
     /** @brief 文字表示領域へ共通の黒いHUD背景を描画する @param renderer 描画先 @return なし */
     void DrawHudBackground(Renderer& renderer) const;
 
+    /** @brief 各プレイヤーが独立して保持する戦闘状態 */
+    struct PlayerState {
+        PlayerType m_playerType = Homing;
+        float m_playerX = -0.72f;
+        float m_playerY = 0.0f;
+        int m_shotCooldown = 0;
+        int m_specialShotCooldown = 0;
+        int m_invincible = 0;
+        int m_bombCount = InitialBombCount;
+        int m_playerDestructionTimer = 0;
+        int m_powerUpTimer = 0;
+        float m_power = 0.0f;
+        bool m_moveLeft = false;
+        bool m_moveRight = false;
+        bool m_moveUp = false;
+        bool m_moveDown = false;
+        bool m_slowMove = false;
+        bool m_fire = false;
+        bool m_bombRequested = false;
+        Bomb m_bomb {};
+    };
+    std::array<PlayerState, 2> m_players {};
+    int m_playerCount = 1;
+    mutable int m_activePlayer = 0;
+    /** @brief 処理対象の自機状態を取得する @return 自機状態 */
+    PlayerState& Player() { return m_players[m_activePlayer]; }
+    /** @brief 描画対象の自機状態を取得する @return 自機状態 */
+    const PlayerState& Player() const { return m_players[m_activePlayer]; }
+    /** @brief 各自機へ同じ処理を適用し、呼び出し元の対象へ戻す @param action 自機ごとの処理 @return なし */
+    template<class Action> void ForEachPlayer(Action action) const {
+        // ponytail: 更新と描画は単一スレッド、並列化時はPlayerStateを引数で渡す
+        const int previous = m_activePlayer;
+        for (int i = 0; i < m_playerCount; ++i) { m_activePlayer = i; action(); }
+        m_activePlayer = previous;
+    }
+
     std::array<Shot, Stage5ShotCapacity> m_shots {};
     std::array<Enemy, EnemyCapacity> m_enemies {};
     std::array<Item, ItemCapacity> m_items {};
     std::array<Explosion, ExplosionCapacity> m_explosions {};
     std::array<Debris, DebrisCapacity> m_debris {};
-    Bomb m_bomb {};
     ShooterStages::Stage1::State m_stage1 {};
     ShooterStages::Stage2::State m_stage2 {};
     ShooterStages::Stage3::State m_stage3 {};
@@ -1059,20 +1100,13 @@ private:
     bool m_currentBgmIsBoss = false;
     bool m_isRestartingChapter = false;
     const Stage* m_stage = nullptr;
-    PlayerType m_playerType = Homing;
     DifficultyType m_difficulty = Easy;
     std::uint32_t m_galleryUnlocks = DefaultGalleryUnlocks;
-    float m_playerX = -0.72f;
-    float m_playerY = 0.0f;
     float m_scroll = 0.0f;
     int m_frame = 0;
     int m_spawnCooldown = 0;
-    int m_shotCooldown = 0;
-    int m_specialShotCooldown = 0;
-    int m_invincible = 0;
     int m_score = 0;
     int m_kills = 0;
-    int m_bombCount = InitialBombCount;
     int m_bossHp = 0;
     float m_displayBossHp = 0.0f;
     int m_bossStoryLine = 0;
@@ -1087,24 +1121,14 @@ private:
     int m_chapterStartScore = 0;
     int m_chapterStartKills = 0;
     int m_chapterResultTimer = 0;
-    int m_playerDestructionTimer = 0;
     int m_restartTimer = 0;
-    int m_powerUpTimer = 0;
     int m_missionStartTimer = 0;
-    float m_power = 0.0f;
     int m_clearTimer = 0;
     bool m_tutorialMode = false;
     int m_tutorialStep = 0;
     int m_tutorialStepFrame = 0;
     bool m_tutorialSlowUsed = false;
     static constexpr int TutorialStepCount = 5;
-    bool m_moveLeft = false;
-    bool m_moveRight = false;
-    bool m_moveUp = false;
-    bool m_moveDown = false;
-    bool m_slowMove = false;
-    bool m_fire = false;
-    bool m_bombRequested = false;
     bool m_clear = false;
     bool m_bossBattle = false;
     bool m_bossBattlePending = false;

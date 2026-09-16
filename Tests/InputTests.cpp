@@ -40,20 +40,28 @@ public:
     /**
      * @brief テスト用ゲームパッド状態を入力へ反映する
      * @param gamepad ゲームパッド状態、切断時はnullptr
+     * @param slot プレイヤー番号0または1
      * @return なし
      */
-    static void SetGamepad(const XINPUT_GAMEPAD* gamepad) {
-        WindowsInputBackend::ProcessGamepad(gamepad, 1.0f / 60.0f);
+    static void SetGamepad(const XINPUT_GAMEPAD* gamepad, int slot = 0) {
+        WindowsInputBackend::ProcessGamepad(gamepad, 1.0f / 60.0f, slot);
     }
 
     /**
      * @brief テスト用に再接続判定を通してゲームパッド状態を反映する
      * @param gamepad ゲームパッド状態、切断時はnullptr
+     * @param slot プレイヤー番号0または1
      * @return なし
      */
-    static void SetPolledGamepad(const XINPUT_GAMEPAD* gamepad) {
-        WindowsInputBackend::ProcessPolledGamepad(gamepad, 1.0f / 60.0f);
+    static void SetPolledGamepad(const XINPUT_GAMEPAD* gamepad, int slot = 0) {
+        WindowsInputBackend::ProcessPolledGamepad(gamepad, 1.0f / 60.0f, slot);
     }
+
+    /** @brief テスト用に入力元の割り当てを通して反映する @param gamepads XInput4台とNintendo2台の状態 @return なし */
+    static void SetAvailableGamepads(const std::array<const XINPUT_GAMEPAD*, XUSER_MAX_COUNT + 2>& gamepads) {
+        WindowsInputBackend::ProcessAvailableGamepads(gamepads.data(), 1.0f / 60.0f);
+    }
+
 };
 
 namespace {
@@ -385,4 +393,64 @@ void RunInputTests() {
     Require(Input::GetKeyDown(KeyCode::X) && Input::GetKeyUp(KeyCode::X),
         "Rapid repress must preserve both release and press edges");
     InputTestAccess::SetKey('X', false);
+
+    // 同時入力は別々の状態とエッジになり、2Pは1Pや共通UIを操作しない
+    WindowsInputBackendTestAccess::SetPolledGamepad(nullptr, 0);
+    WindowsInputBackendTestAccess::SetPolledGamepad(nullptr, 1);
+    XINPUT_GAMEPAD first {}, second {};
+    std::array<const XINPUT_GAMEPAD*, XUSER_MAX_COUNT + 2> available {};
+    available[1] = &first;
+    available[3] = &second;
+    WindowsInputBackendTestAccess::SetAvailableGamepads(available);
+    Input::BeginFrame();
+    first.wButtons = XINPUT_GAMEPAD_DPAD_LEFT | XINPUT_GAMEPAD_X;
+    second.wButtons = XINPUT_GAMEPAD_DPAD_RIGHT | XINPUT_GAMEPAD_Y | XINPUT_GAMEPAD_A;
+    second.sThumbRX = 32767;
+    WindowsInputBackendTestAccess::SetAvailableGamepads(available);
+    Require(Input::IsGamepadConnected(0) && Input::IsGamepadConnected(1), "Two pads must connect independently");
+    Require(Input::GetGamepadKey(0, KeyCode::LeftArrow) && !Input::GetGamepadKey(1, KeyCode::LeftArrow) &&
+        Input::GetGamepadKey(1, KeyCode::RightArrow) && !Input::GetGamepadKey(0, KeyCode::RightArrow),
+        "Opposing movement must not leak between players");
+    Require(Input::GetGamepadKeyDown(0, KeyCode::X) && Input::GetGamepadKeyDown(1, KeyCode::C) &&
+        !Input::GetGamepadKeyDown(0, KeyCode::C), "View and bomb edges must belong to their pad");
+    Require(Input::GetGamepadKeyDown(1, KeyCode::Space) && !Input::GetKey(KeyCode::Space) &&
+        !Input::GetMouseButton(MouseButton::Left), "Second pad must not confirm or click global UI");
+    Input::BeginFrame();
+    Require(Input::GetGamepadKey(1, KeyCode::C) && !Input::GetGamepadKeyDown(1, KeyCode::C),
+        "Per-pad edges must clear while held input remains");
+
+    // 1P切断時に2Pの割り当てを詰めず、別の新規入力元で1Pを置き換えない
+    available[1] = nullptr;
+    available[0] = &first;
+    WindowsInputBackendTestAccess::SetAvailableGamepads(available);
+    Require(!Input::IsGamepadConnected(0) && Input::IsGamepadConnected(1) &&
+        Input::GetGamepadKey(1, KeyCode::RightArrow) && !Input::GetGamepadKey(0, KeyCode::RightArrow),
+        "Disconnect must retain the other player's controller slot");
+    Require(Input::GetGamepadKeyUp(0, KeyCode::X) && !Input::GetGamepadKeyUp(1, KeyCode::C),
+        "Disconnect must release only the disconnected player's input");
+    Input::BeginFrame();
+    available[0] = nullptr;
+    available[1] = &first;
+    WindowsInputBackendTestAccess::SetAvailableGamepads(available);
+    Require(Input::IsGamepadConnected(0) && !Input::GetGamepadKey(0, KeyCode::X),
+        "Held reconnect input must wait for neutral independently");
+    Require(Input::GetGamepadKey(1, KeyCode::C), "Reconnect must not suppress the other pad");
+    first = {};
+    WindowsInputBackendTestAccess::SetAvailableGamepads(available);
+    Input::BeginFrame();
+    first.wButtons = XINPUT_GAMEPAD_X;
+    WindowsInputBackendTestAccess::SetAvailableGamepads(available);
+    Require(Input::GetGamepadKeyDown(0, KeyCode::X), "Reconnected pad must resume after neutral");
+
+    // 範囲外のプレイヤーやキーは未入力として扱う
+    Require(!Input::IsGamepadConnected(-1) && !Input::IsGamepadConnected(2) &&
+        !Input::GetGamepadKey(-1, KeyCode::Z) && !Input::GetGamepadKey(2, KeyCode::Z) &&
+        !Input::GetGamepadKey(0, static_cast<KeyCode>(-1)) && !Input::GetGamepadKeyDown(1, KeyCode::Count) &&
+        !Input::GetGamepadKeyUp(2, KeyCode::Z), "Invalid pad or key indices must be rejected");
+    WindowsInputBackendTestAccess::SetPolledGamepad(nullptr, 0);
+    WindowsInputBackendTestAccess::SetPolledGamepad(nullptr, 1);
+    InputTestAccess::CancelNativeInput();
+    Require(!Input::GetGamepadKeyDown(0, KeyCode::X) && !Input::GetGamepadKeyUp(0, KeyCode::X) &&
+        !Input::GetGamepadKeyUp(1, KeyCode::C), "Focus cancellation must discard per-pad input edges");
+
 }

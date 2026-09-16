@@ -455,7 +455,7 @@ private:
         enemy.x -= SideApproachSpeed;
         enemy.z = ToRailZFromSideX(enemy.x);
         enemy.y = enemy.baseY;
-        if (enemy.x <= shooter.m_playerX + SideTriggerLeadX) {
+        if (enemy.x <= shooter.Player().m_playerX + SideTriggerLeadX) {
             BeginStop(shooter, enemy);
         }
     }
@@ -463,10 +463,10 @@ private:
     void BeginStop(const SideScrollingShooter& shooter, Enemy& enemy) const {
         enemy.phase = 1.0f;
         enemy.motionAge = 0;
-        enemy.actionX = shooter.m_playerX;
-        enemy.actionY = shooter.m_playerY;
+        enemy.actionX = shooter.Player().m_playerX;
+        enemy.actionY = shooter.Player().m_playerY;
         enemy.actionZ = shooter.IsRailGameplayActive() ?
-            SideScrollingShooter::PlayerRailZ : ToRailZFromSideX(shooter.m_playerX);
+            SideScrollingShooter::PlayerRailZ : ToRailZFromSideX(shooter.Player().m_playerX);
     }
 
     void TickStop(Enemy& enemy) const {
@@ -1016,10 +1016,10 @@ private:
         }
 
         // ポインターへ自機が触れた瞬間の地点を連射方向として保存する
-        if (!DroneSearchlightTouches(shooter.m_playerX, shooter.m_playerY,
+        if (!DroneSearchlightTouches(shooter.Player().m_playerX, shooter.Player().m_playerY,
                 enemy.turretAimX, enemy.turretAimY, 0.055f)) return;
-        enemy.attackWarningTargetX = shooter.m_playerX;
-        enemy.attackWarningTargetY = shooter.m_playerY;
+        enemy.attackWarningTargetX = shooter.Player().m_playerX;
+        enemy.attackWarningTargetY = shooter.Player().m_playerY;
         enemy.motionAge = DroneMachineGunBurstFrames;
         enemy.attackWarningFrames = enemy.motionAge;
         FireMachineGun(shooter, enemy);

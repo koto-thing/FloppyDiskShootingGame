@@ -302,7 +302,7 @@ void SideScrollingShooter::Stage5Module::ApplyCameraCorrection(
             shooter.m_stage5.phaseTimer));
         const float turn = SmoothStep(Math::Clamp01(climb * 4.0f));
         const Vector3 playerPosition {
-            ToWorldX(shooter.m_playerX),
+            ToWorldX(shooter.m_players[0].m_playerX),
             -0.65f + climb * ShooterStages::Stage5::WallClimbHeight,
             Math::Lerp(ShooterStages::Stage5::WallApproachStartZ,
                 ShooterStages::Stage5::WallApproachEndZ, approach)
@@ -366,7 +366,7 @@ void SideScrollingShooter::Stage5Module::ApplyCameraCorrection(
             const float battle = SmoothStep(ShooterStages::Stage5::CarrierCameraBattleProgress(
                 shooter.m_stage5.phaseTimer));
             const Vector2 playerOrbit = SideScrollingShooter::TayamaOrbitXZ(0.0f, 0.0f);
-            const Vector3 player {playerOrbit.x, ToWorldY(shooter.m_playerY), playerOrbit.y};
+            const Vector3 player {playerOrbit.x, ToWorldY(shooter.m_players[0].m_playerY), playerOrbit.y};
             const Vector3 radial {0.0f, 0.0f, -1.0f};
             const Vector3 battlePosition = player + radial * ShooterStages::Stage5::TayamaCameraDistance +
                 Vector3 {0.0f, ShooterStages::Stage5::TayamaCameraHeight, 0.0f};
@@ -381,7 +381,7 @@ void SideScrollingShooter::Stage5Module::ApplyCameraCorrection(
     if (shooter.m_stage5.phase >= Stage5Phase::TayamaFireControl &&
         shooter.m_stage5.phase <= Stage5Phase::TayamaCommandCore) {
         const Stage5ModelTransform boss = TayamaTransform(shooter);
-        railPosition = {ToWorldX(shooter.m_playerX) * 0.08f, 1.5f, -9.0f};
+        railPosition = {ToWorldX(shooter.m_players[0].m_playerX) * 0.08f, 1.5f, -9.0f};
         railTarget = {0.0f, boss.position.y + 0.8f, boss.position.z};
         return;
     }
@@ -530,6 +530,7 @@ void SideScrollingShooter::Stage5Module::ApplyPlayerRenderCorrection(
         position = Vector3::Lerp(
             {0.0f, boss.position.y, bossFrontZ},
             {8.0f, boss.position.y + 480.0f, bossFrontZ}, progress);
+        position.x += static_cast<float>(shooter.m_activePlayer) * ToWorldX(0.36f);
         pitch = Math::Lerp(0.0f, -Math::HalfPi, progress);
         return;
     }
@@ -538,6 +539,7 @@ void SideScrollingShooter::Stage5Module::ApplyPlayerRenderCorrection(
             shooter.m_stage5.phaseTimer));
         position = Vector3::Lerp({0.0f, 8.0f, 18.0f},
             {0.0f, 0.0f, PlayerRailZ}, assembly);
+        position.x += static_cast<float>(shooter.m_activePlayer) * ToWorldX(0.36f);
     }
 }
 
