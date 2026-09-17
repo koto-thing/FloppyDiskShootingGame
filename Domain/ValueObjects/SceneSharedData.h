@@ -1,4 +1,5 @@
 #pragma once
+#include <string>
 #include "DifficultyType.h"
 #include "PlayerType.h"
 
@@ -14,6 +15,7 @@ struct SceneSharedData {
     DifficultyType difficulty = Easy;
     PlayerType playerType = Homing;
     int playerCount = 1;
+    std::string resumeCode;
     PlayerType secondPlayerType = Homing;
     bool showRankingAfterCredits = false;
 #if defined(SPACEYAKUZA_EDITION_Steam)

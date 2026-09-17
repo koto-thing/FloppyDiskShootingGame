@@ -467,6 +467,80 @@ void SideScrollingShooter::StartDebugCheckpoint(
     }
 }
 
+std::string SideScrollingShooter::GetResumeCode() const {
+    if (m_playerCount != 1 || m_networkGame || m_tutorialMode) return {};
+    ResumeCode code;
+    code.stage = m_stageNumber;
+    code.chapter = m_bossBattle || m_bossBattlePending ? 'B' : static_cast<char>('0' + m_chapterNumber);
+    if (m_stageNumber == 5) {
+        // 演出中もその戦闘または次区間の開始地点を指す
+        const auto phase = m_stage5.phase;
+        if (phase >= Stage5Phase::CloudSea) {
+            code.part = 2;
+            code.chapter = 'D';
+        } else if (phase >= Stage5Phase::RooftopArrival) {
+            code.part = 2;
+            code.chapter = 'B';
+        } else if (phase >= Stage5Phase::WallClimbTransition) {
+            code.part = 2;
+            code.chapter = phase <= Stage5Phase::WallClimbLower ? '1' :
+                phase == Stage5Phase::WallClimbMiddle ? '2' : '3';
+        } else if (phase >= Stage5Phase::EastsourceIntro) code.chapter = 'B';
+    }
+    code.difficulty = m_difficulty;
+    code.player = Player().m_playerType;
+    code.power = static_cast<int>(std::lround(Player().m_power * 100.0f));
+    code.score = m_score;
+    code.bombs = Player().m_bombCount;
+    code.kills = m_kills;
+    code.retries = m_chapterRetryCounts;
+    return code.Encode();
+}
+
+bool SideScrollingShooter::RestoreResumeCode(std::string_view text) {
+    ResumeCode code;
+    if (m_playerCount != 1 || m_networkGame || m_tutorialMode || !ResumeCode::Parse(text, code)) return false;
+
+    // 既存の地点初期化へ渡す前に難易度と引き継ぐ状態を反映する
+    m_difficulty = code.difficulty;
+    Reset(true);
+    Player().m_playerType = code.player;
+    Player().m_power = code.power / 100.0f;
+    Player().m_bombCount = code.bombs;
+    m_score = code.score;
+    m_kills = code.kills;
+    const bool boss = code.chapter == 'B' || code.chapter == 'D';
+    const int chapter = boss ? 3 : code.chapter - '0';
+    if (code.stage == 5 && code.part == 2) {
+        const auto phase = code.chapter == 'D' ? Stage5Phase::TayamaDragonBattle :
+            code.chapter == 'B' ? Stage5Phase::TayamaFireControl :
+            chapter == 1 ? Stage5Phase::WallClimbLower :
+            chapter == 2 ? Stage5Phase::WallClimbMiddle : Stage5Phase::WallClimbUpper;
+        Stage5Module::StartDebugPhase(*this, phase);
+        m_chapterNumber = chapter;
+        if (!boss) {
+            m_frame = m_stage->ChapterEndFrame(chapter - 1);
+            m_scroll = static_cast<float>(m_frame) * 0.008f;
+            m_missionStartTimer = MissionBannerDisplayFrames;
+        }
+    } else {
+        StartDebugCheckpoint(code.stage, chapter, boss);
+    }
+
+    // 被弾時も復元済みのスコアへ戻せるよう開始時スナップショットを揃える
+    m_chapterRetryCounts = code.retries;
+    m_chapterStartPower = Player().m_power;
+    m_chapterStartScore = m_score;
+    m_chapterStartKills = m_kills;
+    m_stage5.checkpointPower = Player().m_power;
+    m_stage5.checkpointScore = m_score;
+    m_stage5.checkpointKills = m_kills;
+    Player().m_invincible = 90;
+    if (boss) PlayCurrentBossBgm(true);
+    else PlayCurrentStageBgm(true);
+    return true;
+}
+
 void SideScrollingShooter::ProcessInput() {
     // リスタート表示中の新しいキー入力でカウントダウンを終了する
     if (m_restartTimer > 0 && Input::GetAnyKeyDown()) m_restartTimer = 0;
