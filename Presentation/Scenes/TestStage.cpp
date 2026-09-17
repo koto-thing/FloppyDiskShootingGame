@@ -51,6 +51,13 @@ void TestStage::Initialize() {
 #endif
     m_game->Initialize(getData().audio, getData().playerType, getData().difficulty,
         getData().playerCount, getData().secondPlayerType);
+    // 再開要求はシングルプレイだけで一度消費する
+    if (getData().playerCount == 1
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+        && !getData().onlineGame
+#endif
+        ) m_game->RestoreResumeCode(getData().resumeCode);
+    getData().resumeCode.clear();
 #if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
     // 通信プレイの初期入力を適用する
     if (getData().onlineGame) m_game->ApplyNetworkInput({});
@@ -268,6 +275,14 @@ void TestStage::RenderPauseMenu(Renderer& renderer) const {
         m_returnToTitleButton->Render(renderer);
         m_openOptionsButton->Render(renderer);
         m_closeMenuButton->Render(renderer);
+        const std::string code = m_game->GetResumeCode();
+        if (!code.empty()) {
+            renderer.DrawText("RESUME CODE", TextAlign::Center, 0.018f, ColorF::White(), {0.0f, -0.40f}, 0.002f);
+            renderer.DrawText(code, TextAlign::Center, 0.010f, {1.0f, 0.82f, 0.18f, 1.0f},
+                {0.0f, -0.49f}, 0.001f);
+            renderer.DrawText("RESTARTS THIS CHAPTER / BOSS", TextAlign::Center, 0.010f,
+                ColorF::White(), {0.0f, -0.59f}, 0.001f);
+        }
         return;
     }
 

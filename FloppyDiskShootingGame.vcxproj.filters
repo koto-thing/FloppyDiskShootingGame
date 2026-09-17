@@ -134,6 +134,9 @@
     <ClInclude Include="Domain\ValueObjects\SceneSharedData.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Domain\ValueObjects\ResumeCode.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="Application\Interfaces\IScene.h">
       <Filter>Header Files</Filter>
     </ClInclude>

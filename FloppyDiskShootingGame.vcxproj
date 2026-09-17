@@ -244,6 +244,7 @@
     <ClInclude Include="Domain\ValueObjects\DifficultyType.h" />
     <ClInclude Include="Domain\ValueObjects\GalleryEntry.h" />
     <ClInclude Include="Domain\ValueObjects\PlayerType.h" />
+    <ClInclude Include="Domain\ValueObjects\ResumeCode.h" />
     <ClInclude Include="Domain\ValueObjects\SceneSharedData.h" />
     <ClInclude Include="Domain\ValueObjects\SceneType.h" />
     <ClInclude Include="Infrastructure\ExternalServices\AudioService.h" />

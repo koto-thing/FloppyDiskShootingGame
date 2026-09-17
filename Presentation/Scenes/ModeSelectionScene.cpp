@@ -8,6 +8,7 @@
 #include "../../Engine/Time/Time.h"
 #include "../Common/SpaceBackground.h"
 #include "../Gameplay/Models/AircraftModelView.h"
+#include "../../Domain/ValueObjects/ResumeCode.h"
 
 namespace {
 constexpr float CharacterSpacing = 0.0035f;
@@ -127,6 +128,9 @@ void ModeSelectionScene::Initialize() {
     // 人数を選び直してから各モードの開始条件を確認する
     m_stateController = std::make_unique<ModeSelectionStateController>();
     getData().playerCount = 1;
+    getData().resumeCode.clear();
+    m_resumeCode.clear();
+    m_invalidResumeCode = false;
 #if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
     constexpr const char* playerCountLabels[] = {"1 PLAYER", "2 PLAYERS ONLINE"};
 #else
@@ -175,11 +179,30 @@ void ModeSelectionScene::Initialize() {
             Vector2 { 0.40f, 0.12f }, RectAlign::Center,
             playerTypeLabels[i], Vector2 { -0.62f, 0.20f - static_cast<float>(i) * 0.20f });
         m_playerTypeButtons[i]->SetOnClick([this, playerType = playerTypes[i]]() {
-            // 選択した機体タイプを共有データへ保存してゲームを開始する
+            // シングルプレイは機体選択後に再開コード入力へ進む
             getData().playerType = playerType;
-            changeScene(SceneType::Story);
+            m_stateController->SetCurrentState(ModeSelectionState::ResumeCodeInput);
         });
     }
+
+    // 空欄での通常開始とコードでの再開を分ける
+    m_startButton = std::make_unique<Button>(Vector2 {0.46f, 0.10f}, RectAlign::Center,
+        "START FROM BEGINNING", Vector2 {0.0f, -0.36f});
+    m_startButton->SetOnClick([this] {
+        getData().resumeCode.clear();
+        changeScene(SceneType::Story);
+    });
+    m_resumeButton = std::make_unique<Button>(Vector2 {0.46f, 0.10f}, RectAlign::Center,
+        "START FROM CODE", Vector2 {0.0f, -0.12f});
+    m_resumeButton->SetOnClick([this] {
+        ResumeCode code;
+        m_invalidResumeCode = !ResumeCode::Parse(m_resumeCode, code);
+        if (m_invalidResumeCode) return;
+        getData().resumeCode = m_resumeCode;
+        getData().difficulty = code.difficulty;
+        getData().playerType = code.player;
+        changeScene(SceneType::TestStage);
+    });
 
     // 左下にタイトルシーンへ戻るボタンを配置する
     m_backButton = std::make_unique<Button>(
@@ -188,6 +211,8 @@ void ModeSelectionScene::Initialize() {
     m_backButton->SetOnClick([this]() {
         const auto state = m_stateController->GetCurrentState();
         if (state == ModeSelectionState::PlayerCountSelect) changeScene(SceneType::Title);
+        else if (state == ModeSelectionState::ResumeCodeInput)
+            m_stateController->SetCurrentState(ModeSelectionState::PlayerTypeSelect);
         else m_stateController->SetCurrentState(state == ModeSelectionState::PlayerTypeSelect ?
             ModeSelectionState::DifficultySelect : ModeSelectionState::PlayerCountSelect);
     });
@@ -197,6 +222,27 @@ void ModeSelectionScene::Initialize() {
 void ModeSelectionScene::ProcessInput() {
     // 2人用の個別入力は共有マウス入力と分離する
     const auto state = m_stateController->GetCurrentState();
+    if (state == ModeSelectionState::ResumeCodeInput) {
+        // パッドの移動キーを文字に変換せず、キーボードとテンキーで入力する
+        const auto append = [&](KeyCode key, char character) {
+            if (Input::GetKeyDown(key) && !Input::GetGamepadKeyDown(0, key) &&
+                m_resumeCode.size() < ResumeCode::MaxLength) {
+                m_resumeCode += character;
+                m_invalidResumeCode = false;
+            }
+        };
+        for (int i = 0; i < 26; ++i) append(static_cast<KeyCode>(static_cast<int>(KeyCode::A) + i), static_cast<char>('A' + i));
+        for (int i = 0; i < 10; ++i) {
+            append(static_cast<KeyCode>(static_cast<int>(KeyCode::Alpha0) + i), static_cast<char>('0' + i));
+            append(static_cast<KeyCode>(static_cast<int>(KeyCode::Numpad0) + i), static_cast<char>('0' + i));
+        }
+        append(KeyCode::Minus, '-');
+        append(KeyCode::NumpadSubtract, '-');
+        if (Input::GetKeyDown(KeyCode::Backspace) && !m_resumeCode.empty()) {
+            m_resumeCode.pop_back();
+            m_invalidResumeCode = false;
+        }
+    }
     if (getData().playerCount == 2 && state != ModeSelectionState::PlayerCountSelect) {
         UpdateCooperativeInput();
         if (m_stateController->ArePlayersReady()) {
@@ -245,6 +291,11 @@ void ModeSelectionScene::UpdateActiveButtons(const UIInputState& inputState) {
         for (const auto& button : m_difficultyButtons) button->Update(inputState);
         return;
     }
+    if (state == ModeSelectionState::ResumeCodeInput) {
+        m_resumeButton->Update(inputState);
+        m_startButton->Update(inputState);
+        return;
+    }
 
     // 2人用のショット選択は各自のコントローラーだけが変更できる
     if (getData().playerCount == 2 || state != ModeSelectionState::PlayerTypeSelect) return;
@@ -284,6 +335,8 @@ void ModeSelectionScene::Dispose() {
     for (auto& button : m_difficultyButtons) button.reset();
     for (auto& button : m_playerTypeButtons) button.reset();
     m_backButton.reset();
+    m_resumeButton.reset();
+    m_startButton.reset();
     m_stateController.reset();
 }
 
@@ -300,6 +353,7 @@ void ModeSelectionScene::Render(Renderer& renderer) {
     renderer.DrawText(
         state == ModeSelectionState::PlayerCountSelect ? "SELECT PLAYERS" :
         state == ModeSelectionState::ControllerSelect ? "ASSIGN CONTROLLERS" :
+        state == ModeSelectionState::ResumeCodeInput ? "RESUME CODE" :
         selectingDifficulty ? "SELECT DIFFICULTY" : "SELECT SHOT TYPE",
         TextAlign::TopCenter,
         0.025f,
@@ -314,6 +368,18 @@ void ModeSelectionScene::Render(Renderer& renderer) {
         renderer.DrawText("LOCAL CO-OP REQUIRES TWO CONTROLLERS", TextAlign::Center,
 #endif
             0.014f, ColorF::White(), {0.0f, -0.40f}, CharacterSpacing);
+    } else if (state == ModeSelectionState::ResumeCodeInput) {
+        DrawPanel(renderer, {0.0f, 0.36f}, {0.92f, 0.12f});
+        renderer.DrawText(m_resumeCode.empty() ? "TYPE CODE HERE" : m_resumeCode,
+            TextAlign::Center, 0.012f, ShotColor, {0.0f, 0.36f}, 0.001f);
+        renderer.DrawText("KEYBOARD: A-Z / 0-9 / -    BACKSPACE: DELETE", TextAlign::Center,
+            0.012f, ColorF::White(), {0.0f, 0.16f}, 0.001f);
+        renderer.DrawText(m_invalidResumeCode ? "INVALID CODE - CHECK ALL CHARACTERS" :
+            "CODE OVERRIDES DIFFICULTY AND SHOT TYPE", TextAlign::Center,
+            0.012f, m_invalidResumeCode ? ColorF {1.0f, 0.35f, 0.25f, 1.0f} : ColorF::White(),
+            {0.0f, 0.02f}, 0.001f);
+        m_resumeButton->Render(renderer);
+        m_startButton->Render(renderer);
     } else if (selectingDifficulty) {
         for (const auto& button : m_difficultyButtons) button->Render(renderer);
     } else if (getData().playerCount == 2) {

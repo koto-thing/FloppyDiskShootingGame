@@ -8,6 +8,7 @@
 #include "../../Domain/ValueObjects/CooperativeInput.h"
 #include "../../Domain/ValueObjects/GalleryEntry.h"
 #include "../../Domain/ValueObjects/PlayerType.h"
+#include "../../Domain/ValueObjects/ResumeCode.h"
 #include "../../Engine/Graphics/Camera3D.h"
 #include "Stages/Stage1/Stage1State.h"
 #include "Stages/Stage2/Stage2State.h"
@@ -27,7 +28,12 @@ class SideScrollingShooter {
     friend struct OrbitShotTests;
     friend struct CoopGameplayTests;
     friend struct CoopStageTests;
+    friend struct ResumeCodeTests;
 public:
+    /** @brief 現在地点のシングルプレイ再開コードを取得する @return コード、対象外なら空文字列 */
+    std::string GetResumeCode() const;
+    /** @brief 検証済みコードの開始地点と状態を復元する @param code 入力コード @return 復元成功ならtrue */
+    bool RestoreResumeCode(std::string_view code);
     /** @brief 自機弾の挙動を調整するパラメータ */
     struct PlayerShotParameters {
         int fireIntervalFrames;

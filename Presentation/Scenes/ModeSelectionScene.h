@@ -52,5 +52,9 @@ private:
     std::array<std::unique_ptr<Button>, 3> m_difficultyButtons;
     std::array<std::unique_ptr<Button>, 3> m_playerTypeButtons;
     std::unique_ptr<Button> m_backButton;
+    std::unique_ptr<Button> m_resumeButton;
+    std::unique_ptr<Button> m_startButton;
+    std::string m_resumeCode;
+    bool m_invalidResumeCode = false;
     PlayerType m_previewPlayerType = Homing;
 };
