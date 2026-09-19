@@ -51,7 +51,7 @@ void OnlineCoopSession::Work() {
     // 接続先は配布時に設定でき、平文HTTPはローカル開発だけ許可する
     wchar_t configured[2048] {};
     const DWORD length = GetEnvironmentVariableW(L"SPACEYAKUZA_SERVER_URL", configured, 2048);
-    const std::wstring url = length == 0 ? L"http://127.0.0.1:8080" : length < 2048 ? configured : L"";
+    const std::wstring url = length == 0 ? L"https://game.koto-thing.com" : length < 2048 ? configured : L"";
     URL_COMPONENTS parts {};
     parts.dwStructSize = sizeof(parts);
     parts.dwHostNameLength = parts.dwUrlPathLength = parts.dwExtraInfoLength =

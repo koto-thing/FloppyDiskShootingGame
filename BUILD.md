@@ -18,10 +18,15 @@ Online版のランキングは匿名の共有ランキング（難易度別、1�
 
 Go側を自分で実装する手順と省略のないコードは [OnlineServerTutorial.md](Docs/OnlineServerTutorial.md) を参照する
 サーバーを起動してから `OnlineRelease` または `OnlineDebug` のゲームを起動する
-既定接続先は `http://127.0.0.1:8080`、外部サーバーは環境変数 `SPACEYAKUZA_SERVER_URL` でHTTPSのoriginを設定する
-例: `$env:SPACEYAKUZA_SERVER_URL = 'https://自分のドメイン'`
+既定接続先は `https://game.koto-thing.com`、環境変数の設定なしでラズパイの公開サーバーへ接続する
+接続先を変更する場合だけ環境変数 `SPACEYAKUZA_SERVER_URL` で上書きする
+ローカル開発の例: `$env:SPACEYAKUZA_SERVER_URL = 'http://127.0.0.1:8080'`
+`$env:` の設定はそのPowerShellとそこから起動したゲームにだけ適用される
 パス・クエリ・ユーザー情報付きURL、外部への平文HTTP、リダイレクトは受理しない
-公開サーバーのホスティングとHTTPS証明書は別途必要で、この変更だけでは公開URLは発行されない
+公開サーバーではCaddyとGoサーバーの両方の稼働が必要、HTTP 502の場合はCaddyからGoサーバーへの接続を確認する
+現在のラズパイの配置先は `~/space_yakuza_server/space_yakuza_server`
+手動起動は `ssh pi` 接続後に `cd ~/space_yakuza_server && ./space_yakuza_server` を実行する
+手動起動中はターミナルを開いたままにする（自動起動は別途設定が必要）
 
 `START GAME → 2 PLAYERS ONLINE` で自動検索し、OFFにすると非公開部屋の作成と部屋コード参加が使える
 両者が `READY`、1Pが `START GAME` で開始する
