@@ -1,0 +1,34 @@
+
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\Temp\OrbitBuild\FloppyEngine.lib
+
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(551,5): warning MSB8028: 中間ディレクトリ (D:\Pandd\FloppyDiskShootingGame\Temp\OrbitGameObj/) に別のプロジェクト (FloppyDiskShootingGame.vcxproj) と共有されているファイルが含まれています。これにより、クリーンしてリビルド動作が適切に行われない可能性があります。 [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+  Build version: Floppy v025
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  SideScrollingShooter.cpp
+  SideScrollingShooterBackgrounds.cpp
+  SideScrollingShooterCombat.cpp
+  SideScrollingShooterRendering.cpp
+  CityBackgroundModule.cpp
+  StageDispatch.cpp
+  Stage1Module.cpp
+  Stage2Module.cpp
+  Stage2Rendering.cpp
+  Stage3Module.cpp
+  Stage4Module.cpp
+  Stage5Module.cpp
+  Stage5Rendering.cpp
+  ModeSelectionScene.cpp
+  TestStage.cpp
+  TitleScene.cpp
+  TutorialStage.cpp
+  コード生成しています。
+  コード生成が終了しました。
+  FloppyDiskShootingGame.vcxproj -> D:\Pandd\FloppyDiskShootingGame\Temp\OrbitBuild\SpaceYakuza.exe
+  Floppy distribution: 1446912 / 1474560 bytes
+OrbitShotTests.cpp
+コード生成しています。
+コード生成が終了しました。
+Tayama stomp passed
+OrbitShotTests and Tayama laser sight shots passed
+Wall drone shot tests passed

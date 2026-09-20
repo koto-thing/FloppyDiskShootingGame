@@ -7,6 +7,7 @@
 #include "../Engine/Input/Input.h"
 #include "../Engine/Graphics/Renderer.h"
 #include "../Presentation/Gameplay/SideScrollingShooter.h"
+#include "../Presentation/Gameplay/Stages/Stage3/Stage3Module.h"
 #include "../Presentation/Gameplay/GameplayRandom.h"
 #include "../Application/UseCases/CooperativeFrames.h"
 
@@ -38,6 +39,10 @@ public:
 
 class InputTestAccess {
 public:
+    /** @brief F12のフレーム入力を設定する @param down 新規押下 @return なし */
+    static void SetHitboxKey(bool down) {
+        Input::m_keyDown[static_cast<size_t>(KeyCode::F12)] = down;
+    }
     /** @brief 実機なしで各パッドの入力を設定する @param player パッド番号 @param keys 押下キー @return なし */
     static void SetPad(int player, std::initializer_list<KeyCode> keys) {
         Input::m_playerGamepadKeys[player] = {};
@@ -51,6 +56,93 @@ public:
 
 struct CoopGameplayTests {
     using Game = SideScrollingShooter;
+
+    /** @brief Stage3の2D機体全体がバリア内に収まり視点往復後も制限されることを検証する @return なし */
+    static void CheckStage3BarrierBounds() {
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        CoopCameraBackend backend;
+        Renderer renderer(backend);
+        g.m_stageNumber = 3;
+        g.m_stage = &Game::Stage3Module::Definition(Easy);
+        g.m_bossBattle = true;
+        auto& boss = g.m_enemies[0];
+        Game::Stage3Module::ConfigureBossSpawn(boss, false, 2);
+        boss.active = true;
+        boss.type = 2;
+
+        // Phase2/3と両プレイヤーを四隅まで移動し、2D→3D→2Dを往復する
+        for (float phase : {5.0f, 6.0f}) {
+            boss.phase = phase;
+            for (int playerCount : {1, 2}) {
+                g.m_playerCount = playerCount;
+                for (int player = 0; player < playerCount; ++player) {
+                    g.m_activePlayer = player;
+                    for (float xSign : {-1.0f, 1.0f}) {
+                        for (float ySign : {-1.0f, 1.0f}) {
+                            for (bool rail : {false, true, false}) {
+                                g.RequestViewMode(rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D);
+                                g.Player().m_moveLeft = xSign < 0.0f;
+                                g.Player().m_moveRight = xSign > 0.0f;
+                                g.Player().m_moveDown = ySign < 0.0f;
+                                g.Player().m_moveUp = ySign > 0.0f;
+                                for (int frame = 0; frame < 600; ++frame) {
+                                    g.TickViewTransition();
+                                    g.TickPlayer();
+                                    const Vector2 xRange = Game::Stage3Module::PlayerXRange(g);
+                                    assert(g.Player().m_playerX >= xRange.x && g.Player().m_playerX <= xRange.y);
+                                }
+                                assert(g.m_viewTransitionTimer == 0);
+                                if (rail) {
+                                    // 既存の3D移動端を維持する
+                                    assert(std::abs(g.Player().m_playerX - xSign * 1.2f) < 0.0001f);
+                                    const float y = Game::ToWorldY(g.Player().m_playerY);
+                                    assert(std::abs(y - (ySign < 0.0f ? -21.04f : 0.85f)) < 0.0001f);
+                                    continue;
+                                }
+
+                                // 描画されたバリア5面から画面上の左右上下境界を得る
+                                Camera3D camera;
+                                g.ConfigureSideCamera(camera, renderer);
+                                renderer.BeginFrame();
+                                assert(Game::Stage3Module::DrawBossModel(g, renderer, camera, boss, 0.0f));
+                                std::array<Matrix4x4, 5> fields;
+                                size_t fieldCount = 0;
+                                for (size_t i = 0; i < renderer.CommandCount(); ++i) {
+                                    const auto& command = renderer.Command(i);
+                                    if (command.type != RenderCommand::Type::Primitive3D ||
+                                        std::abs(command.primitive.color.a - 0.28f) > 0.00001f ||
+                                        command.primitive.color.r >= 0.05f) continue;
+                                    assert(fieldCount < fields.size());
+                                    fields[fieldCount++] = command.primitive.wvpMatrix;
+                                }
+                                assert(fieldCount == fields.size());
+                                const float left = fields[1].TransformPoint({}).x;
+                                const float right = fields[0].TransformPoint({}).x;
+                                const float bottom = fields[0].TransformPoint({0.0f, -0.5f, 0.0f}).y;
+                                const float top = fields[0].TransformPoint({0.0f, 0.5f, 0.0f}).y;
+
+                                // 機首の最大発光も含め、各部品の外接箱を透視投影して照合する
+                                g.m_viewToggleCooldown = 0;
+                                renderer.BeginFrame();
+                                g.DrawPlayerModel(renderer, camera, Game::ToWorldX(g.Player().m_playerX),
+                                    Game::ToWorldY(g.Player().m_playerY), Game::SidePlaneZ, true, Math::HalfPi);
+                                assert(renderer.CommandCount() >= 4);
+                                for (size_t i = 0; i < renderer.CommandCount(); ++i) {
+                                    const auto& matrix = renderer.Command(i).primitive.wvpMatrix;
+                                    for (float x : {-0.5f, 0.5f}) for (float y : {-0.5f, 0.5f}) for (float z : {-0.5f, 0.5f}) {
+                                        const Vector3 point = matrix.TransformPoint({x, y, z});
+                                        assert(point.x > left && point.x < right);
+                                        assert(point.y > bottom && point.y < top);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     /** @brief 無関係な敵出現と隕石を止めて実ゲーム状態を初期化する @param game 検証対象 @return なし */
     static void Prepare(Game& game) {
@@ -264,6 +356,44 @@ struct CoopGameplayTests {
         }
     }
 
+    /** @brief 第2部の3D自機弾だけ遠方の表示サイズを維持することを検証する @param game 検証対象 @return なし */
+    static void CheckPart2ShotSize(Game& game) {
+        Prepare(game);
+        CoopCameraBackend backend;
+        Renderer renderer(backend);
+        Camera3D camera;
+        camera.SetViewport({0, 0, backend.Width(), backend.Height()});
+        Game::Shot shot {};
+        shot.z = 30.0f;
+        shot.hitRadius = 0.01f;
+        game.m_viewMode = Game::ViewMode::Rail3D;
+        game.m_viewTransitionTimer = 0;
+
+        // 同一カメラでステージ、区間、弾種だけを変えて対象範囲を検証する
+        for (bool special : {false, true}) {
+            shot.special = special;
+            const Vector2 minimum = special ? Vector2 {0.030f, 0.015f} : Vector2 {0.04125f, 0.021f};
+            for (int stage : {1, 5}) {
+                game.m_stageNumber = stage;
+                for (auto phase : {ShooterStages::Stage5::Phase::EastsourceBattle,
+                        ShooterStages::Stage5::Phase::WallClimbLower,
+                        ShooterStages::Stage5::Phase::WallClimbMiddle,
+                        ShooterStages::Stage5::Phase::WallClimbUpper}) {
+                    game.m_stage5.phase = phase;
+                    renderer.BeginFrame();
+                    game.DrawShotModel(renderer, camera, shot, 0.0f);
+                    assert(renderer.CommandCount() == 1);
+                    const Vector2 size = renderer.Command(0).playerShot.size;
+                    if (stage == 5 && phase != ShooterStages::Stage5::Phase::EastsourceBattle) {
+                        assert(size.x >= minimum.x - 0.00001f && size.y >= minimum.y - 0.00001f);
+                    } else {
+                        assert(size.x < minimum.x && size.y < minimum.y);
+                    }
+                }
+            }
+        }
+    }
+
     /** @brief 通信入力が実機入力に依存せず両機に適用されることを検証する @param game 検証対象 @return なし */
     static void CheckNetworkInput(Game& game) {
         Prepare(game);
@@ -337,19 +467,143 @@ struct CoopGameplayTests {
         }
     }
 
+    /** @brief 被弾判定球が全自機より後に深度テストなしで描画されることを検証する @param game 検証対象 @return なし */
+    static void CheckHitboxOverlay(Game& game) {
+        Prepare(game);
+        CoopCameraBackend backend;
+        Renderer renderer(backend);
+        // 2D、3D、視点遷移中と低速入力の有無を検証する
+        for (int view = 0; view < 3; ++view) {
+            game.m_viewMode = view == 1 ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+            game.m_nextViewMode = Game::ViewMode::Rail3D;
+            game.m_viewTransitionTimer = view == 2 ? 10 : 0;
+            game.m_viewTransitionProgress = view == 2 ? 0.5f : 0.0f;
+            for (int expected = 0; expected <= 2; ++expected) {
+                for (int player = 0; player < 2; ++player) {
+                    game.m_players[player].m_slowMove = player < expected;
+                    game.m_players[player].m_invincible = 0;
+                }
+                renderer.BeginFrame();
+                if (view == 0) game.Render2D(renderer);
+                else game.Render3D(renderer);
+                PipelineId pipeline = PipelineId::Model3D;
+                int hitboxes = 0;
+                for (size_t i = 0; i < renderer.CommandCount(); ++i) {
+                    const auto& command = renderer.Command(i);
+                    if (command.type == RenderCommand::Type::ResetCamera) break;
+                    if (command.type == RenderCommand::Type::Pipeline) pipeline = command.pipeline;
+                    if (command.type != RenderCommand::Type::Primitive3D) continue;
+                    const auto& primitive = command.primitive;
+                    const bool hitbox = primitive.shape == PrimitiveShape::Sphere &&
+                        primitive.color.r == 1.0f && primitive.color.g == 0.08f && primitive.color.b == 0.08f;
+                    if (hitbox) {
+                        assert(pipeline == PipelineId::Object && primitive.color.a >= 0.5f);
+                        ++hitboxes;
+                    } else {
+                        assert(hitboxes == 0);
+                    }
+                }
+                assert(hitboxes == expected);
+            }
+        }
+    }
+
+    /** @brief F12で表示だけが切り替わり、保持中は再反転しないことを検証する @param game 検証対象 @return なし */
+    static void CheckDebugHitboxToggle(Game& game) {
+#if defined(_DEBUG)
+        Prepare(game);
+        CoopCameraBackend backend;
+        Renderer renderer(backend);
+        // 全ステージの両視点で描画数と進行状態を確認する
+        for (int stage = 1; stage <= 5; ++stage) {
+            game.StartDebugCheckpoint(stage, 1, false);
+            for (const auto mode : {Game::ViewMode::Side2D, Game::ViewMode::Rail3D}) {
+                game.m_viewMode = mode;
+                const auto phase = game.m_stage5.phase;
+                assert(game.m_showHitboxes);
+                renderer.BeginFrame();
+                game.Render(renderer);
+                const auto visibleCount = renderer.CommandCount();
+                InputTestAccess::SetHitboxKey(true);
+                game.ProcessInput();
+                assert(!game.m_showHitboxes && game.m_stage5.phase == phase);
+                renderer.BeginFrame();
+                game.Render(renderer);
+                assert(renderer.CommandCount() < visibleCount);
+                InputTestAccess::SetHitboxKey(false);
+                game.ProcessInput();
+                assert(!game.m_showHitboxes);
+                InputTestAccess::SetHitboxKey(true);
+                game.ProcessInput();
+                assert(game.m_showHitboxes && game.m_stage5.phase == phase);
+                InputTestAccess::SetHitboxKey(false);
+                renderer.BeginFrame();
+                game.Render(renderer);
+                assert(renderer.CommandCount() == visibleCount);
+            }
+        }
+#endif
+    }
+
     /** @brief ローカル協力プレイの主要ルールを検証する @return なし */
     static void Run() {
+        CheckStage3BarrierBounds();
         auto game = std::make_unique<Game>();
+        CheckGrazeRecovery(*game);
         CheckInputAndShots(*game);
         CheckItems(*game);
         CheckBombs(*game);
         CheckRespawn(*game);
         CheckCamera(*game);
+        CheckPart2ShotSize(*game);
+        CheckHitboxOverlay(*game);
+        CheckDebugHitboxToggle(*game);
         CheckNetworkInput(*game);
         CheckNetworkFrames();
         CheckNetworkSimulation();
         RunCoopStageTests();
         std::puts("CoopGameplayTests passed");
+    }
+
+    /** @brief 両視点で継続グレイズと離脱時の回復速度を検証する @param game 検証対象 @return なし */
+    static void CheckGrazeRecovery(Game& game) {
+        for (bool rail : {false, true}) {
+            Prepare(game);
+            if (rail) {
+                game.RequestViewMode(Game::ViewMode::Rail3D);
+                for (int i = 0; i < Game::ViewTransitionFrames; ++i) game.TickViewTransition();
+            }
+            game.m_viewToggleCooldown = 100;
+            game.Tick();
+            assert(!game.m_grazing && game.m_viewToggleCooldown == 99);
+
+            // 2Pの近傍に得点済みの静止弾を複数置いても、共有ゲージは2倍まで
+            game.m_activePlayer = 1;
+            const Vector3 player = game.PlayerWorldPosition();
+            game.m_activePlayer = 0;
+            for (int i = 0; i < 3; ++i) {
+                auto& shot = game.m_shots[i];
+                shot = {};
+                shot.active = shot.enemy = shot.grazed = true;
+                shot.x = rail ? Game::FromWorldX(player.x + 0.8f) : game.m_players[1].m_playerX + 0.13f;
+                shot.y = game.m_players[1].m_playerY;
+                shot.z = player.z;
+            }
+            game.Tick();
+            assert(game.m_grazing && game.m_viewToggleCooldown == 97);
+            game.Tick();
+            assert(game.m_grazing && game.m_viewToggleCooldown == 95);
+            assert(game.m_chapterResult.grazeCount == 0);
+
+            // 完了直前でも負数にせず、弾が離れたフレームから通常速度へ戻す
+            game.m_viewToggleCooldown = 1;
+            game.Tick();
+            assert(game.m_grazing && game.m_viewToggleCooldown == 0);
+            game.m_shots = {};
+            game.m_viewToggleCooldown = 100;
+            game.Tick();
+            assert(!game.m_grazing && game.m_viewToggleCooldown == 99);
+        }
     }
 };
 

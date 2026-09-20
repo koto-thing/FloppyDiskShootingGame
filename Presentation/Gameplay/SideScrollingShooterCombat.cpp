@@ -368,6 +368,8 @@ void SideScrollingShooter::TickLinkedEnemyLasers() {
 }
 
 void SideScrollingShooter::TickShots() {
+    // 得点済みの弾も含め、今フレームの接近状態を取り直す
+    m_grazing = false;
     // Stage3以降の遅延点火ミサイルは画面外到達または命中時に爆発へ変換する
     auto DeactivateShot = [this](Shot& shot) {
         if ((m_stageNumber == 3 || m_stageNumber == 4 || m_stageNumber == 5) && shot.enemy &&
@@ -395,6 +397,18 @@ void SideScrollingShooter::TickShots() {
         shot.x += shot.vx;
         shot.y += shot.vy;
         shot.z += shot.vz;
+        // Spreadは実移動距離で減衰し、2D用の疑似奥行きや視点切替の座標変換を加算しない
+        if (!shot.enemy && shot.special && shot.playerType == Spread) {
+            const float dx = ToWorldX(shot.x - previousX);
+            const float dy = ToWorldY(shot.y - previousY);
+            const float dz = IsRailGameplayActive() ? shot.z - previousZ : 0.0f;
+            shot.travelDistance += std::sqrt(dx * dx + dy * dy + dz * dz);
+            constexpr float NearRange = 3.5f;
+            constexpr float FarRange = 7.0f;
+            shot.damage = PlayerShotConfigs[Spread].damage -
+                (shot.travelDistance >= NearRange ? 1 : 0) -
+                (shot.travelDistance >= FarRange ? 1 : 0);
+        }
         StageDispatch::TickSpecialShotAfterMove(*this, shot, previousX, previousY, previousZ);
         if (!shot.active) continue;
         if (!IsRailGameplayActive()) {
@@ -464,6 +478,7 @@ void SideScrollingShooter::TickShots() {
                     Hit3D(playerPosition.x, playerPosition.y, playerPosition.z, 1.18f,
                         ToWorldX(shot.x), ToWorldY(shot.y), shot.z, 0.28f) :
                     Hit(Player().m_playerX, Player().m_playerY, 0.200f, shot.x, shot.y, 0.022f);
+                m_grazing |= !playerHit && grazed;
                 if (!playerHit && grazed && !shot.grazed) {
                     shot.grazed = true;
                     ++m_chapterResult.grazeCount;
@@ -1069,10 +1084,6 @@ void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, 
     shot.vx = vx;
     shot.vy = vy;
     shot.vz = vz;
-    if (enemy && !IsRailGameplayActive() && m_stageNumber == 5 &&
-        ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase)) {
-        AimShotGroundward(shot.vx, shot.vy);
-    }
     shot.barrageIndex = barrageIndex;
     shot.barrageCount = barrageCount;
     shot.enemy = enemy;

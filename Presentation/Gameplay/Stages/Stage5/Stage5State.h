@@ -224,11 +224,12 @@ inline constexpr int TayamaDragonSweepRecoveryFrames = 45;
 inline constexpr int TayamaDragonRushCycleFrames = 480;
 inline constexpr int TayamaDragonRushStartFrame = 150;
 inline constexpr int TayamaDragonRushWarningFrames = 60;
-inline constexpr int TayamaDragonRushActiveFrames = 30;
+inline constexpr int TayamaDragonRushActiveFrames = 120;
 inline constexpr int TayamaDragonRushRecoveryFrames = 75;
-inline constexpr float TayamaDragonRushWindupRate = 0.12f;
-inline constexpr float TayamaDragonRushSideDistance = 1.35f;
-inline constexpr float TayamaDragonRushRailDistance = 48.0f;
+// 全40節が左端またはカメラ後方へ抜けるまで進み、予備動作の後退量を維持する
+inline constexpr float TayamaDragonRushWindupRate = 0.03f;
+inline constexpr float TayamaDragonRushSideDistance = 5.4f;
+inline constexpr float TayamaDragonRushRailDistance = 192.0f;
 inline constexpr int TayamaDragonOrbitStartFrame = 330;
 inline constexpr int TayamaDragonOrbitFrames = 120;
 inline constexpr float TayamaDragonOrbitRadius = 10.5f;
@@ -239,7 +240,7 @@ inline constexpr int TayamaDragonRomanceCannonIntervalFrames = 900;
 inline constexpr int TayamaDragonRomanceCannonSequenceFrames = 180;
 inline constexpr int TayamaDragonRomanceCannonMoveFrames = 30;
 inline constexpr int TayamaDragonRomanceCannonFireFrame = 75;
-inline constexpr float TayamaDragonSideCenterX = 0.98f;
+inline constexpr float TayamaDragonSideCenterX = 1.3f;
 inline constexpr int TayamaDragonCollapseSegmentIntervalFrames = 10;
 inline constexpr int TayamaDragonHeadPartCount = 34;
 inline constexpr int TayamaDragonHeadBreakStartFrame = 285;
@@ -247,8 +248,12 @@ inline constexpr int TayamaDragonHeadPartIntervalFrames = 8;
 inline constexpr int TayamaDragonCollapseHeadExplosionFrame =
     TayamaDragonHeadBreakStartFrame +
     TayamaDragonHeadPartCount * TayamaDragonHeadPartIntervalFrames;
+inline constexpr int TayamaDragonFinalChargeFrames = 72;
+inline constexpr int TayamaDragonFinalBurstIntervalFrames = 18;
+inline constexpr int TayamaDragonFinalBurstCount = 5;
+inline constexpr int TayamaDragonFinalAfterglowFrames = 240;
 inline constexpr int TayamaDragonCollapseFrames =
-    TayamaDragonCollapseHeadExplosionFrame + 120;
+    TayamaDragonCollapseHeadExplosionFrame + TayamaDragonFinalAfterglowFrames;
 inline constexpr int SearchlightLockFrames = 45;
 inline constexpr int SearchlightWarningFrames = 24;
 inline constexpr int SearchlightVolleyCount = 3;
@@ -912,6 +917,7 @@ struct State {
     float coreTargetY = 0.0f;
     float coreTargetZ = 8.0f;
     Vector3 headLaserTarget {};
+    Vector3 tayamaDragonExplosionCenter {};
     int phaseTimer = 0;
     int checkpointScore = 0;
     int checkpointKills = 0;

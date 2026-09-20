@@ -19,7 +19,7 @@
 #endif
 
 namespace {
-constexpr float PlayerHitboxColor[4] = {1.0f, 0.08f, 0.08f, 0.24f};
+constexpr float PlayerHitboxColor[4] = {1.0f, 0.08f, 0.08f, 0.65f};
 constexpr float PlayerHitRadius2D = 0.050f;
 constexpr float PlayerHitRadius3D = 0.38f;
 
@@ -179,23 +179,25 @@ void SideScrollingShooter::Render(Renderer& renderer) const {
         return true;
     }();
     (void)hitboxCheck;
-    // 深度に隠れないオーバーレイとして、接触範囲と命中範囲を最後に描画する
-    Camera3D camera;
-    if (IsRailRenderActive()) ConfigureRailCamera(camera, renderer);
-    else ConfigureSideCamera(camera, renderer);
-    renderer.SetPipeline(PipelineId::Object);
-    for (const auto& enemy : m_enemies) {
-        if (!enemy.active) continue;
-        Enemy target = enemy;
-        if (!IsRailGameplayActive()) target.z = SidePlaneZ;
-        DrawEnemyHitbox(renderer, camera, target);
+    if (m_showHitboxes) {
+        // 深度に隠れないオーバーレイとして、接触範囲と命中範囲を最後に描画する
+        Camera3D camera;
+        if (IsRailRenderActive()) ConfigureRailCamera(camera, renderer);
+        else ConfigureSideCamera(camera, renderer);
+        renderer.SetPipeline(PipelineId::Object);
+        for (const auto& enemy : m_enemies) {
+            if (!enemy.active) continue;
+            Enemy target = enemy;
+            if (!IsRailGameplayActive()) target.z = SidePlaneZ;
+            DrawEnemyHitbox(renderer, camera, target);
+        }
+        Shot query;
+        query.hitboxRenderer = &renderer;
+        query.hitboxCamera = &camera;
+        StageDispatch::HitsHazard(*this, 0.0f, 0.0f, 0.0f, 0.0f, &query);
+        if (m_stageNumber == 5) Stage5Module::DrawTargetHitboxes(*this, query);
+        if (m_stageNumber == 3) Stage3Module::DrawTargetHitboxes(*this, query);
     }
-    Shot query;
-    query.hitboxRenderer = &renderer;
-    query.hitboxCamera = &camera;
-    StageDispatch::HitsHazard(*this, 0.0f, 0.0f, 0.0f, 0.0f, &query);
-    if (m_stageNumber == 5) Stage5Module::DrawTargetHitboxes(*this, query);
-    if (m_stageNumber == 3) Stage3Module::DrawTargetHitboxes(*this, query);
 #endif
     DrawBossNameReveal(renderer);
     DrawMissionBanner(renderer);
@@ -259,6 +261,15 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
         DrawPlayerModel(renderer, camera, ToWorldX(Player().m_playerX), ToWorldY(Player().m_playerY),
             SidePlaneZ, playerVisible, Math::HalfPi, 0.0f,
             verticalSide ? Math::HalfPi : 0.0f);
+    });
+    // 半透明の砂粒は船体と弾の描画後に重ねる
+    if (m_stageNumber == 2) Stage2Module::DrawSandstorm(*this, renderer, camera);
+
+    // 全自機の描画後に深度テストなしで被弾判定を重ね、機体内部でも表示する
+    renderer.SetPipeline(PipelineId::Object);
+    ForEachPlayer([&] {
+        const bool playerVisible = Player().m_playerDestructionTimer == 0 &&
+            (m_tutorialMode || Player().m_invincible == 0 || (Player().m_invincible / 5) % 2 == 0);
         if (Player().m_slowMove && playerVisible) {
             // 2D判定の画面比率をワールド寸法へ変換して表示する
             DrawModelPrimitive(renderer, camera, 5, ToWorldX(Player().m_playerX), ToWorldY(Player().m_playerY), SidePlaneZ,
@@ -268,8 +279,7 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
         }
 
     });
-    // 半透明の砂粒は船体と弾の描画後に重ねる
-    if (m_stageNumber == 2) Stage2Module::DrawSandstorm(*this, renderer, camera);
+    renderer.SetPipeline(PipelineId::Model3D);
     renderer.ResetCamera();
     DrawHudBackground(renderer);
     StageDispatch::DrawOverlay2D(*this, renderer);
@@ -418,7 +428,22 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
         }
         DrawPlayerModel(renderer, camera, playerPosition.x, playerPosition.y,
             playerPosition.z, playerVisible, playerYaw, playerPitch, playerRoll);
+    });
+    // 遷移中も同じカメラから砂嵐を描画して2D終点と一致させる
+    if (m_stageNumber == 2) Stage2Module::DrawSandstorm(*this, renderer, camera);
+
+    // 全自機の描画後に深度テストなしで被弾判定を重ね、機体内部でも表示する
+    renderer.SetPipeline(PipelineId::Object);
+    ForEachPlayer([&] {
+        const bool cinematic = StageDispatch::IsCinematic(*this);
+        const bool playerVisible = Player().m_playerDestructionTimer == 0 &&
+            (cinematic || m_tutorialMode || Player().m_invincible == 0 || (Player().m_invincible / 5) % 2 == 0);
         if (!cinematic && Player().m_slowMove && playerVisible) {
+            Vector3 playerPosition = IsTayamaBattle() ? PlayerWorldPosition() :
+                Vector3 {ToWorldX(Player().m_playerX), ToWorldY(Player().m_playerY),
+                    Math::Lerp(SidePlaneZ, PlayerRailDepth(), railWeight)};
+            float playerPitch = 0.0f;
+            StageDispatch::ApplyPlayerRenderCorrection(*this, playerPosition, playerPitch);
             // 視点遇移中も実際の2D/3D被弾半径に連続して追従する
             const float hitboxWidth = Math::Lerp(
                 PlayerHitRadius2D * WorldXScale * 2.0f, PlayerHitRadius3D * 2.0f, railWeight);
@@ -429,8 +454,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
                 hitboxWidth, hitboxHeight, hitboxHeight, PlayerHitboxColor);
         }
     });
-    // 遷移中も同じカメラから砂嵐を描画して2D終点と一致させる
-    if (m_stageNumber == 2) Stage2Module::DrawSandstorm(*this, renderer, camera);
+    renderer.SetPipeline(PipelineId::Model3D);
     renderer.ResetCamera();
     DrawHudBackground(renderer);
     StageDispatch::DrawOverlay3D(*this, renderer, camera);

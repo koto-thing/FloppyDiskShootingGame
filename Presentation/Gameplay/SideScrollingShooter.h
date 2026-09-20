@@ -55,7 +55,7 @@ public:
         // PIERCING
         { 18, 2, 0.052f, 0.0f, 0.12f, 0.09f, 0.032f, 1, 0.000f, true },
         // SPREAD
-        { 12, 7, 0.043f, 65.0f, 0.17f, 0.00f, 0.022f, 1, 0.000f, false },
+        { 12, 7, 0.043f, 65.0f, 0.17f, 0.00f, 0.022f, 3, 0.000f, false },
     }};
 
     /** @brief 全機体共通の通常弾パラメータ */
@@ -179,6 +179,7 @@ private:
         float vy = 0.0f;
         float vz = 0.0f;
         float hitRadius = 0.025f;
+        float travelDistance = 0.0f;
         int damage = 1;
         int barrageIndex = -1;
         int barrageCount = 0;
@@ -986,6 +987,7 @@ private:
         float yaw = 0.0f, float pitch = 0.0f, float roll = 0.0f) const;
     void DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw = 0.0f) const;
 #if defined(_DEBUG)
+    bool m_showHitboxes = true;
     /**
      * @brief ワールド座標の判定楕円体を半透明の赤で描画する
      * @param query 描画先を設定した問い合わせ
@@ -1156,6 +1158,7 @@ private:
     ViewMode m_nextViewMode = ViewMode::Side2D;
     int m_viewTransitionTimer = 0;
     int m_viewToggleCooldown = 0;
+    bool m_grazing = false;
     float m_viewTransitionProgress = 0.0f;
     float m_screenShakeIntensity = 0.0f;
     int m_screenShakeFrames = 0;

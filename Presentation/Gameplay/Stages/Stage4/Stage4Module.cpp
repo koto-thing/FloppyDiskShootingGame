@@ -1047,6 +1047,9 @@ void SideScrollingShooter::Stage4Module::TickSecondaryGunAttacks(
 
     // 突進開始フレームも含め、突進中はミサイル以外の副砲を停止する
     const bool rushActive = Stage4EnemySheet::IsRushAttackActive(boss);
+    // EASYでは副砲の連射数を減らして回避経路を広げる
+    const int spreadShotCount = shooter.m_difficulty == Easy ? 4 : Stage4SpreadShotCount;
+    const int aimedBurstCount = shooter.m_difficulty == Easy ? 3 : Stage4AimedBurstCount;
     const int spreadFrame = boss.age % Stage4SpreadAttackInterval;
     const int aimedFrame = boss.age % Stage4AimedAttackInterval;
     const int mainAttackInterval = shooter.m_stage->BossAttackInterval(
@@ -1056,12 +1059,12 @@ void SideScrollingShooter::Stage4Module::TickSecondaryGunAttacks(
     const bool firesSpread = !rushActive &&
         spreadFrame >= Stage4SpreadAttackStartFrame &&
         spreadFrame <= Stage4SpreadAttackStartFrame +
-            (Stage4SpreadShotCount - 1) * Stage4SpreadShotInterval &&
+            (spreadShotCount - 1) * Stage4SpreadShotInterval &&
         (spreadFrame - Stage4SpreadAttackStartFrame) % Stage4SpreadShotInterval == 0;
     const bool firesAimed = !rushActive &&
         aimedFrame >= Stage4AimedAttackStartFrame &&
         aimedFrame <= Stage4AimedAttackStartFrame +
-            (Stage4AimedBurstCount - 1) * Stage4AimedShotInterval &&
+            (aimedBurstCount - 1) * Stage4AimedShotInterval &&
         (aimedFrame - Stage4AimedAttackStartFrame) % Stage4AimedShotInterval == 0;
     if (!firesMissile && !firesSpread && !firesAimed) return;
 
@@ -1512,6 +1515,7 @@ void SideScrollingShooter::Stage4Module::SpawnSiegeMortarBarrage(
         launchArc(0.0f, config.giantSpeed),
         Stage4GiantCannonballSideRadius, Stage4GiantExplosionRadius, true, true, 3);
     for (float spread : Spread) {
+        if (shooter.m_difficulty == Easy && std::abs(spread) == 1.0f) continue;
         SpawnCannonballShot(shooter, muzzle,
             launchArc(spread, config.normalSpeed + std::abs(spread) * 0.025f),
             Stage4CannonballSideRadius, 0.55f, true, true, 2);
@@ -1539,6 +1543,9 @@ bool SideScrollingShooter::Stage4Module::SpawnCannonballShot(
     float sideRadius, float explosionRadius,
     bool gravity, bool detonateAtPlayerZ, int damage,
     bool fixedSideExplosionX, float sideExplosionX, float gravityScale) {
+    // EASYは全主砲の弾速と判定を縮小し、重力も時間倍率の二乗で弾道を保つ
+    const float speedScale = shooter.m_difficulty == Easy ? 0.75f : 1.0f;
+    const float hitScale = shooter.m_difficulty == Easy ? 0.7f : 1.0f;
     for (int shotIndex = 0; shotIndex < shooter.ActiveShotCapacity(); ++shotIndex) {
         auto& shot = shooter.m_shots[shotIndex];
         if (shot.active) continue;
@@ -1548,18 +1555,18 @@ bool SideScrollingShooter::Stage4Module::SpawnCannonballShot(
         shot.z = muzzle.z;
         shot.transitionSideX = shot.x;
         shot.transitionSideY = shot.y;
-        shot.vx = FromWorldX(velocity.x);
-        shot.vy = FromWorldY(velocity.y);
-        shot.vz = shooter.IsRailGameplayActive() ? velocity.z : 0.0f;
-        shot.hitRadius = sideRadius;
+        shot.vx = FromWorldX(velocity.x * speedScale);
+        shot.vy = FromWorldY(velocity.y * speedScale);
+        shot.vz = shooter.IsRailGameplayActive() ? velocity.z * speedScale : 0.0f;
+        shot.hitRadius = sideRadius * hitScale;
         shot.damage = damage;
         shot.enemy = true;
         shot.stage4.kind = ShotKind::Cannonball;
         shot.stage4.gravity = gravity;
         shot.stage4.detonateAtPlayerZ = detonateAtPlayerZ;
         shot.stage4.fixedSideExplosionX = fixedSideExplosionX;
-        shot.stage4.gravityScale = gravityScale;
-        shot.stage4.explosionRadius = explosionRadius;
+        shot.stage4.gravityScale = gravityScale * speedScale * speedScale;
+        shot.stage4.explosionRadius = explosionRadius * hitScale;
         shot.stage4.sideExplosionX = sideExplosionX;
         shot.active = true;
         return true;

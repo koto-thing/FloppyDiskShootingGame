@@ -1,0 +1,52 @@
+
+  Component.cpp
+  GameObject.cpp
+  MeshRenderer.cpp
+  Debug.cpp
+  Renderer.cpp
+  GameWorld.cpp
+  Transform.cpp
+  Button.cpp
+  Slider.cpp
+  D3D12RenderingService.cpp
+  TextRenderingService.cpp
+  CollisionService.cpp
+  コードを生成中...
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Floppy\x64\Debug\FloppyEngine.lib
+  Build version: Floppy v017
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  TextRenderingService.cpp
+  SettingsRepository.cpp
+  SpaceBackground.cpp
+  CreditContentController.cpp
+  CreditContentPresenter.cpp
+  SideScrollingShooter.cpp
+  SideScrollingShooterBackgrounds.cpp
+  SideScrollingShooterCombat.cpp
+  SideScrollingShooterRendering.cpp
+  CityBackgroundModule.cpp
+  StageDispatch.cpp
+  Stage1Module.cpp
+  Stage2Module.cpp
+  Stage2Rendering.cpp
+  Stage3Module.cpp
+  Stage4Module.cpp
+  Stage5Module.cpp
+  Stage5Rendering.cpp
+  ModeSelectionStateController.cpp
+  CreditScene.cpp
+  コードを生成中...
+  コンパイル中...
+  EndingScene.cpp
+  GalleryScene.cpp
+  ModeSelectionScene.cpp
+  OptionScene.cpp
+  RankingScene.cpp
+  StoryScene.cpp
+  TestStage.cpp
+  TitleScene.cpp
+  TutorialStage.cpp
+  main.cpp
+  コードを生成中...
+  FloppyDiskShootingGame.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Floppy\x64\Debug\SpaceYakuza.exe

@@ -1,0 +1,12 @@
+
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Floppy\x64\Debug\FloppyEngine.lib
+  Build version: Floppy v046
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  FloppyEngine.Tests.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Floppy\x64\Debug\FloppyEngine.Tests.exe
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  CityBackgroundModule.cpp
+  TitleScene.cpp
+  コードを生成中...
+  FloppyDiskShootingGame.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Floppy\x64\Debug\SpaceYakuza.exe

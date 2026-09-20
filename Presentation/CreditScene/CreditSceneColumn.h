@@ -28,5 +28,5 @@ struct CreditSceneLine {
  */
 struct CreditSceneColumn {
     std::vector<CreditSceneLine> lines;
-    float spacingAfter = 0.05f;
+    float spacingAfter = 0.16f;
 };

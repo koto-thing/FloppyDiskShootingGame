@@ -1,5 +1,6 @@
 #include "SteamCoopSession.h"
 #include "BuildVersion.h"
+#include "../../Engine/Diagnostics/Debug.h"
 #include <cstring>
 #include <sstream>
 #include <cstdlib>
@@ -21,16 +22,34 @@ int Choice(const char* text) { return text && text[0] >= '0' && text[0] <= '2' &
 /** @brief Steam APIを終了する @return なし */
 SteamCoopSession::~SteamCoopSession() {
     Leave();
+    // Steam終了前に通知と非同期結果の登録を解除する
+    m_inviteCallback.Unregister();
+    m_sessionRequestCallback.Unregister();
+    m_sessionFailedCallback.Unregister();
+    m_overlayCallback.Unregister();
+    m_created.Cancel();
+    m_entered.Cancel();
     if (m_initialized) SteamAPI_Shutdown();
 }
 
 /** @brief Steamを初期化する @param commandLine 起動引数 @return なし */
 void SteamCoopSession::Initialize(const wchar_t* commandLine) {
+    if (m_initialized) return;
     // Steamをレンダラーより先に初期化してオーバーレイを利用する
     _putenv_s("SteamAppId", std::to_string(SPACEYAKUZA_STEAM_APP_ID).c_str());
     SteamErrMsg error {};
     m_initialized = SteamAPI_InitEx(&error) == k_ESteamAPIInitResult_OK;
-    if (!m_initialized) { m_status = "START STEAM AND CHECK steam_appid.txt"; return; }
+    if (!m_initialized) {
+        Debug::LogError(std::string("Steam initialization failed: ") + error);
+        m_status = "START STEAM AND CHECK steam_appid.txt"; return;
+    }
+
+    // 初期化済みのSteamへ通知を登録する
+    m_inviteCallback.Register(this, &SteamCoopSession::OnInvite);
+    m_sessionRequestCallback.Register(this, &SteamCoopSession::OnSessionRequest);
+    m_sessionFailedCallback.Register(this, &SteamCoopSession::OnSessionFailed);
+    m_overlayCallback.Register(this, &SteamCoopSession::OnOverlay);
+    Debug::LogInfo(std::string("Steam initialized: app=") + std::to_string(SteamUtils()->GetAppID()) + " build=" + Build);
 
     // リレー通信を初期化する
     SteamNetworkingUtils()->InitRelayNetworkAccess();
@@ -52,6 +71,8 @@ void SteamCoopSession::Initialize(const wchar_t* commandLine) {
 
 /** @brief 招待による画面遷移要求を消費する @return 要求があればtrue */
 bool SteamCoopSession::TakeLobbyRequest() {
+    // 非同期接続の結果が届くまで招待を保持し、進行中の要求との競合を避ける
+    if (m_opening || m_created.IsActive() || m_entered.IsActive()) return false;
     const bool requested = m_lobbyRequest;
     m_lobbyRequest = false;
     return requested;
@@ -76,14 +97,17 @@ void SteamCoopSession::OpenLobby() {
 
     // 保留中の招待があれば参加し、なければロビーを作成する
     if (invited.IsValid()) {
+        Debug::LogInfo("Steam JoinLobby: " + std::to_string(invited.ConvertToUint64()));
         m_entered.Set(SteamMatchmaking()->JoinLobby(invited), this, &SteamCoopSession::OnEntered);
     } else {
+        Debug::LogInfo("Steam CreateLobby");
         m_created.Set(SteamMatchmaking()->CreateLobby(k_ELobbyTypeFriendsOnly, 2), this, &SteamCoopSession::OnCreated);
     }
 }
 
 /** @brief ロビー作成結果を処理する @param result 結果 @param failure 通信失敗 @return なし */
 void SteamCoopSession::OnCreated(LobbyCreated_t* result, bool failure) {
+    Debug::LogInfo("Steam lobby created: result=" + std::to_string(failure ? -1 : static_cast<int>(result->m_eResult)) + " ioFailure=" + std::to_string(failure));
     // 戻る操作やタイムアウトの後に成功した非同期ロビーも必ず退出する
     if (!m_opening) {
         if (!failure && result->m_eResult == k_EResultOK) SteamMatchmaking()->LeaveLobby(CSteamID(result->m_ulSteamIDLobby));
@@ -95,6 +119,7 @@ void SteamCoopSession::OnCreated(LobbyCreated_t* result, bool failure) {
     // 作成したロビーへゲーム設定を登録する
     m_lobby = CSteamID(result->m_ulSteamIDLobby);
     m_owner = SteamUser()->GetSteamID();
+    Debug::LogInfo("Steam host lobby: " + std::to_string(m_lobby.ConvertToUint64()));
     SteamMatchmaking()->SetLobbyData(m_lobby, "game", Game);
     SteamMatchmaking()->SetLobbyData(m_lobby, "build", Build);
     SteamMatchmaking()->SetLobbyData(m_lobby, "difficulty", "0");
@@ -106,6 +131,7 @@ void SteamCoopSession::OnCreated(LobbyCreated_t* result, bool failure) {
 
 /** @brief ロビー参加結果を処理する @param result 結果 @param failure 通信失敗 @return なし */
 void SteamCoopSession::OnEntered(LobbyEnter_t* result, bool failure) {
+    Debug::LogInfo("Steam lobby entered: response=" + std::to_string(failure ? -1 : static_cast<int>(result->m_EChatRoomEnterResponse)) + " ioFailure=" + std::to_string(failure));
     if (!m_opening) {
         if (!failure && result->m_EChatRoomEnterResponse == k_EChatRoomEnterResponseSuccess)
             SteamMatchmaking()->LeaveLobby(CSteamID(result->m_ulSteamIDLobby));
@@ -119,6 +145,8 @@ void SteamCoopSession::OnEntered(LobbyEnter_t* result, bool failure) {
     // 参加先のゲームとビルドを検証する
     m_lobby = CSteamID(result->m_ulSteamIDLobby);
     m_owner = SteamMatchmaking()->GetLobbyOwner(m_lobby);
+    Debug::LogInfo(std::string("Steam lobby metadata: game=") + SteamMatchmaking()->GetLobbyData(m_lobby, "game") +
+        " build=" + SteamMatchmaking()->GetLobbyData(m_lobby, "build") + " expected=" + Build);
     if (std::strcmp(SteamMatchmaking()->GetLobbyData(m_lobby, "game"), Game) != 0 ||
         std::strcmp(SteamMatchmaking()->GetLobbyData(m_lobby, "build"), Build) != 0 ||
         SteamMatchmaking()->GetNumLobbyMembers(m_lobby) > 2) {
@@ -172,7 +200,10 @@ bool SteamCoopSession::CanStart() const {
 }
 /** @brief 招待画面を開く @return なし */
 void SteamCoopSession::Invite() {
-    if (InLobby() && IsHost() && !m_inGame) SteamFriends()->ActivateGameOverlayInviteDialog(m_lobby);
+    if (InLobby() && IsHost() && !m_inGame) {
+        Debug::LogInfo("Steam invite dialog: lobby=" + std::to_string(m_lobby.ConvertToUint64()));
+        SteamFriends()->ActivateGameOverlayInviteDialog(m_lobby);
+    }
 }
 /** @brief 自分の機体を変更する @return なし */
 void SteamCoopSession::CycleShot() {
@@ -247,6 +278,7 @@ void SteamCoopSession::Poll() {
         Fail("HOST LEFT OR STEAM DISCONNECTED - RETURN TO TITLE"); return;
     }
     const auto peer = Member(IsHost() ? 1 : 0);
+    if (peer != m_peer) Debug::LogInfo(peer.IsValid() ? "Steam peer joined lobby" : "Steam peer left lobby");
     if (m_inGame && peer != m_peer) { Fail("FRIEND DISCONNECTED - RETURN TO TITLE"); return; }
     if (peer != m_peer && m_peer.IsValid()) {
         SteamNetworkingIdentity old; old.SetSteamID(m_peer);
@@ -300,7 +332,12 @@ bool SteamCoopSession::Step(CooperativeInput& local, std::array<CooperativeInput
 
 /** @brief 招待を保留する @param event 招待情報 @return なし */
 void SteamCoopSession::OnInvite(GameLobbyJoinRequested_t* event) {
-    if (m_inGame || m_opening || !event->m_steamIDLobby.IsLobby()) return;
+    Debug::LogInfo("Steam invite received: lobby=" + std::to_string(event->m_steamIDLobby.ConvertToUint64()));
+    if (m_inGame || !event->m_steamIDLobby.IsLobby()) {
+        Debug::LogWarning("Steam invite ignored: playing or invalid lobby");
+        return;
+    }
+    // 接続中も最新の招待を保持し、完了後に画面遷移で参加する
     m_pendingLobby = event->m_steamIDLobby;
     m_lobbyRequest = true;
 }
@@ -316,7 +353,7 @@ void SteamCoopSession::OnSessionFailed(SteamNetworkingMessagesSessionFailed_t* e
 /** @brief Steamオーバーレイの表示状態を保存する @param event 表示状態 @return なし */
 void SteamCoopSession::OnOverlay(GameOverlayActivated_t* event) { m_overlayActive = event->m_bActive != 0; }
 /** @brief 更新を停止する @param message 表示文 @return なし */
-void SteamCoopSession::Fail(const char* message) { m_failed = true; m_status = message; }
+void SteamCoopSession::Fail(const char* message) { Debug::LogError(message); m_failed = true; m_status = message; }
 /** @brief ロビーと通信を解放する @return なし */
 void SteamCoopSession::Leave() {
     // 相手とのP2P接続を閉じる
@@ -330,5 +367,6 @@ void SteamCoopSession::Leave() {
 
     // ロビーと同期状態を初期化する
     m_lobby.Clear(); m_peer.Clear(); m_owner.Clear();
-    m_inGame = m_failed = m_opening = m_lobbyRequest = false;
+    // 招待はロビー画面の再生成や接続タイムアウトをまたいで保持する
+    m_inGame = m_failed = m_opening = false;
 }

@@ -67,6 +67,14 @@ struct ResumeCodeTests {
                             ResumeCode after;
                             assert(ResumeCode::Parse(g.GetResumeCode(), after));
                             assert(after.stage == stage && after.part == part && after.chapter == chapter);
+                            // ボス戦でボムを使い切っても、繰り返しのリスタートで初期数へ戻る
+                            if (boss) {
+                                for (int remaining : {0, 1, 2}) {
+                                    g.Player().m_bombCount = remaining;
+                                    g.RestartCurrentChapter();
+                                    assert(g.Player().m_bombCount == SideScrollingShooter::InitialBombCount);
+                                }
+                            }
                         }
                     }
                 }

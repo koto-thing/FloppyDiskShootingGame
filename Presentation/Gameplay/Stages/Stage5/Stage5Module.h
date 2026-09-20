@@ -391,6 +391,7 @@ public:
     static void CompleteTayamaIntroduction(SideScrollingShooter& shooter);
 
 private:
+    friend struct OrbitShotTests;
     class StageDefinitionImpl;
 
     static float MoveTowards(float current, float target, float maxDelta);

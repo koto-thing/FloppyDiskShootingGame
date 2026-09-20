@@ -1,0 +1,82 @@
+
+  Component.cpp
+  Debug.cpp
+  Transform.cpp
+  GameObject.cpp
+  GameWorld.cpp
+  Circle.cpp
+  Rect.cpp
+  Sphere.cpp
+  Box.cpp
+  Ray.cpp
+  Camera2D.cpp
+  Camera3D.cpp
+  Renderer.cpp
+  MeshRenderer.cpp
+  CollisionLayer.cpp
+  Input.cpp
+  WindowsInputBackend.cpp
+  Switch2ProInput.cpp
+  Time.cpp
+  Button.cpp
+  コンパイル中...
+  Slider.cpp
+  D3D12RenderingService.cpp
+  InputService.cpp
+  TextRenderingService.cpp
+  Win32WindowService.cpp
+  CollisionService.cpp
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\Temp\HomingBuild\FloppyEngine.lib
+
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(551,5): warning MSB8028: 中間ディレクトリ (D:\Pandd\FloppyDiskShootingGame\Temp\HomingGameObj/) に別のプロジェクト (FloppyDiskShootingGame.vcxproj) と共有されているファイルが含まれています。これにより、クリーンしてリビルド動作が適切に行われない可能性があります。 [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+  Build version: Floppy v026
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  TextRenderingService.cpp
+  AudioService.cpp
+  MMLData.cpp
+  PackedAudioSamples.cpp
+  MMLParser.cpp
+  SynthWaveGenerator.cpp
+  SfxrGenerator.cpp
+  ScoreRepository.cpp
+  SettingsRepository.cpp
+  main.cpp
+  SideScrollingShooter.cpp
+  SideScrollingShooterCombat.cpp
+  SideScrollingShooterRendering.cpp
+  SideScrollingShooterBackgrounds.cpp
+  StageDispatch.cpp
+  Stage1Module.cpp
+  Stage2Module.cpp
+  Stage2Rendering.cpp
+  Stage3Module.cpp
+  CityBackgroundModule.cpp
+  コンパイル中...
+  Stage4Module.cpp
+  Stage5Module.cpp
+  Stage5Rendering.cpp
+  SpaceBackground.cpp
+  CreditContentController.cpp
+  CreditContentPresenter.cpp
+  CreditSceneContent.cpp
+  ModeSelectionStateController.cpp
+  CreditScene.cpp
+  ModeSelectionScene.cpp
+  StoryScene.cpp
+  EndingScene.cpp
+  RankingScene.cpp
+  OptionScene.cpp
+  TestStage.cpp
+  TutorialStage.cpp
+  GalleryScene.cpp
+  TitleScene.cpp
+  TitleSceneColumn.cpp
+  コード生成しています。
+  コード生成が終了しました。
+  FloppyDiskShootingGame.vcxproj -> D:\Pandd\FloppyDiskShootingGame\Temp\HomingBuild\SpaceYakuza.exe
+  Floppy distribution: 1446912 / 1474560 bytes
+HomingShotTests.cpp
+コード生成しています。
+コード生成が終了しました。
+HomingShotTests passed

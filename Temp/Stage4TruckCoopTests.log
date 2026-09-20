@@ -1,0 +1,25 @@
+CoopGameplayTests.cpp
+CoopStageTests.cpp
+コードを生成中...
+コード生成しています。
+コード生成が終了しました。
+CoopStageTests passed
+CoopGameplayTests passed
+CooperativeSetupTests.cpp
+コード生成しています。
+コード生成が終了しました。
+Cooperative setup tests passed
+HomingShotTests.cpp
+コード生成しています。
+コード生成が終了しました。
+HomingShotTests passed
+OrbitShotTests.cpp
+コード生成しています。
+コード生成が終了しました。
+Tayama stomp passed
+OrbitShotTests and Tayama laser sight shots passed
+Wall drone shot tests passed
+ResumeCodeTests.cpp
+コード生成しています。
+コード生成が終了しました。
+Resume code tests passed

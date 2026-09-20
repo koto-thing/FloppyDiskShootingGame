@@ -91,9 +91,9 @@ void SteamLobbyScene::Render(Renderer& renderer) {
         ColorF::White(), {0.0f, -0.16f});
     renderer.DrawText(session.Status(), TextAlign::Center, 0.012f,
         ColorF::White(), {0.0f, 0.60f});
-    renderer.DrawText(session.Ready(0) ? "1P HOST: READY" : "1P HOST: NOT READY",
+    renderer.DrawText(!session.HasPlayer(0) ? "1P HOST: NOT CONNECTED" : session.Ready(0) ? "1P HOST: READY" : "1P HOST: NOT READY",
         TextAlign::Center, 0.015f, ColorF::White(), {-0.45f, 0.40f});
-    renderer.DrawText(session.Ready(1) ? "2P FRIEND: READY" : "2P FRIEND: NOT READY",
+    renderer.DrawText(!session.HasPlayer(1) ? "2P FRIEND: NOT CONNECTED" : session.Ready(1) ? "2P FRIEND: READY" : "2P FRIEND: NOT READY",
         TextAlign::Center, 0.015f, ColorF::White(), {0.45f, 0.40f});
     // ロビー操作ボタンを描画する
     for (const auto& button : m_buttons) button->Render(renderer);

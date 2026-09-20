@@ -1,0 +1,22 @@
+
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(551,5): warning MSB8028: 中間ディレクトリ (D:\Pandd\FloppyDiskShootingGame\Temp\HitboxToggleTestsObj\) に別のプロジェクト (FloppyEngine.Tests.vcxproj) と共有されているファイルが含まれています。これにより、クリーンしてリビルド動作が適切に行われない可能性があります。 [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+cl : コマンド ライン  warning D9025: '/ZI' より '/Z7' が優先されます。 [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.Tests.vcxproj]
+  TimeTests.cpp
+  TransformTests.cpp
+  GeometryTests.cpp
+  RendererTests.cpp
+  VoiceDpcmDecoderTests.cpp
+  WavSamplesTests.cpp
+  SynthWaveGenerator.cpp
+  MMLData.cpp
+  PackedAudioSamples.cpp
+  MMLParser.cpp
+  AudioService.cpp
+  SfxrGenerator.cpp
+  SpaceBackground.cpp
+  ScoreRepository.cpp
+  SettingsRepository.cpp
+  コードを生成中...
+  FloppyEngine.Tests.vcxproj -> D:\Pandd\FloppyDiskShootingGame\Temp\HitboxToggleBuild\FloppyEngine.Tests.exe

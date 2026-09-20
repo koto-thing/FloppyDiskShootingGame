@@ -165,7 +165,9 @@ void SideScrollingShooter::ConfigureSideCamera(Camera3D& camera, Renderer& rende
     camera.SetProjectionMode(ProjectionMode::Perspective);
     camera.SetFieldOfView(Math::ToRadians(SideCameraFieldOfView));
     camera.SetNearClip(0.1f);
-    camera.SetFarClip(80.0f);
+    // 雲海の遠景は2Dでも描画し、3Dから戻った瞬間の消失を防ぐ
+    const bool cloudSea = m_stageNumber == 5 && ShooterStages::Stage5::IsCloudSeaPhase(m_stage5.phase);
+    camera.SetFarClip(cloudSea ? StageDispatch::CameraFarClip(*this) : 80.0f);
     camera.SetPosition({shake.x, cameraY + shake.y, SideCameraZ});
     camera.LookAt({shake.x, cameraY + shake.y, SidePlaneZ});
 }
@@ -668,9 +670,14 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
             Vector2 radiusYScreen;
             if (camera.TryWorldToScreen(worldPosition + Vector3 {worldRadius, 0.0f, 0.0f}, radiusXScreen) &&
                 camera.TryWorldToScreen(worldPosition + Vector3 {0.0f, worldRadius, 0.0f}, radiusYScreen)) {
-                const Vector2 railSize {
+                Vector2 railSize {
                     std::abs(radiusXScreen.x - screenPosition.x) / static_cast<float>(viewport.width) * 2.0f,
                     std::abs(radiusYScreen.y - screenPosition.y) / static_cast<float>(viewport.height)};
+                // Stage5第2部だけ2D表示の75%を下限にして、遠方の自機弾も見える大きさを保つ
+                if (m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase)) {
+                    railSize.x = (std::max)(railSize.x, size.x * 0.75f);
+                    railSize.y = (std::max)(railSize.y, size.y * 0.75f);
+                }
                 size = Vector2::Lerp(size, railSize, RailBlend());
             }
         }
@@ -1184,8 +1191,10 @@ void SideScrollingShooter::DrawViewToggleCooldownHud(
     const float opacity = ViewToggleHudOpacity(
         m_viewToggleCooldown, ViewToggleCooldownFrames, FadeFrames);
     if (opacity <= 0.0f) return;
-    const float trackColor[4] = {0.10f, 0.18f, 0.20f, 0.92f * opacity};
-    const float fillColor[4] = {0.20f, 0.82f, 1.00f, opacity};
+    const float trackColor[4] = {m_grazing ? 0.30f : 0.10f,
+        m_grazing ? 0.04f : 0.18f, m_grazing ? 0.04f : 0.20f, 0.92f * opacity};
+    const float fillColor[4] = {m_grazing ? 1.00f : 0.20f,
+        m_grazing ? 0.12f : 0.82f, m_grazing ? 0.08f : 1.00f, opacity};
 
     // 自機下方のワールド座標を画面座標へ投影してメーターを追従させる
     Vector2 screenPosition;
@@ -1194,13 +1203,20 @@ void SideScrollingShooter::DrawViewToggleCooldownHud(
     if (!camera.TryWorldToScreen(
             {player.x, player.y - 0.70f, player.z}, screenPosition)) return;
     const Viewport& viewport = camera.GetViewport();
-    const Vector2 position {
+    Vector2 position {
         (screenPosition.x - static_cast<float>(viewport.x)) /
                 static_cast<float>(viewport.width) * 2.0f - 1.0f,
         1.0f - (screenPosition.y - static_cast<float>(viewport.y)) /
                 static_cast<float>(viewport.height) * 2.0f};
 
-    // 暗いトラック上へ切り替え可能率を水色で表示する
+    // グレイズ中はトラックとゲージを一緒に揺らし、回復量の読みやすさを保つ
+    if (m_grazing) {
+        const float age = static_cast<float>(m_tutorialMode ? m_tutorialStepFrame : m_frame);
+        position.x += std::sin(age * 1.7f) * 0.006f;
+        position.y += std::sin(age * 2.3f) * 0.004f;
+    }
+
+    // 通常は水色、グレイズによる回復加速中は赤色で表示する
     DrawShape(renderer, position.x, position.y, BarWidth, 0.013f, trackColor);
     DrawShape(renderer, position.x, position.y, BarWidth * readyRate, 0.008f, fillColor);
 }

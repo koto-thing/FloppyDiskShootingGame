@@ -124,6 +124,9 @@ constexpr float BossPhase2SideCenterY =
     (BossPhase2SideBottomY + BossPhase2SideTopY) * 0.5f;
 constexpr float BossBarrierPlayerMarginX = 0.35f;
 constexpr float BossBarrierPlayerMarginY = 0.35f;
+// 2Dでは機首の発光と手前側の翼の透視拡大まで含めて内側へ収める
+constexpr float BossBarrierSidePlayerMarginX = 1.5f;
+constexpr float BossBarrierSidePlayerMarginY = 0.5f;
 constexpr float BossPhase2Travel = 3.0f;
 constexpr float BossPhase2Deploy = 4.0f;
 constexpr float BossPhase2Survival = 5.0f;
@@ -2228,11 +2231,13 @@ Vector2 SideScrollingShooter::Stage3Module::PlayerXRange(
     const Enemy& boss = shooter.m_enemies[0];
     if (boss.phase < BossPhase2Travel) return defaultRange;
 
-    // 視点ごとに横方向を向くバリア辺から機体の余白を引く
-    const float barrierHalfRange = FromWorldX(
-        (railMode ? Stage3BarrierCageView::BarrierHalfWidth * BossModelScale :
-            Stage3BarrierCageView::BarrierHalfLength * BossSideModelScale) -
-        BossBarrierPlayerMarginX);
+    // 奥に描く2Dバリアを自機の描画面へ投影してから機体の余白を引く
+    constexpr float sideDepthScale = (SidePlaneZ - SideCameraZ) /
+        (SidePlaneZ + BossSideZOffset - SideCameraZ);
+    const float barrierHalfRange = FromWorldX(railMode ?
+        Stage3BarrierCageView::BarrierHalfWidth * BossModelScale - BossBarrierPlayerMarginX :
+        Stage3BarrierCageView::BarrierHalfLength * BossSideModelScale * sideDepthScale -
+            BossBarrierSidePlayerMarginX);
     const float progress = boss.phase == BossPhase2Travel ? SmoothStep(
         1.0f - static_cast<float>(boss.motionAge) /
             static_cast<float>(BossPhase2TravelFrames)) : 1.0f;
@@ -2252,11 +2257,16 @@ Vector2 SideScrollingShooter::Stage3Module::SidePlayerYRange(
     const float progress = boss.phase == BossPhase2Travel ? SmoothStep(
         1.0f - static_cast<float>(boss.motionAge) /
             static_cast<float>(BossPhase2TravelFrames)) : 1.0f;
+    // カメラ中心からの高さを自機面へ投影し、上下にも機体の余白を確保する
+    constexpr float sideDepthScale = (SidePlaneZ - SideCameraZ) /
+        (SidePlaneZ + BossSideZOffset - SideCameraZ);
     return {
         Math::Lerp(Side2DPlayerMinY,
-            FromWorldY(BossPhase2SideBottomY + BossBarrierPlayerMarginY), progress),
+            FromWorldY(Math::Lerp(BossPhase2SideCenterY, BossPhase2SideBottomY,
+                sideDepthScale) + BossBarrierSidePlayerMarginY), progress),
         Math::Lerp(Side2DPlayerMaxY,
-            FromWorldY(BossPhase2SideTopY - BossBarrierPlayerMarginY), progress)
+            FromWorldY(Math::Lerp(BossPhase2SideCenterY, BossPhase2SideTopY,
+                sideDepthScale) - BossBarrierSidePlayerMarginY), progress)
     };
 }
 

@@ -2,6 +2,7 @@
 .SYNOPSIS
 Steam SDKの実通信で単独ロビーを検証する（フレンド招待は送らない）
 #>
+param([switch]$Offline)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $vs = & "${env:ProgramFiles(x86)}/Microsoft Visual Studio/Installer/vswhere.exe" -latest -property installationPath
@@ -18,12 +19,14 @@ $arguments = @('/nologo', '/std:c++20', '/EHsc', '/MT', '/utf-8', '/UNDEBUG',
     ('/Fo"' + $output + '/"'), ('/Fe"' + $output + '/SteamCoopSmokeTests.exe"'),
     ('"' + $PSScriptRoot + '/SteamCoopSmokeTests.cpp"'),
     ('"' + $repo + '/Infrastructure/ExternalServices/SteamCoopSession.cpp"'),
+    ('"' + $repo + '/Engine/Diagnostics/Debug.cpp"'),
     '/link', ('"' + $settings.SteamLibrary + '"'))
 $response = Join-Path $output 'compile.rsp'
 Set-Content -LiteralPath $response -Value ($arguments -join ' ') -Encoding utf8
 cmd /c "call `"$vs/VC/Auxiliary/Build/vcvars64.bat`" >nul && cl.exe @`"$response`""
 if ($LASTEXITCODE) { throw 'Steam smoke test compilation failed' }
 Copy-Item -LiteralPath $settings.SteamRuntime -Destination $output -Force
-& "$output/SteamCoopSmokeTests.exe"
+if ($Offline) { & "$output/SteamCoopSmokeTests.exe" --offline }
+else { & "$output/SteamCoopSmokeTests.exe" }
 if ($LASTEXITCODE -eq 2) { throw 'Steam is unavailable; sign into Steam and rerun this test' }
 if ($LASTEXITCODE) { throw 'Steam lobby smoke test failed' }

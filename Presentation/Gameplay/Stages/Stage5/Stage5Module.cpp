@@ -214,7 +214,6 @@ void SideScrollingShooter::Stage5Module::ProcessDebugInput(SideScrollingShooter&
     if (Input::GetKeyDown(KeyCode::F8)) StartDebugPhase(shooter, Stage5Phase::CloudSea);
     if (Input::GetKeyDown(KeyCode::F10)) StartDebugPhase(shooter, Stage5Phase::TayamaLiftEngines);
     if (Input::GetKeyDown(KeyCode::F11)) StartDebugPhase(shooter, Stage5Phase::TayamaCommandCore);
-    if (Input::GetKeyDown(KeyCode::F12)) StartDebugPhase(shooter, Stage5Phase::TayamaCollapse);
 
     // Mは現在のラスボス形態を撃破状態へ進める
     if (Input::GetKeyDown(KeyCode::M)) {
@@ -868,6 +867,13 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
         return;
     }
 
+    // 両形態の撃破演出開始時に同じTAYAMA撃破音声を一度だけ再生する
+    if (phase == Stage5Phase::TayamaCollapse || phase == Stage5Phase::TayamaDragonCollapse) {
+        static const auto tayamaDeathVoice =
+            VoiceCodec::DecodeForAudioService(VoiceSamples::tayamaDeath);
+        if (shooter.m_audio) shooter.m_audio->PlayVoice(tayamaDeathVoice);
+    }
+
     if (phase == Stage5Phase::TayamaCollapse) {
         shooter.m_bossBattle = false;
         shooter.m_bossHp = 0;
@@ -1170,23 +1176,24 @@ void SideScrollingShooter::Stage5Module::FireSearchlightVolley(SideScrollingShoo
     float sourceX = (static_cast<float>(lightIndex) - 1.0f) * 0.72f;
     float sourceY = 0.72f - static_cast<float>(lightIndex) * 0.22f;
     float sourceZ = 46.0f;
-    if (shooter.m_stage5.phase == Stage5Phase::TayamaFireControl) {
-        const TayamaPartGroup group = lightIndex == 0 ?
-            TayamaPartGroup::LeftSearchlight : TayamaPartGroup::RightSearchlight;
+    const bool laserSight = ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase);
+    if (laserSight) {
+        // レーザーサイトが固定した地点へ胴体から高速弾を撃つ
         const Stage5GroupBounds bounds = TayamaModelView::GroupBounds(
-            TayamaTransform(shooter), shooter.m_stage5.tayamaTransformation, TayamaState(shooter), group);
+            TayamaTransform(shooter), shooter.m_stage5.tayamaTransformation, TayamaState(shooter),
+            TayamaPartGroup::CentralHull);
         if (bounds.valid) {
             sourceX = FromWorldX(bounds.center.x);
             sourceY = FromWorldY(bounds.center.y);
             sourceZ = bounds.center.z;
         }
     }
-    const int spreadCount = shooter.m_stage5.phase == Stage5Phase::TayamaFireControl ? 0 : 2;
+    const int spreadCount = laserSight ? 0 : 2;
     for (int bullet = -spreadCount; bullet <= spreadCount; ++bullet) {
         const float spread = static_cast<float>(bullet) * 0.065f;
         SpawnEnemyShotAt(shooter, sourceX, sourceY, sourceZ,
             light.lockedX + spread, light.lockedY + std::abs(spread) * 0.35f,
-            light.lockedZ, 0.78f);
+            light.lockedZ, laserSight ? 1.32f : 0.78f);
     }
     shooter.PlayEnemyShotSound();
 }
@@ -1480,6 +1487,11 @@ TayamaModelState SideScrollingShooter::Stage5Module::TayamaState(const SideScrol
     if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase)) {
         state.armSpinAngle = ShooterStages::Stage5::TayamaArmSpinAngle(
             ShooterStages::Stage5::TayamaArmAttackTimer(shooter.m_stage5.attackTimer));
+        // 踏みつける脚の上昇量を描画と当たり判定へ共通で反映する
+        const TayamaPartGroup foot = shooter.m_stage5.tayamaStompLeftFoot ?
+            TayamaPartGroup::LeftLiftEngine : TayamaPartGroup::RightLiftEngine;
+        state.collapseOffsets[static_cast<std::size_t>(foot)].position.y =
+            ShooterStages::Stage5::TayamaStompLiftOffset(shooter.m_stage5.tayamaStompTimer);
     }
     if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase)) {
         state.visible[static_cast<std::size_t>(TayamaPartGroup::ArmorPanel)] = false;
@@ -1897,9 +1909,6 @@ void SideScrollingShooter::Stage5Module::UpdateTayamaBossHp(SideScrollingShooter
 
     // 第一形態は単一戦闘として扱い、本体HPが尽きた時だけ崩壊へ進む
     if (shooter.m_stage5.tayamaHp <= 0) {
-        static const auto tayamaDeathVoice =
-            VoiceCodec::DecodeForAudioService(VoiceSamples::tayamaDeath);
-        if (shooter.m_audio) shooter.m_audio->PlayVoice(tayamaDeathVoice);
         shooter.UnlockGallery(GalleryEntry::Tayama);
         StartPhase(shooter, Stage5Phase::TayamaCollapse, false);
     }
@@ -2809,18 +2818,32 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
                 center.z, false);
             if (removed % 4 == 0) PlayCue(shooter, ShooterStages::Stage5::ChainExplosion);
         }
-        if (shooter.m_stage5.phaseTimer ==
-            ShooterStages::Stage5::TayamaDragonCollapseHeadExplosionFrame) {
-            const Vector3 head = TayamaDragonSegmentPosition(shooter, 0,
+        // 最後の破裂点を固定し、外側へ広がる五段の連鎖爆発を重ねる
+        const int finalAge = shooter.m_stage5.phaseTimer -
+            ShooterStages::Stage5::TayamaDragonCollapseHeadExplosionFrame;
+        if (finalAge == -ShooterStages::Stage5::TayamaDragonFinalChargeFrames) {
+            shooter.ShakeScreen(0.10f, ShooterStages::Stage5::TayamaDragonFinalChargeFrames);
+        }
+        if (finalAge == 0) {
+            shooter.m_stage5.tayamaDragonExplosionCenter = TayamaDragonSegmentPosition(shooter, 0,
                 shooter.RailBlend());
-            for (int burst = 0; burst < 9; ++burst) {
-                const float angle = static_cast<float>(burst) * Math::TwoPi / 9.0f;
-                shooter.SpawnExplosion(FromWorldX(head.x) + std::cos(angle) * 0.20f,
-                    FromWorldY(head.y) + std::sin(angle) * 0.28f,
+            shooter.ShakeScreen(0.48f, 140);
+            PlayCue(shooter, ShooterStages::Stage5::FinalExplosion);
+        }
+        if (finalAge >= 0 && finalAge <
+                ShooterStages::Stage5::TayamaDragonFinalBurstIntervalFrames *
+                    ShooterStages::Stage5::TayamaDragonFinalBurstCount &&
+            finalAge % ShooterStages::Stage5::TayamaDragonFinalBurstIntervalFrames == 0) {
+            const int wave = finalAge / ShooterStages::Stage5::TayamaDragonFinalBurstIntervalFrames;
+            const Vector3 head = shooter.m_stage5.tayamaDragonExplosionCenter;
+            for (int burst = 0; burst < 12; ++burst) {
+                const float angle = static_cast<float>(burst) * Math::TwoPi / 12.0f +
+                    static_cast<float>(wave) * 0.37f;
+                const float radius = 2.0f + static_cast<float>(wave) * 3.2f;
+                shooter.SpawnExplosion(FromWorldX(head.x + std::cos(angle) * radius),
+                    FromWorldY(head.y + std::sin(angle) * radius),
                     head.z + static_cast<float>(burst % 3) * 0.8f, true);
             }
-            shooter.ShakeScreen(0.30f, 90);
-            PlayCue(shooter, ShooterStages::Stage5::FinalExplosion);
         }
         if (shooter.m_stage5.phaseTimer >=
             ShooterStages::Stage5::TayamaDragonCollapseFrames) {
@@ -2884,6 +2907,9 @@ void SideScrollingShooter::Stage5Module::RestartCheckpoint(SideScrollingShooter&
         return;
     }
 
+    // TAYAMA戦は通常ボスと別経路で復帰するため、ボムも初期数へ戻す
+    shooter.Player().m_bombCount = InitialBombCount;
+
     // 第二形態は龍形態の初期HPと演出状態へ戻す
     if (shooter.m_stage5.checkpoint == Stage5Checkpoint::TayamaDragonBattle) {
         StartPhase(shooter, Stage5Phase::TayamaDragonBattle, false);
@@ -2906,7 +2932,9 @@ void SideScrollingShooter::Stage5Module::RestartCheckpoint(SideScrollingShooter&
  * @return なし
  */
 void SideScrollingShooter::Stage5Module::PlayCue(SideScrollingShooter& shooter, int cue) {
-    if (!shooter.m_audio || shooter.m_stage5.soundCooldown > 0) return;
+    // 最後の爆音は直前の小爆発のクールダウンで欠落させない
+    if (!shooter.m_audio ||
+        (shooter.m_stage5.soundCooldown > 0 && cue != ShooterStages::Stage5::FinalExplosion)) return;
     switch (cue) {
     case ShooterStages::Stage5::DistantThunder:
         shooter.m_audio->PlayMMLSE("t90 o2 l8 v7 c r g");
@@ -2949,6 +2977,7 @@ void SideScrollingShooter::Stage5Module::PlayCue(SideScrollingShooter& shooter, 
         shooter.m_stage5.soundCooldown = 36;
         break;
     case ShooterStages::Stage5::FinalExplosion:
+        shooter.m_audio->PlaySE(Audio::SfxrPreset::Explosion);
         shooter.m_audio->PlayMMLSE("t80 o1 l2 v15 c g c");
         shooter.m_stage5.soundCooldown = 90;
         break;

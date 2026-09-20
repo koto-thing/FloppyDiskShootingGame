@@ -563,6 +563,9 @@ void SideScrollingShooter::ProcessInput() {
     });
 
 #ifdef _DEBUG
+    // F12の押下ごとに当たり判定のデバッグ表示を切り替える
+    if (Input::GetKeyDown(KeyCode::F12)) m_showHitboxes = !m_showHitboxes;
+
     // デバッグ用に任意の進行地点へ移動する
     if (Input::GetKeyDown(KeyCode::F1)) StartDebugCheckpoint(1, 1, false);
     if (Input::GetKeyDown(KeyCode::F2)) StartDebugCheckpoint(2, 1, false);
@@ -613,6 +616,8 @@ void SideScrollingShooter::ApplyNetworkInput(const std::array<CooperativeInput, 
 }
 
 void SideScrollingShooter::Tick() {
+    // 戦闘停止や撃破後にグレイズ表示を持ち越さない
+    m_grazing = false;
     // 進行停止中も画面演出を終了へ進める
     m_screenShakeFrames = (std::max)(0, m_screenShakeFrames - 1);
     ForEachPlayer([&] {
@@ -758,6 +763,8 @@ void SideScrollingShooter::Tick() {
     if (!cinematic) ForEachPlayer([&] { TickBomb(); });
     TickEnemies();
     TickShots();
+    // グレイズ中だけ通常回復へ1フレーム分を追加し、弾数では加算しない
+    if (m_grazing) m_viewToggleCooldown = (std::max)(0, m_viewToggleCooldown - 1);
     TickExplosions();
     TickDebris();
     TickItems();
@@ -818,7 +825,8 @@ void SideScrollingShooter::TickChapterExitEnemies() {
     constexpr float RailExitSpeed = 1.4f;
     static_assert(SideExitSpeed > 0.0f && RailExitSpeed > 0.0f);
     const bool exitsDownward = m_stageNumber == 5 &&
-        m_stage5.phase == ShooterStages::Stage5::Phase::WallClimbUpper;
+        (m_stage5.phase == ShooterStages::Stage5::Phase::WallClimbUpper ||
+            (!IsRailGameplayActive() && Stage5Module::IsPart2Route(*this)));
     const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
 
     // 敵AIと射撃を止めたまま画面外へ高速移動させる
@@ -826,7 +834,7 @@ void SideScrollingShooter::TickChapterExitEnemies() {
         if (!enemy.active || enemy.type == 2) continue;
         enemy.collisionEnabled = false;
         if (exitsDownward) {
-            // 第2部最終区間は屋上ムービー前に全敵を画面下へ高速退避させる
+            // 第2部の2D視点と最終区間は壁から離れず画面下へ高速退避させる
             enemy.y = ShooterStages::Stage5::Part2EnemyExitY(
                 enemy.y, IsRailGameplayActive());
             enemy.baseY = enemy.y;
@@ -1442,6 +1450,8 @@ void SideScrollingShooter::TickTutorial() {
     }
     TickBomb();
     TickShots();
+    // チュートリアルも通常戦闘と同じ2倍の回復速度にする
+    if (m_grazing) m_viewToggleCooldown = (std::max)(0, m_viewToggleCooldown - 1);
     TickExplosions();
     TickDebris();
 
@@ -1483,6 +1493,8 @@ void SideScrollingShooter::RestartCurrentChapter() {
     // ボス戦中は警報を再生せずBキーと同じ戦闘開始状態へ戻す
     const bool restartBossBattle = m_bossBattle;
     if (restartBossBattle) {
+        // ボス戦のやり直しでは消費したボムを初期数へ戻す
+        Player().m_bombCount = InitialBombCount;
         if (!StageDispatch::HandleDebugBossInput(*this)) {
             StartDebugCheckpoint(m_stageNumber, 3, true, false);
         }

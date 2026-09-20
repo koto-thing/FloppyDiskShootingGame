@@ -27,6 +27,10 @@ public:
     static void Log(
         std::string_view message,
         const std::source_location& location = std::source_location::current());
+    /** @brief 配布版でも情報ログを出力する @param message メッセージ @param location 呼び出し元 @return なし */
+    static void LogInfo(
+        std::string_view message,
+        const std::source_location& location = std::source_location::current());
     /**
      * @brief 警告ログを出力する
      * @param message 出力するメッセージ

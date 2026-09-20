@@ -5,8 +5,130 @@
 #include "../Presentation/Gameplay/SideScrollingShooter.h"
 #include "../Presentation/Gameplay/Stages/Stage5/Stage5Module.h"
 #include "../Presentation/Gameplay/Stages/Stage2/Stage2Module.h"
+#include "../Presentation/Gameplay/Stages/Stage4/Stage4Module.h"
 
 struct HomingShotTests {
+    /** @brief Stage4の全主砲と副砲がEasyのみ緩和されることを検証する @return なし */
+    static void CheckStage4Easy() {
+        using Game = SideScrollingShooter;
+        using Weapon = ShooterStages::Stage4::MainWeaponType;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.Initialize(nullptr, Spread, Normal);
+        g.m_stageNumber = 4;
+        Game::Enemy boss {};
+        boss.type = 2;
+        boss.bossPartHp.fill(100);
+        for (bool rail : {false, true}) {
+            g.m_viewMode = g.m_nextViewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+            for (Weapon weapon : {Weapon::Phase1Cannon, Weapon::SiegeMortar, Weapon::RomanceCannon}) {
+                g.m_stage4.currentWeapon = weapon;
+                Game::Shot normal {};
+                for (auto difficulty : {Normal, Hard, Easy}) {
+                    g.m_difficulty = difficulty;
+                    g.m_shots.fill({});
+                    Game::Stage4Module::FireBossPartBarrage(g, boss);
+                    const auto& shot = g.m_shots[0];
+                    assert(shot.active);
+                    if (difficulty == Normal) normal = shot;
+                    const float speed = difficulty == Easy ? 0.75f : 1.0f;
+                    const float radius = difficulty == Easy ? 0.7f : 1.0f;
+                    assert(std::abs(shot.vx - normal.vx * speed) < 0.00001f);
+                    assert(std::abs(shot.vy - normal.vy * speed) < 0.00001f);
+                    assert(std::abs(shot.vz - normal.vz * speed) < 0.00001f);
+                    assert(std::abs(shot.hitRadius - normal.hitRadius * radius) < 0.00001f);
+                    assert(std::abs(shot.stage4.explosionRadius - normal.stage4.explosionRadius * radius) < 0.00001f);
+                    assert(std::abs(shot.stage4.gravityScale - normal.stage4.gravityScale * speed * speed) < 0.00001f);
+                    int count = 0;
+                    for (const auto& bullet : g.m_shots) count += bullet.active;
+                    assert(count == (weapon == Weapon::SiegeMortar ? (difficulty == Easy ? 4 : 6) : 1));
+                }
+            }
+            // 一周期分の副砲を集計し、散射と狙撃の両方の減少を確認する
+            for (auto difficulty : {Normal, Hard, Easy}) {
+                g.m_difficulty = difficulty;
+                int count = 0;
+                for (int frame = 1; frame < 180; ++frame) {
+                    boss.age = frame;
+                    g.m_shots.fill({});
+                    Game::Stage4Module::TickSecondaryGunAttacks(g, boss);
+                    for (const auto& shot : g.m_shots)
+                        if (shot.active && !shot.stage2.delayedEngine) ++count;
+                }
+                assert(count == (difficulty == Easy ? 14 : 26));
+            }
+        }
+    }
+    /** @brief Spreadの距離減衰と通常弾への非適用を実更新で検証する @return なし */
+    static void CheckSpreadFalloff() {
+        using Game = SideScrollingShooter;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.Initialize(nullptr, Spread, Normal);
+        g.m_enemies.fill({});
+
+        // 発射時の近距離威力と再利用スロットの距離リセットを確認する
+        g.FireSpecialShots();
+        assert(g.m_shots[0].damage == 3 && g.m_shots[0].travelDistance == 0.0f);
+        for (bool rail : {false, true}) {
+            g.m_viewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+            for (float distance : {0.0f, 3.49f, 3.5f, 6.99f, 7.0f, 100.0f}) {
+                g.m_shots.fill({});
+                auto& shot = g.m_shots[0];
+                shot.active = shot.special = true;
+                shot.playerType = Spread;
+                shot.z = 10.0f;
+                shot.travelDistance = distance;
+                g.TickShots();
+                assert(shot.active);
+                assert(shot.damage == (distance < 3.5f ? 3 : distance < 7.0f ? 2 : 1));
+
+                // 同じフレームの敵へのダメージに減衰後の値を使用する
+                auto& enemy = g.m_enemies[0];
+                enemy = {};
+                enemy.active = enemy.collisionEnabled = true;
+                enemy.hp = 100;
+                enemy.x = shot.x;
+                enemy.y = shot.y;
+                enemy.z = shot.z;
+                g.TickShots();
+                assert(enemy.hp == 100 - shot.damage && !shot.active);
+                enemy.active = false;
+            }
+
+            // 2Dの疑似奥行きは無視し、3Dでは奥行きを含む実距離を加算する
+            auto& shot = g.m_shots[0];
+            shot.active = true;
+            shot.travelDistance = 0.0f;
+            shot.vx = 0.03f;
+            shot.vy = 0.04f;
+            shot.vz = rail ? 0.5f : 0.0f;
+            g.TickShots();
+            const float dx = Game::ToWorldX(shot.vx);
+            const float dy = Game::ToWorldY(shot.vy);
+            const float expected = std::sqrt(dx * dx + dy * dy + shot.vz * shot.vz);
+            assert(std::abs(shot.travelDistance - expected) < 0.00001f);
+
+            // 自機の移動で距離が戻らず、通常弾には減衰を適用しない
+            g.Player().m_playerX += 0.5f;
+            shot.vx = shot.vy = shot.vz = 0.0f;
+            g.TickShots();
+            assert(std::abs(shot.travelDistance - expected) < 0.00001f);
+
+            // 移動で境界を越えたフレームに威力が一段下がる
+            for (float boundary : {3.5f, 7.0f}) {
+                shot.travelDistance = boundary - 0.1f;
+                shot.vx = 0.03f;
+                g.TickShots();
+                assert(shot.damage == (boundary == 3.5f ? 2 : 1));
+            }
+            shot.special = false;
+            shot.damage = 1;
+            g.TickShots();
+            assert(shot.damage == 1);
+        }
+    }
+
     /** @brief 実際の追尾と部位衝突をGPUなしで検証する @return なし */
     static void Run() {
         using Game = SideScrollingShooter;
@@ -256,6 +378,8 @@ struct HomingShotTests {
 
 /** @brief 追尾回帰チェックを実行する @return 成功時0 */
 int main() {
+    HomingShotTests::CheckStage4Easy();
+    HomingShotTests::CheckSpreadFalloff();
     HomingShotTests::Run();
     return 0;
 }

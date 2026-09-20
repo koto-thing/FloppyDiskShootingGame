@@ -77,11 +77,20 @@ SteamNetworkingMessagesを使用し、接続経路はSteamが直接通信また�
 自動テストは入力の順序・待機と同一入力によるゲーム進行一致を検証する
 実際の招待・通信・切断の最終確認には2台・2アカウントが必要
 
+App ID 480では両者が先に配布物の `SpaceYakuza.exe` を直接起動してから招待を承認する
+未起動の状態で招待を承認すると、Steamは480の登録先であるSpacewarを起動する
+ロビーの `NOT CONNECTED` は未参加、`NOT READY` は参加済みで準備待ちを表す
+接続中に承認した招待は、処理中の要求の完了後に参加する
+接続調査には両者のexe横にある `Logs/latest.log` を確認する（次回起動で上書き）
+Steam初期化、招待受信、JoinLobby、参加結果、ビルド照合、相手の入退室をRelease版でも記録する
+
 ```powershell
 # 同期入力と既存ゲームの回帰テスト
 powershell -NoProfile -ExecutionPolicy Bypass -File Tests/RunCoopTests.ps1
 # Steamへログインして実行する単独ロビーの接続テスト（招待は送らない）
 powershell -NoProfile -ExecutionPolicy Bypass -File Tests/RunSteamCoopSmokeTests.ps1
+# Steam接続なしで招待の保留・拒否・退出前後の維持を検証する
+powershell -NoProfile -ExecutionPolicy Bypass -File Tests/RunSteamCoopSmokeTests.ps1 -Offline
 ```
 
 ## Rider / Visual Studio

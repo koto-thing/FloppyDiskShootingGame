@@ -174,6 +174,11 @@ void Debug::LogWarning(std::string_view message, const std::source_location& loc
     Write(LogLevel::Warning, message, location);
 }
 
+/** @brief 配布版でも情報ログを出力する @param message メッセージ @param location 呼び出し元 @return なし */
+void Debug::LogInfo(std::string_view message, const std::source_location& location) {
+    Write(LogLevel::Info, message, location);
+}
+
 /**
  * @brief エラーメッセージをログに出力する
  * @param message エラーメッセージ

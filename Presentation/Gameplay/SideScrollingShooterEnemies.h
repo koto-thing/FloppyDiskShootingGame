@@ -939,7 +939,7 @@ public:
             }
         }
 
-        // 接触時の照準を連射終了まで固定し、終了後は走査へ戻す
+        // 接触時の照準を連射終了まで固定し、終了後は自機追尾へ戻す
         TickSearchlightAttack(shooter, enemy);
     }
 
@@ -981,7 +981,7 @@ public:
 
 private:
     /**
-     * @brief レーザーポインター走査と接触後のマシンガン連射を更新する
+     * @brief レーザーポインターの自機追尾と接触後のマシンガン連射を更新する
      * @param shooter ゲーム本体
      * @param enemy 更新する壁面警備ドローン
      * @return なし
@@ -1004,12 +1004,9 @@ private:
             return;
         }
 
-        // 画面内を巡回するレーザーポインターの照射地点を更新する
-        const float scanAge = static_cast<float>(enemy.age);
-        enemy.turretAimX = std::sin(enemy.phase + scanAge * 0.031f) * 0.88f;
-        const float aimWave = std::sin(enemy.phase * 1.7f + scanAge * 0.023f);
-        enemy.turretAimY = shooter.IsRailGameplayActive() ?
-            Part2RailDroneAimY(aimWave) : aimWave * 0.70f;
+        // 再装填中もポインターを自機へ追従させ、接触後に狙いを固定する
+        enemy.turretAimX = Math::Lerp(enemy.turretAimX, shooter.Player().m_playerX, 0.08f);
+        enemy.turretAimY = Math::Lerp(enemy.turretAimY, shooter.Player().m_playerY, 0.08f);
         if (enemy.recoilAge > 0) {
             --enemy.recoilAge;
             return;
@@ -1035,7 +1032,7 @@ private:
     static void FireMachineGun(SideScrollingShooter& shooter, const Enemy& enemy) {
         if (!shooter.CanSpawnEnemyProjectile(enemy.x, enemy.y, enemy.z)) return;
 
-        const float dx = enemy.attackWarningTargetX - enemy.x;
+        const float dx = enemy.attackWarningTargetX - (enemy.x - 0.06f);
         const float dy = enemy.attackWarningTargetY - enemy.y;
         const int shotIndex = (ShooterStages::Stage5::DroneMachineGunBurstFrames -
             enemy.motionAge) / ShooterStages::Stage5::DroneMachineGunShotIntervalFrames;

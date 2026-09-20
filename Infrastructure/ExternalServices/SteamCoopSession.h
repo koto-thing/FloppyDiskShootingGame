@@ -42,6 +42,8 @@ public:
     bool IsHost() const;
     /** @brief ロビー参加状態を取得する @return 参加中ならtrue */
     bool InLobby() const { return m_lobby.IsValid(); }
+    /** @brief 指定プレイヤーの参加状態を取得する @param player ホスト0、ゲスト1 @return 参加済みならtrue */
+    bool HasPlayer(int player) const { return Member(player).IsValid(); }
     /** @brief 開始状態を取得する @return 開始済みならtrue */
     bool InGame() const { return m_inGame; }
     /** @brief 通信エラーを取得する @return 失敗した場合true */
@@ -61,18 +63,19 @@ public:
     /** @brief 同期開始用乱数を取得する @return 非ゼロの乱数種 */
     unsigned Seed() const { return m_seed; }
 private:
+    friend struct SteamCoopSessionTests;
     /** @brief ロビー作成結果を処理する @param result 作成結果 @param failure 通信失敗 @return なし */
     void OnCreated(LobbyCreated_t* result, bool failure);
     /** @brief ロビー参加結果を処理する @param result 参加結果 @param failure 通信失敗 @return なし */
     void OnEntered(LobbyEnter_t* result, bool failure);
     /** @brief 招待を保留する @param event Steamの招待 @return なし */
-    STEAM_CALLBACK(SteamCoopSession, OnInvite, GameLobbyJoinRequested_t);
+    STEAM_CALLBACK_MANUAL(SteamCoopSession, OnInvite, GameLobbyJoinRequested_t, m_inviteCallback);
     /** @brief ロビーメンバー以外の接続を拒否する @param event 接続要求 @return なし */
-    STEAM_CALLBACK(SteamCoopSession, OnSessionRequest, SteamNetworkingMessagesSessionRequest_t);
+    STEAM_CALLBACK_MANUAL(SteamCoopSession, OnSessionRequest, SteamNetworkingMessagesSessionRequest_t, m_sessionRequestCallback);
     /** @brief 通信失敗を記録する @param event 切断情報 @return なし */
-    STEAM_CALLBACK(SteamCoopSession, OnSessionFailed, SteamNetworkingMessagesSessionFailed_t);
+    STEAM_CALLBACK_MANUAL(SteamCoopSession, OnSessionFailed, SteamNetworkingMessagesSessionFailed_t, m_sessionFailedCallback);
     /** @brief Steamオーバーレイの操作中はゲームを止める @param event 表示状態 @return なし */
-    STEAM_CALLBACK(SteamCoopSession, OnOverlay, GameOverlayActivated_t);
+    STEAM_CALLBACK_MANUAL(SteamCoopSession, OnOverlay, GameOverlayActivated_t, m_overlayCallback);
     /** @brief メンバーを取得する @param player ホスト0、ゲスト1 @return Steam ID */
     CSteamID Member(int player) const;
     /** @brief 失敗を記録し更新を止める @param message 表示文 @return なし */

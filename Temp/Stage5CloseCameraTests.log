@@ -1,0 +1,5 @@
+Checking sample generation
+Checking audio output
+BGM preload: 101.201s, 188.6 MiB PCM, 14 scores
+XAudio2 silent playback checks passed
+TimeTests passed

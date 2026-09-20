@@ -75,6 +75,19 @@ constexpr float TruckNeonIntensity(int frame) {
     return (frame / TruckNeonFlashFrames) % 2 == 0 ? 1.0f : 0.16f;
 }
 
+/**
+ * @brief トラックが再出現するたびに4車線を順に切り替える
+ * @param scroll ステージのスクロール量
+ * @return 描画と接触判定で共有する車線のワールドX座標
+ */
+float TruckRailX(float scroll) {
+    // 奥行きの折り返し回数を使い、接近中や視点切替では車線を変えない
+    constexpr float LaneCenters[] = {3.0f, -3.0f, 9.0f, -9.0f};
+    const int cycle = static_cast<int>(-std::floor(
+        (37.0f - scroll * 92.0f) / TruckRailCycleLength));
+    return LaneCenters[cycle % 4];
+}
+
 static_assert(ShouldDrawTraffic(4, false));
 static_assert(!ShouldDrawTraffic(4, true));
 static_assert(ShouldDrawTraffic(4, true, true));
@@ -443,11 +456,11 @@ void SideScrollingShooter::CityBackgroundModule::DrawTruck(
     constexpr float SideRoadZ = SidePlaneZ + 13.55f;
     const float sideX = WrapNdcX(0.47f - shooter.m_scroll * 0.72f) * 18.0f;
     constexpr float SideY = -6.0f + TruckSideHeight * 0.5f;
-    constexpr float RailX = 2.8f;
+    const float railX = TruckRailX(shooter.m_scroll);
     constexpr float RailY = -3.55f + TruckRailHeight * 0.5f;
     const float railZ = 12.0f + WrapDistance(
         37.0f - shooter.m_scroll * 92.0f, TruckRailCycleLength);
-    const float x = Math::Lerp(sideX, RailX, railWeight);
+    const float x = Math::Lerp(sideX, railX, railWeight);
     const float y = Math::Lerp(SideY, RailY, railWeight);
     const float z = Math::Lerp(SideRoadZ - 0.18f, railZ, railWeight);
     const float width = Math::Lerp(TruckSideWidth, TruckRailWidth, railWeight);
@@ -504,20 +517,20 @@ bool SideScrollingShooter::CityBackgroundModule::HitsTruck(
 
     // 3Dレール視点は道路上の自機レーンにおける楕円体判定を行う
     if (shooter.IsRailGameplayActive()) {
-        constexpr float RailX = 2.8f;
+        const float railX = TruckRailX(shooter.m_scroll);
         constexpr float RailY = -3.55f + TruckRailHeight * 0.5f;
         const float railZ = 12.0f + WrapDistance(
             37.0f - shooter.m_scroll * 92.0f, TruckRailCycleLength);
 #if defined(_DEBUG)
         // 車体寸法に対応する接触判定楕円体を表示する
         if (debugQuery) {
-            DrawHitboxEllipsoid(*debugQuery, {RailX, RailY, railZ},
+            DrawHitboxEllipsoid(*debugQuery, {railX, RailY, railZ},
                 {TruckRailWidth * 0.5f, TruckRailHeight * 0.5f, TruckRailDepth * 0.5f});
             return false;
         }
 #endif
         return SideScrollingShooterShared::HitsEllipsoid(
-            ToWorldX(x) - RailX, ToWorldY(y) - RailY, z - railZ,
+            ToWorldX(x) - railX, ToWorldY(y) - RailY, z - railZ,
             TruckRailWidth * 0.5f + radius * WorldXScale,
             TruckRailHeight * 0.5f + radius * WorldYScale,
             TruckRailDepth * 0.5f + radius * WorldXScale);

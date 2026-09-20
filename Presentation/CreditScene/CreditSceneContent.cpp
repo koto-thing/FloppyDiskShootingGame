@@ -15,7 +15,7 @@ CreditSceneContent CreditSceneContent::CreateDefault() {
             { "SPACE YAKUZA", 0.012f, CreditTextAlignment::Center },
             { "AIZU-KAI", 0.009f, CreditTextAlignment::Center }
         },
-        0.08f
+        0.24f
     });
     
     content.AddColumn({
@@ -32,8 +32,7 @@ CreditSceneContent CreditSceneContent::CreateDefault() {
             { "PROGRAMMERS", 0.011f, CreditTextAlignment::Center },
             { "botamochi", 0.009f, CreditTextAlignment::Center },
             { "lumi", 0.009f, CreditTextAlignment::Center }
-        },
-        0.06f
+        }
     });
     
     content.AddColumn({
@@ -48,8 +47,7 @@ CreditSceneContent CreditSceneContent::CreateDefault() {
         {
             { "LEAD GRAPHIC DESIGNER", 0.011f, CreditTextAlignment::Center },
             { "lumi", 0.009f, CreditTextAlignment::Center },
-        },
-        0.06f
+        }
     });
     
     content.AddColumn({
@@ -63,8 +61,7 @@ CreditSceneContent CreditSceneContent::CreateDefault() {
         {
             { "LEAD SOUND DESIGNER", 0.011f, CreditTextAlignment::Center },
             { "botamochi", 0.009f, CreditTextAlignment::Center },
-        },
-        0.06f
+        }
     });
     
     content.AddColumn({
@@ -91,8 +88,7 @@ CreditSceneContent CreditSceneContent::CreateDefault() {
         {
             { "DIRECTOR", 0.011f, CreditTextAlignment::Center },
             { "koto", 0.009f, CreditTextAlignment::Center }
-        },
-        0.06f
+        }
     });
     
     content.AddColumn({
@@ -107,7 +103,7 @@ CreditSceneContent CreditSceneContent::CreateDefault() {
             { "SPECIAL THANKS", 0.011f, CreditTextAlignment::Center },
             { "All Players", 0.009f, CreditTextAlignment::Center }
         },
-        0.2f
+        0.28f
     });
 
     // 終端メッセージを追加する
