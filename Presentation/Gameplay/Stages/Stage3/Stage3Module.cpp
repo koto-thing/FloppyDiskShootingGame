@@ -37,6 +37,7 @@ constexpr float SeaSerpentMouthColor[4] = {0.08f, 0.015f, 0.02f, 1.0f};
 constexpr float SeaSerpentSideEyeSurfaceOffset = 0.90f;
 constexpr float SeaSerpentRailEyeSurfaceOffset = 1.70f;
 constexpr float SeaSerpentHitboxScale = 0.55f;
+constexpr float SeaSerpentSideZOffset = 13.1f;
 constexpr int SeaSerpentCycleFrames = 420;
 constexpr int SeaSerpentWarningFrames = 90;
 constexpr int DawnStartFrame = 500;
@@ -2677,6 +2678,11 @@ bool SideScrollingShooter::Stage3Module::HitsHazard(
                 return true;
             }
         } else {
+            // 奥に描く胴体を自機の2D平面へ投影し、画面揺れも描画と揃える
+            constexpr float perspectiveScale = (SidePlaneZ - SideCameraZ) /
+                (SidePlaneZ + SeaSerpentSideZOffset - SideCameraZ);
+            const Vector2 shake = shooter.ScreenShakeOffset();
+            const float cameraY = SideCameraY(shooter) + shake.y;
             const float sideHeight = 1.35f * segment.scale;
             const float visibleHeight = Math::Clamp01(segment.elevation / sideHeight) * sideHeight;
             if (visibleHeight <= 0.0f) {
@@ -2685,17 +2691,19 @@ bool SideScrollingShooter::Stage3Module::HitsHazard(
             const float visibleWidth = 1.18f * segment.scale *
                 std::sqrt(visibleHeight / sideHeight);
             const float hitWidth =
-                visibleWidth * 0.5f * SeaSerpentHitboxScale + radius * WorldXScale;
+                visibleWidth * perspectiveScale * 0.5f * SeaSerpentHitboxScale + radius * WorldXScale;
             const float hitHeight =
-                visibleHeight * 0.5f * SeaSerpentHitboxScale + radius * WorldYScale;
-            const float dx = (ToWorldX(x) - segment.sideX) / hitWidth;
+                visibleHeight * perspectiveScale * 0.5f * SeaSerpentHitboxScale + radius * WorldYScale;
+            const float visualX = shake.x + (segment.sideX - shake.x) * perspectiveScale;
+            const float dx = (ToWorldX(x) - visualX) / hitWidth;
             const float sideY = -6.0f + (segment.elevation < sideHeight ?
                 visibleHeight * 0.5f : segment.elevation - sideHeight * 0.5f);
-            const float dy = (ToWorldY(y) - sideY) / hitHeight;
+            const float visualY = cameraY + (sideY - cameraY) * perspectiveScale;
+            const float dy = (ToWorldY(y) - visualY) / hitHeight;
 #if defined(_DEBUG)
             // 横視点の楕円判定を共通の2D奥行きへ表示する
             if (debugQuery) {
-                DrawHitboxEllipsoid(*debugQuery, {segment.sideX, sideY, debugQuery->hitboxSideZ},
+                DrawHitboxEllipsoid(*debugQuery, {visualX, visualY, debugQuery->hitboxSideZ},
                     {hitWidth, hitHeight, hitHeight});
                 continue;
             }
@@ -2789,7 +2797,7 @@ void SideScrollingShooter::Stage3Module::DrawSeaSerpent(
             const float approach = std::sin(Math::Pi * segment.progress);
             return Math::Lerp(SidePlaneZ + 28.0f, SidePlaneZ + 1.0f, approach);
         }
-        return shooter.m_clear ? SidePlaneZ + 1.0f : SidePlaneZ + 13.1f;
+        return shooter.m_clear ? SidePlaneZ + 1.0f : SidePlaneZ + SeaSerpentSideZOffset;
     };
 
     // 通常時は海面跳躍、撃破時は奥行き突進または横突進として描画する

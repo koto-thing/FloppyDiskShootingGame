@@ -14,6 +14,81 @@
 
 /** @brief ステージ固有の演出と被弾判定の協力プレイ回帰チェック */
 struct CoopStageTests {
+    /** @brief ウミヘビの描画から投影した中心と接触範囲を検証する @return なし */
+    static void CheckSeaSerpentHitboxes() {
+        using Game = SideScrollingShooter;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.m_stageNumber = 3;
+        Renderer renderer;
+        Camera3D camera;
+        camera.SetViewport({0, 0, 1280, 720});
+        camera.SetProjectionMode(ProjectionMode::Orthographic);
+        Matrix4x4 inverseViewProjection;
+        assert((camera.ProjectionMatrix() * camera.ViewMatrix()).TryInverse(inverseViewProjection));
+
+        // 全3種と左右両方向の跳躍で、描画コマンドを判定の独立した基準にする
+        for (int cycle = 0; cycle < 6; ++cycle) {
+            g.m_frame = cycle * 420 + 48 + (cycle * 97) % 170 + 55;
+            for (bool shaking : {false, true}) {
+                g.m_screenShakeFrames = g.m_screenShakeDurationFrames = shaking ? 8 : 0;
+                g.m_screenShakeIntensity = 0.5f;
+                const Vector2 shake = g.ScreenShakeOffset();
+                for (bool rail : {false, true}) {
+                    g.m_viewMode = g.m_nextViewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+                    renderer.BeginFrame();
+                    if (rail) Game::Stage3Module::DrawBackground3D(g, renderer, camera, 1.0f);
+                    else Game::Stage3Module::DrawBackground2D(g, renderer, camera);
+                    assert(!renderer.HasOverflowed());
+                    struct Segment { Vector3 center; Vector3 radii; };
+                    Segment segments[23];
+                    int count = 0;
+                    for (std::size_t i = 0; i < renderer.CommandCount(); ++i) {
+                        const auto& command = renderer.Command(i);
+                        const auto& color = command.primitive.color;
+                        if (command.type != RenderCommand::Type::Primitive3D ||
+                            color.r != 0.05f || color.g != 0.24f || color.b != 0.20f) continue;
+                        const Matrix4x4 world = inverseViewProjection * command.primitive.wvpMatrix;
+                        Vector3 center = world.TransformPoint(Vector3::Zero);
+                        Vector3 radii {std::abs(world.m[0][0]), std::abs(world.m[1][1]), std::abs(world.m[2][2])};
+                        radii *= 0.5f * 0.55f;
+                        if (!rail) {
+                            // 描画深度から自機平面へカメラの視線を延ばす
+                            const Vector3 eye {shake.x, shake.y, -16.0f};
+                            const float scale = (Game::SidePlaneZ - eye.z) / (center.z - eye.z);
+                            center = eye + (center - eye) * scale;
+                            radii *= scale;
+                        }
+                        assert(count < 23);
+                        segments[count++] = {center, radii};
+                    }
+                    assert(count > 0);
+                    // 中心と上下境界の内外を、対象の半径を加えた全節の和集合と照合する
+                    for (int i = 0; i < count; ++i) {
+                        for (float radius : {0.0f, 0.055f}) {
+                            for (float offset : {0.0f, -1.05f, -0.95f, 0.95f, 1.05f}) {
+                                Vector3 point = segments[i].center;
+                                point.y += offset * (segments[i].radii.y + radius * (rail ? Game::WorldXScale : Game::WorldYScale));
+                                bool expected = false;
+                                for (int j = 0; j < count; ++j) {
+                                    const Vector3 d = point - segments[j].center;
+                                    const Vector3 r = segments[j].radii + Vector3 {
+                                        radius * Game::WorldXScale,
+                                        radius * (rail ? Game::WorldXScale : Game::WorldYScale), radius * Game::WorldXScale};
+                                    const float distance = d.x * d.x / (r.x * r.x) + d.y * d.y / (r.y * r.y) +
+                                        (rail ? d.z * d.z / (r.z * r.z) : 0.0f);
+                                    expected |= distance <= 1.0f;
+                                }
+                                assert(Game::Stage3Module::HitsHazard(g, Game::FromWorldX(point.x),
+                                    Game::FromWorldY(point.y), point.z, radius) == expected);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     /** @brief Stage4トラックの車線と描画・接触判定の一致を検証する @return なし */
     static void CheckStage4TruckLanes() {
         using Game = SideScrollingShooter;
@@ -74,6 +149,7 @@ struct CoopStageTests {
 
     /** @brief 実際のステージ処理をGPUなしで検証する @return なし */
     static void Run() {
+        CheckSeaSerpentHitboxes();
         CheckStage4TruckLanes();
         using Game = SideScrollingShooter;
         auto game = std::make_unique<Game>();
