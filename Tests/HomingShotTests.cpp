@@ -2,12 +2,421 @@
 #include <cmath>
 #include <cstdio>
 #include <memory>
+#include "../Engine/Graphics/Renderer.h"
 #include "../Presentation/Gameplay/SideScrollingShooter.h"
 #include "../Presentation/Gameplay/Stages/Stage5/Stage5Module.h"
 #include "../Presentation/Gameplay/Stages/Stage2/Stage2Module.h"
 #include "../Presentation/Gameplay/Stages/Stage4/Stage4Module.h"
 
 struct HomingShotTests {
+    /** @brief 高速移動への偏差射撃と実弾の通過点への十字の加減速を検証する @return なし */
+    static void CheckPredictiveAim() {
+        using Game = SideScrollingShooter;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.Initialize(nullptr, Spread, Easy);
+        g.m_viewMode = g.m_nextViewMode = Game::ViewMode::Rail3D;
+        const Vector3 aim = g.PlayerAimPoint();
+        auto& enemy = g.m_enemies[0];
+        enemy.active = true;
+        enemy.hp = 10;
+        enemy.x = Game::FromWorldX(aim.x);
+        enemy.y = Game::FromWorldY(aim.y);
+        enemy.z = aim.z;
+        for (int frame = 0; frame < 60; ++frame) g.UpdateAimSnap();
+
+        // 横へ高速移動する敵へ、発射後に曲がらない通常弾が到達する
+        enemy.x += Game::FromWorldX(0.6f);
+        g.UpdateAimSnap();
+        assert(std::abs(g.Player().m_aimTargetVelocity.x - 0.6f) < 0.0001f);
+        g.UpdateAimSnap(false);
+        assert(std::abs(g.Player().m_aimTargetVelocity.x - 0.6f) < 0.0001f);
+        const auto shot = g.MakeNormalPlayerShot();
+        const Vector3 origin {Game::ToWorldX(shot.x), Game::ToWorldY(shot.y), shot.z};
+        const Vector3 velocity {Game::ToWorldX(shot.vx), Game::ToWorldY(shot.vy), shot.vz};
+        const float time = (enemy.z - origin.z) / velocity.z;
+        const Vector3 target {Game::ToWorldX(enemy.x) + 0.6f * time, Game::ToWorldY(enemy.y), enemy.z};
+        assert(Vector3::Distance(origin + velocity * time, target) < 0.001f);
+        assert(std::abs(velocity.Length() - 1.45f) < 0.0001f);
+
+        // 偏差射撃後もプレビューと実際に生成された通常弾の弾道が一致する
+        g.Player().m_fire = true;
+        g.TickPlayerWeapons();
+        assert(g.m_shots[0].vx == shot.vx && g.m_shots[0].vy == shot.vy && g.m_shots[0].vz == shot.vz);
+        Camera3D camera;
+        g.ConfigureRailCamera(camera, g.m_aimViewport);
+        const Vector3 future = origin + velocity * 15.0f;
+        Vector2 screen;
+        assert(camera.TryWorldToScreen(future, screen));
+        const Vector2 desired {screen.x / g.m_aimViewport.width * 2.0f - 1.0f,
+            1.0f - screen.y / g.m_aimViewport.height * 2.0f};
+        assert(g.Player().m_crosshairPosition.x < desired.x);
+
+        // 静止した目標へ移動開始時は加速し、接近すると減速して実弾の15フレーム先へ収束する
+        enemy.x = Game::FromWorldX(aim.x + 0.8f);
+        g.UpdateAimSnap();
+        g.UpdateAimSnap();
+        g.Player().m_crosshairPosition = {0.0f, 0.0f};
+        g.Player().m_crosshairVelocity = {};
+        g.UpdateAimSnap();
+        const float initialSpeed = g.Player().m_crosshairVelocity.Length();
+        g.UpdateAimSnap();
+        assert(g.Player().m_crosshairVelocity.Length() > initialSpeed);
+        for (int frame = 0; frame < 100; ++frame) g.UpdateAimSnap();
+        const auto settled = g.MakeNormalPlayerShot();
+        const Vector3 settledFuture = Vector3 {Game::ToWorldX(settled.x), Game::ToWorldY(settled.y), settled.z} +
+            Vector3 {Game::ToWorldX(settled.vx), Game::ToWorldY(settled.vy), settled.vz} * 15.0f;
+        assert(camera.TryWorldToScreen(settledFuture, screen));
+        assert(std::abs(g.Player().m_crosshairPosition.x - (screen.x / g.m_aimViewport.width * 2.0f - 1.0f)) < 0.0001f);
+        assert(std::abs(g.Player().m_crosshairPosition.y - (1.0f - screen.y / g.m_aimViewport.height * 2.0f)) < 0.0001f);
+        assert(g.Player().m_crosshairVelocity.Length() < initialSpeed);
+
+        // 弾と同速で接近する場合も迎撃でき、追いつけない横移動でも有限の弾道を保つ
+        enemy.x = Game::FromWorldX(aim.x);
+        for (int frame = 0; frame < 2; ++frame) g.UpdateAimSnap();
+        g.Player().m_aimTargetVelocity = {0.0f, 0.0f, -1.45f};
+        auto equalSpeed = g.MakeNormalPlayerShot();
+        assert(std::isfinite(equalSpeed.vx) && std::isfinite(equalSpeed.vz));
+        assert(std::abs(equalSpeed.vz - 1.45f) < 0.0001f);
+        g.Player().m_aimTargetVelocity = {3.0f, 0.0f, 0.0f};
+        auto unreachable = g.MakeNormalPlayerShot();
+        assert(std::isfinite(unreachable.vx) && std::isfinite(unreachable.vy) && std::isfinite(unreachable.vz));
+
+        // 捕捉対象の変更と2Dへの復帰では古い速度・十字の慣性を引き継がない
+        enemy.active = false;
+        g.m_enemies[1] = enemy;
+        g.m_enemies[1].active = true;
+        g.UpdateAimSnap();
+        assert(g.Player().m_aimTargetVelocity == Vector3::Zero);
+        g.m_viewMode = Game::ViewMode::Side2D;
+        g.UpdateAimSnap();
+        assert(!g.Player().m_crosshairInitialized && g.Player().m_crosshairVelocity == Vector2::Zero);
+    }
+    /** @brief 難易度別の捕捉範囲と最大弾道補正、および解除時の減衰を検証する @return なし */
+    static void CheckAimSnapDifficulty() {
+        using Game = SideScrollingShooter;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.Initialize(nullptr, Spread, Normal);
+        g.m_viewMode = g.m_nextViewMode = Game::ViewMode::Rail3D;
+        Camera3D camera;
+        g.ConfigureRailCamera(camera, g.m_aimViewport);
+        const Vector3 aim = g.PlayerAimPoint();
+        Vector2 center, shifted;
+        assert(camera.TryWorldToScreen(aim, center));
+        assert(camera.TryWorldToScreen(aim + Vector3::Right, shifted));
+        const float worldPerScreenHeight = g.m_aimViewport.height / (shifted.x - center.x);
+        auto& enemy = g.m_enemies[0];
+        enemy.active = true;
+        enemy.hp = 10;
+        enemy.y = Game::FromWorldY(aim.y);
+        enemy.z = aim.z;
+        float previousCorrection = 2.0f;
+        for (auto difficulty : {Easy, Normal, Hard}) {
+            g.m_difficulty = difficulty;
+            const float radius = difficulty == Easy ? 0.09f : difficulty == Hard ? 0.035f : 0.06f;
+            // 各難易度の境界の内外で捕捉が切り替わる
+            for (float offset : {radius - 0.001f, radius + 0.001f}) {
+                enemy.x = Game::FromWorldX(aim.x + worldPerScreenHeight * offset);
+                g.UpdateAimSnap(false);
+                assert(g.Player().m_aimSnapped == (offset < radius));
+            }
+
+            // 全難易度で捕捉できる同じ標的に対し、弾速を保って補正強度だけを変える
+            enemy.x = Game::FromWorldX(aim.x + worldPerScreenHeight * 0.02f);
+            g.Player().m_aimSnapBlend = 0.0f;
+            g.Player().m_aimSnapOffset = {};
+            for (int frame = 0; frame < 60; ++frame) g.UpdateAimSnap();
+            const float strength = difficulty == Easy ? 1.0f : difficulty == Hard ? 0.45f : 0.75f;
+            assert(std::abs(g.Player().m_aimSnapBlend - strength) < 0.0001f);
+            Game::Shot shot;
+            shot.x = g.Player().m_playerX;
+            shot.y = g.Player().m_playerY;
+            shot.z = g.PlayerWorldPosition().z + 2.0f;
+            shot.vz = 1.45f;
+            g.ApplyAimSnap(shot);
+            const Vector3 velocity {Game::ToWorldX(shot.vx), Game::ToWorldY(shot.vy), shot.vz};
+            assert(velocity.x > 0.0f && velocity.x < previousCorrection);
+            assert(std::abs(velocity.Length() - 1.45f) < 0.0001f);
+            previousCorrection = velocity.x;
+
+            // 最大補正率が異なっても解除直後は滑らかに減衰し、最後は完全に戻る
+            enemy.active = false;
+            g.UpdateAimSnap();
+            assert(g.Player().m_aimSnapBlend > 0.0f && g.Player().m_aimSnapBlend < strength);
+            for (int frame = 0; frame < 40; ++frame) g.UpdateAimSnap();
+            assert(g.Player().m_aimSnapBlend == 0.0f);
+            enemy.active = true;
+        }
+    }
+    /** @brief 常時表示の枠と弾道が捕捉・変更・解除時に連続して動くことを検証する @return なし */
+    static void CheckSmoothAimSnap() {
+        using Game = SideScrollingShooter;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.Initialize(nullptr, Spread, Normal);
+        g.m_viewMode = g.m_nextViewMode = Game::ViewMode::Rail3D;
+        Camera3D camera;
+        g.ConfigureRailCamera(camera, g.m_aimViewport);
+        Renderer renderer;
+        g.UpdateAimSnap();
+        g.DrawReticle(renderer, camera);
+        assert(renderer.CommandCount() == 28);
+        const float restingX = (renderer.Command(20).rect.position.x + renderer.Command(26).rect.position.x) * 0.5f;
+        assert(std::abs(restingX - renderer.Command(6).rect.position.x) < 0.0001f);
+
+        // 捕捉した最初のフレームでは、枠と発射方向を一気に標的へ飛ばさない
+        const Vector3 aim = g.PlayerAimPoint();
+        auto& enemy = g.m_enemies[0];
+        enemy.active = true;
+        enemy.hp = 10;
+        enemy.x = Game::FromWorldX(aim.x + 0.8f);
+        enemy.y = Game::FromWorldY(aim.y);
+        enemy.z = aim.z;
+        ++g.m_frame;
+        g.UpdateAimSnap();
+        assert(g.Player().m_aimSnapped);
+        assert(g.Player().m_aimSnapOffset.x > 0.0f && g.Player().m_aimSnapOffset.x < 0.8f);
+        const float firstOffset = g.Player().m_aimSnapOffset.x;
+        g.UpdateAimSnap(false);
+        assert(g.Player().m_aimSnapOffset.x == firstOffset);
+        renderer.BeginFrame();
+        g.DrawReticle(renderer, camera);
+        const float acquiringX = (renderer.Command(20).rect.position.x + renderer.Command(26).rect.position.x) * 0.5f;
+        assert(acquiringX > restingX);
+        Game::Shot initial;
+        initial.x = g.Player().m_playerX;
+        initial.y = g.Player().m_playerY;
+        initial.z = g.PlayerWorldPosition().z + 2.0f;
+        initial.vz = 1.45f;
+        auto acquiring = initial;
+        g.ApplyAimSnap(acquiring);
+        for (int frame = 0; frame < 40; ++frame) { ++g.m_frame; g.UpdateAimSnap(); }
+        auto locked = initial;
+        g.ApplyAimSnap(locked);
+        assert(acquiring.vx > 0.0f && acquiring.vx < locked.vx);
+
+        // 対象が反対側へ変わっても枠は現在位置から補間する
+        const float lockedOffset = g.Player().m_aimSnapOffset.x;
+        enemy.x = Game::FromWorldX(aim.x - 0.8f);
+        ++g.m_frame;
+        g.UpdateAimSnap();
+        assert(g.Player().m_aimSnapOffset.x < lockedOffset && g.Player().m_aimSnapOffset.x > -0.8f);
+
+        // 解除直後も枠と補正を残し、徐々に十字位置と通常弾道へ戻す
+        const float previousOffset = g.Player().m_aimSnapOffset.x;
+        const float previousBlend = g.Player().m_aimSnapBlend;
+        enemy.active = false;
+        ++g.m_frame;
+        g.UpdateAimSnap();
+        assert(!g.Player().m_aimSnapped);
+        assert(g.Player().m_aimSnapOffset.x > 0.0f && g.Player().m_aimSnapOffset.x < previousOffset);
+        assert(g.Player().m_aimSnapBlend > 0.0f && g.Player().m_aimSnapBlend < previousBlend);
+        for (int frame = 0; frame < 40; ++frame) { ++g.m_frame; g.UpdateAimSnap(); }
+        assert(g.Player().m_aimSnapOffset == Vector3::Zero && g.Player().m_aimSnapBlend == 0.0f);
+        auto released = initial;
+        g.ApplyAimSnap(released);
+        assert(released.vx == initial.vx && released.vy == initial.vy && released.vz == initial.vz);
+        renderer.BeginFrame();
+        g.DrawReticle(renderer, camera);
+        assert(renderer.CommandCount() == 28);
+        assert(std::abs((renderer.Command(20).rect.position.x + renderer.Command(26).rect.position.x) * 0.5f - restingX) < 0.0001f);
+    }
+    /** @brief スナップ対象の選択、弾道補正、解除と表示を検証する @return なし */
+    static void CheckAimSnap() {
+        using Game = SideScrollingShooter;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.Initialize(nullptr, Spread, Easy);
+        g.m_viewMode = g.m_nextViewMode = Game::ViewMode::Rail3D;
+        const Vector3 aim = g.PlayerAimPoint();
+        auto& enemy = g.m_enemies[0];
+        enemy.active = true;
+        enemy.hp = 10;
+        enemy.x = Game::FromWorldX(aim.x + 0.5f);
+        enemy.y = Game::FromWorldY(aim.y);
+        enemy.z = aim.z;
+        g.UpdateAimSnap();
+        assert(g.Player().m_aimSnapped);
+        const Vector3 target = g.Player().m_aimSnapTarget;
+        for (int frame = 0; frame < 40; ++frame) { ++g.m_frame; g.UpdateAimSnap(); }
+
+        // 十字を残して対象の枠を追加し、通常弾は同じ対象へ発射する
+        Camera3D camera;
+        g.ConfigureRailCamera(camera, g.m_aimViewport);
+        Renderer renderer;
+        g.DrawReticle(renderer, camera);
+        assert(renderer.CommandCount() == 28);
+        Vector2 targetScreen;
+        assert(camera.TryWorldToScreen(target, targetScreen));
+        assert(std::abs((renderer.Command(20).rect.position.x + renderer.Command(26).rect.position.x) * 0.5f -
+            (targetScreen.x / 1280.0f * 2.0f - 1.0f)) < 0.0001f);
+        g.Player().m_fire = true;
+        g.TickPlayerWeapons();
+        const auto normal = g.m_shots[0];
+        const Vector3 velocity {Game::ToWorldX(normal.vx), Game::ToWorldY(normal.vy), normal.vz};
+        const Vector3 direction = (target - Vector3 {Game::ToWorldX(normal.x), Game::ToWorldY(normal.y), normal.z}).Normalized();
+        assert(Vector3::Dot(velocity.Normalized(), direction) > 0.9999f);
+        assert(std::abs(velocity.Length() - 1.45f) < 0.0001f);
+        assert(g.m_shots[1].special && g.m_shots[2].special);
+        assert(g.m_shots[1].vx != g.m_shots[2].vx);
+        const auto snappedSpecial = g.m_shots[1];
+        g.m_shots.fill({});
+        g.Player().m_aimSnapped = false;
+        g.Player().m_aimSnapBlend = 0.0f;
+        g.FireSpecialShots();
+        const auto& unsnappedSpecial = g.m_shots[0];
+        assert(std::abs(snappedSpecial.vx - unsnappedSpecial.vx) > 0.0001f);
+        const Vector3 snappedVelocity {Game::ToWorldX(snappedSpecial.vx), Game::ToWorldY(snappedSpecial.vy), snappedSpecial.vz};
+        const Vector3 unsnappedVelocity {Game::ToWorldX(unsnappedSpecial.vx), Game::ToWorldY(unsnappedSpecial.vy), unsnappedSpecial.vz};
+        assert(std::abs(snappedVelocity.Length() - unsnappedVelocity.Length()) < 0.0001f);
+        g.m_shots.fill({});
+
+        // 解像度を変えても同じ位置の敵へスナップする
+        g.m_aimViewport = {0, 0, 2560, 1440};
+        g.UpdateAimSnap();
+        assert(g.Player().m_aimSnapped);
+        g.m_aimViewport = {0, 0, 1280, 720};
+
+        // 近傍外、背後、無効化、撃破済みの敵へはスナップしない
+        enemy.x += 2.0f;
+        g.UpdateAimSnap();
+        assert(!g.Player().m_aimSnapped);
+        enemy.x = Game::FromWorldX(aim.x + 0.5f);
+        enemy.z = g.PlayerWorldPosition().z - 1.0f;
+        g.UpdateAimSnap();
+        assert(!g.Player().m_aimSnapped);
+        enemy.z = aim.z;
+        enemy.collisionEnabled = false;
+        g.UpdateAimSnap();
+        assert(!g.Player().m_aimSnapped);
+        enemy.collisionEnabled = true;
+        enemy.hp = 0;
+        g.TickShots();
+        assert(!g.Player().m_aimSnapped);
+        renderer.BeginFrame();
+        g.DrawReticle(renderer, camera);
+        assert(renderer.CommandCount() == 28);
+
+        // 2Dと切替中は標的が正面にいても弾道を変更しない
+        enemy.hp = 10;
+        g.m_viewMode = Game::ViewMode::Side2D;
+        g.UpdateAimSnap();
+        assert(!g.Player().m_aimSnapped);
+        g.m_viewMode = Game::ViewMode::Rail3D;
+        g.m_viewTransitionTimer = 1;
+        g.UpdateAimSnap();
+        assert(!g.Player().m_aimSnapped);
+        g.m_viewTransitionTimer = 0;
+
+        // 同じ候補でも照準に最も近い敵を選び、協力プレイでは各自の照準を使う
+        auto& nearEnemy = g.m_enemies[1];
+        nearEnemy = enemy;
+        nearEnemy.x = Game::FromWorldX(aim.x + 0.1f);
+        g.UpdateAimSnap();
+        assert(std::abs(g.Player().m_aimSnapTarget.x - (aim.x + 0.1f)) < 0.0001f);
+        g.m_playerCount = 2;
+        g.m_activePlayer = 1;
+        g.Player().m_playerX = 0.8f;
+        g.UpdateAimSnap();
+        assert(!g.Player().m_aimSnapped);
+        assert(g.m_players[0].m_aimSnapped);
+
+        // 壁面の上向き通常弾と周回戦の通常弾も、表示対象の命中位置へ向ける
+        g.m_activePlayer = 0;
+        g.m_playerCount = 1;
+        g.m_enemies.fill({});
+        g.m_stageNumber = 5;
+        for (auto phase : {Game::Stage5Phase::WallClimbMiddle, Game::Stage5Phase::TayamaFireControl}) {
+            g.m_stage5.phase = phase;
+            g.m_stage5.tayamaOrbitAngle = 0.4f;
+            const Vector3 aimPoint = g.PlayerAimPoint();
+            enemy = {};
+            enemy.active = true;
+            enemy.hp = 10;
+            enemy.x = Game::FromWorldX(aimPoint.x + 0.3f);
+            enemy.y = Game::FromWorldY(aimPoint.y);
+            enemy.z = aimPoint.z;
+            g.UpdateAimSnap();
+            assert(g.Player().m_aimSnapped);
+            for (int frame = 0; frame < 60; ++frame) { ++g.m_frame; g.UpdateAimSnap(); }
+            g.m_shots.fill({});
+            g.Player().m_shotCooldown = 0;
+            g.TickPlayerWeapons();
+            const auto& shot = g.m_shots[0];
+            Vector3 hitTarget = g.Player().m_aimSnapTarget;
+            if (phase == Game::Stage5Phase::WallClimbMiddle) hitTarget.z = shot.z;
+            const Vector3 desired = (hitTarget - Vector3 {Game::ToWorldX(shot.x), Game::ToWorldY(shot.y), shot.z}).Normalized();
+            const Vector3 actual {Game::ToWorldX(shot.vx), Game::ToWorldY(shot.vy), shot.vz};
+            assert(Vector3::Dot(desired, actual.Normalized()) > 0.9999f);
+        }
+    }
+    /** @brief 3D照準の表示条件、投影位置、縦横比を検証する @return なし */
+    static void CheckReticle() {
+        using Game = SideScrollingShooter;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.Initialize(nullptr, Spread, Normal);
+        Renderer renderer;
+        Camera3D camera;
+        camera.SetViewport({0, 0, 1280, 720});
+        camera.SetPosition({0.0f, 0.0f, -10.0f});
+        camera.LookAt({0.0f, 0.0f, 10.0f});
+
+        // 2Dでは非表示、3Dでは暗い縁と黄色い十字を描画する
+        g.m_viewMode = Game::ViewMode::Side2D;
+        g.DrawReticle(renderer, camera);
+        assert(renderer.CommandCount() == 0);
+        g.m_viewMode = Game::ViewMode::Rail3D;
+        g.DrawReticle(renderer, camera);
+        assert(renderer.CommandCount() == 28);
+        Vector2 expected;
+        assert(camera.TryWorldToScreen(g.PlayerAimPoint(), expected));
+        const auto& left = renderer.Command(8).rect;
+        const auto& right = renderer.Command(10).rect;
+        assert(std::abs((left.position.x + right.position.x) * 0.5f -
+            (expected.x / 1280.0f * 2.0f - 1.0f)) < 0.0001f);
+        assert(std::abs((left.position.y + right.position.y) * 0.5f -
+            (1.0f - expected.y / 720.0f * 2.0f)) < 0.0001f);
+        assert(std::abs(left.size.y * 720.0f - renderer.Command(9).rect.size.x * 1280.0f) < 0.0001f);
+
+        // 壁面では上方向の弾道へ照準を合わせ、周回戦の2D視点でも非表示にする
+        renderer.BeginFrame();
+        g.m_stageNumber = 5;
+        g.m_stage5.phase = Game::Stage5Phase::WallClimbLower;
+        const Vector3 verticalTarget = g.PlayerAimPoint();
+        camera.LookAt(verticalTarget);
+        g.DrawReticle(renderer, camera);
+        assert(renderer.CommandCount() == 0);
+        g.m_stage5.phaseTimer = ShooterStages::Stage5::WallClimbFadeFrames;
+        g.DrawReticle(renderer, camera);
+        assert(renderer.CommandCount() == 28);
+        assert(std::abs(renderer.Command(8).rect.position.x + renderer.Command(10).rect.position.x) < 0.0001f);
+        assert(std::abs(renderer.Command(8).rect.position.y + renderer.Command(10).rect.position.y) < 0.0001f);
+        renderer.BeginFrame();
+        g.m_stage5.phase = Game::Stage5Phase::TayamaFireControl;
+        g.m_viewMode = Game::ViewMode::Side2D;
+        g.DrawReticle(renderer, camera);
+        assert(renderer.CommandCount() == 0);
+        g.m_stageNumber = 1;
+        g.m_viewMode = Game::ViewMode::Rail3D;
+
+        // どちら向きの視点切替中も、撃墜中とクリア中も非表示にする
+        renderer.BeginFrame();
+        g.m_viewTransitionTimer = 1;
+        g.DrawReticle(renderer, camera);
+        g.m_viewMode = Game::ViewMode::Side2D;
+        g.DrawReticle(renderer, camera);
+        assert(renderer.CommandCount() == 0);
+        g.m_viewMode = Game::ViewMode::Rail3D;
+        g.m_viewTransitionTimer = 0;
+        g.Player().m_playerDestructionTimer = 1;
+        g.DrawReticle(renderer, camera);
+        g.Player().m_playerDestructionTimer = 0;
+        g.m_clear = true;
+        g.DrawReticle(renderer, camera);
+        assert(renderer.CommandCount() == 0);
+    }
     /** @brief Stage4の全主砲と副砲がEasyのみ緩和されることを検証する @return なし */
     static void CheckStage4Easy() {
         using Game = SideScrollingShooter;
@@ -378,6 +787,11 @@ struct HomingShotTests {
 
 /** @brief 追尾回帰チェックを実行する @return 成功時0 */
 int main() {
+    HomingShotTests::CheckPredictiveAim();
+    HomingShotTests::CheckAimSnapDifficulty();
+    HomingShotTests::CheckSmoothAimSnap();
+    HomingShotTests::CheckAimSnap();
+    HomingShotTests::CheckReticle();
     HomingShotTests::CheckStage4Easy();
     HomingShotTests::CheckSpreadFalloff();
     HomingShotTests::Run();

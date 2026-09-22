@@ -720,6 +720,22 @@ private:
         bool damagesPlayer = false);
     void FireSpecialShots();
     void UpdateHomingShot(Shot& shot);
+    /** @brief 通常の十字照準のワールド位置を取得する @return 照準位置 */
+    Vector3 PlayerAimPoint() const;
+    /** @brief 発射と照準予測に共通の通常弾を作る @param snap スナップ補正を適用する場合true @return 通常弾 */
+    Shot MakeNormalPlayerShot(bool snap = true) const;
+    /** @brief 3D照準の対象を更新する @param advance 枠と弾道の補間を1フレーム進める場合true @return なし */
+    void UpdateAimSnap(bool advance = true);
+    /** @brief 発射時の弾道を標的へ補正する @param shot 発射する自機弾 @return なし */
+    void ApplyAimSnap(Shot& shot) const;
+    /**
+     * @brief 追尾または画面上の照準距離で攻撃可能な標的を選ぶ
+     * @param shot 標的を選ぶ自機弾
+     * @param target 選んだ標的のワールド位置
+     * @param aimCamera 非nullなら十字照準の近傍だけを選ぶ
+     * @return 標的ID、対象なしなら-1
+     */
+    int FindShotTarget(const Shot& shot, Vector3& target, const Camera3D* aimCamera = nullptr);
     void DamagePlayer();
     /** @brief 現在のチャプターを開始時状態へ戻す */
     void RestartCurrentChapter();
@@ -855,6 +871,8 @@ private:
     bool CanToggleView() const;
     void ConfigureSideCamera(Camera3D& camera, Renderer& renderer) const;
     void ConfigureRailCamera(Camera3D& camera, Renderer& renderer) const;
+    /** @brief 描画と照準に共通のカメラを設定する @param camera 設定先 @param viewport 描画領域 @return なし */
+    void ConfigureRailCamera(Camera3D& camera, const Viewport& viewport) const;
     /**
      * @brief 現在フレームの画面揺れオフセットを取得する
      * @return カメラへ加算するXYオフセット
@@ -903,6 +921,13 @@ private:
      */
     void DrawViewToggleCooldownHud(
         Renderer& renderer, const Camera3D& camera, float playerZ) const;
+    /**
+     * @brief 3D視点の十字照準とスナップ対象の四角い照準を描画する
+     * @param renderer 描画先レンダラー
+     * @param camera 射撃方向の投影に使うカメラ
+     * @return なし
+     */
+    void DrawReticle(Renderer& renderer, const Camera3D& camera) const;
     /** @brief ボス戦前会話を画面へ描画する */
     void DrawBossStory(Renderer& renderer) const;
     /** @brief 墨の筆跡を模したボス名演出を画面へ描画する */
@@ -1088,11 +1113,22 @@ private:
         bool m_slowMove = false;
         bool m_fire = false;
         bool m_bombRequested = false;
+        bool m_aimSnapped = false;
+        Vector3 m_aimSnapTarget {};
+        Vector3 m_aimSnapOffset {};
+        float m_aimSnapBlend = 0.0f;
+        int m_aimSampleId = -1;
+        Vector3 m_aimSamplePosition {};
+        Vector3 m_aimTargetVelocity {};
+        bool m_crosshairInitialized = false;
+        Vector2 m_crosshairPosition {};
+        Vector2 m_crosshairVelocity {};
         Bomb m_bomb {};
     };
     std::array<PlayerState, 2> m_players {};
     int m_playerCount = 1;
     mutable int m_activePlayer = 0;
+    mutable Viewport m_aimViewport {0, 0, 1280, 720};
     /** @brief 処理対象の自機状態を取得する @return 自機状態 */
     PlayerState& Player() { return m_players[m_activePlayer]; }
     /** @brief 描画対象の自機状態を取得する @return 自機状態 */

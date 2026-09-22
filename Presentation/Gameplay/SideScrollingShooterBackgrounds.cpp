@@ -459,6 +459,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     DrawHudBackground(renderer);
     StageDispatch::DrawOverlay3D(*this, renderer, camera);
     if (StageDispatch::IsCinematic(*this)) return;
+    ForEachPlayer([&] { DrawReticle(renderer, camera); });
     const float playerZ = IsTayamaBattle() ? PlayerWorldPosition().z : Math::Lerp(SidePlaneZ, PlayerRailDepth(), railWeight);
     ForEachPlayer([&] { DrawPowerUp(renderer, camera, IsTayamaBattle() ? PlayerWorldPosition().z : playerZ); });
     DrawTutorialControlHint(renderer, camera, playerZ);

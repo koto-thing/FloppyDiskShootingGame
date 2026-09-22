@@ -173,6 +173,14 @@ void SideScrollingShooter::ConfigureSideCamera(Camera3D& camera, Renderer& rende
 }
 
 void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, Renderer& renderer) const {
+    // 発射時の照準判定にも実際の画面サイズを使う
+    const Viewport viewport {0, 0, renderer.Width(), renderer.Height()};
+    if (viewport.IsValid()) m_aimViewport = viewport;
+    ConfigureRailCamera(camera, viewport);
+}
+
+/** @brief 描画と照準に共通のカメラを設定する @param camera 設定先 @param viewport 描画領域 @return なし */
+void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, const Viewport& viewport) const {
     const float railWeight = RailBlend();
     const Vector2 shake = ScreenShakeOffset();
     const float sideCameraY = StageDispatch::SideCameraY(*this);
@@ -215,7 +223,7 @@ void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, Renderer& rende
         railTarget = tayamaPlayer -
             orbitRadial * ShooterStages::Stage5::TayamaCameraLookAhead;
     }
-    camera.SetViewport({0, 0, renderer.Width(), renderer.Height()});
+    camera.SetViewport(viewport);
     camera.SetProjectionMode(ProjectionMode::Perspective);
     camera.SetFieldOfView(Math::ToRadians(StageDispatch::CameraFieldOfView(
         *this, 38.0f + (8.0f * railWeight))));
@@ -1094,6 +1102,62 @@ void SideScrollingShooter::DrawTutorialControlHint(
         Input::IsGamepadConnected() ? GamepadHints : KeyboardHints)[m_tutorialStep];
     renderer.DrawText(hint, TextAlign::Center, 0.015f,
         {0.35f, 1.0f, 0.85f, 1.0f}, position, 0.0025f);
+}
+
+/**
+ * @brief 3D視点の十字照準とスナップ対象の四角い照準を描画する
+ * @param renderer 描画先レンダラー
+ * @param camera 射撃方向の投影に使うカメラ
+ * @return なし
+ */
+void SideScrollingShooter::DrawReticle(Renderer& renderer, const Camera3D& camera) const {
+    // 2D、視点遷移、演出中、撃墜中は照準を表示しない
+    if (m_viewMode != ViewMode::Rail3D || m_viewTransitionTimer > 0 ||
+        m_clear || Player().m_playerDestructionTimer > 0 || StageDispatch::IsCinematic(*this)) return;
+    const Viewport& viewport = camera.GetViewport();
+    if (viewport.width <= 0 || viewport.height <= 0) return;
+
+    // 通常弾の進行方向を投影し、周回戦と壁面の縦スクロール弾道へ追従する
+    Vector2 screen;
+    if (!camera.TryWorldToScreen(PlayerAimPoint(), screen)) return;
+    const Vector2 center = Player().m_crosshairInitialized ? Player().m_crosshairPosition : Vector2 {
+        (screen.x - viewport.x) / viewport.width * 2.0f - 1.0f,
+        1.0f - (screen.y - viewport.y) / viewport.height * 2.0f};
+    const float aspect = static_cast<float>(viewport.height) / viewport.width;
+
+    // 中央の小さな十字と上下左右の短い目盛りを描画する
+    for (int layer = 0; layer < 2; ++layer) {
+        const float thickness = layer == 0 ? 0.00525f : 0.00225f;
+        const ColorF color = layer == 0 ? ColorF {0.08f, 0.07f, 0.02f, 0.22f} :
+            ColorF {1.0f, 0.9f, 0.3f, 0.50f};
+        renderer.Draw(Rect {center, {0.0135f * aspect, thickness}}, color);
+        renderer.Draw(Rect {center, {thickness * aspect, 0.0135f}}, color);
+        for (float sign : {-1.0f, 1.0f}) {
+            renderer.Draw(Rect {{center.x + sign * 0.0525f * aspect, center.y},
+                {0.0135f * aspect, thickness}}, color);
+            renderer.Draw(Rect {{center.x, center.y + sign * 0.0525f},
+                {thickness * aspect, 0.0135f}}, color);
+        }
+    }
+
+    // 四角い枠を常時表示し、捕捉・対象変更・解除のすべてを連続した移動にする
+    camera.TryWorldToScreen(PlayerAimPoint() + Player().m_aimSnapOffset, screen);
+    const Vector2 lockedCenter {
+        (screen.x - viewport.x) / viewport.width * 2.0f - 1.0f,
+        1.0f - (screen.y - viewport.y) / viewport.height * 2.0f};
+    for (int layer = 0; layer < 2; ++layer) {
+        const float thickness = layer == 0 ? 0.0075f : 0.003f;
+        const ColorF color = layer == 0 ? ColorF {0.08f, 0.07f, 0.02f, 0.22f} :
+            ColorF {1.0f, 0.85f, 0.20f, 0.50f};
+        for (float x : {-1.0f, 1.0f}) {
+            for (float y : {-1.0f, 1.0f}) {
+                renderer.Draw(Rect {{lockedCenter.x + x * (0.09f - 0.016875f) * aspect,
+                    lockedCenter.y + y * 0.09f}, {(0.03375f + thickness) * aspect, thickness}}, color);
+                renderer.Draw(Rect {{lockedCenter.x + x * 0.09f * aspect,
+                    lockedCenter.y + y * (0.09f - 0.016875f)}, {thickness * aspect, 0.03375f + thickness}}, color);
+            }
+        }
+    }
 }
 
 void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
