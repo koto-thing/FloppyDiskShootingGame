@@ -1,0 +1,12 @@
+
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Online\x64\OnlineRelease\FloppyEngine.lib
+  Build version: Online v011
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  Localization.cpp
+  OnlineCoopSession.cpp
+  TextRenderingService.cpp
+  TitleScene.cpp
+  コード生成しています。
+  コード生成が終了しました。
+  FloppyDiskShootingGame.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Online\x64\OnlineRelease\SpaceYakuza.exe

@@ -4,6 +4,9 @@
 #include <cstddef>
 #include <memory>
 #include <string_view>
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+#include <string>
+#endif
 
 #include "Color.h"
 #include "IRenderBackend.h"
@@ -71,7 +74,12 @@ struct RenderCommand {
     PipelineId pipeline = PipelineId::Object;
     CameraMatrices cameraMatrices {};
     Viewport viewport {};
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    static constexpr std::size_t TextCapacity = 512;
+    std::array<char, TextCapacity> text {};
+#else
     std::array<char, 128> text {};
+#endif
     std::size_t textLength = 0;
 };
 
@@ -84,6 +92,12 @@ struct RenderCommand {
 class Renderer {
 public:
     static constexpr std::size_t MaxCommands = 4096;
+    // Floppy版のビットマップ文字が隣接しないよう既定の字間を設ける
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    static constexpr float DefaultCharacterSpacing = 0.0f;
+#else
+    static constexpr float DefaultCharacterSpacing = 0.003f;
+#endif
 
     /** @brief バックエンドなしの描画ファサードを生成する */
     Renderer() = default;
@@ -92,6 +106,23 @@ public:
      * @param backend 描画バックエンド
      */
     explicit Renderer(IRenderBackend& backend) : m_backend(&backend) {}
+
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    /**
+     * @brief ゲーム側の表示言語変換処理を登録する
+     * @param translator UTF-8文字列を翻訳する関数、nullptrで無効化
+     * @return なし
+     */
+    void SetTextTranslator(std::string (*translator)(std::string_view)) { m_textTranslator = translator; }
+    /**
+     * @brief 計測と描画に使う翻訳済み文字列を取得する
+     * @param text 元のUTF-8文字列
+     * @return 翻訳後の文字列
+     */
+    std::string ResolveText(std::string_view text) const {
+        return m_textTranslator ? m_textTranslator(text) : std::string(text);
+    }
+#endif
 
     /** @brief フレームの描画記録を開始する */
     void BeginFrame();
@@ -126,7 +157,7 @@ public:
      * @param characterSpacing 文字ごとに追加する字間
      */
     void DrawText(std::string_view text, const Vector2& position, float size, const ColorF& color,
-                  float characterSpacing = 0.0f);
+                  float characterSpacing = DefaultCharacterSpacing);
     /**
      * @brief テキストを画面内の代表的な位置へ描画コマンドとして記録する
      * @param alignment テキスト全体を配置する画面上の位置
@@ -134,7 +165,7 @@ public:
      * @param characterSpacing 文字ごとに追加する字間
      */
     void DrawText(std::string_view text, TextAlign alignment, float size, const ColorF& color,
-                  const Vector2& offset = Vector2::Zero, float characterSpacing = 0.0f);
+                  const Vector2& offset = Vector2::Zero, float characterSpacing = DefaultCharacterSpacing);
     /** @brief 型付きパイプライン切り替えを記録する */
     void SetPipeline(PipelineId pipeline);
     /** @brief 2Dカメラを遅延設定する */
@@ -168,6 +199,20 @@ public:
     const RenderCommand& Command(std::size_t index) const { return m_commands[index]; }
 
 private:
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    /**
+     * @brief 翻訳を重複させず表示文字列の描画コマンドを記録する
+     * @param text 翻訳済み文字列
+     * @param position 先頭文字の中心座標
+     * @param size 文字の半サイズ
+     * @param color 文字色
+     * @param characterSpacing 追加の字間
+     * @return なし
+     */
+    void RecordTextCommand(std::string_view text, const Vector2& position, float size, const ColorF& color,
+                           float characterSpacing);
+    std::string (*m_textTranslator)(std::string_view) = nullptr;
+#endif
     /**
      * @brief 描画コマンドを記録領域へ追加する
      * @param type 追加するコマンド種別

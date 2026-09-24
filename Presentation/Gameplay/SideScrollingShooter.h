@@ -51,7 +51,7 @@ public:
     /** @brief 機体タイプ別の自機弾パラメータ */
     inline static constexpr std::array<PlayerShotParameters, 3> PlayerShotConfigs {{
         // HOMING
-        { 10, 2, 0.038f, 5.0f, 0.08f, 0.20f, 0.025f, 1, 0.150f, false },
+        { 10, 2, 0.038f, 5.0f, 0.08f, 0.05f, 0.025f, 1, 0.150f, false },
         // PIERCING
         { 18, 2, 0.052f, 0.0f, 0.12f, 0.09f, 0.032f, 1, 0.000f, true },
         // SPREAD
@@ -186,6 +186,11 @@ private:
         int age = 0;
         int hitCount = 0;
         int homingTarget = -1;
+        Vector3 homingOrigin {};
+        Vector3 homingLaunchDirection {};
+        int homingView = -1;
+        int homingTrailCount = 0;
+        std::array<Vector3, 24> homingTrail {};
         int owner = 0;
         std::uint16_t bossCollisionIgnoreMask = 0;
         ShooterStages::Stage2::ShotState stage2 {};
@@ -194,6 +199,7 @@ private:
         bool enemy = false;
         bool special = false;
         bool piercing = false;
+        bool bomb = false;
         bool grazed = false;
         bool firedByBoss = false;
         bool tayamaDragonOrbit = false;
@@ -204,7 +210,7 @@ private:
          * @brief 自機弾の命中回数を加算して消滅判定を適用する
          * @return なし
          */
-        void RegisterHit() { if (!piercing || ++hitCount >= 5) active = false; }
+        void RegisterHit() { if (!piercing || (!bomb && ++hitCount >= 5)) active = false; }
     };
 
     /** @brief ボス機体で個別に破壊できる部位 */
@@ -315,15 +321,19 @@ private:
         unsigned char damagedPlayerMask = 0;
     };
 
-    /** @brief 自機から画面中央へ投げるボム */
+    /** @brief 機体別のミサイル、レーザー、シールド */
     struct Bomb {
-        float startX = 0.0f;
-        float startY = 0.0f;
         float x = 0.0f;
         float y = 0.0f;
         float z = 0.0f;
+        Vector3 direction {};
+        PlayerType type = Homing;
         int age = 0;
+        bool rail = false;
         bool active = false;
+        std::array<Shot, 10> missiles {};
+        /** @brief シールドを維持し、一時的な攻撃だけを終了する @return なし */
+        void EndAttack() { if (type != Spread) active = false; }
     };
 
     /** @brief 撃破された機体モデルから分離して飛散する部品 */
@@ -389,10 +399,18 @@ private:
     static constexpr int ExplosionLifetimeFrames = 18;
     static constexpr int DestructionExplosionLifetimeFrames = 48;
     static constexpr int MortarExplosionLifetimeFrames = 64;
-    static constexpr int BombTravelFrames = 24;
-    static constexpr int BombChargeFrames = 12;
-    static constexpr int BombExplosionLifetimeFrames = 42;
-    static constexpr int BombExplosionEffectType = 5;
+    // 減速後も従来と同程度の距離を追尾できるよう飛行時間を確保する
+    static constexpr int BombMissileFrames = 320;
+    static constexpr int BombMissileInterval = 6;
+    // 十発目を射出し終えてから全弾のブースターを点火する
+    static constexpr int BombMissileLaunchFrames = 9 * BombMissileInterval + 1;
+    static constexpr int BombLaserFrames = 180;
+    static constexpr float BombMissileSpeed = 0.84f;
+    static constexpr float BombMissileScale = 0.24f;
+    static constexpr float BombMissileRadius = 0.85f * BombMissileScale;
+    static constexpr float BombLaserRadius = 1.8f;
+    static constexpr float BombLaserLength = 90.0f;
+    static constexpr float BombShieldRadius = 1.8f;
     static constexpr int MaxBombCount = 3;
     static constexpr int InitialBombCount = MaxBombCount;
     static constexpr int AttackWarningFrames = 12;
@@ -570,16 +588,21 @@ private:
     /** @brief 接続レーザー敵のレーザー接触判定を更新する */
     void TickLinkedEnemyLasers();
     void TickShots();
+    /** @brief 弾プールの一時コピーを作らず全弾を初期化する @return なし */
+    void ResetShots();
     /**
-     * @brief ボムの移動、発光待機、爆発を更新する
+     * @brief 機体別ボムの発動、移動、持続時間を更新する
      * @return なし
      */
     void TickBomb();
-    /**
-     * @brief ボムを爆発させ、画面内の通常敵と敵弾を消去する
-     * @return なし
-     */
-    void DetonateBomb();
+    /** @brief ボムの攻撃範囲を共通の弾判定へ変換する @return 攻撃線分と威力を持つ弾 */
+    Shot MakeBombShot() const;
+    /** @brief ボムと敵弾の移動軌跡が重なるか判定する @param shot 敵弾 @return 消去対象ならtrue */
+    bool BombClearsShot(const Shot& shot);
+    /** @brief 二つの弾の掃引範囲が接触するか判定する @param bomb 弾消し側 @param shot 敵弾 @return 接触時true */
+    bool BombShotIntersects(const Shot& bomb, const Shot& shot) const;
+    /** @brief 自機弾とボムに共通の敵・部位へのダメージを適用する @param shot 自機弾 @return なし */
+    void HitPlayerShotTargets(Shot& shot);
     /** @brief 生存中の爆発エフェクトを更新する */
     void TickExplosions();
     /** @brief 飛散中の機体部品を更新する */
@@ -1055,7 +1078,7 @@ private:
     /** @brief 爆発エフェクトをHLSLへ渡す描画コマンドとして記録する */
     static void DrawExplosion(Renderer& renderer, const Camera3D& camera, const Explosion& explosion);
     /**
-     * @brief 移動中または発光中の小型ボムを描画する
+     * @brief 機体別のミサイル、極太レーザー、シールドを描画する
      * @param renderer 描画先レンダラー
      * @param camera 描画に使用するカメラ
      * @param bomb 描画対象のボム

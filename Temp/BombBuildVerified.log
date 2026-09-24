@@ -1,0 +1,41 @@
+
+  MeshRenderer.cpp
+  Renderer.cpp
+  Button.cpp
+  Slider.cpp
+  D3D12RenderingService.cpp
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Floppy\x64\FloppyRelease\FloppyEngine.lib
+  Build version: Floppy v104
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  SpaceBackground.cpp
+  CreditContentPresenter.cpp
+  SideScrollingShooter.cpp
+  SideScrollingShooterBackgrounds.cpp
+  SideScrollingShooterCombat.cpp
+  SideScrollingShooterRendering.cpp
+  CityBackgroundModule.cpp
+  StageDispatch.cpp
+  Stage1Module.cpp
+  Stage2Module.cpp
+  Stage2Rendering.cpp
+  Stage3Module.cpp
+  Stage4Module.cpp
+  Stage5Module.cpp
+  Stage5Rendering.cpp
+  CreditScene.cpp
+  EndingScene.cpp
+  GalleryScene.cpp
+  ModeSelectionScene.cpp
+  OptionScene.cpp
+  コンパイル中...
+  RankingScene.cpp
+  StoryScene.cpp
+  TestStage.cpp
+  TitleScene.cpp
+  TutorialStage.cpp
+  main.cpp
+  コード生成しています。
+  コード生成が終了しました。
+  FloppyDiskShootingGame.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Floppy\x64\FloppyRelease\SpaceYakuza.exe
+  Floppy distribution: 1473536 / 1474560 bytes

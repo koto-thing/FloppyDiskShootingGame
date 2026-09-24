@@ -18,7 +18,8 @@ New-Item -ItemType Directory -Force $output | Out-Null
 
 $gameObjects = Get-ChildItem $objects -Filter '*.obj' | Where-Object Name -ne 'main.obj' | ForEach-Object { '"' + $_.FullName + '"' }
 foreach ($test in @('CoopGameplayTests', 'CooperativeSetupTests', 'HomingShotTests', 'OrbitShotTests', 'ResumeCodeTests')) {
-    $arguments = @('/nologo', '/std:c++20', '/EHsc', '/MT', '/utf-8', '/UNDEBUG',
+    # ゲームと同じ最適化で大型モデル状態の未最適化一時コピーによるスタック超過を防ぐ
+    $arguments = @('/nologo', '/std:c++20', '/EHsc', '/MT', '/O1', '/utf-8', '/UNDEBUG',
         ('/Fo"' + "$output/" + '"'), ('/Fe"' + "$output/$test.exe" + '"'),
         ('"' + "$PSScriptRoot/$test.cpp" + '"'))
     if ($test -eq 'CoopGameplayTests') { $arguments += '"' + "$PSScriptRoot/CoopStageTests.cpp" + '"' }

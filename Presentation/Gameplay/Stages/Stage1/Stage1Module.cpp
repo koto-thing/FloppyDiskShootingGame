@@ -384,9 +384,9 @@ bool SideScrollingShooter::Stage1Module::HandleBossDefeat(
     if (!boss.active) return false;
 
     // 戦闘物を消して2D固定の撃破演出へ移り、ボス本体は段階破壊用に残す
-    shooter.m_shots = {};
+    shooter.ResetShots();
     shooter.m_items = {};
-    shooter.ForEachPlayer([&] { shooter.Player().m_bomb = {}; });
+    shooter.ForEachPlayer([&] { shooter.Player().m_bomb.EndAttack(); });
     boss.hp = 0;
     boss.collisionEnabled = false;
     boss.age = 0;

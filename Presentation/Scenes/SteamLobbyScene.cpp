@@ -1,4 +1,5 @@
 #include "SteamLobbyScene.h"
+#include "../../Application/UseCases/Localization.h"
 #include "../../Infrastructure/ExternalServices/SteamCoopSession.h"
 #include "../../Engine/Graphics/Renderer.h"
 #include "../../Engine/Time/Time.h"
@@ -45,8 +46,8 @@ void SteamLobbyScene::ProcessInput() {
     m_buttons[4]->SetEnabled(session.IsHost() && session.CanStart());
     const char* difficulties[] = {"EASY", "NORMAL", "HARD"};
     const char* shots[] = {"HOMING", "PIERCING", "SPREAD"};
-    m_buttons[1]->SetText(std::string("DIFFICULTY: ") + difficulties[(std::clamp)(session.Difficulty(), 0, 2)]);
-    m_buttons[2]->SetText(std::string("MY SHOT: ") + shots[(std::clamp)(session.Shot(session.IsHost() ? 0 : 1), 0, 2)]);
+    m_buttons[1]->SetText(std::string(Localization::Text("DIFFICULTY: ")) + Localization::Text(difficulties[(std::clamp)(session.Difficulty(), 0, 2)]));
+    m_buttons[2]->SetText(std::string(Localization::Text("MY SHOT: ")) + Localization::Text(shots[(std::clamp)(session.Shot(session.IsHost() ? 0 : 1), 0, 2)]));
     m_buttons[3]->SetText(session.Ready(session.IsHost() ? 0 : 1) ? "CANCEL READY" : "READY");
 
     // 共通UI入力で各ボタンを更新する

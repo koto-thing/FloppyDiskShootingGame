@@ -1,0 +1,48 @@
+
+  TextRenderingService.cpp
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Online\x64\OnlineRelease\FloppyEngine.lib
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  TimeTests.cpp
+  TransformTests.cpp
+  GeometryTests.cpp
+  RendererTests.cpp
+  ObjectPoolTests.cpp
+  CollisionServiceTests.cpp
+  SceneManagerTests.cpp
+  CameraTests.cpp
+  Geometry3DTests.cpp
+  UITests.cpp
+  InputTests.cpp
+  ScoreRepositoryTests.cpp
+  Stage2BossModelViewTests.cpp
+  Stage4BossModelViewTests.cpp
+  Stage4WeaponDroneViewTests.cpp
+  Stage3BossModelViewTests.cpp
+  Stage3BarrierCageViewTests.cpp
+  Stage3FunnelModelViewTests.cpp
+  Stage5ModelViewTests.cpp
+  VoiceDpcmDecoderTests.cpp
+  コードを生成中...
+  コンパイル中...
+  WavSamplesTests.cpp
+  SynthWaveGenerator.cpp
+  MMLData.cpp
+  PackedAudioSamples.cpp
+  MMLParser.cpp
+  AudioService.cpp
+  SfxrGenerator.cpp
+  SpaceBackground.cpp
+  ScoreRepository.cpp
+  SettingsRepository.cpp
+  Localization.cpp
+  コードを生成中...
+  FloppyEngine.lib(Time.obj) : MSIL .netmodule または /GL を伴ってコンパイルされたモジュールが見つかりました。/LTCG を使用して再開始してください。リンカーのパフォーマンスを向上させるためには、コマンドラインに /LTCG を追加してください。
+  コード生成しています。
+  コード生成が終了しました。
+  FloppyEngine.Tests.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Online\x64\OnlineRelease\FloppyEngine.Tests.exe
+Checking sample generation
+Checking audio output
+BGM preload: 3.957s, 188.6 MiB PCM, 14 scores
+XAudio2 silent playback checks passed
+TimeTests passed

@@ -110,3 +110,32 @@ GameSettings SettingsRepository::Sanitize(GameSettings settings) {
     settings.galleryUnlocks = (settings.galleryUnlocks & ValidGalleryUnlocks) | DefaultGalleryUnlocks;
     return settings;
 }
+
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+Localization::Language SettingsRepository::LoadLanguage() const {
+    // 共通設定へのFloppy版からの書き込みで言語選択が失われないよう分離する
+    std::ifstream input(UserDataPath() / L"language.dat");
+    int language = -1;
+    if (input >> language && language >= 0 && language < static_cast<int>(Localization::Language::Count))
+        return static_cast<Localization::Language>(language);
+    return Localization::DetectSystemLanguage();
+}
+
+void SettingsRepository::SaveLanguage(Localization::Language language) const {
+    // 不正値と書き込み失敗では既存の言語ファイルを維持する
+    const int value = static_cast<int>(language);
+    if (value < 0 || value >= static_cast<int>(Localization::Language::Count)) return;
+    const std::filesystem::path directory = UserDataPath();
+    std::error_code error;
+    std::filesystem::create_directories(directory, error);
+    if (error) return;
+    const auto path = directory / L"language.dat";
+    const auto temporary = directory / L"language.tmp";
+    std::ofstream output(temporary, std::ios::trunc);
+    if (!output) return;
+    output << value << '\n';
+    output.close();
+    if (!output) return;
+    MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+}
+#endif

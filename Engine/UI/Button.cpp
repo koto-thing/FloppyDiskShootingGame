@@ -1,6 +1,9 @@
 #include "Button.h"
 
 #include <utility>
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+#include "../Graphics/Utf8Text.h"
+#endif
 
 Button::Button(Rect bounds, std::string text)
     : m_bounds(bounds), m_text(std::move(text)) {}
@@ -37,9 +40,22 @@ void Button::Render(Renderer& renderer) const {
     renderer.Draw(drawBounds, color);
 
     if (!m_text.empty()) {
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+        // 翻訳後の全角文字幅を使い、長いラベルは余白内に収める
+        const std::string translated = renderer.ResolveText(m_text);
+        const auto label = std::string_view(translated).substr(0,
+            Utf8Text::PrefixLength(translated, RenderCommand::TextCapacity - 1));
+        const auto metrics = Utf8Text::Measure(label, textSize, characterSpacing, renderer.AspectRatio());
+        const float scale = metrics.width > 0.0f ? (std::min)(1.0f,
+            (std::min)(m_bounds.size.x * 0.9f / metrics.width, m_bounds.size.y * 0.8f / metrics.height)) : 1.0f;
+        const float firstGlyphX = m_bounds.Center().x - metrics.width * scale * 0.5f + textSize * scale;
+        renderer.DrawText(m_text, {firstGlyphX, m_bounds.Center().y}, textSize * scale,
+                          textColor, characterSpacing * scale);
+#else
         // テキスト描画は先頭文字の中心座標を受け取るため、文字列全体をボタン中央へ寄せる
         const float firstGlyphX = m_bounds.Center().x -
             static_cast<float>(m_text.size() - 1) * (textSize * 1.5f + characterSpacing) * 0.5f;
         renderer.DrawText(m_text, { firstGlyphX, m_bounds.Center().y }, textSize, textColor, characterSpacing);
+#endif
     }
 }

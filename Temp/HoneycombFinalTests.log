@@ -1,0 +1,20 @@
+
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\Temp\HoneycombBuild\FloppyEngine.lib
+
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(551,5): warning MSB8028: 中間ディレクトリ (D:\Pandd\FloppyDiskShootingGame/Temp/HoneycombGameObj/) に別のプロジェクト (FloppyDiskShootingGame.vcxproj) と共有されているファイルが含まれています。これにより、クリーンしてリビルド動作が適切に行われない可能性があります。 [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+  Build version: Floppy v121
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  SideScrollingShooterRendering.cpp
+  TitleScene.cpp
+  コード生成しています。
+  コード生成が終了しました。
+  FloppyDiskShootingGame.vcxproj -> D:\Pandd\FloppyDiskShootingGame\Temp\HoneycombBuild\SpaceYakuza.exe
+  Floppy distribution exceeds 1.44MB: 1475584 / 1474560 bytes
+  発生場所 D:\Pandd\FloppyDiskShootingGame\Scripts\CheckDistributionSize.ps1:15 文字:27
+  + ...  1474560) { throw "Floppy distribution exceeds 1.44MB: $bytes / 14745 ...
+  +                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      + CategoryInfo          : OperationStopped: (Floppy distribu.../ 1474560 bytes:String) [], RuntimeException
+      + FullyQualifiedErrorId : Floppy distribution exceeds 1.44MB: 1475584 / 1474560 bytes
+   
+D:\Pandd\FloppyDiskShootingGame\Distribution.props(87,5): error MSB3073: コマンド "powershell.exe -NoProfile -ExecutionPolicy Bypass -File "D:\Pandd\FloppyDiskShootingGame\Scripts\CheckDistributionSize.ps1" -Path "D:\Pandd\FloppyDiskShootingGame/dist/Floppy/x64/HoneycombPreview/."" はコード 1 で終了しました。 [D:\Pandd\FloppyDiskShootingGame\FloppyDiskShootingGame.vcxproj]

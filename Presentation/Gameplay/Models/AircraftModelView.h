@@ -7,6 +7,8 @@
 /** @brief プレイヤー機と通常敵機で共有するプロシージャルモデル */
 class AircraftModelView final {
 public:
+    /** @brief モデル中心から機首前端までの距離 */
+    static constexpr float NoseTipZ = 0.82f + 0.78f * 0.5f;
     /**
      * @brief プレイヤー機を描画する
      * @param position モデル中心のワールド座標

@@ -20,12 +20,16 @@ struct PlayerPreviewContent {
     const char* name;
     const char* effect;
     const char* behavior;
+    const char* bomb[2];
 };
 
 constexpr PlayerPreviewContent PreviewContents[] = {
-    {"HOMING", "LOCKS ON TO THE NEAREST ENEMY", "CURVES TOWARD A MOVING TARGET"},
-    {"PIERCING", "PASSES THROUGH MULTIPLE ENEMIES", "FLIES STRAIGHT THROUGH THE FORMATION"},
-    {"SPREAD", "HIGH DAMAGE AT CLOSE RANGE", "DAMAGE FALLS OFF WITH DISTANCE"}
+    {"HOMING", "LOCKS ON TO THE NEAREST ENEMY", "CURVES TOWARD A MOVING TARGET",
+        {"BOMB: 10 HEAVY HOMING MISSILES", "LAUNCH, FALL, SEEK / CLEAR SHOTS"}},
+    {"PIERCING", "PASSES THROUGH MULTIPLE ENEMIES", "FLIES STRAIGHT THROUGH THE FORMATION",
+        {"BOMB: NOSE-MOUNTED MEGA LASER", "WIDE FORWARD BEAM / CLEARS SHOTS"}},
+    {"SPREAD", "HIGH DAMAGE AT CLOSE RANGE", "DAMAGE FALLS OFF WITH DISTANCE",
+        {"BOMB: ONE-HIT SHIELD", "STAYS ACTIVE UNTIL HIT"}}
 };
 
 /**
@@ -390,12 +394,29 @@ void ModeSelectionScene::Render(Renderer& renderer) {
         // 右パネル上部へ効果、下部へ実際の挙動デモを表示する
         const auto& content = PreviewContents[static_cast<size_t>(m_previewPlayerType)];
         DrawPanel(renderer, {0.47f, -0.08f}, {0.49f, 0.63f});
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+        // 翻訳で説明が長くなっても右側のパネル幅に収める
+        renderer.DrawText(content.name, TextAlign::Center, 0.026f, ShotColor, {0.47f, 0.43f}, CharacterSpacing);
+        renderer.DrawText("EFFECT", TextAlign::Center, 0.012f, BorderColor, {0.47f, 0.32f}, CharacterSpacing);
+        renderer.DrawText(content.effect, TextAlign::Center, 0.012f, ColorF::White(), {0.47f, 0.22f}, CharacterSpacing);
+        renderer.Draw(Rect {{0.47f, 0.10f}, {0.45f, 0.003f}}, BorderColor);
+        renderer.DrawText("BEHAVIOR", TextAlign::Center, 0.012f, BorderColor, {0.47f, 0.01f}, CharacterSpacing);
+        renderer.DrawText(content.behavior, TextAlign::Center, 0.010f, ColorF::White(), {0.47f, -0.45f}, CharacterSpacing);
+        for (int line = 0; line < 2; ++line)
+            renderer.DrawText(content.bomb[line], TextAlign::Center,
+                0.010f, line == 0 ? ShotColor : ColorF::White(), {0.47f, -0.56f - line * 0.09f}, CharacterSpacing);
+#else
         renderer.DrawText(content.name, {0.05f, 0.43f}, 0.026f, ShotColor, CharacterSpacing);
         renderer.DrawText("EFFECT", {0.05f, 0.32f}, 0.012f, BorderColor, CharacterSpacing);
         renderer.DrawText(content.effect, {0.05f, 0.22f}, 0.012f, ColorF::White(), CharacterSpacing);
         renderer.Draw(Rect {{0.47f, 0.10f}, {0.45f, 0.003f}}, BorderColor);
         renderer.DrawText("BEHAVIOR", {0.05f, 0.01f}, 0.012f, BorderColor, CharacterSpacing);
-        renderer.DrawText(content.behavior, {0.05f, -0.48f}, 0.010f, ColorF::White(), CharacterSpacing);
+        renderer.DrawText(content.behavior, {0.05f, -0.45f}, 0.010f, ColorF::White(), CharacterSpacing);
+        // 自機紹介の末尾に機体固有のボムと防御性能を示す
+        for (int line = 0; line < 2; ++line)
+            renderer.DrawText(content.bomb[line], {0.05f, -0.56f - line * 0.09f},
+                0.010f, line == 0 ? ShotColor : ColorF::White(), CharacterSpacing);
+#endif
         DrawWeaponDemo(renderer, m_previewPlayerType, Time::unscaledTime);
     }
 
@@ -409,7 +430,7 @@ void ModeSelectionScene::RenderCooperativeSelection(Renderer& renderer) const {
     // コントローラー番号と担当色を並べ、各自の決定状態を表示する
     for (int player = 0; player < 2; ++player) {
         const float x = player == 0 ? -0.50f : 0.50f;
-        DrawPanel(renderer, {x, -0.04f}, {0.45f, 0.63f});
+        DrawPanel(renderer, {x, -0.07f}, {0.45f, 0.66f});
         renderer.DrawText(player == 0 ? "1P BLUE" : "2P GREEN", TextAlign::Center,
             0.025f, playerColors[player], {x, 0.47f}, CharacterSpacing);
         if (assigning) {
@@ -430,8 +451,12 @@ void ModeSelectionScene::RenderCooperativeSelection(Renderer& renderer) const {
         }
         renderer.DrawText(PreviewContents[selected].effect, TextAlign::Center,
             0.010f, ColorF::White(), {x, -0.34f}, 0.001f);
+        // 協力プレイでも各自が選んだ機体のボムを確認できる
+        for (int line = 0; line < 2; ++line)
+            renderer.DrawText(PreviewContents[selected].bomb[line], TextAlign::Center,
+                0.010f, line == 0 ? ShotColor : ColorF::White(), {x, -0.44f - line * 0.09f}, 0.001f);
         renderer.DrawText(m_stateController->IsPlayerReady(player) ? "READY" : "PRESS FIRE TO CONFIRM",
-            TextAlign::Center, 0.014f, playerColors[player], {x, -0.51f}, CharacterSpacing);
+            TextAlign::Center, 0.014f, playerColors[player], {x, -0.65f}, CharacterSpacing);
     }
     renderer.DrawText(assigning ? "CONFIRM ON EACH CONTROLLER" : "UP / DOWN: SELECT    FIRE: READY    PAUSE: CANCEL",
         TextAlign::Center, 0.012f, ColorF::White(), {0.0f, -0.77f}, CharacterSpacing);

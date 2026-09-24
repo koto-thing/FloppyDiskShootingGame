@@ -1,4 +1,5 @@
 #include "Stage5Module.h"
+#include "../../../../Application/UseCases/Localization.h"
 
 #include <algorithm>
 #include <cmath>
@@ -2418,8 +2419,8 @@ void SideScrollingShooter::Stage5Module::DrawStage5Hud(const SideScrollingShoote
         shooter.m_stage5.phase <= Stage5Phase::WallClimbUpper) return;
     if (shooter.m_stage5.phase == Stage5Phase::RooftopArrival ||
         shooter.m_stage5.phase == Stage5Phase::CarrierTransformation) {
-        char status[48];
-        std::snprintf(status, sizeof(status), "GIANT MECHA TAYAMA  %03d%%",
+        char status[Localization::BufferSize(48)];
+        std::snprintf(status, sizeof(status), Localization::Text("GIANT MECHA TAYAMA  %03d%%"),
             static_cast<int>(shooter.m_stage5.tayamaTransformation * 100.0f));
         renderer.DrawText(status, TextAlign::Center, 0.018f,
             {0.30f, 0.88f, 1.0f, 1.0f}, {0.0f, 0.82f});
@@ -2434,13 +2435,13 @@ void SideScrollingShooter::Stage5Module::DrawStage5Hud(const SideScrollingShoote
         BarWidth * hpRate, 0.018f, Accent);
     renderer.DrawText("TAYAMA", TextAlign::Center, 0.022f,
         {0.20f, 0.88f, 1.0f, 1.0f}, {0.0f, 0.86f});
-    char components[96];
+    char components[Localization::BufferSize(96)];
     if (shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle) {
         std::snprintf(components, sizeof(components),
-            "ALL BODY SECTIONS VULNERABLE");
+            Localization::Text("ALL BODY SECTIONS VULNERABLE"));
     } else {
         std::snprintf(components, sizeof(components),
-            "L-LIGHT[%c] R-LIGHT[%c] RADAR[%c] L-LEG[%c] R-LEG[%c] CORE[%c]",
+            Localization::Text("L-LIGHT[%c] R-LIGHT[%c] RADAR[%c] L-LEG[%c] R-LEG[%c] CORE[%c]"),
             shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::LeftSearchlight)].destroyed ? 'X' : ' ',
             shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::RightSearchlight)].destroyed ? 'X' : ' ',
             shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::FireControlRadar)].destroyed ? 'X' : ' ',

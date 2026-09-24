@@ -252,23 +252,272 @@ struct CoopGameplayTests {
         assert(game.Score() == 300 && game.m_chapterResult.score == 300);
     }
 
-    /** @brief 同時ボムの個別消費と共通敵弾の消去を検証する @param game 検証対象 @return なし */
+    /** @brief 機首レーザー、十発の追尾ミサイル、被弾まで残るシールドを検証する @param game 検証対象 @return なし */
     static void CheckBombs(Game& game) {
+        for (bool rail : {false, true}) {
+            Prepare(game);
+            game.m_viewMode = game.m_nextViewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+            auto& player = game.Player();
+            player.m_playerX = player.m_playerY = 0.0f;
+            player.m_playerType = Piercing;
+            player.m_bombRequested = true;
+            game.TickBomb();
+            player.m_bombRequested = false;
+            const auto laser = game.MakeBombShot();
+            const Vector3 start {Game::ToWorldX(laser.x - laser.vx), Game::ToWorldY(laser.y - laser.vy),
+                rail ? laser.z - laser.vz : game.PlayerWorldPosition().z};
+            assert(std::abs((start - game.PlayerWorldPosition()).Length() - 1.21f) < 0.0001f);
+            Game::Shot hostile;
+            hostile.enemy = true;
+            hostile.x = rail ? 0.0f : 1.0f;
+            hostile.z = game.PlayerRailDepth() + 8.0f;
+            assert(game.BombClearsShot(hostile));
+            hostile.y = 1.0f;
+            assert(!game.BombClearsShot(hostile));
+            hostile.vy = 2.0f;
+            assert(game.BombClearsShot(hostile));
+            hostile.enemy = false;
+            assert(!game.BombClearsShot(hostile));
+            auto renderer = std::make_unique<Renderer>();
+            Camera3D camera;
+            camera.SetViewport({0, 0, 1280, 720});
+            game.DrawBomb(*renderer, camera, player.m_bomb);
+            assert(renderer->CommandCount() > 0 && !renderer->HasOverflowed());
+            while (player.m_bomb.active) game.TickBomb();
+            assert(player.m_bomb.age == Game::BombLaserFrames + 1);
+
+            // 通常弾プールが満杯でも、六フレーム間隔で一発ずつ合計十発を打ち上げる
+            Prepare(game);
+            game.m_viewMode = game.m_nextViewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+            player.m_playerX = player.m_playerY = 0.0f;
+            player.m_playerType = Homing;
+            player.m_bombRequested = true;
+            for (auto& shot : game.m_shots) shot.active = true;
+            for (int frame = 1; frame <= 55; ++frame) {
+                game.TickBomb();
+                player.m_bombRequested = false;
+                int count = 0;
+                for (const auto& missile : player.m_bomb.missiles) if (missile.active) ++count;
+                assert(count == (frame - 1) / Game::BombMissileInterval + 1);
+                if (frame == 1) {
+                    const auto& missile = player.m_bomb.missiles[0];
+                    assert(std::abs(Game::ToWorldX(missile.vx)) < 0.026f && missile.vy > 0.0f);
+                }
+            }
+            assert(player.m_bombCount == Game::InitialBombCount - 1);
+            // 十発目が出た時点でも初弾は落下中で、全弾の噴射炎はまだ出ない
+            assert(player.m_bomb.missiles.front().vy < 0.0f && player.m_bomb.missiles.back().vy > 0.0f);
+            for (const auto& missile : player.m_bomb.missiles) assert(missile.homingTarget == -1);
+            game.ResetShots();
+            renderer->BeginFrame();
+            game.DrawBomb(*renderer, camera, player.m_bomb);
+            assert(renderer->CommandCount() == 40 && !renderer->HasOverflowed());
+            Matrix4x4 inverse;
+            assert((camera.ProjectionMatrix() * camera.ViewMatrix()).TryInverse(inverse));
+            const Matrix4x4 body = inverse * renderer->Command(0).primitive.wvpMatrix;
+            assert(std::abs(body.TransformVector(Vector3::Right).Length() - 0.624f) < 0.001f);
+
+            // 各弾の判定を単独で有効にし、十発すべてが敵弾を消すことを確認する
+            for (auto& missile : player.m_bomb.missiles) missile.active = false;
+            for (auto& missile : player.m_bomb.missiles) {
+                missile.active = true;
+                hostile = {};
+                hostile.enemy = true;
+                hostile.x = missile.x;
+                hostile.y = missile.y;
+                hostile.z = missile.z;
+                assert(game.BombClearsShot(hostile));
+                hostile.y += 10.0f;
+                assert(!game.BombClearsShot(hostile));
+                missile.active = false;
+            }
+            for (auto& missile : player.m_bomb.missiles) missile.active = true;
+
+            // 点火後は移動中の敵を再捕捉し、各弾が別々の位置から旋回する
+            auto& enemy = game.m_enemies[0];
+            enemy = {};
+            enemy.active = true;
+            enemy.hp = enemy.maxHp = 100;
+            // 到達前の区間だけを測り、命中処理を省いた状態で標的を通り過ぎない距離に置く
+            enemy.x = rail ? 1.0f : 6.0f;
+            enemy.y = -0.5f;
+            enemy.z = 100.0f;
+            for (int frame = 0; frame < 80; ++frame) {
+                enemy.y -= 0.002f;
+                game.TickBomb();
+                if (frame == 20) {
+                    // 同じ標的へ向かっても、弾ごとに異なる曲線を描く
+                    const auto& a = player.m_bomb.missiles[0];
+                    const auto& b = player.m_bomb.missiles[1];
+                    assert(std::abs(a.vx - b.vx) + std::abs(a.vy - b.vy) + std::abs(a.vz - b.vz) > 0.001f);
+                    renderer->BeginFrame();
+                    game.DrawBomb(*renderer, camera, player.m_bomb);
+                    int boosters = 0;
+                    for (size_t i = 0; i < renderer->CommandCount(); ++i)
+                        if (renderer->Command(i).type == RenderCommand::Type::Railgun) ++boosters;
+                    assert(boosters == 10);
+                }
+            }
+            for (const auto& missile : player.m_bomb.missiles) {
+                assert(missile.homingTarget >= 0);
+                assert(missile.owner == 0 && missile.bomb && missile.damage == 80);
+                // 曲線の広がりが収まった後は、移動する標的へ収束する
+                const Vector3 delta {Game::ToWorldX(enemy.x - missile.x), Game::ToWorldY(enemy.y - missile.y),
+                    rail ? enemy.z - missile.z : 0.0f};
+                const Vector3 velocity {Game::ToWorldX(missile.vx), Game::ToWorldY(missile.vy), rail ? missile.vz : 0.0f};
+                assert(Vector3::Dot(delta.Normalized(), velocity.Normalized()) > 0.98f);
+            }
+            // 一発の命中は他の九発を終了させず、通常敵へ高威力を適用する
+            auto& first = player.m_bomb.missiles[0];
+            enemy.x = first.x; enemy.y = first.y; enemy.z = first.z;
+            game.HitPlayerShotTargets(first);
+            assert(!first.active && enemy.hp == 20 && player.m_bomb.active);
+            for (int i = 1; i < 10; ++i) assert(player.m_bomb.missiles[i].active);
+            while (player.m_bomb.active) game.TickBomb();
+            assert(player.m_bomb.age == Game::BombMissileFrames + 1);
+
+            // 異なる乱数列でも、実際の移動と命中判定で十発すべてが移動標的へ到達する
+            for (unsigned seed : {1U, 12345U}) {
+                Prepare(game);
+                game.m_viewMode = game.m_nextViewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+                player.m_playerX = player.m_playerY = 0.0f;
+                player.m_playerType = Homing;
+                player.m_bombRequested = true;
+                enemy = {};
+                enemy.active = true;
+                enemy.hp = enemy.maxHp = 1000;
+                enemy.x = 1.0f;
+                enemy.z = 45.0f;
+                GameplayRandom::State = seed;
+                for (int frame = 0; frame <= Game::BombMissileFrames; ++frame) {
+                    enemy.y = std::sin(frame * 0.02f) * 0.25f;
+                    game.TickBomb();
+                    player.m_bombRequested = false;
+                    game.TickShots();
+                }
+                assert(enemy.hp == 200 && !player.m_bomb.active);
+            }
+
+            // シールドは長時間保持され、味方の被弾やチャプター終了では失われない
+            Prepare(game);
+            game.m_viewMode = game.m_nextViewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+            player.m_playerType = Spread;
+            player.m_invincible = 0;
+            player.m_bombRequested = true;
+            game.TickBomb();
+            player.m_bombRequested = false;
+            // 六角形の枠が閉じ、全頂点が同じ球面上にあることを両視点で検証する
+            for (int age : {0, 179, 359}) {
+                player.m_bomb.age = age;
+                renderer->BeginFrame();
+                game.DrawBomb(*renderer, camera, player.m_bomb);
+                assert(renderer->CommandCount() == 240 && !renderer->HasOverflowed());
+                Vector3 shieldCenter = game.PlayerWorldPosition();
+                shieldCenter.z = rail ? game.PlayerRailDepth() : Game::SidePlaneZ;
+                for (size_t i = 0; i < renderer->CommandCount(); ++i) {
+                    const auto& primitive = renderer->Command(i).primitive;
+                    assert(primitive.shape == PrimitiveShape::Cylinder);
+                    const Matrix4x4 world = inverse * primitive.wvpMatrix;
+                    const Vector3 start = world.TransformPoint({0.0f, -0.5f, 0.0f});
+                    const Vector3 end = world.TransformPoint({0.0f, 0.5f, 0.0f});
+                    assert(std::abs((start - shieldCenter).Length() - Game::BombShieldRadius) < 0.001f);
+                    assert(std::abs((end - shieldCenter).Length() - Game::BombShieldRadius) < 0.001f);
+                    const size_t next = i / 12 * 12 + (i + 1) % 12;
+                    const Matrix4x4 nextWorld = inverse * renderer->Command(next).primitive.wvpMatrix;
+                    assert((end - nextWorld.TransformPoint({0.0f, -0.5f, 0.0f})).Length() < 0.001f);
+                }
+            }
+            for (int frame = 0; frame < 1800; ++frame) game.TickBomb();
+            assert(player.m_bomb.active);
+            game.FinishChapter();
+            assert(player.m_bomb.active);
+            game.StartNextStage();
+            assert(player.m_bomb.active);
+            game.m_activePlayer = 1;
+            game.Player().m_invincible = 0;
+            game.DamagePlayer();
+            assert(game.Player().m_playerDestructionTimer > 0 && player.m_bomb.active);
+            game.m_activePlayer = 0;
+            player.m_invincible = 0;
+            game.TickBomb();
+            hostile = {};
+            hostile.active = hostile.enemy = true;
+            hostile.x = player.m_bomb.x;
+            hostile.y = player.m_bomb.y;
+            hostile.z = player.m_bomb.z;
+            assert(game.BombClearsShot(hostile));
+            assert(!player.m_bomb.active && player.m_playerDestructionTimer == 0 && player.m_invincible > 0);
+            game.DamagePlayer();
+            assert(player.m_playerDestructionTimer == 0);
+            player.m_invincible = 0;
+            game.DamagePlayer();
+            assert(player.m_playerDestructionTimer > 0);
+
+            // 接触や障害物の被弾も同じ一回の防御を消費する
+            Prepare(game);
+            player.m_playerType = Spread;
+            player.m_invincible = 0;
+            player.m_bombRequested = true;
+            game.TickBomb();
+            game.DamagePlayer();
+            assert(!player.m_bomb.active && player.m_playerDestructionTimer == 0);
+        }
+
+        // 横・縦・周回戦で、判定と円柱描画の発射端が実機モデルの先端と一致する
+        for (int route : {0, 1, 2}) {
+            for (bool rail : {false, true}) {
+                Prepare(game);
+                game.m_viewMode = game.m_nextViewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+                if (route != 0) {
+                    game.m_stageNumber = 5;
+                    game.m_stage5.phase = route == 1 ? ShooterStages::Stage5::Phase::WallClimbLower :
+                        ShooterStages::Stage5::Phase::TayamaFireControl;
+                    game.m_stage5.tayamaOrbitAngle = 0.7f;
+                }
+                game.Player().m_playerType = Piercing;
+                game.Player().m_bombRequested = true;
+                game.TickBomb();
+                const auto laser = game.MakeBombShot();
+                const Vector3 muzzle {Game::ToWorldX(laser.x - laser.vx), Game::ToWorldY(laser.y - laser.vy), laser.z - laser.vz};
+                Vector3 expected = game.PlayerWorldPosition() + game.Player().m_bomb.direction * 1.21f;
+                if (!game.IsRailGameplayActive()) expected.z = Game::SidePlaneZ;
+                assert(Vector3::Distance(muzzle, expected) < 0.0001f);
+                auto renderer = std::make_unique<Renderer>();
+                Camera3D camera;
+                camera.SetViewport({0, 0, 1280, 720});
+                game.DrawBomb(*renderer, camera, game.Player().m_bomb);
+                const auto& core = renderer->Command(0).primitive;
+                assert(core.shape == PrimitiveShape::Cylinder);
+                const Vector3 drawnMuzzle = core.wvpMatrix.TransformPoint({0.0f, -0.5f, 0.0f});
+                const Vector3 expectedMuzzle = (camera.ProjectionMatrix() * camera.ViewMatrix()).TransformPoint(expected);
+                assert(Vector3::Distance(drawnMuzzle, expectedMuzzle) < 0.00001f);
+            }
+        }
+
+        // 同時発動する二人の残弾と十発の所有者を分離する
         Prepare(game);
-        game.m_players[0].m_bombCount = 1;
-        game.m_players[1].m_bombCount = 3;
-        game.ForEachPlayer([&] { game.Player().m_bombRequested = true; game.TickBomb(); });
-        assert(game.m_players[0].m_bombCount == 0 && game.m_players[1].m_bombCount == 2);
-        assert(game.m_players[0].m_bomb.active && game.m_players[1].m_bomb.active);
-        game.ForEachPlayer([&] { game.Player().m_bombRequested = false; });
-        game.m_shots[0].active = game.m_shots[0].enemy = true;
-        game.m_shots[1].active = game.m_shots[1].enemy = true;
-        game.m_shots[2].active = true;
-        for (int frame = 1; frame < Game::BombTravelFrames + Game::BombChargeFrames; ++frame)
-            game.ForEachPlayer([&] { game.TickBomb(); });
-        assert(!game.m_shots[0].active && !game.m_shots[1].active && game.m_shots[2].active);
-        assert(!game.m_players[0].m_bomb.active && !game.m_players[1].m_bomb.active);
-        assert(game.m_players[0].m_bombCount == 0 && game.m_players[1].m_bombCount == 2);
+        game.ForEachPlayer([&] { game.Player().m_playerType = Homing;
+            game.Player().m_bombRequested = true; game.TickBomb(); });
+        for (int i = 0; i < 2; ++i) {
+            assert(game.m_players[i].m_bombCount == Game::InitialBombCount - 1);
+            assert(game.m_players[i].m_bomb.missiles[0].owner == i);
+        }
+        // 全機体でボム課題を完了できる
+        for (PlayerType type : {Homing, Piercing, Spread}) {
+            Prepare(game);
+            game.m_tutorialMode = true;
+            game.m_tutorialStep = 3;
+            game.Player().m_playerType = type;
+            game.BeginTutorialStep();
+            game.m_tutorialStepFrame = 239;
+            game.TickTutorial();
+            assert(game.m_tutorialStep == 3);
+            game.Player().m_bombRequested = true;
+            game.TickTutorial();
+            assert(game.m_tutorialStep == 4);
+            game.m_tutorialMode = false;
+        }
+        Prepare(game);
     }
 
     /** @brief 被弾、その場復帰、無敵と両者不在時の進行を検証する @param game 検証対象 @return なし */

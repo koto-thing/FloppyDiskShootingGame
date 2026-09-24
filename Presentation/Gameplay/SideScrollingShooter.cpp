@@ -335,7 +335,7 @@ void SideScrollingShooter::Reset(bool resetRetryCounts) {
         Player().m_invincible = 90;
         if (m_playerCount == 2) Player().m_playerY = m_activePlayer == 0 ? 0.25f : -0.25f;
     });
-    m_shots = {};
+    ResetShots();
     m_enemies = {};
     m_items = {};
     m_explosions = {};
@@ -404,7 +404,7 @@ void SideScrollingShooter::StartDebugCheckpoint(
     int chapterNumber,
     bool bossBattle,
     bool playBossWarningSound) {
-    m_shots = {};
+    ResetShots();
     m_enemies = {};
     m_items = {};
     m_explosions = {};
@@ -736,7 +736,7 @@ void SideScrollingShooter::Tick() {
     }
 
     const bool cinematic = StageDispatch::IsCinematic(*this);
-    if (!cinematic) ForEachPlayer([&] { TickPlayer(); });
+    if (!cinematic) ForEachPlayer([&] { TickPlayer(); TickBomb(); });
     StageDispatch::TickWorld(*this);
 
     // 3Dから2Dへ確定するフレームだけは、座標変換直後の特殊障害物との誤接触を除外する
@@ -760,7 +760,6 @@ void SideScrollingShooter::Tick() {
         }
     }
 
-    if (!cinematic) ForEachPlayer([&] { TickBomb(); });
     TickEnemies();
     TickShots();
     // グレイズ中だけ通常回復へ1フレーム分を追加し、弾数では加算しない
@@ -859,6 +858,7 @@ void SideScrollingShooter::TickChapterExitEnemies() {
  * @brief 現在のチャプター戦績を確定して表示を開始する
  */
 void SideScrollingShooter::FinishChapter() {
+    ForEachPlayer([&] { Player().m_bomb.EndAttack(); });
     m_chapterResult.retryCount = m_chapterRetryCounts[m_chapterNumber - 1];
     m_chapterResult.totalScore = CalculateChapterTotalScore(m_chapterResult);
     m_chapterResult.bombAwarded = false;
@@ -1166,7 +1166,7 @@ void SideScrollingShooter::StartBossBattle(bool playWarningSound) {
     for (auto& enemy : m_enemies) {
         enemy.active = false;
     }
-    m_shots = {};
+    ResetShots();
 
     Enemy& boss = m_enemies[0];
     m_stage->ConfigureBoss(boss, IsRailGameplayActive());
@@ -1268,15 +1268,15 @@ void SideScrollingShooter::StartNextStage() {
     // スコアと残機を維持したまま、次のステージ用に戦闘オブジェクトを初期化する
     ForEachPlayer([&] {
         Player().m_bombCount = (std::max)(Player().m_bombCount, InitialBombCount);
-        Player().m_bomb = {};
+        Player().m_bomb.EndAttack();
         Player().m_invincible = (std::max)(Player().m_invincible, 90);
         Player().m_playerDestructionTimer = 0;
     });
-    m_shots = {};
+    ResetShots();
     m_enemies = {};
     m_explosions = {};
     m_debris = {};
-    Player().m_bomb = {};
+    Player().m_bomb.EndAttack();
     StageDispatch::ResetGimmicks(*this);
     m_stage = &StageForNumber(m_stageNumber, m_difficulty);
     m_chapterNumber = 1;
@@ -1308,6 +1308,12 @@ void SideScrollingShooter::StartNextStage() {
     PlayCurrentStageBgm(true);
 }
 
+/** @brief 弾プールの一時コピーを作らず全弾を初期化する @return なし */
+void SideScrollingShooter::ResetShots() {
+    // 各再開経路で同じ初期化を使い、大型プールをスタックへ積まない
+    m_shots.fill({});
+}
+
 /**
  * @brief 被弾効果を再生して現在のチャプターをやり直す
  * @return なし
@@ -1315,6 +1321,13 @@ void SideScrollingShooter::StartNextStage() {
 void SideScrollingShooter::DamagePlayer() {
     if (StageDispatch::IsPlayerDamageIgnored(*this)) return;
     if (Player().m_playerDestructionTimer > 0 || Player().m_invincible > 0) return;
+    // 敵弾、接触、障害物のいずれも一回だけ防ぎ、同時被弾には短い猶予を与える
+    if (Player().m_bomb.active && Player().m_bomb.type == Spread) {
+        Player().m_bomb.active = false;
+        Player().m_invincible = 60;
+        PlayHitSound();
+        return;
+    }
     if (m_playerCount == 2) Player().m_power = PowerAfterRestart(Player().m_power, m_difficulty);
 
     // 被弾成立と同時に撃破音声を開始する
@@ -1326,13 +1339,15 @@ void SideScrollingShooter::DamagePlayer() {
     SpawnExplosion(FromWorldX(player.x), FromWorldY(player.y), player.z, true);
     PlayHitSound();
     Player().m_playerDestructionTimer = PlayerDestructionWaitFrames;
+    Player().m_bomb = {};
 }
 
 /** @brief 現在のチュートリアル課題を準備する */
 void SideScrollingShooter::BeginTutorialStep() {
-    m_shots = {};
+    ResetShots();
     m_enemies = {};
     Player().m_bomb = {};
+    Player().m_bombCount = InitialBombCount;
     for (auto& meteor : m_stage1.meteors) meteor.destroyed = true;
     m_tutorialStepFrame = 0;
     m_tutorialSlowUsed = false;
@@ -1469,8 +1484,7 @@ void SideScrollingShooter::TickTutorial() {
         for (const auto& enemy : m_enemies) if (enemy.active) completed = false;
     }
     if (m_tutorialStep == 3 && m_tutorialStepFrame > 70) {
-        completed = true;
-        for (const auto& shot : m_shots) if (shot.active && shot.enemy) completed = false;
+        completed = Player().m_bombCount < InitialBombCount && m_tutorialStepFrame >= 240;
     }
     if (m_tutorialStep == 4 && m_tutorialStepFrame > 45) {
         completed = m_viewMode == ViewMode::Rail3D && m_viewTransitionTimer == 0;
@@ -1507,7 +1521,7 @@ void SideScrollingShooter::RestartCurrentChapter() {
     Player().m_power = PowerAfterRestart(Player().m_power, m_difficulty);
     if (StageDispatch::TryRestartCheckpoint(*this)) return;
     ++m_chapterRetryCounts[m_chapterNumber - 1];
-    m_shots = {};
+    ResetShots();
     m_enemies = {};
     m_items = {};
     m_explosions = {};

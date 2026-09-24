@@ -1,8 +1,13 @@
 #include "D3D12RenderingService.h"
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+#include "../../Engine/Graphics/Utf8Text.h"
+#endif
 
 namespace {
 /** @brief 画像を使わず自機弾と敵弾を生成する埋め込みHLSL */
-constexpr char PlayerShotShaderCode[] = R"hlsl(
+// ponytail: プリプロセッサ命令のないHLSLは文字列化で空白を圧縮し、命令が必要ならRCDATAへ移す
+#define EMBEDDED_HLSL(...) #__VA_ARGS__
+constexpr char PlayerShotShaderCode[] = EMBEDDED_HLSL(
 struct VS_OUTPUT
 {
     float4 position : SV_POSITION;
@@ -40,7 +45,7 @@ float4 PSPlayerShot(VS_OUTPUT input) : SV_TARGET
 
     if (u_shotType < 0.5f)
     {
-        // HOMING: 明るい弾頭と後方へ細く消える青緑色の尾
+        // HOMING
         float headDistance = length((uv - float2(0.38f, 0.0f)) * float2(1.0f, 1.35f));
         float head = 1.0f - smoothstep(0.18f, 0.68f, headDistance);
         float tailWidth = 0.08f + saturate((uv.x + 1.0f) * 0.24f);
@@ -104,13 +109,14 @@ float4 PSPlayerShot(VS_OUTPUT input) : SV_TARGET
         else if (u_shotType > 4.5f) color = 1.0f - saturate(color);
     }
 
+    alpha *= saturate(u_color.a);
     if (alpha < 0.01f) discard;
     return float4(color, alpha);
 }
-)hlsl";
+);
 
 /** @brief 敵命中時に火花と衝撃波を描く埋め込みHLSL */
-constexpr char ExplosionShaderCode[] = R"hlsl(
+constexpr char ExplosionShaderCode[] = EMBEDDED_HLSL(
 struct VS_OUTPUT
 {
     float4 position : SV_POSITION;
@@ -140,20 +146,6 @@ VS_OUTPUT VSExplosion(uint vertexId : SV_VertexID)
 
 float4 PSExplosion(VS_OUTPUT input) : SV_TARGET
 {
-    if (u_shapeType > 4.5f)
-    {
-        // ボム専用の青白い中心光と膨張する光輪を生成する
-        float progress = saturate(u_progress);
-        float distanceFromCenter = length(input.uv);
-        float core = 1.0f - smoothstep(0.02f, 0.30f + progress * 0.22f, distanceFromCenter);
-        float ringRadius = 0.16f + progress * 0.80f;
-        float ring = 1.0f - smoothstep(0.025f, 0.10f, abs(distanceFromCenter - ringRadius));
-        float alpha = saturate((core + ring) * (1.0f - progress * 0.82f));
-        if (alpha < 0.01f) discard;
-        float3 color = lerp(float3(0.02f, 0.20f, 1.0f), float3(0.72f, 0.94f, 1.0f), core);
-        return float4(color, alpha);
-    }
-
     if (u_shapeType > 3.5f)
     {
         // 迫撃砲着弾時に地表を走る高温の衝撃波を生成する
@@ -242,10 +234,10 @@ float4 PSExplosion(VS_OUTPUT input) : SV_TARGET
     float3 color = lerp(float3(1.0f, 0.10f, 0.01f), float3(1.0f, 0.92f, 0.35f), core);
     return float4(color, alpha);
 }
-)hlsl";
+);
 
 /** @brief 瞬間発光して細く消えるレールガン軌跡の埋め込みHLSL */
-constexpr char RailgunShaderCode[] = R"hlsl(
+constexpr char RailgunShaderCode[] = EMBEDDED_HLSL(
 struct VS_OUTPUT
 {
     float4 position : SV_POSITION;
@@ -351,7 +343,8 @@ float4 PSRailgun(VS_OUTPUT input) : SV_TARGET
     float3 color = lerp(float3(1.0f, 0.10f, 0.01f), float3(1.0f, 0.98f, 0.72f), core);
     return float4(color, alpha);
 }
-)hlsl";
+);
+#undef EMBEDDED_HLSL
 
 /** @brief 2D描画でも共有する256バイト定数バッファの先頭部分 */
 struct RendererTransformBufferData {
@@ -1543,7 +1536,7 @@ void D3D12RenderingService::DrawPlayerShot(const PlayerShotVisual& shot) {
         DirectX::XMMatrixRotationZ(shot.direction) *
         DirectX::XMMatrixTranslation(shot.position.x, shot.position.y, shot.depth);
     DirectX::XMStoreFloat4x4(&cbData->u_wvpMatrix, DirectX::XMMatrixTranspose(matrix));
-    cbData->u_Color = {1.0f, 1.0f, 1.0f, 1.0f};
+    cbData->u_Color = {1.0f, 1.0f, 1.0f, shot.opacity};
     cbData->u_time = shot.time;
     cbData->u_shapeType = static_cast<float>(shot.type);
     cbData->u_rotAngle = shot.direction;
@@ -1583,7 +1576,7 @@ void D3D12RenderingService::DrawExplosion(const ExplosionVisual& explosion) {
     const int previousPipelineType = m_currentPipelineType;
     ID3D12PipelineState* pipelineState = explosion.effectType == 3 ?
         m_pipelineStateEngineFlame.Get() :
-        ((explosion.effectType == 0 || explosion.effectType == 4 || explosion.effectType == 5) ?
+        ((explosion.effectType == 0 || explosion.effectType == 4) ?
             m_pipelineStateExplosion.Get() : m_pipelineStateExplosionSmoke.Get());
     m_commandList->SetPipelineState(pipelineState);
     m_commandList->SetGraphicsRootSignature(m_rootSignature.Get());
@@ -1645,7 +1638,15 @@ void D3D12RenderingService::RenderText(const char* text, DirectX::XMFLOAT2 posit
         return;
     }
     
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    // 描画と同じデコードで不正文字も数え、改行だけを領域予約から除外する
+    size_t length = 0;
+    const std::string_view utf8(text);
+    for (size_t offset = 0; offset < utf8.size();)
+        if (Utf8Text::Next(utf8, offset) != '\n') ++length;
+#else
     const size_t length = std::strlen(text);
+#endif
     
     // 定数バッファの範囲外アクセスを防止する
     if (length > MAX_CONSTANT_BUFFER_ELEMENTS - m_constantBufferCursor) {

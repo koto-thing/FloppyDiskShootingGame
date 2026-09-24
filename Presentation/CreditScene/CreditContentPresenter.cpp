@@ -49,7 +49,16 @@ void CreditContentPresenter::Render(
     // 定義順にクレジット行を上から下へ並べて描画する
     for (const CreditSceneColumn& column : content.GetColumns()) {
         for (const CreditSceneLine& line : column.lines) {
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+            // 翻訳後の文字幅で配置し、スクロール位置は従来の行高を維持する
+            const auto alignment = line.alignment == CreditTextAlignment::Left ? TextAlign::CenterLeft :
+                line.alignment == CreditTextAlignment::Right ? TextAlign::CenterRight : TextAlign::Center;
+            const float inset = line.alignment == CreditTextAlignment::Left ? 0.1f :
+                line.alignment == CreditTextAlignment::Right ? -0.1f : 0.0f;
+            renderer.DrawText(line.text, alignment, line.textSize, ColorF::White(), {inset, y}, kCreditCharacterSpacing);
+#else
             renderer.DrawText(line.text, { GetTextStartX(line), y }, line.textSize, ColorF::White(), kCreditCharacterSpacing);
+#endif
 
             // 文字の高さに加えて固定の余白を取り、行同士の重なりを防ぐ
             y -= line.textSize * 4.0f + 0.025f;

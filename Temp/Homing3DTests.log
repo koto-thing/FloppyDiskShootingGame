@@ -1,0 +1,19 @@
+
+  D3D12RenderingService.cpp
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\Temp\Homing3DBuild\FloppyEngine.lib
+
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(551,5): warning MSB8028: 中間ディレクトリ (D:\Pandd\FloppyDiskShootingGame\Temp\Homing3DGameObj/) に別のプロジェクト (FloppyDiskShootingGame.vcxproj) と共有されているファイルが含まれています。これにより、クリーンしてリビルド動作が適切に行われない可能性があります。 [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+  Build version: Floppy v114
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  SideScrollingShooterCombat.cpp
+  SideScrollingShooterRendering.cpp
+  TitleScene.cpp
+  コード生成しています。
+  コード生成が終了しました。
+  FloppyDiskShootingGame.vcxproj -> D:\Pandd\FloppyDiskShootingGame\Temp\Homing3DBuild\SpaceYakuza.exe
+  Floppy distribution: 1474560 / 1474560 bytes
+HomingShotTests.cpp
+コード生成しています。
+コード生成が終了しました。
+HomingShotTests passed

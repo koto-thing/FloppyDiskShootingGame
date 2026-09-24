@@ -1,4 +1,5 @@
 #include "GalleryScene.h"
+#include "../../Application/UseCases/Localization.h"
 
 #include <algorithm>
 #include <array>
@@ -626,12 +627,12 @@ void GalleryScene::RenderUi(Renderer& renderer) const {
     const ExhibitDefinition& exhibit = Exhibits[static_cast<std::size_t>(m_exhibitIndex)];
     const bool unlocked = IsUnlocked();
     char counter[32] {};
-    char animationStatus[64] {};
+    char animationStatus[Localization::BufferSize(64)] {};
     std::snprintf(counter, sizeof(counter), "%02d / %02d", m_exhibitIndex + 1,
         static_cast<int>(Exhibits.size()));
     std::snprintf(animationStatus, sizeof(animationStatus), "%s / %s",
-        exhibit.animations[static_cast<std::size_t>(m_animationIndex)],
-        m_playing ? "PLAYING" : "PAUSED");
+        Localization::Text(exhibit.animations[static_cast<std::size_t>(m_animationIndex)]),
+        Localization::Text(m_playing ? "PLAYING" : "PAUSED"));
 
     // 上部へ展示名、一言説明、展示の進捗を表示する
     renderer.DrawText(unlocked ? exhibit.name : "????????", TextAlign::TopCenter, 0.032f,

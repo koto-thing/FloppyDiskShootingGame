@@ -1,0 +1,41 @@
+
+  Component.cpp
+  Debug.cpp
+  Transform.cpp
+  GameObject.cpp
+  GameWorld.cpp
+  Circle.cpp
+  Rect.cpp
+  Sphere.cpp
+  Box.cpp
+  Ray.cpp
+  Camera2D.cpp
+  Camera3D.cpp
+  Renderer.cpp
+  MeshRenderer.cpp
+  CollisionLayer.cpp
+  Input.cpp
+  WindowsInputBackend.cpp
+  Switch2ProInput.cpp
+  Time.cpp
+  Button.cpp
+  コンパイル中...
+  Slider.cpp
+  D3D12RenderingService.cpp
+  InputService.cpp
+  TextRenderingService.cpp
+  Win32WindowService.cpp
+  CollisionService.cpp
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppCommon.targets(790,5): error MSB6003: 指定されたタスク実行可能ファイル "CL.exe" を実行できませんでした。System.IO.IOException: 別のプロセスで使用されているため、プロセスはファイル 'D:\Pandd\FloppyDiskShootingGame\obj\Floppy\x64\FloppyRelease\FloppyEngine\FloppyEngine.tlog\CL.read.1.tlog' にアクセスできません。 [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppCommon.targets(790,5): error MSB6003:    場所 System.IO.__Error.WinIOError(Int32 errorCode, String maybeFullPath) [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppCommon.targets(790,5): error MSB6003:    場所 System.IO.FileStream.Init(String path, FileMode mode, FileAccess access, Int32 rights, Boolean useRights, FileShare share, Int32 bufferSize, FileOptions options, SECURITY_ATTRIBUTES secAttrs, String msgPath, Boolean bFromProxy, Boolean useLongPath, Boolean checkHost) [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppCommon.targets(790,5): error MSB6003:    場所 System.IO.FileStream..ctor(String path, FileMode mode, FileAccess access, FileShare share, Int32 bufferSize, FileOptions options, String msgPath, Boolean bFromProxy, Boolean useLongPath, Boolean checkHost) [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppCommon.targets(790,5): error MSB6003:    場所 System.IO.StreamWriter.CreateFile(String path, Boolean append, Boolean checkHost) [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppCommon.targets(790,5): error MSB6003:    場所 System.IO.StreamWriter..ctor(String path, Boolean append, Encoding encoding, Int32 bufferSize, Boolean checkHost) [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppCommon.targets(790,5): error MSB6003:    場所 System.IO.File.InternalWriteAllText(String path, String contents, Encoding encoding, Boolean checkHost) [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppCommon.targets(790,5): error MSB6003:    場所 System.IO.File.WriteAllText(String path, String contents, Encoding encoding) [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppCommon.targets(790,5): error MSB6003:    場所 Microsoft.Build.Utilities.CanonicalTrackedInputFiles.SaveTlog(DependencyFilter includeInTLog) [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppCommon.targets(790,5): error MSB6003:    場所 Microsoft.Build.CPPTasks.CL.PostExecuteTool(Int32 exitCode) [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppCommon.targets(790,5): error MSB6003:    場所 Microsoft.Build.CPPTasks.TrackedVCToolTask.ExecuteTool(String pathToTool, String responseFileCommands, String commandLineCommands) [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppCommon.targets(790,5): error MSB6003:    場所 Microsoft.Build.CPPTasks.CL.ExecuteTool(String pathToTool, String responseFileCommands, String commandLineCommands) [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppCommon.targets(790,5): error MSB6003:    場所 Microsoft.Build.Utilities.ToolTask.Execute() [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]

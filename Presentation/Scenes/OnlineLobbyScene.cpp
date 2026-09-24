@@ -1,4 +1,5 @@
 #include "OnlineLobbyScene.h"
+#include "../../Application/UseCases/Localization.h"
 #include "../../Infrastructure/ExternalServices/OnlineCoopSession.h"
 #include "../../Infrastructure/Repositories/SettingsRepository.h"
 #include "../../Engine/Time/Time.h"
@@ -75,8 +76,8 @@ void OnlineLobbyScene::ProcessInput() {
     m_buttons[7]->SetEnabled(session.IsHost() && session.CanStart());
     const char* difficulties[] = {"EASY", "NORMAL", "HARD"};
     const char* shots[] = {"HOMING", "PIERCING", "SPREAD"};
-    m_buttons[4]->SetText(std::string("DIFFICULTY: ") + difficulties[session.Difficulty()]);
-    m_buttons[5]->SetText(std::string("MY SHOT: ") + shots[session.Shot(session.IsHost() ? 0 : 1)]);
+    m_buttons[4]->SetText(std::string(Localization::Text("DIFFICULTY: ")) + Localization::Text(difficulties[session.Difficulty()]));
+    m_buttons[5]->SetText(std::string(Localization::Text("MY SHOT: ")) + Localization::Text(shots[session.Shot(session.IsHost() ? 0 : 1)]));
     m_buttons[6]->SetText(session.Ready(session.IsHost() ? 0 : 1) ? "CANCEL READY" : "READY");
 
     // キーボード入力で部屋コードを編集する
@@ -135,7 +136,7 @@ void OnlineLobbyScene::Render(Renderer& renderer) {
     SpaceBackground::Render(renderer, Time::unscaledTime);
     renderer.DrawText("ONLINE CO-OP", TextAlign::Center, 0.035f, ColorF::White(), {0.0f, 0.86f});
     renderer.DrawText(session.Status(), TextAlign::Center, 0.012f, ColorF::White(), {0.0f, 0.70f});
-    const std::string room = session.InLobby() ? "ROOM " + session.RoomCode() + (session.IsHost() ? "  YOU: 1P HOST" : "  YOU: 2P") : "NO ROOM CONNECTED";
+    const std::string room = session.InLobby() ? std::string(Localization::Text("ROOM ")) + session.RoomCode() + Localization::Text(session.IsHost() ? "  YOU: 1P HOST" : "  YOU: 2P") : "NO ROOM CONNECTED";
     renderer.DrawText(room, TextAlign::Center, 0.018f, ColorF::White(), {0.0f, 0.56f});
     renderer.DrawText(session.Ready(0) ? "1P: READY" : "1P: NOT READY", TextAlign::Center, 0.013f, ColorF::White(), {-0.5f, -0.37f});
     renderer.DrawText(session.Ready(1) ? "2P: READY" : "2P: NOT READY", TextAlign::Center, 0.013f, ColorF::White(), {0.5f, -0.37f});

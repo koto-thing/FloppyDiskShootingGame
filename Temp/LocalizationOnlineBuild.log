@@ -1,0 +1,49 @@
+
+  MeshRenderer.cpp
+  Debug.cpp
+  Renderer.cpp
+  Button.cpp
+  Slider.cpp
+  D3D12RenderingService.cpp
+  TextRenderingService.cpp
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Online\x64\OnlineRelease\FloppyEngine.lib
+  Build version: Online v010
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  TextRenderingService.cpp
+  SettingsRepository.cpp
+  main.cpp
+  SideScrollingShooter.cpp
+  SideScrollingShooterCombat.cpp
+  SideScrollingShooterRendering.cpp
+  SideScrollingShooterBackgrounds.cpp
+  StageDispatch.cpp
+  Stage1Module.cpp
+  Stage2Module.cpp
+  Stage2Rendering.cpp
+  Stage3Module.cpp
+  CityBackgroundModule.cpp
+  Stage4Module.cpp
+  Stage5Module.cpp
+  Stage5Rendering.cpp
+  SpaceBackground.cpp
+  CreditContentController.cpp
+  CreditContentPresenter.cpp
+  CreditSceneContent.cpp
+  コンパイル中...
+  CreditScene.cpp
+  ModeSelectionScene.cpp
+  StoryScene.cpp
+  EndingScene.cpp
+  RankingScene.cpp
+  OptionScene.cpp
+  TestStage.cpp
+  TutorialStage.cpp
+  GalleryScene.cpp
+  TitleScene.cpp
+  Localization.cpp
+  OnlineCoopSession.cpp
+  OnlineLobbyScene.cpp
+  コード生成しています。
+  コード生成が終了しました。
+  FloppyDiskShootingGame.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Online\x64\OnlineRelease\SpaceYakuza.exe

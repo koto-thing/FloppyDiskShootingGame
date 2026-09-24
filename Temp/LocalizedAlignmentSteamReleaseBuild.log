@@ -1,0 +1,35 @@
+
+  Renderer.cpp
+  Button.cpp
+  Slider.cpp
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Steam\x64\SteamRelease\FloppyEngine.lib
+  Build version: Steam v031
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  SteamCoopSession.cpp
+  SpaceBackground.cpp
+  CreditContentPresenter.cpp
+  SideScrollingShooterBackgrounds.cpp
+  SideScrollingShooterRendering.cpp
+  CityBackgroundModule.cpp
+  Stage1Module.cpp
+  Stage2Rendering.cpp
+  Stage3Module.cpp
+  Stage4Module.cpp
+  Stage5Rendering.cpp
+  CreditScene.cpp
+  EndingScene.cpp
+  GalleryScene.cpp
+  ModeSelectionScene.cpp
+  OptionScene.cpp
+  RankingScene.cpp
+  SteamLobbyScene.cpp
+  StoryScene.cpp
+  TestStage.cpp
+  コンパイル中...
+  TitleScene.cpp
+  TutorialStage.cpp
+  main.cpp
+  コード生成しています。
+  コード生成が終了しました。
+  FloppyDiskShootingGame.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Steam\x64\SteamRelease\SpaceYakuza.exe

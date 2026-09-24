@@ -1,2 +1,2 @@
 #pragma once
-#define SPACEYAKUZA_BUILD_LABEL "Floppy v026"
+#define SPACEYAKUZA_BUILD_LABEL "Floppy v089"

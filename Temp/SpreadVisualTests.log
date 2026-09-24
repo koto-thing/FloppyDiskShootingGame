@@ -1,0 +1,20 @@
+
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\Temp\HomingBuild\FloppyEngine.lib
+
+C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Microsoft\VC\v180\Microsoft.CppBuild.targets(551,5): warning MSB8028: 中間ディレクトリ (D:\Pandd\FloppyDiskShootingGame\Temp\HomingGameObj/) に別のプロジェクト (FloppyDiskShootingGame.vcxproj) と共有されているファイルが含まれています。これにより、クリーンしてリビルド動作が適切に行われない可能性があります。 [D:\Pandd\FloppyDiskShootingGame\FloppyEngine.vcxproj]
+  Build version: Floppy v089
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  SideScrollingShooterRendering.cpp
+  TitleScene.cpp
+  コード生成しています。
+  コード生成が終了しました。
+  FloppyDiskShootingGame.vcxproj -> D:\Pandd\FloppyDiskShootingGame\Temp\HomingBuild\SpaceYakuza.exe
+D:\Pandd\FloppyDiskShootingGame\Distribution.props(86,5): warning MSB3026: "D:\Pandd\FloppyDiskShootingGame\Temp\HomingBuild\SpaceYakuza.exe" を "D:\Pandd\FloppyDiskShootingGame\dist\Floppy\x64\Release\SpaceYakuza.exe" にコピーできませんでした。1000 ミリ秒以内に 1 回目の再試行を開始します。別のプロセスで使用されているため、プロセスはファイル 'D:\Pandd\FloppyDiskShootingGame\dist\Floppy\x64\Release\SpaceYakuza.exe' にアクセスできません。 このファイルは "SpaceYakuza.exe (5628)" によってロックされています。 [D:\Pandd\FloppyDiskShootingGame\FloppyDiskShootingGame.vcxproj]
+D:\Pandd\FloppyDiskShootingGame\Distribution.props(86,5): warning MSB3026: "D:\Pandd\FloppyDiskShootingGame\Temp\HomingBuild\SpaceYakuza.exe" を "D:\Pandd\FloppyDiskShootingGame\dist\Floppy\x64\Release\SpaceYakuza.exe" にコピーできませんでした。1000 ミリ秒以内に 2 回目の再試行を開始します。別のプロセスで使用されているため、プロセスはファイル 'D:\Pandd\FloppyDiskShootingGame\dist\Floppy\x64\Release\SpaceYakuza.exe' にアクセスできません。 このファイルは "SpaceYakuza.exe (5628)" によってロックされています。 [D:\Pandd\FloppyDiskShootingGame\FloppyDiskShootingGame.vcxproj]
+D:\Pandd\FloppyDiskShootingGame\Distribution.props(86,5): warning MSB3026: "D:\Pandd\FloppyDiskShootingGame\Temp\HomingBuild\SpaceYakuza.exe" を "D:\Pandd\FloppyDiskShootingGame\dist\Floppy\x64\Release\SpaceYakuza.exe" にコピーできませんでした。1000 ミリ秒以内に 3 回目の再試行を開始します。別のプロセスで使用されているため、プロセスはファイル 'D:\Pandd\FloppyDiskShootingGame\dist\Floppy\x64\Release\SpaceYakuza.exe' にアクセスできません。 このファイルは "SpaceYakuza.exe (5628)" によってロックされています。 [D:\Pandd\FloppyDiskShootingGame\FloppyDiskShootingGame.vcxproj]
+  Floppy distribution: 1470464 / 1474560 bytes
+HomingShotTests.cpp
+コード生成しています。
+コード生成が終了しました。
+HomingShotTests passed

@@ -52,6 +52,9 @@ private:
     std::unique_ptr<Button> m_closeMenuButton;
     std::unique_ptr<Button> m_backToMenuButton;
     std::unique_ptr<Button> m_retroEffectButton;
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    std::unique_ptr<Button> m_languageButton;
+#endif
     Slider m_masterVolumeSlider;
     Slider m_bgmVolumeSlider;
     Slider m_seVolumeSlider;

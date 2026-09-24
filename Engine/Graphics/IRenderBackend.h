@@ -54,6 +54,7 @@ struct PlayerShotVisual {
     int type = 0;
     float depth = 0.0f;
     bool depthTest = false;
+    float opacity = 1.0f;
 };
 
 /** @brief HLSLで描画する爆発エフェクトの描画情報 */

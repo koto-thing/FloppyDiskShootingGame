@@ -1,4 +1,5 @@
 #include "SideScrollingShooter.h"
+#include "../../Application/UseCases/Localization.h"
 
 #include <algorithm>
 #include <cmath>
@@ -7,6 +8,9 @@
 #include <string_view>
 
 #include "../../Engine/Graphics/Renderer.h"
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+#include "../../Engine/Graphics/Utf8Text.h"
+#endif
 #include "../../Engine/Input/Input.h"
 #include "Models/AircraftModelView.h"
 #include "Models/StageEnemyModelView.h"
@@ -648,6 +652,7 @@ Vector2 SideScrollingShooter::ScreenShakeOffset() const {
 }
 
 
+/** @brief 弾頭と実軌道に沿う追尾弾の残光を描画する @param renderer 描画先 @param camera 投影カメラ @param shot 描画対象 @param yaw 弾モデルの回転角 @return なし */
 void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw) const {
     if (StageDispatch::DrawSpecialShot(*this, renderer, camera, shot, yaw)) return;
     {
@@ -689,8 +694,35 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
                 size = Vector2::Lerp(size, railSize, RailBlend());
             }
         }
+        // 散弾は威力3→2→1の距離を連続補間し、最大減衰後も元の1/3の寸法を保つ
+        if (!shot.enemy && shot.special && shot.playerType == Spread) {
+            size = size * Math::Lerp(1.0f, 1.0f / 3.0f, std::clamp(shot.travelDistance / 7.0f, 0.0f, 1.0f));
+        }
         Vector2 drawPosition = position;
         int type = shot.enemy ? 4 : shot.special ? static_cast<int>(shot.playerType) : 6;
+
+        // 直近8フレームだけを薄く残し、敵弾を隠さない短い残光にする
+        if (!shot.enemy && shot.special && shot.playerType == Homing && m_viewTransitionTimer == 0) {
+            Vector2 end = position;
+            constexpr int TrailFrames = 8;
+            const int count = (std::min)(shot.homingTrailCount, TrailFrames);
+            for (int back = 1; back < count; back += 2) {
+                Vector2 screen;
+                Vector3 point = shot.homingTrail[(shot.age - 1 - back) % shot.homingTrail.size()];
+                // 弾頭と同じ描画平面へ投影し、座標補間中は残光を出さない
+                point.z = Math::Lerp(SidePlaneZ - 0.4f, point.z, RailBlend());
+                if (!camera.TryWorldToScreen(point, screen)) break;
+                const Vector2 start {
+                    (screen.x - viewport.x) / viewport.width * 2.0f - 1.0f,
+                    1.0f - (screen.y - viewport.y) / viewport.height * 2.0f};
+                const Vector2 segment = end - start;
+                const float fade = 1.0f - static_cast<float>(back) / TrailFrames;
+                renderer.DrawPlayerShot({(start + end) * 0.5f,
+                    {segment.Length() * 0.65f, size.y * 0.48f * fade},
+                    std::atan2(segment.y, segment.x), static_cast<float>(m_frame), 0, depth, false, 0.22f * fade * fade});
+                end = start;
+            }
+        }
 
         // 既存のグレイズ範囲へ入った通常敵弾を反転させ、弾ごとに位相をずらして小刻みに震わせる
         if (shot.enemy) {
@@ -714,7 +746,7 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
 }
 
 /**
- * @brief 移動中または発光中の小型ボムを描画する
+ * @brief 機体別のミサイル、極太レーザー、シールドを描画する
  * @param renderer 描画先レンダラー
  * @param camera 描画に使用するカメラ
  * @param bomb 描画対象のボム
@@ -722,29 +754,100 @@ void SideScrollingShooter::DrawShotModel(Renderer& renderer, const Camera3D& cam
  */
 void SideScrollingShooter::DrawBomb(
     Renderer& renderer, const Camera3D& camera, const Bomb& bomb) const {
-    constexpr float BombBodyColor[4] = {0.03f, 0.10f, 0.24f, 1.0f};
-    constexpr float BombBlueColor[4] = {0.08f, 0.65f, 3.20f, 1.0f};
-    constexpr float BombFuseColor[4] = {0.65f, 0.78f, 0.92f, 1.0f};
-    const bool charging = bomb.age >= BombTravelFrames;
-    const Vector3 center {ToWorldX(bomb.x), ToWorldY(bomb.y), bomb.z};
-    const float pulse = charging ? 1.0f + std::sin(static_cast<float>(bomb.age) * 1.1f) * 0.12f : 1.0f;
+    // 描画中の自機と同じ位置・姿勢から先端を求め、視点遷移中も機首へ接続する
+    const float blend = RailBlend();
+    Vector3 center = PlayerWorldPosition();
+    if (!IsTayamaBattle()) center.z = Math::Lerp(SidePlaneZ, PlayerRailDepth(), blend);
+    const float yaw = IsTayamaBattle() ? std::atan2(-center.x,
+        ShooterStages::Stage5::TayamaArenaCenterZ - center.z) : Math::Lerp(Math::HalfPi, 0.0f, blend);
+    const float roll = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase) ?
+        Math::Lerp(Math::HalfPi, 0.0f, blend) : 0.0f;
+    float pitch = 0.0f;
+    StageDispatch::ApplyPlayerRenderCorrection(*this, center, pitch);
+    const Vector3 forward = (Matrix4x4::RotationZ(roll) * Matrix4x4::RotationX(pitch) *
+        Matrix4x4::RotationY(yaw)).TransformVector(Vector3::Forward);
+    const float pulse = 0.5f + 0.5f * std::sin(static_cast<float>(bomb.age) * 0.35f);
+    if (bomb.type == Piercing) {
+        // 円柱状の白熱芯で正面視でも太さを保ち、金色の発光を重ねる
+        center += forward * AircraftModelView::NoseTipZ;
+        const Vector3 end = center + forward * BombLaserLength;
+        const float core[4] = {1.8f, 1.4f, 0.65f, 0.85f};
+        const Matrix4x4 beam = Matrix4x4::Translation((center + end) * 0.5f) *
+            Matrix4x4::RotationY(std::atan2(-forward.z, forward.x)) *
+            Matrix4x4::RotationZ(std::asin(std::clamp(forward.y, -1.0f, 1.0f)) - Math::HalfPi) *
+            Matrix4x4::Scale({BombLaserRadius * 1.7f, BombLaserLength, BombLaserRadius * 1.7f});
+        DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Cylinder), beam, core);
+        DrawRailgunBeamBetween(renderer, camera, center, end, BombLaserRadius * 1.4f, pulse, 4);
+        DrawRailgunBeamBetween(renderer, camera, center, end, BombLaserRadius, pulse, 5);
+        return;
+    }
+    if (bomb.type == Spread) {
+        // 正二十面体の各面を切頂して六角形を作り、球面へ投影する
+        // 球を閉じるための十二か所の五角形状の隙間は透明のまま残す
+        constexpr float phi = 1.61803399f;
+        constexpr Vector3 vertices[] = {{-1, phi, 0}, {1, phi, 0}, {-1, -phi, 0}, {1, -phi, 0},
+            {0, -1, phi}, {0, 1, phi}, {0, -1, -phi}, {0, 1, -phi},
+            {phi, 0, -1}, {phi, 0, 1}, {-phi, 0, -1}, {-phi, 0, 1}};
+        constexpr unsigned char faces[][3] = {{0,11,5}, {0,5,1}, {0,1,7}, {0,7,10}, {0,10,11},
+            {1,5,9}, {5,11,4}, {11,10,2}, {10,7,6}, {7,1,8},
+            {3,9,4}, {3,4,2}, {3,2,6}, {3,6,8}, {3,8,9},
+            {4,9,5}, {2,4,11}, {6,2,10}, {8,6,7}, {9,8,1}};
+        const Matrix4x4 rotation = Matrix4x4::RotationY(bomb.age * Math::TwoPi / 360.0f);
+        const float rim[4] = {0.25f, 1.45f + 0.15f * std::sin(bomb.age * Math::TwoPi / 180.0f), 0.85f, 0.70f};
+        for (const auto& face : faces) {
+            Vector3 hex[6];
+            const Vector3 inset = (vertices[face[0]] + vertices[face[1]] + vertices[face[2]]) * 0.06f;
+            // 枠を少し縮めて隣のセルと離し、透明な内部から自機を見せる
+            for (int i = 0; i < 6; ++i) {
+                const Vector3 a = vertices[face[i / 2]], b = vertices[face[(i / 2 + 1) % 3]];
+                const Vector3 point = a * static_cast<float>(2 - i % 2) + b * static_cast<float>(1 + i % 2);
+                hex[i] = rotation.TransformVector((point * 0.94f + inset).Normalized());
+            }
+            for (int edge = 0; edge < 6; ++edge) {
+                // 一辺を二分して球面に沿わせ、細い円柱で切れ目なく結ぶ
+                const Vector3 arc[] = {hex[edge], (hex[edge] + hex[(edge + 1) % 6]).Normalized(),
+                    hex[(edge + 1) % 6]};
+                for (int part = 0; part < 2; ++part) {
+                    const Vector3 start = center + arc[part] * BombShieldRadius;
+                    const Vector3 end = center + arc[part + 1] * BombShieldRadius;
+                    const Vector3 direction = (end - start).Normalized();
+                    const Vector3 midpoint = (start + end) * 0.5f;
+                    DrawModelPrimitive(renderer, camera, PrimitiveShape::Cylinder,
+                        midpoint.x, midpoint.y, midpoint.z, 0.025f, (end - start).Length(), 0.025f, rim,
+                        std::atan2(-direction.z, direction.x),
+                        std::asin(std::clamp(direction.y, -1.0f, 1.0f)) - Math::HalfPi);
+                }
+            }
+        }
+        return;
+    }
 
-    // 球形本体と短い信管で小型爆弾を構成する
-    DrawModelPrimitive(renderer, camera, 5, center.x, center.y, center.z,
-        0.48f * pulse, 0.48f * pulse, 0.48f * pulse,
-        charging ? BombBlueColor : BombBodyColor);
-    DrawModelPrimitive(renderer, camera, 2, center.x, center.y + 0.30f, center.z,
-        0.12f, 0.22f, 0.12f, BombFuseColor);
-
-    // 中央到達後は青い光輪を重ねて爆発直前を知らせる
-    if (charging) {
-        const float chargeProgress = static_cast<float>(bomb.age - BombTravelFrames) /
-            static_cast<float>(BombChargeFrames);
-        const float glowSize = 0.82f + chargeProgress * 0.72f;
-        const Matrix4x4 glowWorld = Matrix4x4::Translation(center) *
-            Matrix4x4::Scale({glowSize, glowSize, 1.0f});
-        renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * glowWorld,
-            chargeProgress * 0.32f, BombExplosionEffectType});
+    // 十発をそれぞれの速度方向へ向け、点火後だけ長い噴射炎を描く
+    const float body[4] = {0.60f, 0.72f, 0.82f, 1.0f};
+    const float nose[4] = {1.0f, 0.30f, 0.08f, 1.0f};
+    const float fins[4] = {0.10f, 0.22f, 0.35f, 1.0f};
+    for (const auto& missile : bomb.missiles) {
+        if (!missile.active) continue;
+        center = {ToWorldX(missile.x), ToWorldY(missile.y), missile.z};
+        if (!IsTayamaBattle()) center.z = Math::Lerp(SidePlaneZ - 0.5f, center.z, blend);
+        const Vector3 direction = Vector3 {ToWorldX(missile.vx), ToWorldY(missile.vy), missile.vz}.Normalized();
+        const float missileYaw = std::atan2(-direction.z, direction.x);
+        const float missilePitch = std::asin(std::clamp(direction.y, -1.0f, 1.0f));
+        const Matrix4x4 transform = Matrix4x4::Translation(center) *
+            Matrix4x4::RotationY(missileYaw) * Matrix4x4::RotationZ(missilePitch) *
+            Matrix4x4::Scale(Vector3::One * BombMissileScale);
+        // 本体・弾頭・二枚の尾翼を同じ縮尺で組み立てる
+        constexpr Vector3 dimensions[] = {{2.6f, 1.1f, 1.1f}, {1.0f, 0.85f, 0.85f},
+            {0.65f, 1.7f, 0.15f}, {0.65f, 0.15f, 1.7f}};
+        for (int part = 0; part < 4; ++part) {
+            const float offset = part == 0 ? 0.0f : part == 1 ? 0.85f : -0.8f;
+            DrawModelPrimitive(renderer, camera, static_cast<int>(part < 2 ? PrimitiveShape::Sphere : PrimitiveShape::Box),
+                transform * Matrix4x4::Translation({offset, 0.0f, 0.0f}) * Matrix4x4::Scale(dimensions[part]),
+                part == 0 ? body : part == 1 ? nose : fins);
+        }
+        if (bomb.age > BombMissileLaunchFrames)
+            DrawRailgunBeamBetween(renderer, camera, center - direction * ((4.0f + pulse) * BombMissileScale),
+                center - direction * BombMissileScale, 0.60f * BombMissileScale, 0.25f, 0);
     }
 }
 
@@ -756,17 +859,6 @@ void SideScrollingShooter::DrawBomb(
  * @return なし
  */
 void SideScrollingShooter::DrawExplosion(Renderer& renderer, const Camera3D& camera, const Explosion& explosion) {
-    if (explosion.effectType == BombExplosionEffectType) {
-        const float progress = static_cast<float>(explosion.age) / BombExplosionLifetimeFrames;
-        const float size = 1.10f + progress * 8.50f;
-        const Matrix4x4 world = Matrix4x4::Translation(
-            {ToWorldX(explosion.x), ToWorldY(explosion.y), explosion.z}) *
-            Matrix4x4::Scale({size, size, 1.0f});
-        renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * world,
-            progress, BombExplosionEffectType});
-        return;
-    }
-
     if (explosion.effectType == 1) {
         const float progress = static_cast<float>(explosion.age) / MortarExplosionLifetimeFrames;
         const float fireProgress = Math::Clamp01(progress * 2.20f);
@@ -916,18 +1008,18 @@ void SideScrollingShooter::DrawChapterResult(Renderer& renderer) const {
     const int score = static_cast<int>(m_chapterResult.score * progress);
     const int total = static_cast<int>(m_chapterResult.totalScore * progress);
     const int displayedRate = static_cast<int>(annihilationRate * progress);
-    char line[64];
+    char line[Localization::BufferSize(64)];
 
     renderer.DrawText("CHAPTER RESULT", TextAlign::Center, 0.028f, { 1.0f, 0.88f, 0.25f, alpha }, { 0.0f, 0.40f }, CharacterSpacing);
-    std::snprintf(line, sizeof(line), "GRAZE        %d", graze);
+    std::snprintf(line, sizeof(line), Localization::Text("GRAZE        %d"), graze);
     renderer.DrawText(line, TextAlign::Center, 0.016f, { 0.85f, 0.95f, 1.0f, alpha }, { 0.0f, 0.20f }, CharacterSpacing);
-    std::snprintf(line, sizeof(line), "ANNIHILATION  %d / %d  %d%%", defeat, m_chapterResult.enemySpawnCount, displayedRate);
+    std::snprintf(line, sizeof(line), Localization::Text("ANNIHILATION  %d / %d  %d%%"), defeat, m_chapterResult.enemySpawnCount, displayedRate);
     renderer.DrawText(line, TextAlign::Center, 0.016f, { 0.85f, 0.95f, 1.0f, alpha }, { 0.0f, 0.08f }, CharacterSpacing);
-    std::snprintf(line, sizeof(line), "RETRY        %d", retry);
+    std::snprintf(line, sizeof(line), Localization::Text("RETRY        %d"), retry);
     renderer.DrawText(line, TextAlign::Center, 0.016f, { 0.85f, 0.95f, 1.0f, alpha }, { 0.0f, -0.04f }, CharacterSpacing);
-    std::snprintf(line, sizeof(line), "CHAPTER SCORE  %06d", score);
+    std::snprintf(line, sizeof(line), Localization::Text("CHAPTER SCORE  %06d"), score);
     renderer.DrawText(line, TextAlign::Center, 0.016f, { 0.85f, 0.95f, 1.0f, alpha }, { 0.0f, -0.16f }, CharacterSpacing);
-    std::snprintf(line, sizeof(line), "TOTAL SCORE    %06d", total);
+    std::snprintf(line, sizeof(line), Localization::Text("TOTAL SCORE    %06d"), total);
     renderer.DrawText(line, TextAlign::Center, 0.020f, { 1.0f, 0.88f, 0.25f, alpha }, { 0.0f, -0.31f }, CharacterSpacing);
     if (m_chapterResult.bombAwarded && (m_chapterResultTimer / 8) % 2 != 0) {
         renderer.DrawText("BOMB GET", TextAlign::Center, 0.022f,
@@ -944,8 +1036,8 @@ void SideScrollingShooter::DrawRestart(Renderer& renderer) const {
     if (m_restartTimer <= 0) return;
 
     const int countdown = (m_restartTimer + 59) / 60;
-    char text[16];
-    std::snprintf(text, sizeof(text), "RESTART %d", countdown);
+    char text[Localization::BufferSize(16)];
+    std::snprintf(text, sizeof(text), Localization::Text("RESTART %d"), countdown);
     renderer.DrawText(text, TextAlign::Center, 0.038f, { 1.0f, 0.88f, 0.25f, 1.0f }, { 0.0f, 0.12f });
 }
 
@@ -984,14 +1076,48 @@ void SideScrollingShooter::DrawPowerUp(
 void SideScrollingShooter::DrawMissionBanner(Renderer& renderer) const {
     if ((!m_clear && m_missionStartTimer <= 0) || (m_clear && m_clearTimer <= 0)) return;
 
-    char startText[24];
-    std::snprintf(startText, sizeof(startText), "MISSION %d START", m_stageNumber);
+    char startText[Localization::BufferSize(24)];
+    std::snprintf(startText, sizeof(startText), Localization::Text("MISSION %d START"), m_stageNumber);
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    const std::string text = Localization::Translate(m_tutorialMode ?
+        (m_clear ? "TUTORIAL COMPLETE" : "TUTORIAL START") :
+        (m_clear ? "ARRESTED" : startText));
+#else
     const std::string_view text = m_tutorialMode ?
         (m_clear ? "TUTORIAL COMPLETE" : "TUTORIAL START") :
         (m_clear ? "ARRESTED" : startText);
+#endif
     const int remainingFrames = m_clear ? (std::max)(0, m_clearTimer) : m_missionStartTimer;
     const int elapsedFrames = (m_clear ? ClearWaitFrames : MissionBannerDisplayFrames) - remainingFrames;
     const float fade = remainingFrames < 20 ? static_cast<float>(remainingFrames) / 20.0f : 1.0f;
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    // 文字単位でアニメーションを進め、UTF-8の途中で字形を分割しない
+    float baseSize = 0.050f;
+    float spacing = 0.003f;
+    auto metrics = Utf8Text::Measure(text, baseSize, spacing, renderer.AspectRatio());
+    if (metrics.width > 1.8f) {
+        const float fit = 1.8f / metrics.width;
+        baseSize *= fit;
+        spacing *= fit;
+        metrics = Utf8Text::Measure(text, baseSize, spacing, renderer.AspectRatio());
+    }
+    float x = -metrics.width * 0.5f + metrics.firstGlyphOffset;
+    std::size_t offset = 0;
+    int glyphIndex = 0;
+    while (offset < text.size()) {
+        const std::size_t start = offset;
+        const auto codepoint = Utf8Text::Next(text, offset);
+        const float scale = MissionBannerGlyphScale(elapsedFrames - glyphIndex++ * MissionBannerGlyphDelayFrames);
+        if (scale > 0.0f && codepoint != ' ') {
+            const std::string_view glyph(text.data() + start, offset - start);
+            const Vector2 position {x, 0.10f};
+            renderer.DrawText(glyph, position + Vector2 {0.012f, -0.014f}, baseSize * scale,
+                {0.05f, 0.02f, 0.01f, fade * 0.85f});
+            renderer.DrawText(glyph, position, baseSize * scale, {1.0f, 0.78f, 0.12f, fade});
+        }
+        x += Utf8Text::Advance(codepoint, baseSize, spacing);
+    }
+#else
     constexpr float BaseSize = 0.050f;
     constexpr float Advance = 0.078f;
     const float firstX = -static_cast<float>(text.size() - 1) * Advance * 0.5f;
@@ -1008,6 +1134,7 @@ void SideScrollingShooter::DrawMissionBanner(Renderer& renderer) const {
             {0.05f, 0.02f, 0.01f, fade * 0.85f});
         renderer.DrawText(glyph, position, size, {1.0f, 0.78f, 0.12f, fade});
     }
+#endif
 }
 
 /**
@@ -1045,11 +1172,11 @@ void SideScrollingShooter::DrawTutorialHud(Renderer& renderer) const {
         "DODGE THE METEORS",
         "PASS THROUGH THE NARROW GAPS",
         "DESTROY ALL TARGETS",
-        "CLEAR THE UNAVOIDABLE BARRAGE",
+        "USE YOUR BOMB TO SURVIVE THE BARRAGE",
         "ESCAPE THE 2D BARRAGE"
     };
-    char progress[24];
-    std::snprintf(progress, sizeof(progress), "LESSON %d / %d", m_tutorialStep + 1, TutorialStepCount);
+    char progress[Localization::BufferSize(24)];
+    std::snprintf(progress, sizeof(progress), Localization::Text("LESSON %d / %d"), m_tutorialStep + 1, TutorialStepCount);
     renderer.DrawText(progress, TextAlign::TopCenter, 0.014f,
         {0.65f, 0.90f, 0.95f, 1.0f}, {0.0f, -0.04f}, CharacterSpacing);
     renderer.DrawText(Titles[m_tutorialStep], TextAlign::Center, 0.030f,
@@ -1381,6 +1508,30 @@ void SideScrollingShooter::DrawBossStory(Renderer& renderer) const {
     const ColorF nameColor = line.isBoss ? ColorF {1.0f, 0.45f, 0.65f, 1.0f} :
         ColorF {0.35f, 0.90f, 1.0f, 1.0f};
     constexpr float CharacterSpacing = 0.0015f;
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    // 会話全体を翻訳してから文字幅で二行に折り返す
+    const std::string translated = Localization::Translate(line.text);
+    const std::string_view text = translated;
+    float textSize = 0.016f;
+    std::size_t firstLineEnd = 0;
+    std::size_t secondLineStart = 0;
+    for (;;) {
+        firstLineEnd = Utf8Text::WrapLineEnd(text, 1.55f, textSize, CharacterSpacing, renderer.AspectRatio());
+        secondLineStart = firstLineEnd;
+        while (secondLineStart < text.size() && text[secondLineStart] == ' ') ++secondLineStart;
+        if (Utf8Text::Measure(text.substr(secondLineStart), textSize, CharacterSpacing,
+                renderer.AspectRatio()).width <= 1.55f || textSize <= 0.006f) break;
+        textSize *= 0.95f;
+    }
+    renderer.Draw(Rect {{0.0f, -0.48f}, {1.72f, 0.34f}}, {0.03f, 0.08f, 0.14f, 0.92f});
+    renderer.DrawText(line.speaker, {-0.78f, -0.37f}, 0.022f, nameColor, CharacterSpacing);
+    renderer.DrawText(text.substr(0, firstLineEnd), {-0.78f, -0.51f}, textSize,
+        ColorF::White(), CharacterSpacing);
+    if (secondLineStart < text.size()) renderer.DrawText(text.substr(secondLineStart),
+        {-0.78f, -0.57f}, textSize, ColorF::White(), CharacterSpacing);
+    renderer.DrawText(Input::IsGamepadConnected() ? "A: NEXT   X: SKIP" : "Z: NEXT   X: SKIP",
+        TextAlign::CenterRight, 0.012f, {0.65f, 0.75f, 0.82f, 1.0f}, {-0.17f, -0.65f}, CharacterSpacing);
+#else
     constexpr std::size_t MaxDialogueLineLength = 61;
     const std::string_view text = line.text;
     std::size_t firstLineEnd = text.size();
@@ -1404,6 +1555,7 @@ void SideScrollingShooter::DrawBossStory(Renderer& renderer) const {
     renderer.DrawText(Input::IsGamepadConnected() ? "A: NEXT   X: SKIP" : "Z: NEXT   X: SKIP",
         {0.50f, -0.60f}, 0.012f,
         {0.65f, 0.75f, 0.82f, 1.0f}, CharacterSpacing);
+#endif
 }
 
 /**

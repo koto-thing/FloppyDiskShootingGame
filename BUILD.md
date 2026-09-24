@@ -138,6 +138,7 @@ Releaseのリンクは通常のLTCGを使用し、増分LTCGのキャッシュ�
 MSVCで連続ビルド時に発生するLNK1143を回避するためで、変更のないソースのオブジェクトは再利用する
 超過時はビルドを失敗させる（超過した生成物自体は調査用に残る）
 ゲームリソースは実行ファイルに埋め込み済み
+Online/Steam版はUnicodeフォントも実行ファイルに埋め込み、フォントのライセンス文書を配布する
 Steam版のみSDKの `steam_api64.dll`（Win32では `steam_api.dll`）も配布する
 開発App ID 480のSteam版には `steam_appid.txt` も同梱する
 PDB・静的ライブラリ・編集用MMLは配布しない
@@ -155,4 +156,27 @@ C++から版を判別するときは `SPACEYAKUZA_EDITION_Floppy`、`SPACEYAKUZA
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File Tests/RunDistributionTests.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File Tests/RunReleaseLinkTests.ps1 -Distribution Steam
+```
+
+## 多言語表示（Online / Steam）
+
+英語に加え、日本語、スペイン語、韓国語、簡体字中国語、フランス語、ブラジルポルトガル語に対応する
+初回はWindowsの表示言語を使用し、未対応の言語では英語を使用する
+タイトルのオプションとプレイ中のポーズメニューのオプションで、言語名のボタンを押すたびに切り替わる
+選択は即時反映され、`%LOCALAPPDATA%/SpaceYakuza/language.dat` に保存される
+Floppy版と共有する `settings.dat` の形式は変更しない
+
+翻訳カタログは `Application/UseCases/Localization*.inc`、Unicode BMPフォントは `Resources/UnicodeFont.bin` に置く
+OSの追加言語パックは不要で、フォントは `Scripts/GenerateUnicodeFont.ps1` で再生成できる
+Online/Steam版は英数字も含めて同じUnicodeフォントを使用し、アクセント記号の有無で書体を切り替えない
+ライセンスは `Resources/UnicodeFont-LICENSE.txt` に記載する
+翻訳、フォント、言語選択UIはビルド時の版判定でFloppy版から除外する
+キャラクター名と制作スタッフ名は原表記を維持し、音声は既存のまま使用する
+
+多言語表示の回帰チェック:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File Tests/RunLocalizationTests.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File Tests/RunUnicodeTextTests.ps1
+powershell -NoProfile -ExecutionPolicy Bypass -File Tests/RunLocalizedLayoutTests.ps1
 ```

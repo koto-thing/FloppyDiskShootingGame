@@ -12,9 +12,18 @@
 #include "Stages/Stage5/Stage5Module.h"
 
 #include "SideScrollingShooterEnemies.h"
+#include "Models/AircraftModelView.h"
+#include "GameplayRandom.h"
 #include "Stages/Common/StageDefinition.h"
 
 namespace {
+/** @brief ボスに命中したボム一発分の最大HP比ダメージを求める @param maxHp ボス最大HP @param piercing レーザーボムならtrue @return 一発分のダメージ */
+constexpr int BossBombDamage(int maxHp, bool piercing) {
+    return (std::max)(1, (maxHp * (piercing ? 5 : 20) + 500) / 1000);
+}
+
+static_assert(BossBombDamage(800, false) * 10 == 160);
+static_assert(BossBombDamage(1200, true) * 30 == 180);
 constexpr float MortarExplosionDepthHitRadius = 0.85f;
 
 /**
@@ -67,19 +76,6 @@ float InterceptFrames(const Vector3& delta, const Vector3& velocity, float speed
 }
 
 /**
- * @brief ボムの発射位置から画面中央までの座標を求める
- * @param start 発射位置
- * @param age 発射後の経過フレーム
- * @param travelFrames 中央へ到達するフレーム数
- * @return 現在座標
- */
-constexpr float BombTravelCoordinate(float start, int age, int travelFrames) {
-    if (travelFrames <= 0 || age >= travelFrames) return 0.0f;
-    if (age <= 0) return start;
-    return start * static_cast<float>(travelFrames - age) / static_cast<float>(travelFrames);
-}
-
-/**
  * @brief 透視投影上で同じ位置になる奥行き平面への縮尺を取得する
  * @param cameraZ カメラのZ座標
  * @param sourceZ 投影元のZ座標
@@ -102,8 +98,6 @@ void AimShotGroundward(float& vx, float& vy) {
     vy = -std::sqrt((std::max)(0.0f, speedSquared - vx * vx));
 }
 
-static_assert(BombTravelCoordinate(-0.8f, 0, 24) == -0.8f);
-static_assert(BombTravelCoordinate(-0.8f, 24, 24) == 0.0f);
 static_assert(PerspectiveDepthScale(-13.5f, 35.0f, 10.0f) > 0.0f);
 static_assert(PerspectiveDepthScale(-13.5f, 35.0f, 10.0f) < 1.0f);
 static_assert(HomingTargetScore(1.0f, false) < HomingTargetScore(9.0f, false));
@@ -178,67 +172,177 @@ void SideScrollingShooter::TickPlayerWeapons() {
     if (firedPlayerShot) PlayShotSound();
 }
 
-/**
- * @brief ボムの移動、発光待機、爆発を更新する
- * @return なし
- */
+/** @brief 機体別ボムの発動、移動、持続時間を更新する @return なし */
 void SideScrollingShooter::TickBomb() {
-    // 各自機が一個ずつボムを保持する
-    if (Player().m_playerDestructionTimer == 0 && Player().m_bombRequested && !Player().m_bomb.active && Player().m_bombCount > 0) {
-        const Vector3 player = PlayerWorldPosition();
-        const float playerX = IsTayamaBattle() ? FromWorldX(player.x) : Player().m_playerX;
-        const float playerY = IsTayamaBattle() ? FromWorldY(player.y) : Player().m_playerY;
-        Player().m_bomb = {playerX, playerY, playerX, playerY,
-            player.z + 6.0f, 0, true};
-        --Player().m_bombCount;
-    }
-    if (!Player().m_bomb.active) return;
+    auto& bomb = Player().m_bomb;
+    const bool rail = IsRailGameplayActive();
+    const bool spatial = rail && !UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+    const Shot forwardShot = MakeNormalPlayerShot(false);
+    const Vector3 forward = Vector3 {ToWorldX(forwardShot.vx), ToWorldY(forwardShot.vy), forwardShot.vz}.Normalized();
+    const Vector3 player = PlayerWorldPosition();
 
-    // 発射位置から画面中央へ直線移動し、到達後は短時間発光させる
-    ++Player().m_bomb.age;
-    Player().m_bomb.x = BombTravelCoordinate(Player().m_bomb.startX, Player().m_bomb.age, BombTravelFrames);
-    Player().m_bomb.y = BombTravelCoordinate(Player().m_bomb.startY, Player().m_bomb.age, BombTravelFrames);
-    if (Player().m_bomb.age >= BombTravelFrames + BombChargeFrames) DetonateBomb();
+    // 一人につき一個を消費し、ミサイル用の十個の専用枠も初期化する
+    if (!m_chapterResultActive && !m_clear && Player().m_playerDestructionTimer == 0 &&
+        Player().m_bombRequested && !bomb.active && Player().m_bombCount > 0) {
+        bomb = {};
+        bomb.type = Player().m_playerType;
+        bomb.rail = rail;
+        bomb.active = true;
+        --Player().m_bombCount;
+        PlayShotSound();
+        ShakeScreen(bomb.type == Spread ? 0.06f : 0.16f, 12);
+    }
+    if (!bomb.active) return;
+    // シールドは時間で終了せず、表示用の位相だけを循環させる
+    bomb.age = bomb.type == Spread ? (bomb.age + 1) % 360 : bomb.age + 1;
+    if ((bomb.type == Homing && bomb.age > BombMissileFrames) ||
+        (bomb.type == Piercing && bomb.age > BombLaserFrames)) { bomb.active = false; return; }
+    const Vector3 origin = player + forward * (bomb.type == Piercing ? AircraftModelView::NoseTipZ : 0.0f);
+    bomb.x = FromWorldX(origin.x);
+    bomb.y = FromWorldY(origin.y);
+    bomb.z = rail ? origin.z : SidePlaneZ;
+    bomb.direction = forward;
+    if (bomb.type != Homing) { bomb.rail = rail; return; }
+
+    // Stage2ボスと同じ打ち上げ→点火の順で、一発ずつ発射して個別に追尾する
+    bool flying = false;
+    for (int i = 0; i < static_cast<int>(bomb.missiles.size()); ++i) {
+        auto& missile = bomb.missiles[i];
+        if (bomb.age == i * BombMissileInterval + 1) {
+            missile = {};
+            missile.x = bomb.x;
+            missile.y = bomb.y;
+            missile.z = bomb.z;
+            // 発射時に一度だけ乱数を固定し、同期プレイでも同じ曲線を再現する
+            missile.homingLaunchDirection = {GameplayRandom::Range(-1.0f, 1.0f),
+                GameplayRandom::Range(-1.0f, 1.0f), GameplayRandom::Range(-1.0f, 1.0f)};
+            missile.hitRadius = BombMissileRadius / WorldXScale;
+            missile.damage = 80;
+            missile.owner = m_activePlayer;
+            missile.special = missile.bomb = missile.active = true;
+            PlayMissileLaunchSound();
+        }
+        if (!missile.active) continue;
+        flying = true;
+        if (bomb.rail != rail && missile.age > 0) {
+            // 発射し直さず、既に飛んでいる弾だけを新しい視点の前方軸へ移す
+            if (!UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase)) {
+                if (rail) { missile.z = ToRailZFromSideX(missile.x); missile.x = Player().m_playerX; }
+                else { missile.x = ToSideXFromRailZ(missile.z); missile.z = SidePlaneZ; }
+            } else missile.z = rail ? player.z : SidePlaneZ;
+            missile.vx = FromWorldX(forward.x * BombMissileSpeed);
+            missile.vz = forward.z * BombMissileSpeed;
+        }
+        ++missile.age;
+        if (bomb.age <= BombMissileLaunchFrames) {
+            // 全弾が出るまでは重力で上昇から落下へ移り、低い終端速度で画面内に留める
+            missile.vx = FromWorldX(missile.homingLaunchDirection.x * 0.025f);
+            missile.vz = spatial ? missile.homingLaunchDirection.z * 0.025f : 0.0f;
+            missile.vy = FromWorldY((std::max)(-0.07f,
+                0.17f + missile.homingLaunchDirection.y * 0.015f - 0.006f * missile.age));
+        } else {
+            Vector3 target;
+            missile.homingTarget = FindShotTarget(missile, target);
+            const Vector3 position {ToWorldX(missile.x), ToWorldY(missile.y), spatial ? missile.z : 0.0f};
+            Vector3 desired = missile.homingTarget >= 0 ? (target - position).Normalized() : forward;
+            if (!spatial) desired.z = 0.0f;
+            const float boostFrames = static_cast<float>(bomb.age - BombMissileLaunchFrames);
+            const float speed = (spatial ? BombMissileSpeed : BombMissileSpeed * 0.4f) * Math::Clamp01(boostFrames / 18.0f);
+            Vector3 velocity {ToWorldX(missile.vx), ToWorldY(missile.vy), spatial ? missile.vz : 0.0f};
+            const float distance = missile.homingTarget >= 0 ? (target - position).Length() : 10.0f;
+            // 弾ごとに異なる横向きの加速を徐々に収め、標的の手前では正確な追尾へ戻す
+            Vector3 curve = missile.homingLaunchDirection;
+            if (!spatial) curve.z = 0.0f;
+            curve -= desired * Vector3::Dot(curve, desired);
+            desired = (desired + curve * (1.8f * Math::Clamp01(1.0f - boostFrames / 72.0f) *
+                Math::Clamp01(distance / 6.0f))).Normalized();
+            const float turn = std::clamp(speed * 2.0f / (std::max)(0.01f, distance), 0.14f, 1.0f);
+            velocity = Vector3::Lerp(velocity, desired * speed, turn);
+            missile.vx = FromWorldX(velocity.x);
+            missile.vy = FromWorldY(velocity.y);
+            missile.vz = velocity.z;
+        }
+        missile.x += missile.vx;
+        missile.y += missile.vy;
+        missile.z += missile.vz;
+    }
+    bomb.rail = rail;
+    if (!flying && bomb.age > (static_cast<int>(bomb.missiles.size()) - 1) * BombMissileInterval)
+        bomb.active = false;
 }
 
-/**
- * @brief ボムを爆発させ、画面内の通常敵と敵弾を消去する
- * @return なし
- */
-void SideScrollingShooter::DetonateBomb() {
-    // 画面内の通常敵だけを消し、ボス戦の進行状態は維持する
-    const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
-    for (auto& enemy : m_enemies) {
-        if (!enemy.active || enemy.type == 2) continue;
-        const bool visible = IsRailGameplayActive() ?
-            enemy.z >= PlayerRailDepth() - 2.0f && enemy.z <= EnemyRailFarZ &&
-                std::abs(enemy.x) <= 1.4f && std::abs(enemy.y) <= 1.4f :
-            enemy.x >= Side2DPlayerMinX - Side2DShotCullMargin &&
-                enemy.x <= Side2DPlayerMaxX + Side2DShotCullMargin &&
-                enemy.y >= sideYRange.x - Side2DShotCullMargin &&
-                enemy.y <= sideYRange.y + Side2DShotCullMargin;
-        if (visible) {
-            enemy.active = false;
-            ++m_kills;
-            ++m_chapterResult.enemyDefeatCount;
-        }
+/** @brief ボムの攻撃範囲を共通の弾判定へ変換する @return 攻撃線分と威力を持つ弾 */
+SideScrollingShooter::Shot SideScrollingShooter::MakeBombShot() const {
+    const auto& bomb = Player().m_bomb;
+    Shot shot;
+    shot.x = bomb.x;
+    shot.y = bomb.y;
+    shot.z = bomb.z;
+    const float length = bomb.type == Piercing ? BombLaserLength : 0.0f;
+    shot.vx = FromWorldX(bomb.direction.x * length);
+    shot.vy = FromWorldY(bomb.direction.y * length);
+    shot.vz = bomb.direction.z * length;
+    if (bomb.type == Piercing) {
+        shot.x += shot.vx;
+        shot.y += shot.vy;
+        shot.z += shot.vz;
     }
+    shot.hitRadius = (bomb.type == Piercing ? BombLaserRadius : BombShieldRadius) / WorldXScale;
+    shot.damage = 8;
+    shot.playerType = bomb.type;
+    shot.owner = m_activePlayer;
+    shot.piercing = bomb.type == Piercing;
+    shot.bomb = true;
+    shot.active = true;
+    return shot;
+}
 
-    // 敵弾は固定長プール上の全種類を一括で消去する
-    for (auto& shot : m_shots) {
-        if (shot.active && shot.enemy) shot.active = false;
+/** @brief ボムと敵弾の移動軌跡が重なるか判定する @param shot 敵弾 @return 消去対象ならtrue */
+bool SideScrollingShooter::BombClearsShot(const Shot& shot) {
+    auto& bomb = Player().m_bomb;
+    if (!bomb.active || !shot.enemy) return false;
+    if (bomb.type == Homing) {
+        for (const auto& missile : bomb.missiles)
+            if (missile.active && BombShotIntersects(missile, shot)) return true;
+        return false;
     }
+    if (!BombShotIntersects(MakeBombShot(), shot)) return false;
+    // 一度の被弾を肩代わりし、残りの敵弾で同時に撃墜されない猶予を付ける
+    if (bomb.type == Spread && StageDispatch::CanEnemyShotDamagePlayer(*this, shot)) DamagePlayer();
+    return true;
+}
 
-    // 中央に青い爆発エフェクトを生成する
-    for (auto& explosion : m_explosions) {
-        if (explosion.active) continue;
-        explosion = {0.0f, 0.0f, Player().m_bomb.z, 0, false, true,
-            BombExplosionEffectType};
-        break;
+/** @brief 二つの弾の掃引範囲が接触するか判定する @param bomb 弾消し側 @param shot 敵弾 @return 接触時true */
+bool SideScrollingShooter::BombShotIntersects(const Shot& bomb, const Shot& shot) const {
+    const bool rail = IsRailGameplayActive();
+    const Vector3 end {ToWorldX(bomb.x), ToWorldY(bomb.y), rail ? bomb.z : 0.0f};
+    const Vector3 axis {ToWorldX(bomb.vx), ToWorldY(bomb.vy), rail ? bomb.vz : 0.0f};
+    const Vector3 start = end - axis;
+    const Vector3 point {ToWorldX(shot.x), ToWorldY(shot.y), rail ? shot.z : 0.0f};
+    const Vector3 velocity {ToWorldX(shot.vx), ToWorldY(shot.vy), rail ? shot.vz : 0.0f};
+    const Vector3 previous = point - velocity;
+    const float radius = bomb.hitRadius * WorldXScale +
+        StageDispatch::EnemyShotHitRadius(*this, shot) * (rail ? 1.0f : WorldXScale);
+
+    // 両線分の端点と内部の最近点を調べ、高速弾が防御範囲を飛び越すのを防ぐ
+    float distance = (std::min)({DistancePointToSegment3D(point, start, end),
+        DistancePointToSegment3D(previous, start, end),
+        DistancePointToSegment3D(start, previous, point),
+        DistancePointToSegment3D(end, previous, point)});
+    const Vector3 delta = start - previous;
+    const float aa = axis.LengthSquared();
+    const float bb = Vector3::Dot(axis, velocity);
+    const float cc = velocity.LengthSquared();
+    const float dd = Vector3::Dot(axis, delta);
+    const float ee = Vector3::Dot(velocity, delta);
+    const float denominator = aa * cc - bb * bb;
+    if (denominator > 0.000001f) {
+        const float t = (bb * ee - cc * dd) / denominator;
+        const float u = (aa * ee - bb * dd) / denominator;
+        if (t >= 0.0f && t <= 1.0f && u >= 0.0f && u <= 1.0f)
+            distance = (std::min)(distance, (delta + axis * t - velocity * u).Length());
     }
-    if (m_audio) m_audio->PlaySE(Audio::SfxrPreset::Explosion);
-    ShakeScreen(0.24f, 20);
-    Player().m_bomb = {};
+    return distance <= radius;
 }
 
 void SideScrollingShooter::TickEnemies() {
@@ -449,10 +553,6 @@ void SideScrollingShooter::TickShots() {
             continue;
         }
         // 端から出る円形弾幕が生成直後に欠けないよう、弾のY消滅範囲だけ少し広げる
-        const bool verticalRouteShot = !shot.enemy &&
-            UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
-        const bool part2RailNormalShot = verticalRouteShot &&
-            IsRailGameplayActive() && !shot.special;
         const bool part2RailShot = IsRailGameplayActive() && m_stageNumber == 5 &&
             ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase);
         const float railShotMinY = part2RailShot ?
@@ -487,6 +587,8 @@ void SideScrollingShooter::TickShots() {
         }
 
         if (shot.enemy) {
+            ForEachPlayer([&] { if (shot.active && BombClearsShot(shot)) shot.active = false; });
+            if (!shot.active) continue;
             ForEachPlayer([&] {
                 if (!shot.active || Player().m_playerDestructionTimer > 0) return;
                 const Vector3 playerPosition = PlayerWorldPosition();
@@ -525,116 +627,145 @@ void SideScrollingShooter::TickShots() {
             continue;
         }
 
-        if (StageDispatch::TryDamageStageTarget(*this, shot)) continue;
-
-        for (auto& enemy : m_enemies) {
-            if (!enemy.active) continue;
-            if (m_chapterResultActive && !enemy.collisionEnabled) continue;
-            if (enemy.type == 2 && !enemy.collisionEnabled &&
-                !StageDispatch::CanHitBossWhileCollisionDisabled(*this)) continue;
-            if (enemy.behavior == nullptr) {
-                enemy.behavior = &EnemyBehaviorForType(enemy.type);
-            }
-            BossPart hitPart = BossNose;
-            if (enemy.type == 2 && TryHitBossPart(shot, enemy, hitPart)) {
-                SpawnExplosion(shot.x, shot.y, shot.z);
-                shot.RegisterHit();
-                enemy.bossPartHitFlashFrames[hitPart] = BossPartHitFlashFrames;
-                enemy.bossPartHp[hitPart] -= shot.damage;
-                if (enemy.bossPartHp[hitPart] <= 0) {
-                    enemy.bossPartHp[hitPart] = 0;
-                    SpawnEnemyDebris(enemy, hitPart);
-                    const int partDamage = m_stage->BossPartBreakDamage(hitPart);
-                    bool bossDefeated = false;
-                    if (m_stageNumber == 4 && Stage4Module::IsWeaponSwapActive(*this)) {
-                        // 交換中の通常ダメージ保護とは別に副砲破壊ダメージだけ反映する
-                        enemy.hp -= partDamage;
-                        m_bossHp = (std::max)(0, enemy.hp);
-                        bossDefeated = enemy.hp <= 0;
-                    } else {
-                        bossDefeated = DamageBoss(enemy, partDamage);
-                    }
-                    PlayHitSound();
-                    if (bossDefeated) DefeatBoss(enemy);
-                }
-                if (enemy.hp <= 0) {
-                    DefeatBoss(enemy);
-                } else {
-                    m_bossHp = enemy.hp;
-                }
-                break;
-            }
-            if (enemy.type == 2 && StageDispatch::BlocksPlayerShot(*this, shot, enemy)) {
-                SpawnExplosion(shot.x, shot.y, shot.z);
-                shot.active = false;
-                PlayHitSound();
-                break;
-            }
-            if (enemy.type == 2 && StageDispatch::TryHitBossBody(*this, shot, enemy)) {
-                SpawnExplosion(shot.x, shot.y, shot.z);
-                shot.RegisterHit();
-                if (DamageBoss(enemy, shot.damage)) DefeatBoss(enemy);
-                else m_bossHp = enemy.hp;
-                PlayHitSound();
-                break;
-            }
-            // 専用部位判定後に本体接触無効中のボスを共通形状判定から除外する
-            if (enemy.type == 2 && !enemy.collisionEnabled) continue;
-            const float enemyRadius = enemy.behavior->CollisionRadius(enemy);
-            Vector3 railTarget {ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z};
-            float railTargetRadius = enemy.behavior->ShotHitRadius3D(enemy);
-            if (IsRailGameplayActive() && m_stageNumber == 5 &&
-                ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase)) {
-                railTargetRadius *= ShooterStages::Stage5::Part2EnemyScaleMultiplier(RailBlend());
-            }
-            if (verticalRouteShot && m_viewTransitionTimer > 0) continue;
-            if (verticalRouteShot && shot.special) {
-                // 敵を自機弾の奥行き平面へ透視投影し、画面上で重なった場合だけ命中させる
-                const Vector3 cameraPosition {
-                    ToWorldX(m_players[0].m_playerX) * 0.18f,
-                    ToWorldY(m_players[0].m_playerY) * 0.12f + 1.72f,
-                    PlayerRailDepth() - 21.5f
-                };
-                const float projectionScale = PerspectiveDepthScale(
-                    cameraPosition.z, enemy.z, shot.z);
-                railTarget = cameraPosition + (railTarget - cameraPosition) * projectionScale;
-                railTargetRadius *= projectionScale;
-            }
-            // 第2部3Dの通常ショットは敵の演出用奥行きに依存せず縦画面座標で判定する
-            const bool enemyHit = part2RailNormalShot ?
-                Hit(shot.x, shot.y, shot.hitRadius, enemy.x, enemy.y, enemyRadius) :
-                IsRailGameplayActive() ?
-                Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
-                    ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
-                    railTarget.x, railTarget.y, railTarget.z, railTargetRadius) :
-                Hit(shot.x, shot.y, shot.hitRadius, enemy.x, enemy.y, enemyRadius);
-            if (!enemyHit) continue;
-            SpawnExplosion(shot.x, shot.y, shot.z);
-            shot.RegisterHit();
-            if (enemy.type == 2) DamageBoss(enemy, shot.damage);
-            if (enemy.type != 2) enemy.hp -= shot.damage;
-            if (enemy.hp <= 0) {
-                if (enemy.type == 2) {
-                    DefeatBoss(enemy);
-                } else {
-                    SpawnExplosion(enemy.x, enemy.y, enemy.z, true);
-                    SpawnEnemyDebris(enemy);
-                    enemy.active = false;
-                    ++m_kills;
-                    const int score = enemy.behavior->Score(enemy);
-                    ++m_chapterResult.enemyDefeatCount;
-                    SpawnPowerItem(enemy.x + 0.10f, enemy.y, enemy.z, 0.25f);
-                    SpawnScoreItem(enemy.x - 0.10f, enemy.y, enemy.z, score);
-                }
-                PlayHitSound();
-            } else if (enemy.type == 2) {
-                m_bossHp = enemy.hp;
-            }
-            break;
-        }
+        HitPlayerShotTargets(shot);
     }
+    // 全敵弾を処理してから、各ミサイルとレーザーの命中を個別に解決する
+    ForEachPlayer([&] {
+        auto& bomb = Player().m_bomb;
+        if (!bomb.active || bomb.type == Spread) return;
+        if (bomb.type == Homing) {
+            for (auto& missile : bomb.missiles) {
+                if (!bomb.active) break;
+                if (!missile.active) continue;
+                HitPlayerShotTargets(missile);
+                if (!missile.active) SpawnExplosion(missile.x, missile.y, missile.z, true);
+            }
+        } else if ((bomb.age - 1) % 6 == 0) {
+            Shot shot = MakeBombShot();
+            HitPlayerShotTargets(shot);
+        }
+    });
     // 撃破済みの敵へ枠を残さず、描画前にスナップ先を再評価する
     ForEachPlayer([&] { UpdateAimSnap(); });
+}
+
+/** @brief 自機弾とボムに共通の敵・部位へのダメージを適用する @param shot 自機弾 @return なし */
+void SideScrollingShooter::HitPlayerShotTargets(Shot& shot) {
+    const bool verticalRouteShot = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+    const bool part2RailNormalShot = verticalRouteShot && IsRailGameplayActive() && !shot.special;
+    if (StageDispatch::TryDamageStageTarget(*this, shot) && (!shot.bomb || !shot.active)) return;
+
+    for (auto& enemy : m_enemies) {
+        if (!enemy.active) continue;
+        if (m_chapterResultActive && !enemy.collisionEnabled) continue;
+        if (enemy.type == 2 && !enemy.collisionEnabled &&
+            !StageDispatch::CanHitBossWhileCollisionDisabled(*this)) continue;
+        if (enemy.behavior == nullptr) {
+            enemy.behavior = &EnemyBehaviorForType(enemy.type);
+        }
+        // ボスへのボムは最大HP比で計算する。ミサイル全10発で約20%、レーザー全30ヒットで約15%
+        const int damage = shot.bomb && enemy.type == 2 && enemy.maxHp > 0 ?
+            BossBombDamage(enemy.maxHp, shot.piercing) : shot.damage;
+        BossPart hitPart = BossNose;
+        if (enemy.type == 2 && TryHitBossPart(shot, enemy, hitPart)) {
+            SpawnExplosion(shot.bomb ? enemy.x : shot.x, shot.bomb ? enemy.y : shot.y, shot.bomb ? enemy.z : shot.z);
+            shot.RegisterHit();
+            enemy.bossPartHitFlashFrames[hitPart] = BossPartHitFlashFrames;
+            enemy.bossPartHp[hitPart] -= shot.bomb ? (std::min)(damage, shot.damage) : damage;
+            if (enemy.bossPartHp[hitPart] <= 0) {
+                enemy.bossPartHp[hitPart] = 0;
+                SpawnEnemyDebris(enemy, hitPart);
+                const int partDamage = m_stage->BossPartBreakDamage(hitPart);
+                bool bossDefeated = false;
+                if (m_stageNumber == 4 && Stage4Module::IsWeaponSwapActive(*this)) {
+                    // 交換中の通常ダメージ保護とは別に副砲破壊ダメージだけ反映する
+                    enemy.hp -= partDamage;
+                    m_bossHp = (std::max)(0, enemy.hp);
+                    bossDefeated = enemy.hp <= 0;
+                } else {
+                    bossDefeated = DamageBoss(enemy, partDamage);
+                }
+                PlayHitSound();
+                if (bossDefeated) DefeatBoss(enemy);
+            }
+            if (enemy.hp <= 0) {
+                DefeatBoss(enemy);
+            } else {
+                m_bossHp = enemy.hp;
+            }
+            if (shot.bomb && shot.piercing) continue;
+            break;
+        }
+        if (enemy.type == 2 && StageDispatch::BlocksPlayerShot(*this, shot, enemy)) {
+            SpawnExplosion(shot.bomb ? enemy.x : shot.x, shot.bomb ? enemy.y : shot.y, shot.bomb ? enemy.z : shot.z);
+            shot.active = false;
+            PlayHitSound();
+            break;
+        }
+        if (enemy.type == 2 && StageDispatch::TryHitBossBody(*this, shot, enemy)) {
+            SpawnExplosion(shot.bomb ? enemy.x : shot.x, shot.bomb ? enemy.y : shot.y, shot.bomb ? enemy.z : shot.z);
+            shot.RegisterHit();
+            if (DamageBoss(enemy, damage)) DefeatBoss(enemy);
+            else m_bossHp = enemy.hp;
+            PlayHitSound();
+            if (shot.bomb && shot.piercing) continue;
+            break;
+        }
+        // 専用部位判定後に本体接触無効中のボスを共通形状判定から除外する
+        if (enemy.type == 2 && !enemy.collisionEnabled) continue;
+        const float enemyRadius = enemy.behavior->CollisionRadius(enemy);
+        Vector3 railTarget {ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z};
+        float railTargetRadius = enemy.behavior->ShotHitRadius3D(enemy);
+        if (IsRailGameplayActive() && m_stageNumber == 5 &&
+            ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase)) {
+            railTargetRadius *= ShooterStages::Stage5::Part2EnemyScaleMultiplier(RailBlend());
+        }
+        if (verticalRouteShot && m_viewTransitionTimer > 0) continue;
+        if (verticalRouteShot && shot.special) {
+            // 敵を自機弾の奥行き平面へ透視投影し、画面上で重なった場合だけ命中させる
+            const Vector3 cameraPosition {
+                ToWorldX(m_players[0].m_playerX) * 0.18f,
+                ToWorldY(m_players[0].m_playerY) * 0.12f + 1.72f,
+                PlayerRailDepth() - 21.5f
+            };
+            const float projectionScale = PerspectiveDepthScale(
+                cameraPosition.z, enemy.z, shot.z);
+            railTarget = cameraPosition + (railTarget - cameraPosition) * projectionScale;
+            railTargetRadius *= projectionScale;
+        }
+        // 第2部3Dの通常ショットは敵の演出用奥行きに依存せず縦画面座標で判定する
+        const bool enemyHit = part2RailNormalShot ?
+            HitShotCircle(shot, enemy.x, enemy.y, enemyRadius) :
+            IsRailGameplayActive() ?
+            Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
+                ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
+                railTarget.x, railTarget.y, railTarget.z, railTargetRadius) :
+            HitShotCircle(shot, enemy.x, enemy.y, enemyRadius);
+        if (!enemyHit) continue;
+        SpawnExplosion(shot.bomb ? enemy.x : shot.x, shot.bomb ? enemy.y : shot.y, shot.bomb ? enemy.z : shot.z);
+        shot.RegisterHit();
+        if (enemy.type == 2) DamageBoss(enemy, damage);
+        if (enemy.type != 2) enemy.hp -= shot.damage;
+        if (enemy.hp <= 0) {
+            if (enemy.type == 2) {
+                DefeatBoss(enemy);
+            } else {
+                SpawnExplosion(enemy.x, enemy.y, enemy.z, true);
+                SpawnEnemyDebris(enemy);
+                enemy.active = false;
+                ++m_kills;
+                const int score = enemy.behavior->Score(enemy);
+                ++m_chapterResult.enemyDefeatCount;
+                SpawnPowerItem(enemy.x + 0.10f, enemy.y, enemy.z, 0.25f);
+                SpawnScoreItem(enemy.x - 0.10f, enemy.y, enemy.z, score);
+            }
+            PlayHitSound();
+        } else if (enemy.type == 2) {
+            m_bossHp = enemy.hp;
+        }
+        if (shot.bomb && shot.piercing) continue;
+        break;
+    }
 }
 
 /**
@@ -1182,6 +1313,13 @@ void SideScrollingShooter::FireSpecialShots() {
             shot.hitRadius = config.hitRadius;
             shot.damage = damage;
             shot.playerType = Player().m_playerType;
+            shot.barrageIndex = i;
+            // 発射口の側へ開き、対になる弾は同じ曲線で斉射ごとに巻き返す時刻をずらす
+            if (shot.playerType == Homing) {
+                const int pair = (std::min)(i, projectileCount - 1 - i);
+                const bool negativeSide = verticalRoute ? centeredIndex > 0.0f : centeredIndex < 0.0f;
+                shot.barrageIndex = (pair + m_frame / config.fireIntervalFrames % 3) * 2 + negativeSide;
+            }
             shot.special = true;
             shot.piercing = config.piercing;
             ApplyAimSnap(shot);
@@ -1225,7 +1363,7 @@ int SideScrollingShooter::FindShotTarget(const Shot& shot, Vector3& target, cons
         const Vector3 visiblePosition = position;
         if (!spatial) position.z = 0.0f;
         const Vector3 delta = position - origin;
-        if (delta.x * forward.x + delta.y * forward.y + delta.z * forward.z <= 0.0f) return;
+        if (!shot.bomb && delta.x * forward.x + delta.y * forward.y + delta.z * forward.z <= 0.0f) return;
         float score = HomingTargetScore((position - player).LengthSquared(), shot.homingTarget == id);
         if (aimCamera) {
             Vector2 screen;
@@ -1443,30 +1581,79 @@ void SideScrollingShooter::ApplyAimSnap(Shot& shot) const {
     shot.vz = velocity.z;
 }
 
-/** @brief 攻撃可能な部位と近い敵へ一定速で追尾する @param shot 更新する追尾弾 @return なし */
+/** @brief 自機から放射状に開いて巻き返し、うねりを収めながら標的へ追尾する @param shot 更新する追尾弾 @return なし */
 void SideScrollingShooter::UpdateHomingShot(Shot& shot) {
+    const bool spatial = (IsRailGameplayActive() && !UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase)) || IsTayamaBattle();
+    const int view = (spatial ? 2 : 0) + (IsRailGameplayActive() ? 1 : 0);
+    const bool changedPlane = shot.homingView != view;
+    if (changedPlane) shot.homingTrailCount = 0;
+    shot.homingView = view;
+    // 実際に通った位置を残し、視点の座標系が変わった際は古い残光を破棄する
+    shot.homingTrail[shot.age % shot.homingTrail.size()] = {ToWorldX(shot.x), ToWorldY(shot.y), shot.z};
+    shot.homingTrailCount = (std::min)(shot.homingTrailCount + 1, static_cast<int>(shot.homingTrail.size()));
+    ++shot.age;
+    // 発射後90フレームで誘導を終了し、再捕捉や視点切替後も現在の速度で画面外へ進む
+    constexpr int HomingLifetimeFrames = 90;
+    if (shot.age > HomingLifetimeFrames) {
+        shot.homingTarget = -1;
+        return;
+    }
+    const int previousTarget = shot.homingTarget;
     Vector3 target;
     shot.homingTarget = FindShotTarget(shot, target);
-    if (shot.homingTarget < 0) return;
-    const bool spatial = (IsRailGameplayActive() && !UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase)) || IsTayamaBattle();
-    const Vector3 origin {ToWorldX(shot.x), ToWorldY(shot.y), spatial ? shot.z : 0.0f};
-
-    // 近距離ほど素早く向きを合わせ、旋回半径のために部位を通り過ぎることを防ぐ
-    Vector3 delta = target - origin;
-    Vector3 velocity {ToWorldX(shot.vx), ToWorldY(shot.vy), spatial ? shot.vz : 0.0f};
+    const Vector3 position = spatial ? Vector3 {ToWorldX(shot.x), ToWorldY(shot.y), shot.z} :
+        Vector3 {shot.x, shot.y, 0.0f};
+    Vector3 velocity = spatial ? Vector3 {ToWorldX(shot.vx), ToWorldY(shot.vy), shot.vz} :
+        Vector3 {shot.vx, shot.vy, 0.0f};
     const auto& config = PlayerShotConfigs[static_cast<size_t>(Homing)];
-    if (!spatial) {
-        delta = {FromWorldX(delta.x), FromWorldY(delta.y), 0.0f};
-        velocity = {shot.vx, shot.vy, 0.0f};
-    }
-    const float distance = std::sqrt(delta.LengthSquared());
-    if (distance <= 0.000001f) return;
     const float speed = spatial ? 1.45f : config.speed;
-    const float strength = (std::clamp)(speed * 2.0f / distance, config.homingStrength, 1.0f);
-    velocity = velocity * (1.0f - strength) + delta * (speed * strength / distance);
-    const float length = std::sqrt(velocity.LengthSquared());
-    if (length <= 0.000001f) velocity = delta * (speed / distance);
-    else velocity = velocity * (speed / length);
+    // 曲線の広がりを2Dの弾速と横方向のワールド倍率から決める
+    const float curveSpeed = config.speed * (spatial ? WorldXScale : 1.0f);
+    const int index = (std::max)(0, shot.barrageIndex);
+    const int variant = index / 2 % 3;
+    const float side = (index & 1) ? -1.0f : 1.0f;
+    const int launchFrames = 18 + variant * 4;
+
+    // 敵の位置に依存しない発射軸を保存し、再捕捉や視点切替で発射演出を繰り返さない
+    if (shot.age == 1) {
+        shot.homingOrigin = position;
+        shot.homingLaunchDirection = velocity.Normalized();
+    } else if (changedPlane || (previousTarget >= 0 && shot.homingTarget < 0)) {
+        shot.homingLaunchDirection = {};
+    }
+    const bool launching = shot.age <= launchFrames && shot.homingLaunchDirection.LengthSquared() > 0.5f;
+    if (!launching && shot.homingTarget < 0) return;
+    Vector3 delta = spatial ? target - position :
+        Vector3 {FromWorldX(target.x) - shot.x, FromWorldY(target.y) - shot.y, 0.0f};
+    const float distance = delta.Length();
+    if (!launching && distance <= 0.000001f) return;
+    const Vector3 forward = launching ? shot.homingLaunchDirection : delta / distance;
+    const Vector3 lateral = (spatial ? Vector3::Cross(
+        std::abs(forward.y) < 0.95f ? Vector3::Up : Vector3::Right, forward).Normalized() :
+        Vector3 {-forward.y, forward.x, 0.0f}) * side;
+    if (launching) {
+        // 狭い発射口から横・後方へ開き、先端が内側へ巻き返すエルミート曲線
+        const float t = static_cast<float>(shot.age) / launchFrames;
+        const float endWeight = t * t * (3.0f - 2.0f * t);
+        const float startWeight = t * (t - 1.0f) * (t - 1.0f);
+        const float endTangentWeight = t * t * (t - 1.0f);
+        const float outward = (0.42f - 0.07f * variant) * endWeight +
+            (0.95f - 0.20f * variant) * startWeight - 0.45f * endTangentWeight;
+        const float advance = -(0.03f + 0.055f * variant) * endWeight -
+            (0.25f + 0.35f * variant) * startWeight + 1.15f * endTangentWeight;
+        const Vector3 next = shot.homingOrigin + (lateral * outward + forward * advance) * (curveSpeed * 18.0f);
+        velocity = next - position;
+    } else {
+        // 巻き返し後のうねりを時間と距離で減衰させ、小さい部位へも収束する
+        const float remaining = std::clamp(static_cast<float>(launchFrames + 42 - shot.age) / 42.0f, 0.0f, 1.0f);
+        const float fade = remaining * std::clamp(distance / (speed * 6.0f) - 1.0f, 0.0f, 1.0f);
+        const float phase = (shot.age - launchFrames) * 0.24f + variant * 0.8f;
+        delta -= lateral * (std::cos(phase) * distance * 1.6f * fade * curveSpeed / speed);
+        const float strength = (std::clamp)(speed * 2.0f / distance, config.homingStrength, 1.0f);
+        velocity = velocity * (1.0f - strength) + delta.Normalized() * (speed * strength);
+        const float length = velocity.Length();
+        velocity = length > 0.000001f ? velocity * (speed / length) : forward * speed;
+    }
     shot.vx = spatial ? FromWorldX(velocity.x) : velocity.x;
     shot.vy = spatial ? FromWorldY(velocity.y) : velocity.y;
     if (spatial) shot.vz = velocity.z;
@@ -1669,8 +1856,7 @@ void SideScrollingShooter::TickExplosions() {
                 }
             }
         });
-        const int lifetime = explosion.effectType == BombExplosionEffectType ?
-            BombExplosionLifetimeFrames : explosion.effectType == 1 ? MortarExplosionLifetimeFrames :
+        const int lifetime = explosion.effectType == 1 ? MortarExplosionLifetimeFrames :
             (explosion.destruction ? DestructionExplosionLifetimeFrames : ExplosionLifetimeFrames);
         if (++explosion.age >= lifetime) explosion.active = false;
     }

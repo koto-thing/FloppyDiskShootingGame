@@ -2,6 +2,10 @@
 
 #include <algorithm>
 #include <cstring>
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+#include "Utf8Text.h"
+#include <cmath>
+#endif
 
 /**
  * @brief 描画コマンドを記録領域へ追加する
@@ -74,13 +78,25 @@ void Renderer::DrawRailgun(const RailgunVisual& railgun) {
 
 void Renderer::DrawText(std::string_view text, const Vector2& position, float size, const ColorF& color,
                         float characterSpacing) {
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    // 座標指定の演出はそのまま保ち、表示文字列だけを翻訳する
+    RecordTextCommand(ResolveText(text), position, size, color, characterSpacing);
+}
+
+void Renderer::RecordTextCommand(std::string_view text, const Vector2& position, float size, const ColorF& color,
+                                 float characterSpacing) {
+#endif
     RenderCommand* command = TryAppend(RenderCommand::Type::Text);
     if (command == nullptr) return;
     command->position = position;
     command->size = size;
     command->characterSpacing = characterSpacing;
     command->color = color;
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    command->textLength = Utf8Text::PrefixLength(text, command->text.size() - 1);
+#else
     command->textLength = std::min(text.size(), command->text.size() - 1);
+#endif
     std::memcpy(command->text.data(), text.data(), command->textLength);
     command->text[command->textLength] = '\0';
 
@@ -94,9 +110,27 @@ void Renderer::Draw(const Rect& rect, RectAlign alignment, const ColorF& color) 
 
 void Renderer::DrawText(std::string_view text, TextAlign alignment, float size, const ColorF& color,
                         const Vector2& offset, float characterSpacing) {
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    // 翻訳後に文字境界で切り詰め、画面端と左右パネルの幅に収める
+    const std::string translated = ResolveText(text);
+    text = std::string_view(translated).substr(0, Utf8Text::PrefixLength(translated, RenderCommand::TextCapacity - 1));
+    const bool centered = alignment == TextAlign::TopCenter || alignment == TextAlign::Center ||
+        alignment == TextAlign::BottomCenter;
+    const float availableWidth = (std::max)(0.05f, (centered ? 2.0f * (1.0f - std::abs(offset.x)) :
+        2.0f - std::abs(offset.x)) - 0.04f);
+    const float width = Utf8Text::Measure(text, size, characterSpacing, AspectRatio()).width;
+    if (width > availableWidth) {
+        const float scale = availableWidth / width;
+        size *= scale;
+        characterSpacing *= scale;
+    }
+    RecordTextCommand(text, CalculateTextPosition(text, alignment, size, characterSpacing) + offset,
+                      size, color, characterSpacing);
+#else
     // 配置基準から先頭文字の中心座標を計算する
     DrawText(text, CalculateTextPosition(text, alignment, size, characterSpacing) + offset, size, color,
              characterSpacing);
+#endif
 }
 
 Rect Renderer::CreateAlignedRect(const Vector2& size, RectAlign alignment, const Vector2& offset) {
@@ -137,6 +171,14 @@ Rect Renderer::CreateAlignedRect(const Vector2& size, RectAlign alignment, const
 
 Vector2 Renderer::CalculateTextPosition(std::string_view text, TextAlign alignment, float size,
                                         float characterSpacing) const {
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    // GPU描画と同じ文字幅と行間を使って配置する
+    const auto metrics = Utf8Text::Measure(text, size, characterSpacing, AspectRatio());
+    const float glyphHalfWidth = metrics.firstGlyphOffset;
+    const float glyphHalfHeight = size * AspectRatio();
+    const float lineWidth = metrics.width;
+    const float textHeight = metrics.height;
+#else
     // 改行を考慮して最長行の文字数と行数を求める
     std::size_t longestLineLength = 0;
     std::size_t currentLineLength = 0;
@@ -158,9 +200,14 @@ Vector2 Renderer::CalculateTextPosition(std::string_view text, TextAlign alignme
     const float lineWidth = longestLineLength == 0 ? 0.0f :
         (static_cast<float>(longestLineLength - 1) * characterAdvance) + glyphHalfWidth * 2.0f;
     const float textHeight = static_cast<float>(lineCount) * size * 2.0f;
+#endif
 
     float startX = -1.0f + glyphHalfWidth;
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    float startY = 1.0f - glyphHalfHeight;
+#else
     float startY = 1.0f - size;
+#endif
     switch (alignment) {
     case TextAlign::TopCenter:
     case TextAlign::Center:
@@ -180,12 +227,20 @@ Vector2 Renderer::CalculateTextPosition(std::string_view text, TextAlign alignme
     case TextAlign::CenterLeft:
     case TextAlign::Center:
     case TextAlign::CenterRight:
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+        startY = textHeight * 0.5f - glyphHalfHeight;
+#else
         startY = textHeight * 0.5f - size;
+#endif
         break;
     case TextAlign::BottomLeft:
     case TextAlign::BottomCenter:
     case TextAlign::BottomRight:
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+        startY = -1.0f + textHeight - glyphHalfHeight;
+#else
         startY = -1.0f + textHeight - size;
+#endif
         break;
     default:
         break;

@@ -1,4 +1,5 @@
 #include "TestStage.h"
+#include "../../Application/UseCases/Localization.h"
 #include "../Gameplay/SideScrollingShooter.h"
 #include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
 #include "../../Infrastructure/ExternalServices/AudioService.h"
@@ -178,6 +179,9 @@ void TestStage::Dispose() {
     m_closeMenuButton.reset();
     m_backToMenuButton.reset();
     m_retroEffectButton.reset();
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    m_languageButton.reset();
+#endif
     m_game.reset();
 }
 
@@ -213,7 +217,13 @@ void TestStage::InitializePauseMenu() {
     m_closeMenuButton->SetOnClick([this]() { if (ControllersConnected()) m_pauseMenuOpen = false; });
 
     m_backToMenuButton = std::make_unique<Button>(Vector2 {0.42f, 0.10f}, RectAlign::Center,
-        "BACK TO MENU", Vector2 {0.0f, -0.45f});
+        "BACK TO MENU", Vector2 {0.0f,
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+            -0.59f
+#else
+            -0.45f
+#endif
+        });
     m_backToMenuButton->SetClickSound(Button::ClickSound::Cancel);
     m_backToMenuButton->SetOnClick([this]() { m_optionsOpen = false; });
 
@@ -231,6 +241,19 @@ void TestStage::InitializePauseMenu() {
         settings.retroEffectEnabled = m_retroEffectEnabled;
         repository.Save(settings);
     });
+
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    // ポーズ中にも言語を即時切り替え、再起動後の選択を保存する
+    m_languageButton = std::make_unique<Button>(Vector2 {0.55f, 0.10f}, RectAlign::Center,
+        Localization::LanguageName(Localization::GetLanguage()), Vector2 {0.0f, -0.44f});
+    m_languageButton->SetOnClick([this]() {
+        const auto next = static_cast<Localization::Language>(
+            (static_cast<int>(Localization::GetLanguage()) + 1) % static_cast<int>(Localization::Language::Count));
+        Localization::SetLanguage(next);
+        SettingsRepository().SaveLanguage(next);
+        m_languageButton->SetText(Localization::LanguageName(next));
+    });
+#endif
 
     // 既存のオプション画面と同じ音量設定をゲームを止めたまま変更できるようにする
     m_masterVolumeSlider = Slider(Rect {{0.0f, 0.15f}, {0.55f, 0.04f}}, 0.0f, 1.0f,
@@ -252,6 +275,9 @@ void TestStage::ProcessPauseMenuInput() {
         m_bgmVolumeSlider.Update(input);
         m_seVolumeSlider.Update(input);
         m_retroEffectButton->Update(input);
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+        m_languageButton->Update(input);
+#endif
         return;
     }
 
@@ -286,17 +312,25 @@ void TestStage::RenderPauseMenu(Renderer& renderer) const {
         return;
     }
 
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    // 翻訳後の文字幅でポーズ設定の見出しを中央へ配置する
+    renderer.DrawText("OPTIONS", TextAlign::Center, 0.04f, ColorF::White(), {0.0f, 0.42f});
+#else
     renderer.DrawText("OPTIONS", {-0.18f, 0.42f}, 0.04f, ColorF::White());
-    char text[32];
-    snprintf(text, sizeof(text), "MST %3d%%", static_cast<int>(m_masterVolumeSlider.Value() * 100.0f + 0.5f));
+#endif
+    char text[Localization::BufferSize(32)];
+    snprintf(text, sizeof(text), Localization::Text("MST %3d%%"), static_cast<int>(m_masterVolumeSlider.Value() * 100.0f + 0.5f));
     renderer.DrawText(text, {-0.65f, 0.17f}, 0.016f, ColorF(0.7f, 0.7f, 0.7f, 0.8f));
-    snprintf(text, sizeof(text), "BGM %3d%%", static_cast<int>(m_bgmVolumeSlider.Value() * 100.0f + 0.5f));
+    snprintf(text, sizeof(text), Localization::Text("BGM %3d%%"), static_cast<int>(m_bgmVolumeSlider.Value() * 100.0f + 0.5f));
     renderer.DrawText(text, {-0.65f, 0.02f}, 0.016f, ColorF(0.7f, 0.7f, 0.7f, 0.8f));
-    snprintf(text, sizeof(text), "SE  %3d%%", static_cast<int>(m_seVolumeSlider.Value() * 100.0f + 0.5f));
+    snprintf(text, sizeof(text), Localization::Text("SE  %3d%%"), static_cast<int>(m_seVolumeSlider.Value() * 100.0f + 0.5f));
     renderer.DrawText(text, {-0.65f, -0.13f}, 0.016f, ColorF(0.7f, 0.7f, 0.7f, 0.8f));
     m_masterVolumeSlider.Render(renderer);
     m_bgmVolumeSlider.Render(renderer);
     m_seVolumeSlider.Render(renderer);
     m_retroEffectButton->Render(renderer);
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    m_languageButton->Render(renderer);
+#endif
     m_backToMenuButton->Render(renderer);
 }

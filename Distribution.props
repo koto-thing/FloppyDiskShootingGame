@@ -23,6 +23,14 @@
     <DisableFastUpToDateCheck>true</DisableFastUpToDateCheck>
   </PropertyGroup>
   <!-- Goサーバー用の通信とロビーはOnline版だけに含める -->
+  <!-- 翻訳とUnicodeフォントは容量制限のないゲーム実行ファイルだけに含める -->
+  <ItemGroup Condition="('$(MSBuildProjectName)'=='FloppyDiskShootingGame' or '$(MSBuildProjectName)'=='FloppyEngine.Tests') and ('$(Distribution)'=='Online' or '$(Distribution)'=='Steam')">
+    <ClCompile Include="Application\UseCases\Localization.cpp" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(MSBuildProjectName)'=='FloppyDiskShootingGame' and ('$(Distribution)'=='Online' or '$(Distribution)'=='Steam')">
+    <ResourceCompile Include="Resources\UnicodeFont.rc" />
+    <DistributionFile Include="Resources\UnicodeFont-LICENSE.txt" />
+  </ItemGroup>
   <ItemDefinitionGroup Condition="'$(MSBuildProjectName)'=='FloppyDiskShootingGame' and '$(Distribution)'=='Online'">
     <ClCompile>
       <FloatingPointModel>Strict</FloatingPointModel>

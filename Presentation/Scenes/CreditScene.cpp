@@ -1,4 +1,5 @@
 #include "CreditScene.h"
+#include "../../Application/UseCases/Localization.h"
 
 #include <string>
 #include <windows.h>
@@ -157,7 +158,7 @@ void CreditScene::Render(Renderer& renderer) {
     m_creditPresenter.Render(renderer, *m_creditObject, m_creditController->GetCreditContent());
 
     // ミニゲームの得点を右上へ小さく描画する
-    renderer.DrawText("SCORE " + std::to_string(m_score), TextAlign::TopRight, 0.012f,
+    renderer.DrawText(std::string(Localization::Text("SCORE ")) + std::to_string(m_score), TextAlign::TopRight, 0.012f,
         ColorF::White(), {-0.04f, -0.04f});
 
     // 左下のタイトルへ戻るボタンを描画する

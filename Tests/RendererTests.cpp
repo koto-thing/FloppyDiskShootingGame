@@ -72,6 +72,13 @@ void RecordsCharacterSpacing() {
     renderer.BeginFrame();
     renderer.DrawText("SPACED", {}, 0.1f, ColorF::White(), 0.025f);
     Require(renderer.Command(0).characterSpacing == 0.025f, "Text command must preserve character spacing");
+    // 座標指定でも版ごとの既定字間を記録する
+    renderer.DrawText("EFFECTS", Vector2::Zero, 0.02f, ColorF::White());
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    Require(renderer.Command(1).characterSpacing == 0.0f, "Unicode editions must preserve default spacing");
+#else
+    Require(renderer.Command(1).characterSpacing == 0.003f, "Floppy text must have a readable default gap");
+#endif
 }
 
 void RecordsExplosionCommand() {
@@ -93,17 +100,19 @@ void RecordsExplosionCommand() {
         "Mortar shockwave command must preserve its effect type");
 }
 
-/** @brief 弾の深度情報がバックエンドまで保持されることを検証する @return なし */
+/** @brief 弾の深度と不透明度がバックエンドまで保持されることを検証する @return なし */
 void PreservesShotDepthTest() {
     FakeRenderBackend backend;
     Renderer renderer(backend);
     renderer.BeginFrame();
-    renderer.DrawPlayerShot({{}, {}, 0.0f, 0.0f, 4, 0.75f, true});
+    renderer.DrawPlayerShot({{}, {}, 0.0f, 0.0f, 4, 0.75f, true, 0.22f});
     renderer.Flush();
     Require(backend.lastPlayerShot.depth == 0.75f,
         "Shot command must preserve projected depth");
     Require(backend.lastPlayerShot.depthTest,
         "Shot command must preserve depth-test selection");
+    Require(backend.lastPlayerShot.opacity == 0.22f,
+        "Shot command must preserve opacity");
 }
 
 void SendsCharacterSpacingToBackend() {
@@ -121,7 +130,7 @@ void AlignsTextToScreenPositions() {
     renderer.BeginFrame();
     renderer.DrawText("AB", TextAlign::Center, 0.1f, ColorF::White());
     renderer.Flush();
-    Require(IsNearlyEqual(backend.lastTextPosition, {-0.075f, 0.0f}),
+    Require(IsNearlyEqual(backend.lastTextPosition, {-0.075f - Renderer::DefaultCharacterSpacing * 0.5f, 0.0f}),
             "Center alignment must place the text at the screen center");
 
     renderer.BeginFrame();

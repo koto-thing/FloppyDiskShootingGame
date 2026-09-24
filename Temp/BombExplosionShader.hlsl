@@ -1,0 +1,118 @@
+
+struct VS_OUTPUT
+{
+    float4 position : SV_POSITION;
+    float2 uv : TEXCOORD0;
+};
+
+cbuffer ExplosionBuffer : register(b0)
+{
+    float4x4 u_transform;
+    float4 u_color;
+    float u_progress;
+    float u_shapeType;
+    float u_rotation;
+    float u_padding;
+};
+
+VS_OUTPUT VSExplosion(uint vertexId : SV_VertexID)
+{
+    VS_OUTPUT output;
+    float2 localPosition;
+    localPosition.x = float(vertexId & 2) - 1.0f;
+    localPosition.y = float((vertexId & 1) << 1) - 1.0f;
+    output.position = mul(float4(localPosition, 0.0f, 1.0f), u_transform);
+    output.uv = localPosition;
+    return output;
+}
+
+float4 PSExplosion(VS_OUTPUT input) : SV_TARGET
+{
+    if (u_shapeType > 3.5f)
+    {
+        // 迫撃砲着弾時に地表を走る高温の衝撃波を生成する
+        float progress = saturate(u_progress);
+        float2 uv = input.uv;
+        float distanceFromCenter = length(float2(uv.x * 0.72f, uv.y * 2.45f));
+        float ringRadius = 0.18f + progress * 0.82f;
+        float ring = 1.0f - smoothstep(0.025f, 0.10f, abs(distanceFromCenter - ringRadius));
+        float innerHeat = 1.0f - smoothstep(0.02f, 0.42f + progress * 0.22f, distanceFromCenter);
+        float roughness = sin(atan2(uv.y, uv.x) * 17.0f + progress * 24.0f) * 0.5f + 0.5f;
+        float alpha = saturate((ring * (0.70f + roughness * 0.30f) + innerHeat * 0.20f) *
+            (1.0f - progress));
+        if (alpha < 0.01f) discard;
+        float3 color = lerp(float3(1.0f, 0.12f, 0.01f), float3(1.0f, 0.90f, 0.28f),
+            saturate(innerHeat + ring * 0.45f));
+        return float4(color, alpha);
+    }
+
+    if (u_shapeType > 2.5f)
+    {
+        // 戦艦下面から下向きに噴射する補助エンジン炎を生成する
+        float2 uv = input.uv;
+        float distanceFromNozzle = saturate((1.0f - uv.y) * 0.5f);
+        float flicker = sin(u_progress * 19.0f + uv.y * 7.0f) * 0.08f +
+            sin(u_progress * 31.0f - uv.y * 11.0f) * 0.04f;
+        float flameLength = 0.90f + flicker;
+        float width = lerp(0.72f, 0.05f, distanceFromNozzle) *
+            (0.92f + sin(u_progress * 23.0f + distanceFromNozzle * 18.0f) * 0.08f);
+        float body = 1.0f - smoothstep(width * 0.70f, width, abs(uv.x));
+        float tip = 1.0f - smoothstep(flameLength - 0.12f, flameLength, distanceFromNozzle);
+        float core = (1.0f - smoothstep(0.02f, max(0.06f, width * 0.46f), abs(uv.x))) *
+            (1.0f - smoothstep(0.28f, 0.76f, distanceFromNozzle));
+        float alpha = saturate(body * tip * (0.78f + core * 0.42f));
+        if (alpha < 0.01f) discard;
+        float3 color = lerp(float3(1.0f, 0.08f, 0.005f), float3(1.0f, 0.52f, 0.025f),
+            1.0f - distanceFromNozzle);
+        color = lerp(color, float3(1.0f, 0.96f, 0.62f), core);
+        return float4(color, alpha);
+    }
+
+    if (u_shapeType > 1.5f)
+    {
+        // 撃破後半は膨張しながら上昇する黒煙を複数の塊で描く
+        float progress = saturate(u_progress);
+        float2 uv = input.uv;
+        float rise = progress * 0.72f;
+        float spread = 0.12f + progress * 0.34f;
+        float2 p0 = uv - float2(-spread, -0.22f + rise);
+        float2 p1 = uv - float2(spread * 0.75f, -0.05f + rise * 1.12f);
+        float2 p2 = uv - float2(sin(progress * 13.0f) * 0.12f, 0.22f + rise * 0.82f);
+        float smoke = 1.0f - smoothstep(0.22f, 0.58f, length(p0));
+        smoke += 1.0f - smoothstep(0.20f, 0.54f, length(p1));
+        smoke += 1.0f - smoothstep(0.18f, 0.50f, length(p2));
+        float fade = smoothstep(0.02f, 0.14f, progress) * (1.0f - smoothstep(0.68f, 1.0f, progress));
+        float alpha = saturate(smoke) * fade * 0.88f;
+        if (alpha < 0.02f) discard;
+        float shade = 0.025f + saturate(smoke) * 0.055f + progress * 0.035f;
+        return float4(shade.xxx, alpha);
+    }
+
+    if (u_shapeType > 0.5f)
+    {
+        // 上昇速度の異なる円を重ね、テクスチャなしで煙の揺らぎを作る
+        float time = u_progress;
+        float2 uv = input.uv;
+        float2 p0 = uv - float2(sin(time * 1.7f) * 0.16f, -0.38f + frac(time * 0.23f) * 1.35f);
+        float2 p1 = uv - float2(cos(time * 1.3f + 1.8f) * 0.22f, -0.55f + frac(time * 0.19f + 0.42f) * 1.45f);
+        float2 p2 = uv - float2(sin(time * 1.1f + 3.2f) * 0.18f, -0.48f + frac(time * 0.17f + 0.73f) * 1.40f);
+        float smoke = (1.0f - smoothstep(0.20f, 0.55f, length(p0))) * 0.58f;
+        smoke += (1.0f - smoothstep(0.18f, 0.50f, length(p1))) * 0.50f;
+        smoke += (1.0f - smoothstep(0.16f, 0.46f, length(p2))) * 0.42f;
+        float alpha = saturate(smoke) * saturate(1.0f - (uv.y + 0.25f) * 0.28f);
+        if (alpha < 0.02f) discard;
+        float shade = saturate(0.20f + uv.y * 0.13f + smoke * 0.18f);
+        return float4(shade.xxx, alpha * 0.72f);
+    }
+
+    float distanceFromCenter = length(input.uv);
+    float progress = saturate(u_progress);
+    float core = 1.0f - smoothstep(0.03f, 0.34f + progress * 0.18f, distanceFromCenter);
+    float ringRadius = 0.16f + progress * 0.78f;
+    float ring = 1.0f - smoothstep(0.025f, 0.12f, abs(distanceFromCenter - ringRadius));
+    float sparks = saturate(sin(atan2(input.uv.y, input.uv.x) * 9.0f + progress * 28.0f) * 0.5f + 0.5f);
+    float alpha = saturate((core + ring * (0.75f + sparks * 0.25f)) * (1.0f - progress));
+    if (alpha < 0.01f) discard;
+    float3 color = lerp(float3(1.0f, 0.10f, 0.01f), float3(1.0f, 0.92f, 0.35f), core);
+    return float4(color, alpha);
+}

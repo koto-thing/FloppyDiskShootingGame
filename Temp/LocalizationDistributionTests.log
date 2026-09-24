@@ -1,0 +1,4 @@
+D:\Pandd\FloppyDiskShootingGame\Distribution.props(87,5): error : Distribution must be Floppy, Online, or Steam [D:\Pandd\FloppyDiskShootingGame\FloppyDiskShootingGame.vcxproj]
+D:\Pandd\FloppyDiskShootingGame\Distribution.props(86,5): error : Distribution conflicts with the selected IDE configuration [D:\Pandd\FloppyDiskShootingGame\FloppyDiskShootingGame.vcxproj]
+Floppy distribution: 1474560 / 1474560 bytes
+Distribution tests passed

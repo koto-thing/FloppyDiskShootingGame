@@ -3,6 +3,9 @@
 #include <cstdint>
 
 #include "../../Domain/ValueObjects/GalleryEntry.h"
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+#include "../../Application/UseCases/Localization.h"
+#endif
 
 /** @brief ゲーム設定値 */
 struct GameSettings {
@@ -29,6 +32,13 @@ public:
      * @param settings 保存する設定
      */
     void Save(const GameSettings& settings) const;
+
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    /** @brief 保存済み言語を取得する @return 未保存または破損時はOSの表示言語 */
+    Localization::Language LoadLanguage() const;
+    /** @brief Floppyと共有する設定ファイルとは別に言語を保存する @param language 保存する言語 */
+    void SaveLanguage(Localization::Language language) const;
+#endif
 
     /**
      * @brief 展示を解放して既存設定とともに保存する

@@ -1,4 +1,5 @@
-﻿#include "OptionScene.h"
+#include "OptionScene.h"
+#include "../../Application/UseCases/Localization.h"
 
 #include <cstdio>
 #include <windows.h>
@@ -27,6 +28,20 @@ void OptionScene::Initialize() {
         m_retroEffectEnabled = !m_retroEffectEnabled;
         m_retroEffectButton->SetText(m_retroEffectEnabled ? "RETRO EFFECT  ON" : "RETRO EFFECT OFF");
     });
+
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    // 各言語の自称を表示して、どの表示言語からでも選び直せるようにする
+    m_languageButton = std::make_unique<Button>(
+        Rect {{0.0f, -0.55f}, {0.55f, 0.10f}},
+        Localization::LanguageName(Localization::GetLanguage()));
+    m_languageButton->SetOnClick([this]() {
+        const auto next = static_cast<Localization::Language>(
+            (static_cast<int>(Localization::GetLanguage()) + 1) % static_cast<int>(Localization::Language::Count));
+        Localization::SetLanguage(next);
+        SettingsRepository().SaveLanguage(next);
+        m_languageButton->SetText(Localization::LanguageName(next));
+    });
+#endif
     
     // マスター音量
     m_masterVolumeSlider = Slider(
@@ -93,6 +108,9 @@ void OptionScene::ProcessInput() {
         m_backToTitleButton->Update(inputState);
     }
     if (m_retroEffectButton != nullptr) m_retroEffectButton->Update(inputState);
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    if (m_languageButton != nullptr) m_languageButton->Update(inputState);
+#endif
     
     m_masterVolumeSlider.Update(inputState);
     m_bgmVolumeSlider.Update(inputState);
@@ -117,6 +135,9 @@ void OptionScene::Dispose() {
     repository.Save(settings);
     m_backToTitleButton.reset();
     m_retroEffectButton.reset();
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    m_languageButton.reset();
+#endif
 }
 
 void OptionScene::Render(Renderer& renderer) {
@@ -127,23 +148,27 @@ void OptionScene::Render(Renderer& renderer) {
     SpaceBackground::Render(renderer, Time::unscaledTime);
 
     // オプション画面の見出しを描画する
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    renderer.DrawText("OPTIONS", TextAlign::Center, 0.04f, ColorF::White(), {0.0f, 0.65f});
+#else
     renderer.DrawText(
         "OPTIONS",
         { -0.18f, 0.65f },
         0.04f,
         { 1.0f, 1.0f, 1.0f, 1.0f }
     );
+#endif
 
     // 各音量の現在値をラベルとして描画する
-    char buf[64];
+    char buf[Localization::BufferSize(64)];
 
-    snprintf(buf, sizeof(buf), "MST %3d%%", static_cast<int>(m_masterVolumeSlider.Value() * 100.0f + 0.5f));
+    snprintf(buf, sizeof(buf), Localization::Text("MST %3d%%"), static_cast<int>(m_masterVolumeSlider.Value() * 100.0f + 0.5f));
     renderer.DrawText(buf, { -0.50f, 0.17f }, 0.016f, ColorF(0.7f, 0.7f, 0.7f, 0.8f));
 
-    snprintf(buf, sizeof(buf), "BGM %3d%%", static_cast<int>(m_bgmVolumeSlider.Value() * 100.0f + 0.5f));
+    snprintf(buf, sizeof(buf), Localization::Text("BGM %3d%%"), static_cast<int>(m_bgmVolumeSlider.Value() * 100.0f + 0.5f));
     renderer.DrawText(buf, { -0.50f, 0.02f }, 0.016f, ColorF(0.7f, 0.7f, 0.7f, 0.8f));
 
-    snprintf(buf, sizeof(buf), "SE  %3d%%", static_cast<int>(m_seVolumeSlider.Value() * 100.0f + 0.5f));
+    snprintf(buf, sizeof(buf), Localization::Text("SE  %3d%%"), static_cast<int>(m_seVolumeSlider.Value() * 100.0f + 0.5f));
     renderer.DrawText(buf, { -0.50f, -0.13f }, 0.016f, ColorF(0.7f, 0.7f, 0.7f, 0.8f));
 
     // 音量スライダーを描画する
@@ -152,6 +177,10 @@ void OptionScene::Render(Renderer& renderer) {
     m_seVolumeSlider.Render(renderer);
 
     if (m_retroEffectButton != nullptr) m_retroEffectButton->Render(renderer);
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    renderer.DrawText("LANGUAGE", {-0.50f, -0.50f}, 0.016f, ColorF::White());
+    if (m_languageButton != nullptr) m_languageButton->Render(renderer);
+#endif
 
     // タイトルへ戻るボタンを描画する
     if (m_backToTitleButton != nullptr) {

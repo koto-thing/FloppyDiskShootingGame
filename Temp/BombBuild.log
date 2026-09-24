@@ -1,0 +1,77 @@
+
+  Component.cpp
+  Debug.cpp
+  Transform.cpp
+  GameObject.cpp
+  GameWorld.cpp
+  Circle.cpp
+  Rect.cpp
+  Sphere.cpp
+  Box.cpp
+  Ray.cpp
+  Camera2D.cpp
+  Camera3D.cpp
+  Renderer.cpp
+  MeshRenderer.cpp
+  CollisionLayer.cpp
+  Input.cpp
+  WindowsInputBackend.cpp
+  Switch2ProInput.cpp
+  Time.cpp
+  Button.cpp
+  コンパイル中...
+  Slider.cpp
+  D3D12RenderingService.cpp
+  InputService.cpp
+  TextRenderingService.cpp
+  Win32WindowService.cpp
+  CollisionService.cpp
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Floppy\x64\FloppyRelease\FloppyEngine.lib
+  Build version: Floppy v095
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  TextRenderingService.cpp
+  AudioService.cpp
+  MMLData.cpp
+  PackedAudioSamples.cpp
+  MMLParser.cpp
+  SynthWaveGenerator.cpp
+  SfxrGenerator.cpp
+  ScoreRepository.cpp
+  SettingsRepository.cpp
+  main.cpp
+  SideScrollingShooter.cpp
+  SideScrollingShooterCombat.cpp
+D:\Pandd\FloppyDiskShootingGame\Presentation\Gameplay\SideScrollingShooterCombat.cpp(501,20): warning C4189: 'verticalRouteShot': ローカル変数が初期化されましたが、参照されていません [D:\Pandd\FloppyDiskShootingGame\FloppyDiskShootingGame.vcxproj]
+  SideScrollingShooterRendering.cpp
+  SideScrollingShooterBackgrounds.cpp
+  StageDispatch.cpp
+  Stage1Module.cpp
+  Stage2Module.cpp
+  Stage2Rendering.cpp
+  Stage3Module.cpp
+  CityBackgroundModule.cpp
+  コンパイル中...
+  Stage4Module.cpp
+  Stage5Module.cpp
+  Stage5Rendering.cpp
+  SpaceBackground.cpp
+  CreditContentController.cpp
+  CreditContentPresenter.cpp
+  CreditSceneContent.cpp
+  ModeSelectionStateController.cpp
+  CreditScene.cpp
+  ModeSelectionScene.cpp
+  StoryScene.cpp
+  EndingScene.cpp
+  RankingScene.cpp
+  OptionScene.cpp
+  TestStage.cpp
+  TutorialStage.cpp
+  GalleryScene.cpp
+  TitleScene.cpp
+  TitleSceneColumn.cpp
+  コード生成しています。
+  コード生成が終了しました。
+  FloppyDiskShootingGame.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Floppy\x64\FloppyRelease\SpaceYakuza.exe
+  Floppy distribution: 1474560 / 1474560 bytes

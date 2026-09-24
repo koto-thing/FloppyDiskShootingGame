@@ -139,6 +139,12 @@ int WINAPI wWinMain(
 
     Renderer renderFacade(renderer);
 
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+    // 翻訳とUTF-8描画は容量制限のない版だけに接続する
+    Localization::SetLanguage(SettingsRepository().LoadLanguage());
+    renderFacade.SetTextTranslator(&Localization::Translate);
+#endif
+
     // オーディオ設定を読み込む
     AudioService audio;
     const GameSettings settings = SettingsRepository().Load();

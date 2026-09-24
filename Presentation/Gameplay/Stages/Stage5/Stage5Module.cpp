@@ -774,7 +774,7 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
     }
 
     if (phase == Stage5Phase::EastsourceIntro) {
-        shooter.m_shots = {};
+        shooter.ResetShots();
         shooter.m_enemies = {};
         shooter.m_items = {};
         shooter.m_bossBattle = true;
@@ -799,9 +799,9 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
     }
     if (phase == Stage5Phase::EastsourceFall) {
         shooter.m_bossBattle = false;
-        shooter.m_shots = {};
+        shooter.ResetShots();
         shooter.m_items = {};
-        shooter.ForEachPlayer([&] { shooter.Player().m_bomb = {}; });
+        shooter.ForEachPlayer([&] { shooter.Player().m_bomb.EndAttack(); });
         PlayCue(shooter, ShooterStages::Stage5::SignalLost);
         return;
     }
@@ -848,7 +848,7 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
             shooter.ForEachPlayer([&] {
                 shooter.Player().m_playerX = static_cast<float>(shooter.m_activePlayer) * 0.36f;
                 shooter.Player().m_playerY = 0.0f;
-                shooter.Player().m_bomb = {};
+                shooter.Player().m_bomb.EndAttack();
             });
         }
         if (startsPart2) {
@@ -888,10 +888,10 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
     }
 
     if (phase == Stage5Phase::CloudSea) {
-        shooter.m_shots = {};
+        shooter.ResetShots();
         shooter.m_items = {};
         shooter.ForEachPlayer([&] {
-            shooter.Player().m_bomb = {};
+            shooter.Player().m_bomb.EndAttack();
             shooter.Player().m_playerX = static_cast<float>(shooter.m_activePlayer) * 0.36f;
             shooter.Player().m_playerY = 0.0f;
             shooter.Player().m_invincible = ShooterStages::Stage5::CloudSeaAssemblyFrames + 30;
@@ -1828,7 +1828,7 @@ bool SideScrollingShooter::Stage5Module::TryDamageTayamaReflectFunnel(
                 shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
                 shot.hitRadius * WorldXScale, ToWorldX(funnel.x), ToWorldY(funnel.y),
                 funnel.z, 0.72f) :
-            Hit(shot.x, shot.y, shot.hitRadius, funnel.x, funnel.y, 0.11f);
+            HitShotCircle(shot, funnel.x, funnel.y, 0.11f);
         if (!hit) continue;
 
         shooter.SpawnExplosion(shot.x, shot.y, shot.z);
@@ -2870,7 +2870,7 @@ void SideScrollingShooter::Stage5Module::RestartCheckpoint(SideScrollingShooter&
         shooter.PlayCurrentStageBgm(false);
     }
     ++shooter.m_chapterRetryCounts[shooter.m_chapterNumber - 1];
-    shooter.m_shots = {};
+    shooter.ResetShots();
     shooter.m_enemies = {};
     shooter.m_items = {};
     shooter.m_explosions = {};

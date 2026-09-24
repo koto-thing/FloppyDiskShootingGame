@@ -1,0 +1,21 @@
+
+  FloppyEngine.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Floppy\x64\FloppyRelease\FloppyEngine.lib
+  Build version: Floppy v098
+  MML: 82899 -> 13468 bytes (14 scores, lossless)
+  Audio: 132912 -> 112329 bytes, all 54 samples retained, MSZIP lossless
+  SideScrollingShooter.cpp
+  SideScrollingShooterBackgrounds.cpp
+  SideScrollingShooterCombat.cpp
+  SideScrollingShooterRendering.cpp
+  TitleScene.cpp
+  コード生成しています。
+  コード生成が終了しました。
+  FloppyDiskShootingGame.vcxproj -> D:\Pandd\FloppyDiskShootingGame\bin\Floppy\x64\FloppyRelease\SpaceYakuza.exe
+  Floppy distribution exceeds 1.44MB: 1475072 / 1474560 bytes
+  発生場所 D:\Pandd\FloppyDiskShootingGame\Scripts\CheckDistributionSize.ps1:15 文字:27
+  + ...  1474560) { throw "Floppy distribution exceeds 1.44MB: $bytes / 14745 ...
+  +                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      + CategoryInfo          : OperationStopped: (Floppy distribu.../ 1474560 bytes:String) [], RuntimeException
+      + FullyQualifiedErrorId : Floppy distribution exceeds 1.44MB: 1475072 / 1474560 bytes
+   
+D:\Pandd\FloppyDiskShootingGame\Distribution.props(87,5): error MSB3073: コマンド "powershell.exe -NoProfile -ExecutionPolicy Bypass -File "D:\Pandd\FloppyDiskShootingGame\Scripts\CheckDistributionSize.ps1" -Path "D:\Pandd\FloppyDiskShootingGame\dist\Floppy\x64\FloppyRelease\."" はコード 1 で終了しました。 [D:\Pandd\FloppyDiskShootingGame\FloppyDiskShootingGame.vcxproj]

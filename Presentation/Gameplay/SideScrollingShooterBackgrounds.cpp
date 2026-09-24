@@ -1,4 +1,5 @@
 #include "SideScrollingShooter.h"
+#include "../../Application/UseCases/Localization.h"
 
 #include <algorithm>
 #include <cmath>
@@ -106,6 +107,10 @@ bool SideScrollingShooter::HitShotCircle(const Shot& shot, float x, float y, flo
         return false;
     }
 #endif
+    // ボムは描画と同じワールド半径で線分を掃引し、太いレーザー全体を判定する
+    if (shot.bomb) return Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), 0.0f,
+        ToWorldX(shot.x), ToWorldY(shot.y), 0.0f, shot.hitRadius * WorldXScale,
+        ToWorldX(x), ToWorldY(y), 0.0f, radius * WorldXScale);
     // 通常の弾は従来と同じ円判定を使用する
     return Hit(shot.x, shot.y, shot.hitRadius, x, y, radius);
 }
@@ -230,9 +235,7 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     }
     ForEachPlayer([&] {
         if (Player().m_bomb.active) {
-            Bomb sideBomb = Player().m_bomb;
-            sideBomb.z = SidePlaneZ - 0.5f;
-            DrawBomb(renderer, camera, sideBomb);
+            DrawBomb(renderer, camera, Player().m_bomb);
         }
     });
     for (const auto& explosion : m_explosions) {
@@ -290,17 +293,17 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     // チュートリアル固有HUDだけを描画し、通常ステージ情報との重なりを防ぐ
     if (m_tutorialMode) return;
 
-    char stageStatus[48];
-    char scoreStatus[32];
-    char powerStatus[32];
-    char progressStatus[32];
-    char bombStatus[16];
+    char stageStatus[Localization::BufferSize(48)];
+    char scoreStatus[Localization::BufferSize(32)];
+    char powerStatus[Localization::BufferSize(32)];
+    char progressStatus[Localization::BufferSize(32)];
+    char bombStatus[Localization::BufferSize(16)];
     const int progress = ChapterProgressPercent();
-    std::snprintf(stageStatus, sizeof(stageStatus), "STAGE %d/5  CHAPTER %d/3", m_stageNumber, m_chapterNumber);
-    std::snprintf(scoreStatus, sizeof(scoreStatus), "SCORE %06d", m_score);
-    std::snprintf(powerStatus, sizeof(powerStatus), "POWER %.2f / %.2f", Player().m_power, MaxPower);
-    std::snprintf(progressStatus, sizeof(progressStatus), "DIST %03d%%", progress);
-    std::snprintf(bombStatus, sizeof(bombStatus), "BOMB %d", Player().m_bombCount);
+    std::snprintf(stageStatus, sizeof(stageStatus), Localization::Text("STAGE %d/5  CHAPTER %d/3"), m_stageNumber, m_chapterNumber);
+    std::snprintf(scoreStatus, sizeof(scoreStatus), Localization::Text("SCORE %06d"), m_score);
+    std::snprintf(powerStatus, sizeof(powerStatus), Localization::Text("POWER %.2f / %.2f"), Player().m_power, MaxPower);
+    std::snprintf(progressStatus, sizeof(progressStatus), Localization::Text("DIST %03d%%"), progress);
+    std::snprintf(bombStatus, sizeof(bombStatus), Localization::Text("BOMB %d"), Player().m_bombCount);
     renderer.DrawText(stageStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.025f });
     renderer.DrawText(scoreStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.025f });
     if (m_playerCount == 1) renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
@@ -308,8 +311,8 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     if (m_playerCount == 1) renderer.DrawText(bombStatus, TextAlign::TopCenter, 0.014f, { 0.55f, 0.85f, 1.0f, 1.0f }, { 0.0f, -0.025f });
     if (m_playerCount == 2) {
         ForEachPlayer([&] {
-            char status[64];
-            std::snprintf(status, sizeof(status), "%dP  POWER %.2f  BOMB %d", m_activePlayer + 1,
+            char status[Localization::BufferSize(64)];
+            std::snprintf(status, sizeof(status), Localization::Text("%dP  POWER %.2f  BOMB %d"), m_activePlayer + 1,
                 Player().m_power, Player().m_bombCount);
             const ColorF color = m_activePlayer == 0 ? ColorF {0.25f, 0.65f, 1.0f, 1.0f} : ColorF {0.25f, 1.0f, 0.40f, 1.0f};
             renderer.DrawText(status, TextAlign::TopCenter, 0.014f, color,
@@ -468,17 +471,17 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     // チュートリアル固有HUDだけを描画し、通常ステージ情報との重なりを防ぐ
     if (m_tutorialMode) return;
 
-    char stageStatus[48];
-    char scoreStatus[32];
-    char powerStatus[32];
-    char progressStatus[32];
-    char bombStatus[16];
+    char stageStatus[Localization::BufferSize(48)];
+    char scoreStatus[Localization::BufferSize(32)];
+    char powerStatus[Localization::BufferSize(32)];
+    char progressStatus[Localization::BufferSize(32)];
+    char bombStatus[Localization::BufferSize(16)];
     const int progress = ChapterProgressPercent();
-    std::snprintf(stageStatus, sizeof(stageStatus), "STAGE %d/5  CHAPTER %d/3", m_stageNumber, m_chapterNumber);
-    std::snprintf(scoreStatus, sizeof(scoreStatus), "SCORE %06d", m_score);
-    std::snprintf(powerStatus, sizeof(powerStatus), "POWER %.2f / %.2f", Player().m_power, MaxPower);
-    std::snprintf(progressStatus, sizeof(progressStatus), "DIST %03d%%", progress);
-    std::snprintf(bombStatus, sizeof(bombStatus), "BOMB %d", Player().m_bombCount);
+    std::snprintf(stageStatus, sizeof(stageStatus), Localization::Text("STAGE %d/5  CHAPTER %d/3"), m_stageNumber, m_chapterNumber);
+    std::snprintf(scoreStatus, sizeof(scoreStatus), Localization::Text("SCORE %06d"), m_score);
+    std::snprintf(powerStatus, sizeof(powerStatus), Localization::Text("POWER %.2f / %.2f"), Player().m_power, MaxPower);
+    std::snprintf(progressStatus, sizeof(progressStatus), Localization::Text("DIST %03d%%"), progress);
+    std::snprintf(bombStatus, sizeof(bombStatus), Localization::Text("BOMB %d"), Player().m_bombCount);
     renderer.DrawText(stageStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.025f });
     renderer.DrawText(scoreStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.025f });
     if (m_playerCount == 1) renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
@@ -486,8 +489,8 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     if (m_playerCount == 1) renderer.DrawText(bombStatus, TextAlign::TopCenter, 0.014f, { 0.55f, 0.85f, 1.0f, 1.0f }, { 0.0f, -0.025f });
     if (m_playerCount == 2) {
         ForEachPlayer([&] {
-            char status[64];
-            std::snprintf(status, sizeof(status), "%dP  POWER %.2f  BOMB %d", m_activePlayer + 1,
+            char status[Localization::BufferSize(64)];
+            std::snprintf(status, sizeof(status), Localization::Text("%dP  POWER %.2f  BOMB %d"), m_activePlayer + 1,
                 Player().m_power, Player().m_bombCount);
             const ColorF color = m_activePlayer == 0 ? ColorF {0.25f, 0.65f, 1.0f, 1.0f} : ColorF {0.25f, 1.0f, 0.40f, 1.0f};
             renderer.DrawText(status, TextAlign::TopCenter, 0.014f, color,
@@ -498,8 +501,14 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
         { -0.92f, -0.92f }, 0.012f,
         { 0.55f, 0.70f, 0.65f, 1.0f });
     if (m_viewTransitionTimer > 0) {
+#if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
+        // 視点切り替えの案内も言語によらず画面中央へ配置する
+        renderer.DrawText("CAMERA SHIFT", TextAlign::Center, 0.026f,
+            { 0.55f, 0.85f, 1.0f, 1.0f }, {0.0f, -0.02f});
+#else
         renderer.DrawText("CAMERA SHIFT", { -0.16f, -0.02f }, 0.026f,
             { 0.55f, 0.85f, 1.0f, 1.0f });
+#endif
     }
     DrawBossHud(renderer);
     DrawChapterResult(renderer);

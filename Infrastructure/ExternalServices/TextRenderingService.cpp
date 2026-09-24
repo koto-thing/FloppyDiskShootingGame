@@ -5,6 +5,9 @@
 #include "TextRenderingService.h"
 #include "../../Engine/Diagnostics/Debug.h"
 #include "../../Domain/ValueObjects/CharacterASCIIData.h"
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+#include "../../Engine/Graphics/Utf8Text.h"
+#endif
 
 // 埋め込みシェーダーコード (Typed Bufferからフォントを読み込む)
 const char g_textShaderCode[] = R"(
@@ -38,7 +41,21 @@ VS_OUTPUT VSTextMain(uint vID : SV_VertexID) {
 }
 
 float4 PSTextMain(VS_OUTPUT input) : SV_TARGET {
-    uint pixelX = (uint)clamp(input.uv.x * 8.0f, 0.0f, 7.0f);
+)"
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+R"(
+    if (u_uvOffsetScale.y > 0.5f) {
+        uint pixelX = (uint)clamp(input.uv.x * 16.0f, 0.0f, 15.0f);
+        uint pixelY = (uint)clamp(input.uv.y * 16.0f, 0.0f, 15.0f);
+        uint c = (uint)(u_uvOffsetScale.x + 0.5f);
+        uint word = g_fontBuffer[256 + c * 8 + pixelY / 2];
+        uint row = (word >> ((pixelY % 2) * 16)) & 0xffff;
+        if ((row & (0x8000 >> pixelX)) == 0) discard;
+        return u_Color;
+    }
+)"
+#endif
+R"(    uint pixelX = (uint)clamp(input.uv.x * 8.0f, 0.0f, 7.0f);
     uint pixelY = (uint)clamp(input.uv.y * 8.0f, 0.0f, 7.0f);
     
     uint c = (uint)(u_uvOffsetScale.x + 0.5f);
@@ -77,13 +94,31 @@ bool TextRenderingService::Initialize(ID3D12Device* device, DXGI_FORMAT rtvForma
  * @return 
  */
 bool TextRenderingService::InitFontTexture(ID3D12Device* device) {
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    // BMPフォントは実行ファイル内に固定し、OSの追加言語パックへ依存しない
+    const HMODULE module = GetModuleHandleW(nullptr);
+    const HRSRC resource = FindResourceW(module, L"UNICODE_FONT", RT_RCDATA);
+    const HGLOBAL loaded = resource ? LoadResource(module, resource) : nullptr;
+    const void* unicodeFont = loaded ? LockResource(loaded) : nullptr;
+    constexpr DWORD unicodeBytes = 65536 * 32;
+    if (!unicodeFont || SizeofResource(module, resource) != unicodeBytes) {
+        Debug::LogError("Embedded Unicode font missing or invalid");
+        return false;
+    }
+    const int bufferSize = 1024 + unicodeBytes;
+#else
     const int bufferSize = 1024;
+#endif
     std::vector<unsigned char> fontData(bufferSize);
     for (int charIdx = 0; charIdx < 128; ++charIdx) {
         for (int row = 0; row < 8; ++row) {
             fontData[charIdx * 8 + row] = CharacterASCIIData::g_font[charIdx][row];
         }
     }
+
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    memcpy(fontData.data() + 1024, unicodeFont, unicodeBytes);
+#endif
 
     D3D12_HEAP_PROPERTIES heapProps = {};
     heapProps.Type = D3D12_HEAP_TYPE_UPLOAD;
@@ -105,7 +140,11 @@ bool TextRenderingService::InitFontTexture(ID3D12Device* device) {
     }
 
     void* pData = nullptr;
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    if (FAILED(m_fontTexture->Map(0, nullptr, &pData))) return false;
+#else
     m_fontTexture->Map(0, nullptr, &pData);
+#endif
     memcpy(pData, fontData.data(), fontData.size());
     m_fontTexture->Unmap(0, nullptr);
 
@@ -298,11 +337,25 @@ void TextRenderingService::RenderText(
     float currentX = startX;
     float currentY = startY;
     int length = lstrlenA(text);
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    const std::string_view utf8(text, static_cast<std::size_t>(length));
+#endif
     
     // 外部から渡された定数バッファのポインタを扱いやすい型にキャスト
     TextConstantBufferData* currentCbCpu = reinterpret_cast<TextConstantBufferData*>(cbvCpuPtr);
     D3D12_GPU_VIRTUAL_ADDRESS currentCbGpu = cbvGpuAddress;
     
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    for (std::size_t offset = 0; offset < utf8.size();) {
+        std::uint32_t c = Utf8Text::Next(utf8, offset);
+        if (c == '\n') {
+            currentX = startX;
+            currentY -= size * static_cast<float>(screenWidth) / screenHeight * 2.4f;
+            continue;
+        }
+        // ponytail: 同梱フォントはBMPまで、補助平面を追加する場合はアトラスを拡張する
+        if (c > 0xffff) c = 0xfffd;
+#else
     for (int i = 0 ; i < length ; ++i) {
         unsigned char c = static_cast<unsigned char>(text[i]);
         
@@ -315,6 +368,7 @@ void TextRenderingService::RenderText(
         if (c >= 128) {
             c = '?';
         }
+#endif
         
         // 定数バッファデータ書き込み (16バイトアラインされた u_posSize へパック)
         currentCbCpu->u_posSize = {
@@ -325,6 +379,10 @@ void TextRenderingService::RenderText(
         };
         currentCbCpu->u_color = color;
         currentCbCpu->u_uvOffsetScale = { (float)c, 0.0f, 0.0f, 0.0f }; // x に文字コードを格納
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+        // アクセントの有無や文字ごとの描画でも書体が変わらないよう統一する
+        currentCbCpu->u_uvOffsetScale.y = 1.0f;
+#endif
         
         // コマンドリストに現在の文字の定数バッファをセット
         commandList->SetGraphicsRootConstantBufferView(0, currentCbGpu);
@@ -335,6 +393,10 @@ void TextRenderingService::RenderText(
         currentCbGpu += 256;
         
         // 基本の文字送りへ指定された字間を加算する
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+        currentX += Utf8Text::Advance(c, size, characterSpacing);
+#else
         currentX += size * 1.5f + characterSpacing;
+#endif
     }
 }

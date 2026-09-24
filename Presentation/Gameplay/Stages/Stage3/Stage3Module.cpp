@@ -1339,7 +1339,7 @@ bool SideScrollingShooter::Stage3Module::TryDamageStageTarget(
             Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
                 ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
                 ToWorldX(funnel.x), ToWorldY(funnel.y), funnel.z, 0.72f) :
-            Hit(shot.x, shot.y, shot.hitRadius, funnel.x, funnel.y, 0.11f);
+            HitShotCircle(shot, funnel.x, funnel.y, 0.11f);
         if (!hit) continue;
 
         shooter.SpawnExplosion(shot.x, shot.y, shot.z);
@@ -1806,7 +1806,7 @@ bool SideScrollingShooter::Stage3Module::HandleBossDefeat(
     if (!boss.active) return false;
 
     // 戦闘物を消して2D固定の撃破演出へ移り、船体は演出描画用に残す
-    shooter.m_shots = {};
+    shooter.ResetShots();
     shooter.m_items = {};
     shooter.m_stage3.reflectFunnels = {};
     boss.hp = 0;

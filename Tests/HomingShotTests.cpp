@@ -9,6 +9,236 @@
 #include "../Presentation/Gameplay/Stages/Stage4/Stage4Module.h"
 
 struct HomingShotTests {
+    /** @brief 実発射の左右・上下の弾が外へ開き、3Dでも巻き返しまで画面内に残ることを検証する @return なし */
+    static void CheckLaunchVolley() {
+        using Game = SideScrollingShooter;
+        for (int route : {1, 0, 2, 3}) {
+            for (int power = 0; power <= 4; ++power) {
+                for (int volley = 0; volley < 3; ++volley) {
+                    auto game = std::make_unique<Game>();
+                    auto& g = *game;
+                    g.m_stageNumber = route >= 2 ? 5 : 1;
+                    g.m_viewMode = route == 0 ? Game::ViewMode::Side2D : Game::ViewMode::Rail3D;
+                    g.m_stage5.phase = route == 2 ? Game::Stage5Phase::WallClimbLower : Game::Stage5Phase::TayamaFireControl;
+                    g.m_stage5.tayamaOrbitAngle = Math::Pi * 0.75f;
+                    g.Player().m_playerX = (volley - 1) * 0.72f;
+                    g.Player().m_playerY = 0.0f;
+                    g.Player().m_power = static_cast<float>(power);
+                    g.m_frame = volley * Game::PlayerShotConfigs[Homing].fireIntervalFrames;
+                    g.FireSpecialShots();
+                    const int count = 2 + power;
+                    const Vector3 player = g.PlayerWorldPosition();
+                    const Vector3 forward = route == 3 ?
+                        (Vector3 {0.0f, player.y, ShooterStages::Stage5::TayamaArenaCenterZ} - player).Normalized() :
+                        route == 2 ? Vector3::Up : route == 1 ? Vector3::Forward : Vector3::Right;
+                    const Vector3 spread = route == 0 ? Vector3::Up : route == 2 ? Vector3::Right :
+                        Vector3::Cross(Vector3::Up, forward);
+
+                    // 発射口と最初の横移動を比較し、反対側へ機体を横切る弾を検出する
+                    for (int i = 0; i < count; ++i) {
+                        auto shot = g.m_shots[i];
+                        assert(shot.active && shot.special && shot.playerType == Homing);
+                        const float offset = Vector3::Dot(Vector3 {
+                            Game::ToWorldX(shot.x), Game::ToWorldY(shot.y), shot.z} - player, spread);
+                        g.UpdateHomingShot(shot);
+                        const Vector3 velocity {Game::ToWorldX(shot.vx), Game::ToWorldY(shot.vy), shot.vz};
+                        if (std::abs(offset) > 0.001f) assert(offset * Vector3::Dot(velocity, spread) > 0.0f);
+                    }
+
+                    // 通常3Dの実移動・画面外判定・カメラ投影でも左右の発射演出を保つ
+                    if (route != 1) continue;
+                    auto& enemy = g.m_enemies[0];
+                    enemy.active = enemy.collisionEnabled = true;
+                    enemy.hp = 1000;
+                    enemy.x = g.Player().m_playerX;
+                    enemy.z = g.PlayerRailDepth() + 45.0f;
+                    Camera3D camera;
+                    g.ConfigureRailCamera(camera, g.m_aimViewport);
+                    for (int frame = 0; frame < 90; ++frame) {
+                        g.TickShots();
+                        for (int i = 0; i < count; ++i) {
+                            const auto& shot = g.m_shots[i];
+                            if (shot.age > 18 + shot.barrageIndex / 2 % 3 * 4) continue;
+                            assert(shot.active);
+                            Vector2 screen;
+                            assert(camera.TryWorldToScreen({Game::ToWorldX(shot.x), Game::ToWorldY(shot.y), shot.z}, screen));
+                            assert(camera.GetViewport().Contains(screen));
+                            if (i < count / 2) {
+                                const auto& mirror = g.m_shots[count - 1 - i];
+                                assert(std::abs(shot.x + mirror.x - 2.0f * g.Player().m_playerX) < 0.00001f);
+                                assert(std::abs(shot.z - mirror.z) < 0.00001f);
+                            }
+                        }
+                    }
+                    // 左右とも誘導期限内に実際の衝突判定で命中する
+                    assert(enemy.hp == 1000 - count * Game::PlayerShotConfigs[Homing].damage);
+                    for (int i = 0; i < count; ++i) assert(!g.m_shots[i].active);
+                }
+            }
+        }
+    }
+    /** @brief 敵に依存しない放射状発射・巻き返し・移動標的への収束を両座標系で検証する @return なし */
+    static void CheckSpiral() {
+        using Game = SideScrollingShooter;
+        for (bool spatial : {false, true}) {
+            for (int index : {0, 1, 2, 3, 4, 5}) {
+                auto game = std::make_unique<Game>();
+                auto& g = *game;
+                g.m_stageNumber = 1;
+                g.m_viewMode = spatial ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+                auto& enemy = g.m_enemies[0];
+                enemy.active = enemy.collisionEnabled = true;
+                enemy.hp = 100;
+                enemy.x = spatial ? 0.0f : 1.2f;
+                enemy.z = g.PlayerRailDepth() + 45.0f;
+                Game::Shot shot;
+                shot.barrageIndex = index;
+                shot.z = g.PlayerRailDepth();
+                const float speed = spatial ? 1.45f : Game::PlayerShotConfigs[Homing].speed;
+                shot.vx = spatial ? 0.0f : speed;
+                shot.vz = spatial ? speed : 0.0f;
+                auto unguided = shot;
+                const int launchFrames = 18 + index / 2 * 4;
+                bool hit = false;
+                float widest = 0.0f;
+                float slowestLaunchSpeed = speed;
+                Vector3 previousVelocity {};
+                for (int frame = 0; frame < 180 && !hit; ++frame) {
+                    // 発射中は標的の有無で軌道を変えず、その後に移動標的へ追従する
+                    if (frame < launchFrames) {
+                        enemy.active = false;
+                        g.UpdateHomingShot(unguided);
+                        unguided.x += unguided.vx;
+                        unguided.y += unguided.vy;
+                        unguided.z += unguided.vz;
+                        enemy.active = true;
+                    }
+                    if (frame > 20) enemy.y += 0.0005f;
+                    g.UpdateHomingShot(shot);
+                    const Vector3 velocity = spatial ? Vector3 {
+                        Game::ToWorldX(shot.vx), Game::ToWorldY(shot.vy), shot.vz} :
+                        Vector3 {shot.vx, shot.vy, 0.0f};
+                    if (frame < launchFrames) {
+                        assert(velocity.Length() > 0.0f && velocity.Length() < speed * 1.4f);
+                        slowestLaunchSpeed = (std::min)(slowestLaunchSpeed, velocity.Length());
+                    } else {
+                        assert(std::abs(velocity.Length() - speed) < 0.00001f);
+                    }
+                    if (frame == 0) assert(spatial ? shot.vz < 0.0f : shot.vx < 0.0f);
+                    // 曲線の遅い区間で目標点を追い越し、前後に往復する退行を防ぐ
+                    if (frame > 0) assert(Vector3::Dot(previousVelocity, velocity) > 0.0f);
+                    previousVelocity = velocity;
+                    shot.x += shot.vx;
+                    shot.y += shot.vy;
+                    shot.z += shot.vz;
+                    if (frame < launchFrames) {
+                        assert(std::abs(shot.x - unguided.x) < 0.00001f);
+                        assert(std::abs(shot.y - unguided.y) < 0.00001f);
+                        assert(std::abs(shot.z - unguided.z) < 0.00001f);
+                    }
+                    if (frame == launchFrames - 1) assert(spatial ? shot.vz > 0.0f : shot.vx > 0.0f);
+                    widest = (std::max)(widest, spatial ? std::hypot(
+                        Game::ToWorldX(shot.x), Game::ToWorldY(shot.y)) : std::abs(shot.y));
+                    const Vector3 delta = spatial ? Vector3 {
+                        Game::ToWorldX(enemy.x - shot.x), Game::ToWorldY(enemy.y - shot.y), enemy.z - shot.z} :
+                        Vector3 {enemy.x - shot.x, enemy.y - shot.y, 0.0f};
+                    hit = delta.Length() < speed;
+                }
+                const float curveSpeed = Game::PlayerShotConfigs[Homing].speed * (spatial ? Game::WorldXScale : 1.0f);
+                assert(hit && widest > curveSpeed * 2.0f);
+                assert(slowestLaunchSpeed < speed * 0.5f);
+                // 履歴は直近の実座標を保持し、敵を失ったときはそのまま飛ぶ
+                assert(shot.age > static_cast<int>(shot.homingTrail.size()));
+                enemy.active = false;
+                const Vector3 velocity {shot.vx, shot.vy, shot.vz};
+                g.UpdateHomingShot(shot);
+                assert(shot.homingTarget == -1);
+                assert((Vector3 {shot.vx, shot.vy, shot.vz} == velocity));
+                const auto& last = shot.homingTrail[(shot.age - 1) % shot.homingTrail.size()];
+                assert((last == Vector3 {Game::ToWorldX(shot.x), Game::ToWorldY(shot.y), shot.z}));
+
+                // 同じ描画経路で弾頭と残光を描き、座標系変更時には履歴を切る
+                Renderer renderer;
+                Camera3D camera;
+                camera.SetViewport({0, 0, 1280, 720});
+                camera.SetPosition({0.0f, 0.0f, -100.0f});
+                camera.LookAt({0.0f, 0.0f, 0.0f});
+                shot.special = true;
+                auto drawShot = shot;
+                if (!spatial) drawShot.z = Game::SidePlaneZ - 0.4f;
+                g.DrawShotModel(renderer, camera, drawShot, 0.0f);
+                assert(renderer.CommandCount() == 5 && !renderer.HasOverflowed());
+                Vector3 tailPoint = shot.homingTrail[(shot.age - 2) % shot.homingTrail.size()];
+                if (!spatial) tailPoint.z = drawShot.z;
+                Vector2 tailScreen;
+                assert(camera.TryWorldToScreen(tailPoint, tailScreen));
+                const Vector2 tailNdc {tailScreen.x / 640.0f - 1.0f, 1.0f - tailScreen.y / 360.0f};
+                const Vector2 headNdc = renderer.Command(4).playerShot.position;
+                assert(renderer.Command(4).playerShot.opacity == 1.0f);
+                assert((renderer.Command(0).playerShot.position - (headNdc + tailNdc) * 0.5f).Length() < 0.00001f);
+                for (size_t command = 0; command < renderer.CommandCount(); ++command) {
+                    const auto& visual = renderer.Command(command).playerShot;
+                    assert(std::isfinite(visual.position.x) && std::isfinite(visual.position.y));
+                    assert(visual.size.x >= 0.0f && visual.size.y > 0.0f);
+                    if (command < 4) {
+                        assert(visual.opacity > 0.0f && visual.opacity < 0.22f);
+                        if (command > 0) assert(visual.opacity < renderer.Command(command - 1).playerShot.opacity);
+                    }
+                }
+                g.m_viewMode = spatial ? Game::ViewMode::Side2D : Game::ViewMode::Rail3D;
+                const int age = shot.age;
+                g.UpdateHomingShot(shot);
+                assert(shot.age == age + 1 && shot.homingTrailCount == 1);
+            }
+        }
+    }
+    /** @brief 誘導期限・再捕捉の禁止・直進後の画面外消滅を検証する @return なし */
+    static void CheckHomingLifetime() {
+        using Game = SideScrollingShooter;
+        for (bool spatial : {false, true}) {
+            auto game = std::make_unique<Game>();
+            auto& g = *game;
+            g.m_stageNumber = 1;
+            g.m_viewMode = spatial ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+            auto& shot = g.m_shots[0];
+            shot.active = shot.special = true;
+            shot.z = g.PlayerRailDepth();
+            shot.vx = spatial ? 0.0f : Game::PlayerShotConfigs[Homing].speed;
+            shot.vz = spatial ? 1.45f : 0.0f;
+
+            // 標的がいない時間も寿命に含め、90フレーム目までは捕捉できる
+            for (int frame = 0; frame < 89; ++frame) g.UpdateHomingShot(shot);
+            auto& enemy = g.m_enemies[0];
+            enemy.active = enemy.collisionEnabled = true;
+            enemy.hp = 100;
+            enemy.x = spatial ? 0.0f : 0.2f;
+            enemy.z = shot.z + 8.0f;
+            g.UpdateHomingShot(shot);
+            assert(shot.age == 90 && shot.homingTarget == 0);
+            const Vector3 velocity {shot.vx, shot.vy, shot.vz};
+
+            // 期限後は標的の移動・消失・再出現と視点切替でも誘導へ戻らない
+            enemy.y = 0.4f;
+            for (int frame = 0; frame < 4; ++frame) {
+                enemy.active = frame != 1;
+                g.m_viewMode = (frame == 2 ? !spatial : spatial) ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+                g.UpdateHomingShot(shot);
+                assert(shot.age == 91 + frame && shot.homingTarget == -1);
+                assert((Vector3 {shot.vx, shot.vy, shot.vz} == velocity));
+            }
+
+            // 通常の移動・画面外判定へ引き継ぎ、滞留せず消滅する
+            enemy.active = false;
+            for (int frame = 0; frame < 300 && shot.active; ++frame) {
+                const Vector3 before {shot.x, shot.y, shot.z};
+                g.TickShots();
+                assert(std::abs(shot.x - before.x - velocity.x) < 0.00001f);
+                assert(std::abs(shot.y - before.y - velocity.y) < 0.00001f);
+                if (spatial) assert(std::abs(shot.z - before.z - velocity.z) < 0.00001f);
+            }
+            assert(!shot.active);
+        }
+    }
     /** @brief 高速移動への偏差射撃と実弾の通過点への十字の加減速を検証する @return なし */
     static void CheckPredictiveAim() {
         using Game = SideScrollingShooter;
@@ -492,6 +722,24 @@ struct HomingShotTests {
                 assert(shot.active);
                 assert(shot.damage == (distance < 3.5f ? 3 : distance < 7.0f ? 2 : 1));
 
+                // 同じ位置で比較して遠近法を除き、距離に応じた連続縮小を両視点で確認する
+                Camera3D camera;
+                g.ConfigureRailCamera(camera, g.m_aimViewport);
+                Renderer renderer;
+                auto visualShot = shot;
+                visualShot.travelDistance = 0.0f;
+                g.DrawShotModel(renderer, camera, visualShot);
+                assert(renderer.CommandCount() == 1);
+                const Vector2 originalSize = renderer.Command(0).playerShot.size;
+                renderer.BeginFrame();
+                g.DrawShotModel(renderer, camera, shot);
+                assert(renderer.CommandCount() == 1);
+                const Vector2 size = renderer.Command(0).playerShot.size;
+                const float ratio = distance >= 7.0f ? 1.0f / 3.0f : 1.0f - distance * 2.0f / 21.0f;
+                assert(originalSize.x > 0.0f && originalSize.y > 0.0f);
+                assert(std::abs(size.x / originalSize.x - ratio) < 0.00001f);
+                assert(std::abs(size.y / originalSize.y - ratio) < 0.00001f);
+
                 // 同じフレームの敵へのダメージに減衰後の値を使用する
                 auto& enemy = g.m_enemies[0];
                 enemy = {};
@@ -603,7 +851,7 @@ struct HomingShotTests {
             }
         }
 
-        // 近距離の小さな標的へ収束し、追尾中の速度を維持する
+        // 近距離でも発射演出を行い、その後は一定速で小さな標的へ収束する
         g.m_stageNumber = 1;
         g.m_viewMode = Game::ViewMode::Side2D;
         nearEnemy = {};
@@ -614,16 +862,16 @@ struct HomingShotTests {
         shot = {};
         shot.vx = Game::PlayerShotConfigs[Homing].speed;
         bool hit = false;
-        for (int frame = 0; frame < 30 && !hit; ++frame) {
+        for (int frame = 0; frame < 90 && !hit; ++frame) {
             g.UpdateHomingShot(shot);
-            assert(std::abs(std::hypot(shot.vx, shot.vy) - Game::PlayerShotConfigs[Homing].speed) < 0.00001f);
+            if (frame >= 18) assert(std::abs(std::hypot(shot.vx, shot.vy) - Game::PlayerShotConfigs[Homing].speed) < 0.00001f);
             shot.x += shot.vx;
             shot.y += shot.vy;
             hit = Game::Hit(shot.x, shot.y, shot.hitRadius, nearEnemy.x, nearEnemy.y, 0.03f);
         }
         assert(hit);
 
-        // 3Dでも低HPより近距離を優先し、ワールド弾速を維持する
+        // 3Dでも低HPより近距離を優先し、最初は標的と反対側へ放出する
         g.m_viewMode = Game::ViewMode::Rail3D;
         nearEnemy.x = 0.1f;
         nearEnemy.y = 0.0f;
@@ -636,7 +884,7 @@ struct HomingShotTests {
         shot.vz = 1.45f;
         g.UpdateHomingShot(shot);
         assert(shot.homingTarget == 0);
-        assert(std::abs(Vector3(Game::ToWorldX(shot.vx), Game::ToWorldY(shot.vy), shot.vz).LengthSquared() - 1.45f * 1.45f) < 0.0001f);
+        assert(shot.vz < 0.0f && shot.vx > 0.0f);
 
         // 縦スクロール3Dでは敵の奥行きではなく弾平面へ投影した位置に向かう
         g.m_stageNumber = 5;
@@ -649,7 +897,8 @@ struct HomingShotTests {
         shot.z = g.PlayerRailDepth();
         shot.vy = Game::PlayerShotConfigs[Homing].speed;
         g.UpdateHomingShot(shot);
-        assert(shot.homingTarget == 0 && shot.vx > 0.0f && shot.vy > 0.0f && shot.vz == 0.0f);
+        assert(shot.homingTarget == 0 && shot.vz == 0.0f);
+        assert(shot.vy < 0.0f && shot.vx < 0.0f);
 
         // 周回でZ負方向へ撃つ場合も有効な弱点を狙い、破壊済み弱点を除外する
         nearEnemy.active = false;
@@ -787,6 +1036,9 @@ struct HomingShotTests {
 
 /** @brief 追尾回帰チェックを実行する @return 成功時0 */
 int main() {
+    HomingShotTests::CheckLaunchVolley();
+    HomingShotTests::CheckSpiral();
+    HomingShotTests::CheckHomingLifetime();
     HomingShotTests::CheckPredictiveAim();
     HomingShotTests::CheckAimSnapDifficulty();
     HomingShotTests::CheckSmoothAimSnap();
