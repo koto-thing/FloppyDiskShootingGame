@@ -793,8 +793,12 @@ void SideScrollingShooter::DrawBomb(
             {3,9,4}, {3,4,2}, {3,2,6}, {3,6,8}, {3,8,9},
             {4,9,5}, {2,4,11}, {6,2,10}, {8,6,7}, {9,8,1}};
         const Matrix4x4 rotation = Matrix4x4::RotationY(bomb.age * Math::TwoPi / 360.0f);
-        const float rim[4] = {0.25f, 1.45f + 0.15f * std::sin(bomb.age * Math::TwoPi / 180.0f), 0.85f, 0.70f};
-        for (const auto& face : faces) {
+        const float rim[4] = {0.25f, 1.45f + 0.15f * std::sin(bomb.age * Math::TwoPi / 180.0f),
+            0.85f, 0.70f};
+        for (int faceIndex = 0; faceIndex < 20; ++faceIndex) {
+            // 被弾ごとに球面全体へ散らした七つのセルを欠損させる
+            if ((faceIndex * 7) % 20 < bomb.shieldHits * 7) continue;
+            const auto& face = faces[faceIndex];
             Vector3 hex[6];
             const Vector3 inset = (vertices[face[0]] + vertices[face[1]] + vertices[face[2]]) * 0.06f;
             // 枠を少し縮めて隣のセルと離し、透明な内部から自機を見せる

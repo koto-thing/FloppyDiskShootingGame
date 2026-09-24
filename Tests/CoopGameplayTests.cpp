@@ -427,6 +427,15 @@ struct CoopGameplayTests {
                     assert((end - nextWorld.TransformPoint({0.0f, -0.5f, 0.0f})).Length() < 0.001f);
                 }
             }
+            // 防御回数に応じて六角形が欠け、残る枠の色は維持する
+            for (int hits = 0; hits < 3; ++hits) {
+                player.m_bomb.shieldHits = hits;
+                renderer->BeginFrame();
+                game.DrawBomb(*renderer, camera, player.m_bomb);
+                assert(renderer->CommandCount() == static_cast<size_t>((20 - hits * 7) * 12));
+                assert(std::abs(renderer->Command(0).primitive.color.a - 0.70f) < 0.0001f);
+            }
+            player.m_bomb.shieldHits = 0;
             for (int frame = 0; frame < 1800; ++frame) game.TickBomb();
             assert(player.m_bomb.active);
             game.FinishChapter();
@@ -446,21 +455,28 @@ struct CoopGameplayTests {
             hostile.y = player.m_bomb.y;
             hostile.z = player.m_bomb.z;
             assert(game.BombClearsShot(hostile));
-            assert(!player.m_bomb.active && player.m_playerDestructionTimer == 0 && player.m_invincible > 0);
+            assert(player.m_bomb.active && player.m_bomb.shieldHits == 1 &&
+                player.m_playerDestructionTimer == 0 && player.m_invincible > 0);
             game.DamagePlayer();
-            assert(player.m_playerDestructionTimer == 0);
+            assert(player.m_bomb.shieldHits == 1 && player.m_playerDestructionTimer == 0);
+            player.m_invincible = 0;
+            game.DamagePlayer();
+            assert(player.m_bomb.active && player.m_bomb.shieldHits == 2);
+            player.m_invincible = 0;
+            game.DamagePlayer();
+            assert(!player.m_bomb.active && player.m_bomb.shieldHits == 3);
             player.m_invincible = 0;
             game.DamagePlayer();
             assert(player.m_playerDestructionTimer > 0);
 
-            // 接触や障害物の被弾も同じ一回の防御を消費する
+            // 接触や障害物の被弾も同じ三回の防御を消費する
             Prepare(game);
             player.m_playerType = Spread;
             player.m_invincible = 0;
             player.m_bombRequested = true;
             game.TickBomb();
             game.DamagePlayer();
-            assert(!player.m_bomb.active && player.m_playerDestructionTimer == 0);
+            assert(player.m_bomb.active && player.m_bomb.shieldHits == 1 && player.m_playerDestructionTimer == 0);
         }
 
         // 横・縦・周回戦で、判定と円柱描画の発射端が実機モデルの先端と一致する

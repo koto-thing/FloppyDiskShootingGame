@@ -329,6 +329,7 @@ private:
         Vector3 direction {};
         PlayerType type = Homing;
         int age = 0;
+        int shieldHits = 0;
         bool rail = false;
         bool active = false;
         std::array<Shot, 10> missiles {};

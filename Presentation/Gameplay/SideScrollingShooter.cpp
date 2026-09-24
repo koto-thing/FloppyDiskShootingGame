@@ -1321,9 +1321,9 @@ void SideScrollingShooter::ResetShots() {
 void SideScrollingShooter::DamagePlayer() {
     if (StageDispatch::IsPlayerDamageIgnored(*this)) return;
     if (Player().m_playerDestructionTimer > 0 || Player().m_invincible > 0) return;
-    // 敵弾、接触、障害物のいずれも一回だけ防ぎ、同時被弾には短い猶予を与える
+    // 敵弾、接触、障害物を三回まで防ぎ、同時被弾には短い猶予を与える
     if (Player().m_bomb.active && Player().m_bomb.type == Spread) {
-        Player().m_bomb.active = false;
+        if (++Player().m_bomb.shieldHits >= 3) Player().m_bomb.active = false;
         Player().m_invincible = 60;
         PlayHitSound();
         return;
