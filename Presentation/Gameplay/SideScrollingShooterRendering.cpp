@@ -15,6 +15,7 @@
 #include "Models/AircraftModelView.h"
 #include "Models/StageEnemyModelView.h"
 #include "SideScrollingShooterShared.h"
+#include "Stages/Stage3/Stage3Module.h"
 
 namespace {
 using SideScrollingShooterShared::SideCameraZ;
@@ -236,19 +237,37 @@ void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, const Viewport&
     const Vector3 shakeOffset{shake.x, shake.y, 0.0f};
     camera.SetPosition(Vector3::Lerp(sidePosition, railPosition, railWeight) + shakeOffset);
     camera.LookAt(Vector3::Lerp(sideTarget, railTarget, railWeight) + shakeOffset);
-    // カメラ位置と当たり判定用の投影基準を維持し、2機が入る画角まで広げる
-    if (m_playerCount == 2 && !StageDispatch::IsCinematic(*this)) {
-        float halfAngleTangent = std::tan(camera.FieldOfView() * 0.5f);
+    // 画角を保ったまま後退し、背後へ離れた機体も連続した距離計算で画面へ収める
+    if (m_playerCount == 2 && viewport.IsValid() && !StageDispatch::IsCinematic(*this)) {
+        const float halfAngleTangent = std::tan(camera.FieldOfView() * 0.5f);
+        float pullback = 0.0f;
         ForEachPlayer([&] {
             Vector3 position = PlayerWorldPosition();
             if (!IsTayamaBattle()) position.z = Math::Lerp(SidePlaneZ, PlayerRailDepth(), railWeight);
             const Vector3 local = camera.ViewMatrix().TransformPoint(position);
-            if (local.z <= 0.1f) return;
-            const float required = (std::max)((std::abs(local.x) + 1.0f) / camera.GetViewport().AspectRatio(),
-                std::abs(local.y) + 1.0f) / local.z;
-            halfAngleTangent = (std::max)(halfAngleTangent, required * 1.25f);
+            const float requiredDepth = (std::max)((std::abs(local.x) + 1.0f) / viewport.AspectRatio(),
+                std::abs(local.y) + 1.0f) * 1.25f / halfAngleTangent;
+            pullback = (std::max)(pullback, requiredDepth - local.z);
         });
-        camera.SetFieldOfView(2.0f * std::atan(halfAngleTangent));
+        const float limitedPullback = m_stageNumber == 3 ?
+            Stage3Module::LimitCameraPullback(*this, camera, pullback) :
+            (UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase) ? pullback * (1.0f - railWeight) : pullback);
+        camera.SetPosition(camera.Position() - camera.Forward() * limitedPullback);
+        camera.SetFarClip(camera.FarClip() + pullback);
+
+        // バリア内や外壁道中で後退を止めた場合は、不足する表示範囲だけ画角を広げる
+        if (limitedPullback < pullback) {
+            float tangent = halfAngleTangent;
+            ForEachPlayer([&] {
+                Vector3 position = PlayerWorldPosition();
+                position.z = Math::Lerp(SidePlaneZ, PlayerRailDepth(), railWeight);
+                const Vector3 local = camera.ViewMatrix().TransformPoint(position);
+                const float required = (std::max)((std::abs(local.x) + 1.0f) / viewport.AspectRatio(),
+                    std::abs(local.y) + 1.0f) * 1.25f / local.z;
+                tangent = (std::max)(tangent, required);
+            });
+            camera.SetFieldOfView(2.0f * std::atan(tangent));
+        }
     }
 
 }
@@ -1242,8 +1261,9 @@ void SideScrollingShooter::DrawTutorialControlHint(
  * @return なし
  */
 void SideScrollingShooter::DrawReticle(Renderer& renderer, const Camera3D& camera) const {
-    // 2D、視点遷移、演出中、撃墜中は照準を表示しない
+    // 2D、視点遷移、演出中、撃墜中、Stage5の第2部道中は照準を表示しない
     if (m_viewMode != ViewMode::Rail3D || m_viewTransitionTimer > 0 ||
+        (m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase)) ||
         m_clear || Player().m_playerDestructionTimer > 0 || StageDispatch::IsCinematic(*this)) return;
     const Viewport& viewport = camera.GetViewport();
     if (viewport.width <= 0 || viewport.height <= 0) return;

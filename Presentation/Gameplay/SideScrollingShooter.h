@@ -295,6 +295,7 @@ private:
         int attackWarningFrames = 0;
         float attackWarningTargetX = 0.0f;
         float attackWarningTargetY = 0.0f;
+        float attackWarningTargetZ = PlayerRailZ;
         int laserLinkId = 0;
         int laserLinkRole = 0;
         int bossPhase = BossNormalPhase1;
@@ -683,8 +684,23 @@ private:
     void DefeatBoss(Enemy& boss);
     /** @brief 次のステージの戦闘状態を初期化する */
     void StartNextStage();
+    /** @brief 生存中の自機を順番に選ぶ @return 選んだ自機のワールド座標 */
+    Vector3 SelectEnemyShotTarget();
+    /**
+     * @brief 通常弾または敵弾を生成する
+     * @param x 発射元X
+     * @param y 発射元Y
+     * @param vx 2D速度X、3D散射時の照準補正
+     * @param vy 2D速度Y、3D散射時の照準補正
+     * @param enemy 敵弾ならtrue
+     * @param z 発射元Z、負数なら自動設定
+     * @param railSpeed 3D速度、負数なら既定値
+     * @param damage ダメージ
+     * @param target 3Dで予告済みのワールド座標、nullなら発射時に選択
+     * @return なし
+     */
     void SpawnShot(float x, float y, float vx, float vy, bool enemy,
-        float z = -1.0f, float railSpeed = -1.0f, int damage = 1);
+        float z = -1.0f, float railSpeed = -1.0f, int damage = 1, const Vector3* target = nullptr);
     /**
      * @brief 敵発射体の生成位置が3D時の自機接近禁止範囲外か判定する
      * @param x 発射元ゲーム座標X
@@ -746,6 +762,8 @@ private:
     void UpdateHomingShot(Shot& shot);
     /** @brief 通常の十字照準のワールド位置を取得する @return 照準位置 */
     Vector3 PlayerAimPoint() const;
+    /** @brief 自機弾の透視投影に使う共有カメラの位置を取得する @return 描画と同じワールド位置 */
+    Vector3 ShotProjectionCameraPosition() const;
     /** @brief 発射と照準予測に共通の通常弾を作る @param snap スナップ補正を適用する場合true @return 通常弾 */
     Shot MakeNormalPlayerShot(bool snap = true) const;
     /** @brief 3D照準の対象を更新する @param advance 枠と弾道の補間を1フレーム進める場合true @return なし */
@@ -1151,6 +1169,7 @@ private:
     };
     std::array<PlayerState, 2> m_players {};
     int m_playerCount = 1;
+    int m_nextEnemyShotTarget = 0;
     mutable int m_activePlayer = 0;
     mutable Viewport m_aimViewport {0, 0, 1280, 720};
     /** @brief 処理対象の自機状態を取得する @return 自機状態 */

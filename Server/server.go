@@ -12,15 +12,20 @@ import (
 )
 
 type session struct {
-	build  string
-	room   *room
-	player int
-	last   time.Time
-	inbox  []string
-	fault  string
+	streamRequired bool
+	stream         *socketPeer
+	rtt            [8]uint32
+	samples        uint32
+	build          string
+	room           *room
+	player         int
+	last           time.Time
+	inbox          []string
+	fault          string
 }
 
 type room struct {
+	delay      uint32
 	code       string
 	public     bool
 	players    [2]*session

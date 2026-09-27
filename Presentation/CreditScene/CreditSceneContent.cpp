@@ -13,7 +13,7 @@ CreditSceneContent CreditSceneContent::CreateDefault() {
     content.AddColumn({
         {
             { "SPACE YAKUZA", 0.012f, CreditTextAlignment::Center },
-            { "AIZU-KAI", 0.009f, CreditTextAlignment::Center }
+            { "KOTOBUKI LAB", 0.009f, CreditTextAlignment::Center }
         },
         0.24f
     });

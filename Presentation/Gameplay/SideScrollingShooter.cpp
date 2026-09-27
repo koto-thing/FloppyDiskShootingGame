@@ -328,6 +328,7 @@ void SideScrollingShooter::InitializeTutorial(
 }
 
 void SideScrollingShooter::Reset(bool resetRetryCounts) {
+    m_nextEnemyShotTarget = 0;
     ForEachPlayer([&] {
         const PlayerType type = Player().m_playerType;
         Player() = {};

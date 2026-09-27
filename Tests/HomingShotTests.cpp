@@ -610,7 +610,7 @@ struct HomingShotTests {
             (1.0f - expected.y / 720.0f * 2.0f)) < 0.0001f);
         assert(std::abs(left.size.y * 720.0f - renderer.Command(9).rect.size.x * 1280.0f) < 0.0001f);
 
-        // 壁面では上方向の弾道へ照準を合わせ、周回戦の2D視点でも非表示にする
+        // Stage5の第2部道中では全3区間で照準を非表示にする
         renderer.BeginFrame();
         g.m_stageNumber = 5;
         g.m_stage5.phase = Game::Stage5Phase::WallClimbLower;
@@ -619,10 +619,29 @@ struct HomingShotTests {
         g.DrawReticle(renderer, camera);
         assert(renderer.CommandCount() == 0);
         g.m_stage5.phaseTimer = ShooterStages::Stage5::WallClimbFadeFrames;
+        for (auto phase : {Game::Stage5Phase::WallClimbLower,
+            Game::Stage5Phase::WallClimbMiddle, Game::Stage5Phase::WallClimbUpper}) {
+            g.m_stage5.phase = phase;
+            g.DrawReticle(renderer, camera);
+            assert(renderer.CommandCount() == 0);
+        }
+
+        // 他ステージ、第1部道中、ボス戦の3D視点では照準を表示する
+        g.m_stageNumber = 1;
         g.DrawReticle(renderer, camera);
         assert(renderer.CommandCount() == 28);
-        assert(std::abs(renderer.Command(8).rect.position.x + renderer.Command(10).rect.position.x) < 0.0001f);
-        assert(std::abs(renderer.Command(8).rect.position.y + renderer.Command(10).rect.position.y) < 0.0001f);
+        g.m_stageNumber = 5;
+        for (auto phase : {Game::Stage5Phase::Approach, Game::Stage5Phase::EastsourceBattle,
+            Game::Stage5Phase::TayamaFireControl, Game::Stage5Phase::TayamaDragonBattle}) {
+            renderer.BeginFrame();
+            g.m_stage5.phase = phase;
+            camera.SetPosition(g.PlayerAimPoint() - Vector3 {0.0f, 0.0f, 10.0f});
+            assert(camera.LookAt(g.PlayerAimPoint()));
+            g.DrawReticle(renderer, camera);
+            assert(renderer.CommandCount() == 28);
+        }
+
+        // 周回戦の2D視点でも非表示にする
         renderer.BeginFrame();
         g.m_stage5.phase = Game::Stage5Phase::TayamaFireControl;
         g.m_viewMode = Game::ViewMode::Side2D;
@@ -890,11 +909,13 @@ struct HomingShotTests {
         g.m_stageNumber = 5;
         g.m_stage5.phase = Game::Stage5Phase::WallClimbLower;
         farEnemy.active = false;
+        g.Player().m_playerY = ShooterStages::Stage5::Part2RailPlayerMinY;
         nearEnemy.x = 0.2f;
-        nearEnemy.y = 0.6f;
-        nearEnemy.z = 46.0f;
+        nearEnemy.y = 4.0f;
+        nearEnemy.z = ShooterStages::Stage5::Part2RailEnemyPlaneZ;
         shot = {};
-        shot.z = g.PlayerRailDepth();
+        shot.y = g.Player().m_playerY;
+        shot.z = g.PlayerRailDepth() + 2.0f;
         shot.vy = Game::PlayerShotConfigs[Homing].speed;
         g.UpdateHomingShot(shot);
         assert(shot.homingTarget == 0 && shot.vz == 0.0f);

@@ -1,0 +1,7 @@
+CoopGameplayTests.cpp
+CoopStageTests.cpp
+コードを生成中...
+コード生成しています。
+コード生成が終了しました。
+route camera phase=5 upper=0 weight=0.000000 screen=(-69.141815,-2059.113037) depth=0.996373 eye=(0.000000,0.000000,-16.000000) fov=0.663225
+Assertion failed: viewport.Contains(screen) && depth > 0.0f && depth < 1.0f, file D:\Pandd\FloppyDiskShootingGame\Tests/CoopStageTests.cpp, line 58

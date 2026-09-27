@@ -278,6 +278,16 @@ public:
         Vector3& railPosition, Vector3& railTarget);
 
     /**
+     * @brief 協力カメラの後退をPhase2・3のバリア手前面の内側へ制限する
+     * @param shooter 判定対象
+     * @param camera 後退前のカメラ
+     * @param pullback 二人を画面へ収めるための後退距離
+     * @return 視点切り替え率を反映した後退距離
+     */
+    static float LimitCameraPullback(const SideScrollingShooter& shooter,
+        const Camera3D& camera, float pullback);
+
+    /**
      * @brief Phase2バリア内へ合わせた2DカメラY座標を取得する
      * @param shooter 判定対象
      * @return ワールド座標系のカメラY座標

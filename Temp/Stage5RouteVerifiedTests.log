@@ -1,0 +1,15 @@
+CoopGameplayTests.cpp
+CoopStageTests.cpp
+コードを生成中...
+コード生成しています。
+コード生成が終了しました。
+CoopStageTests passed
+CoopGameplayTests passed
+CooperativeSetupTests.cpp
+コード生成しています。
+コード生成が終了しました。
+Cooperative setup tests passed
+HomingShotTests.cpp
+コード生成しています。
+コード生成が終了しました。
+Assertion failed: shot.homingTarget == 0 && shot.vz == 0.0f, file D:\Pandd\FloppyDiskShootingGame\Tests/HomingShotTests.cpp, line 919

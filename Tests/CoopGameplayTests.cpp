@@ -166,6 +166,75 @@ struct CoopGameplayTests {
         return count;
     }
 
+    /** @brief 自機狙いの交互選択と予告後の弾道固定を両視点で検証する @param game 検証対象 @return なし */
+    static void CheckEnemyShotTargets(Game& game) {
+        for (bool rail : {false, true}) {
+            Prepare(game);
+            game.m_viewMode = game.m_nextViewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+            game.m_players[0].m_playerY = 0.6f;
+            game.m_players[1].m_playerY = -0.6f;
+            game.SpawnEnemy(0, 1.0f, 0.0f, 0.0f, 60.0f);
+            auto& enemy = game.m_enemies[0];
+            const int interval = enemy.shotInterval;
+            assert(interval > Game::AttackWarningFrames);
+
+            // 同じ敵の連続攻撃でも、同時出現した別の敵でも選択順を引き継ぐ
+            for (int attack = 0; attack < 8; ++attack) {
+                const int selected = attack % 2;
+                const float targetY = game.m_players[selected].m_playerY;
+                enemy.age = interval - Game::AttackWarningFrames - 1;
+                game.TickEnemies();
+                assert(std::abs(enemy.attackWarningTargetY - targetY) < 0.00001f);
+                assert(game.m_activePlayer == 0);
+
+                // 予告後に自機が移動しても、発射時に1Pへ狙い直さない
+                game.m_players[selected].m_playerY = -targetY;
+                enemy.age = interval - 1;
+                game.ResetShots();
+                game.TickEnemies();
+                const auto& shot = game.m_shots[0];
+                assert(shot.active && shot.enemy);
+                assert(shot.vy * targetY > 0.0f);
+                if (rail) {
+                    const Vector3 delta {Game::ToWorldX(enemy.attackWarningTargetX - shot.x),
+                        Game::ToWorldY(targetY - shot.y), enemy.attackWarningTargetZ - shot.z};
+                    const Vector3 velocity {Game::ToWorldX(shot.vx), Game::ToWorldY(shot.vy), shot.vz};
+                    assert((delta.Normalized() - velocity.Normalized()).Length() < 0.00001f);
+                }
+                game.m_players[selected].m_playerY = targetY;
+                enemy.active = false;
+                game.SpawnEnemy(0, 1.0f, 0.0f, 0.0f, 60.0f);
+            }
+
+            // 予告を持たない共通3D弾も両プレイヤーへ交互に向かう
+            if (rail) {
+                game.ResetShots();
+                for (int i = 0; i < 4; ++i) {
+                    game.SpawnShot(0.0f, 0.0f, 0.0f, 0.0f, true, 60.0f);
+                    assert(game.m_shots[i].vy * game.m_players[i % 2].m_playerY > 0.0f);
+                }
+            }
+
+            // 撃墜中は残った自機へ集中し、復帰後は交互選択へ戻る
+            for (int alive = 0; alive < 2; ++alive) {
+                game.m_players[1 - alive].m_playerDestructionTimer = 60;
+                for (int i = 0; i < 4; ++i)
+                    assert(std::abs(Game::FromWorldY(game.SelectEnemyShotTarget().y) -
+                        game.m_players[alive].m_playerY) < 0.00001f);
+                game.m_players[1 - alive].m_playerDestructionTimer = 0;
+                assert(std::abs(Game::FromWorldY(game.SelectEnemyShotTarget().y) -
+                    game.m_players[1 - alive].m_playerY) < 0.00001f);
+            }
+
+            // ソロでは2Pの状態や操作対象に影響されず1Pだけを選ぶ
+            game.m_playerCount = 1;
+            for (int i = 0; i < 4; ++i)
+                assert(std::abs(Game::FromWorldY(game.SelectEnemyShotTarget().y) -
+                    game.m_players[0].m_playerY) < 0.00001f);
+            assert(game.m_activePlayer == 0);
+        }
+    }
+
     /** @brief 実際の入力経路と更新処理で移動と射撃の分離を検証する @param game 検証対象 @return なし */
     static void CheckInputAndShots(Game& game) {
         Prepare(game);
@@ -592,7 +661,7 @@ struct CoopGameplayTests {
         assert(green.m_playerDestructionTimer == Game::PlayerDestructionWaitFrames - 1);
     }
 
-    /** @brief 両方向の視点遷移中も離れた2機が画面内に入ることを検証する @param game 検証対象 @return なし */
+    /** @brief 視点遷移と通常・第2部・周回戦で離れた2機を安定して映すことを検証する @param game 検証対象 @return なし */
     static void CheckCamera(Game& game) {
         Prepare(game);
         CoopCameraBackend backend;
@@ -617,6 +686,43 @@ struct CoopGameplayTests {
                     assert(screen.x >= 0.0f && screen.x <= backend.Width());
                     assert(screen.y >= 0.0f && screen.y <= backend.Height());
                 });
+            }
+        }
+
+        // 全ステージ道中とStage5第2部・ボス第一形態で、元のカメラの背後まで離れる
+        game.m_viewMode = game.m_nextViewMode = Game::ViewMode::Rail3D;
+        game.m_viewTransitionTimer = 0;
+        for (int scenario = 0; scenario < 9; ++scenario) {
+            game.m_stageNumber = (std::min)(scenario + 1, 5);
+            game.m_stage5.phase = scenario < 5 ? Game::Stage5Phase::Approach :
+                scenario == 5 ? Game::Stage5Phase::WallClimbMiddle :
+                scenario == 6 ? Game::Stage5Phase::TayamaFireControl :
+                scenario == 7 ? Game::Stage5Phase::TayamaLiftEngines : Game::Stage5Phase::TayamaCommandCore;
+            const float minY = scenario >= 6 ? ShooterStages::Stage5::TayamaPlayerMinY :
+                scenario == 5 ? ShooterStages::Stage5::Part2RailPlayerMinY : game.PlayerRailMinY();
+            const float maxY = scenario >= 6 ? ShooterStages::Stage5::TayamaPlayerMaxY :
+                scenario == 5 ? ShooterStages::Stage5::Part2RailPlayerMaxY : 0.9f;
+            for (int upperPlayer : {0, 1}) {
+                game.m_players[upperPlayer].m_playerY = maxY;
+                Camera3D previous;
+                for (int step = 0; step <= 1200; ++step) {
+                    game.m_players[1 - upperPlayer].m_playerY = Math::Lerp(maxY, minY, step / 1200.0f);
+                    Camera3D camera;
+                    game.ConfigureRailCamera(camera, renderer);
+                    if (step > 0) {
+                        assert(std::abs(camera.FieldOfView() - previous.FieldOfView()) <
+                            (scenario == 5 ? 0.01f : 0.0001f));
+                        assert((camera.Position() - previous.Position()).Length() < 1.0f);
+                    }
+                    game.ForEachPlayer([&] {
+                        Vector2 screen;
+                        float depth;
+                        assert(camera.TryWorldToScreen(game.PlayerWorldPosition(), screen, &depth));
+                        assert(camera.GetViewport().Contains(screen));
+                        assert(depth > 0.0f && depth < 1.0f);
+                    });
+                    previous = camera;
+                }
             }
         }
     }
@@ -724,6 +830,15 @@ struct CoopGameplayTests {
             guestRandom = GameplayRandom::State;
             assert(hostRandom == guestRandom && host->m_frame == guest->m_frame);
             assert(host->Score() == guest->Score() && host->m_bossHp == guest->m_bossHp);
+            assert(host->m_nextEnemyShotTarget == guest->m_nextEnemyShotTarget);
+            for (size_t i = 0; i < host->m_shots.size(); ++i) {
+                const auto& a = host->m_shots[i];
+                const auto& b = guest->m_shots[i];
+                assert(a.active == b.active);
+                if (!a.active || !a.enemy) continue;
+                assert(a.x == b.x && a.y == b.y && a.z == b.z);
+                assert(a.vx == b.vx && a.vy == b.vy && a.vz == b.vz);
+            }
             for (int i = 0; i < 2; ++i) {
                 assert(host->m_players[i].m_playerX == guest->m_players[i].m_playerX);
                 assert(host->m_players[i].m_playerY == guest->m_players[i].m_playerY);
@@ -814,6 +929,7 @@ struct CoopGameplayTests {
     static void Run() {
         CheckStage3BarrierBounds();
         auto game = std::make_unique<Game>();
+        CheckEnemyShotTargets(*game);
         CheckGrazeRecovery(*game);
         CheckInputAndShots(*game);
         CheckItems(*game);

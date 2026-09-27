@@ -10,10 +10,177 @@
 #include "../Presentation/Gameplay/Stages/Stage1/Stage1Module.h"
 #include "../Presentation/Gameplay/Stages/Stage2/Stage2Module.h"
 #include "../Presentation/Gameplay/Stages/Stage3/Stage3Module.h"
+#include "../Presentation/Gameplay/Stages/Stage3/Stage3BarrierCageView.h"
 #include "../Presentation/Gameplay/Stages/Stage5/Stage5Module.h"
 
 /** @brief ステージ固有の演出と被弾判定の協力プレイ回帰チェック */
 struct CoopStageTests {
+    /** @brief 第2部道中の協力カメラと連射時の弾プール回収を検証する @return なし */
+    static void CheckStage5RouteCameraAndShots() {
+        using Game = SideScrollingShooter;
+        using namespace ShooterStages::Stage5;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.m_stageNumber = 5;
+        g.m_stage = &Game::Stage5Module::Definition(Easy);
+        g.m_playerCount = 2;
+        const Viewport viewport {0, 0, 800, 600};
+        for (auto phase : {Phase::WallClimbLower, Phase::WallClimbMiddle, Phase::WallClimbUpper}) {
+            g.m_stage5.phase = phase;
+            g.m_stage5.phaseTimer = WallClimbFadeFrames;
+            // 上下左右の端へ離れても、カメラを外壁から遠ざけず両機を映す
+            for (int upper : {0, 1}) {
+                g.m_players[upper].m_playerX = Game::Side2DPlayerMinX;
+                g.m_players[upper].m_playerY = Part2RailPlayerMaxY;
+                g.m_players[1 - upper].m_playerX = Game::Side2DPlayerMaxX;
+                g.m_players[1 - upper].m_playerY = Part2RailPlayerMinY;
+                for (bool entering : {true, false}) {
+                    g.m_viewMode = entering ? Game::ViewMode::Side2D : Game::ViewMode::Rail3D;
+                    g.m_nextViewMode = entering ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+                    g.m_viewTransitionTimer = 1;
+                    for (int step = 0; step <= 20; ++step) {
+                        g.m_viewTransitionProgress = step / 20.0f;
+                        Camera3D camera;
+                        g.ConfigureRailCamera(camera, viewport);
+                        if (g.RailBlend() == 1.0f) {
+                            assert(std::abs(camera.Position().z - (Part2PlayerRailZ - 11.5f)) < 0.001f);
+                            assert(std::abs(camera.Position().y - (Game::ToWorldY(Part2RailPlayerMinY) - 8.2f)) < 0.001f);
+                        }
+                        g.ForEachPlayer([&] {
+                            Vector3 position = g.PlayerWorldPosition();
+                            position.z = Math::Lerp(Game::SidePlaneZ, g.PlayerRailDepth(), g.RailBlend());
+                            Vector2 screen;
+                            float depth;
+                            assert(camera.TryWorldToScreen(position, screen, &depth));
+                            assert(viewport.Contains(screen) && depth > 0.0f && depth < 1.0f);
+                        });
+                    }
+                }
+            }
+
+            // 2Pの追尾と命中判定も、画面上の敵中心を通るレイと一致する
+            g.m_viewTransitionTimer = 0;
+            g.m_viewMode = g.m_nextViewMode = Game::ViewMode::Rail3D;
+            g.m_aimViewport = viewport;
+            Camera3D camera;
+            g.ConfigureRailCamera(camera, viewport);
+            auto& enemy = g.m_enemies[0];
+            enemy = {};
+            enemy.active = enemy.collisionEnabled = true;
+            enemy.hp = 10;
+            enemy.x = 0.3f;
+            enemy.y = 20.0f;
+            enemy.z = Part2RailEnemyPlaneZ;
+            Vector2 screen;
+            assert(camera.TryWorldToScreen({Game::ToWorldX(enemy.x), Game::ToWorldY(enemy.y), enemy.z}, screen));
+            const Ray ray = camera.ScreenPointToRay(screen);
+            Game::Shot shot {};
+            shot.z = Part2PlayerRailZ + 2.0f;
+            shot.special = shot.active = true;
+            const Vector3 expected = ray.PointAt((shot.z - ray.origin.z) / ray.direction.z);
+            Vector3 target;
+            g.m_activePlayer = 1;
+            assert(g.FindShotTarget(shot, target) == 0);
+            // 遠方の逆投影で発生する単精度の誤差だけを許容する
+            assert(std::abs(target.x - expected.x) < 0.005f && std::abs(target.y - expected.y) < 0.005f);
+            shot.x = Game::FromWorldX(expected.x);
+            shot.y = Game::FromWorldY(expected.y);
+            g.HitPlayerShotTargets(shot);
+            assert(enemy.hp == 9 && g.m_activePlayer == 1);
+            enemy.active = false;
+            g.m_activePlayer = 0;
+
+            // 最も長く弾が残る下端から、全機体を最大Powerで二人同時に連射する
+            for (bool rail : {false, true}) {
+                g.m_viewMode = g.m_nextViewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+                for (auto type : {Homing, Piercing, Spread}) {
+                    g.m_shots = {};
+                    for (auto& player : g.m_players) {
+                        player.m_playerType = type;
+                        player.m_power = 4.0f;
+                        player.m_playerX = 0.0f;
+                        player.m_playerY = rail ? Part2RailPlayerMinY : Game::Side2DPlayerMinY;
+                        player.m_shotCooldown = player.m_specialShotCooldown = 0;
+                        player.m_fire = true;
+                    }
+                    assert(std::abs(g.MakeNormalPlayerShot(false).vy - 0.18f) < 0.00001f);
+                    for (int frame = 0; frame < 1800; ++frame) {
+                        g.m_frame = frame;
+                        g.ForEachPlayer([&] {
+                            g.Player().m_fire = frame < 1200;
+                            g.Player().m_shotCooldown = (std::max)(0, g.Player().m_shotCooldown - 1);
+                            g.Player().m_specialShotCooldown = (std::max)(0, g.Player().m_specialShotCooldown - 1);
+                            g.TickPlayerWeapons();
+                        });
+                        g.TickShots();
+                        int active = 0;
+                        for (const auto& shot : g.m_shots) active += shot.active;
+                        assert(active < g.ActiveShotCapacity() * 3 / 4);
+                        if (frame == 1799) assert(active == 0);
+                    }
+                }
+            }
+        }
+    }
+
+    /** @brief バリア内で二人を映し、両方向の視点切り替えを連続させる @return なし */
+    static void CheckStage3BarrierCamera() {
+        using Game = SideScrollingShooter;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.m_stageNumber = 3;
+        g.m_stage = &Game::Stage3Module::Definition(Easy);
+        g.m_bossBattle = true;
+        g.m_enemies[0].active = true;
+        g.m_playerCount = 2;
+        const float rearZ = 20.0f - Stage3BarrierCageView::BarrierHalfLength * 4.0f;
+
+        // 展開完了、Phase2、Phase3で上下左右の最大距離とプレイヤー入れ替えを確認する
+        for (float phase : {4.0f, 5.0f, 6.0f}) {
+            g.m_enemies[0].phase = phase;
+            for (const Viewport viewport : {Viewport {0, 0, 1280, 720}, Viewport {0, 0, 800, 600}}) {
+                for (int upperPlayer : {0, 1}) {
+                    g.m_viewMode = g.m_nextViewMode = Game::ViewMode::Rail3D;
+                    const Vector2 range = Game::Stage3Module::PlayerXRange(g);
+                    g.m_players[upperPlayer].m_playerX = range.x;
+                    g.m_players[upperPlayer].m_playerY = Game::Stage3Module::RailPlayerMaxY(g);
+                    g.m_players[1 - upperPlayer].m_playerX = range.y;
+                    g.m_players[1 - upperPlayer].m_playerY = g.PlayerRailMinY();
+                    Camera3D camera;
+                    g.ConfigureRailCamera(camera, viewport);
+                    assert(camera.Position().z > rearZ + camera.NearClip());
+                    assert(camera.FieldOfView() > Math::ToRadians(46.0f));
+
+                    // 補間の各段階で両機を画面に収め、後退制限の出入りで跳ばない
+                    for (bool entering : {true, false}) {
+                        g.m_viewMode = entering ? Game::ViewMode::Side2D : Game::ViewMode::Rail3D;
+                        g.m_nextViewMode = entering ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+                        g.m_viewTransitionTimer = 1;
+                        Camera3D previous;
+                        for (int step = 0; step <= 100; ++step) {
+                            g.m_viewTransitionProgress = step / 100.0f;
+                            g.ConfigureRailCamera(camera, viewport);
+                            g.ForEachPlayer([&] {
+                                Vector3 position = g.PlayerWorldPosition();
+                                position.z = Math::Lerp(Game::SidePlaneZ, Game::PlayerRailZ, g.RailBlend());
+                                Vector2 screen;
+                                float depth;
+                                assert(camera.TryWorldToScreen(position, screen, &depth));
+                                assert(viewport.Contains(screen) && depth > 0.0f && depth < 1.0f);
+                            });
+                            if (step > 0) {
+                                assert((camera.Position() - previous.Position()).Length() < 1.0f);
+                                assert(std::abs(camera.FieldOfView() - previous.FieldOfView()) < 0.05f);
+                            }
+                            previous = camera;
+                        }
+                    }
+                    g.m_viewTransitionTimer = 0;
+                }
+            }
+        }
+    }
+
     /** @brief ウミヘビの描画から投影した中心と接触範囲を検証する @return なし */
     static void CheckSeaSerpentHitboxes() {
         using Game = SideScrollingShooter;
@@ -149,6 +316,8 @@ struct CoopStageTests {
 
     /** @brief 実際のステージ処理をGPUなしで検証する @return なし */
     static void Run() {
+        CheckStage5RouteCameraAndShots();
+        CheckStage3BarrierCamera();
         CheckSeaSerpentHitboxes();
         CheckStage4TruckLanes();
         using Game = SideScrollingShooter;

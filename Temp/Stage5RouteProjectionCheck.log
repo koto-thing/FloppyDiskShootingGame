@@ -1,0 +1,7 @@
+CoopGameplayTests.cpp
+CoopStageTests.cpp
+コードを生成中...
+コード生成しています。
+コード生成が終了しました。
+projection target=(1.955173,81.608276) expected=(1.955200,81.609718) camera=(0.000000,-4.680000,20.500000) shared=(0.000000,-4.680000,20.500000)
+Assertion failed: std::abs(target.x - expected.x) < 0.001f && std::abs(target.y - expected.y) < 0.001f, file D:\Pandd\FloppyDiskShootingGame\Tests/CoopStageTests.cpp, line 87

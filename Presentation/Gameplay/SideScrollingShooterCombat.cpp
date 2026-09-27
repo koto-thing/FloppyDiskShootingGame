@@ -354,7 +354,6 @@ void SideScrollingShooter::TickEnemies() {
     }
 
     const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
-    const Vector3 playerPosition = PlayerWorldPosition();
     for (auto& enemy : m_enemies) {
         if (!enemy.active) continue;
         ++enemy.age;
@@ -410,8 +409,10 @@ void SideScrollingShooter::TickEnemies() {
         if (aimedShotInterval > AttackWarningFrames && canUseAimedShot && canSpawnAimedProjectile &&
             enemy.age % aimedShotInterval == aimedShotInterval - AttackWarningFrames) {
             // 発射時の追尾を防ぐため、予告した地点を狙い弾の目標として固定する
-            enemy.attackWarningTargetX = Player().m_playerX;
-            enemy.attackWarningTargetY = Player().m_playerY;
+            const Vector3 target = SelectEnemyShotTarget();
+            enemy.attackWarningTargetX = FromWorldX(target.x);
+            enemy.attackWarningTargetY = FromWorldY(target.y);
+            enemy.attackWarningTargetZ = target.z;
             enemy.attackWarningFrames = AttackWarningFrames;
         }
         if (aimedShotInterval > 0 && enemy.age % aimedShotInterval == 0 &&
@@ -421,8 +422,10 @@ void SideScrollingShooter::TickEnemies() {
             const float length = std::sqrt(dxToPlayer * dxToPlayer + dyToPlayer * dyToPlayer);
             if (length > 0.001f) {
                 const float shotSpeed = enemy.behavior->AimedShotSpeed();
+                const Vector3 target {ToWorldX(enemy.attackWarningTargetX),
+                    ToWorldY(enemy.attackWarningTargetY), enemy.attackWarningTargetZ};
                 SpawnShot(enemy.x - 0.06f, enemy.y, dxToPlayer / length * shotSpeed,
-                    dyToPlayer / length * shotSpeed, true, enemy.z, enemy.behavior->RailAimedShotSpeed());
+                    dyToPlayer / length * shotSpeed, true, enemy.z, enemy.behavior->RailAimedShotSpeed(), 1, &target);
                 if (enemy.type == 2) PlayEnemyShotSound();
                 else PlayBossMachineGunSound();
             }
@@ -721,13 +724,9 @@ void SideScrollingShooter::HitPlayerShotTargets(Shot& shot) {
             railTargetRadius *= ShooterStages::Stage5::Part2EnemyScaleMultiplier(RailBlend());
         }
         if (verticalRouteShot && m_viewTransitionTimer > 0) continue;
-        if (verticalRouteShot && shot.special) {
+        if (verticalRouteShot && shot.special && IsRailGameplayActive()) {
             // 敵を自機弾の奥行き平面へ透視投影し、画面上で重なった場合だけ命中させる
-            const Vector3 cameraPosition {
-                ToWorldX(m_players[0].m_playerX) * 0.18f,
-                ToWorldY(m_players[0].m_playerY) * 0.12f + 1.72f,
-                PlayerRailDepth() - 21.5f
-            };
+            const Vector3 cameraPosition = ShotProjectionCameraPosition();
             const float projectionScale = PerspectiveDepthScale(
                 cameraPosition.z, enemy.z, shot.z);
             railTarget = cameraPosition + (railTarget - cameraPosition) * projectionScale;
@@ -1054,8 +1053,25 @@ void SideScrollingShooter::DefeatBoss(Enemy& boss) {
     m_clearTimer = ClearWaitFrames;
 }
 
+/** @brief 生存中の自機を順番に選ぶ @return 選んだ自機のワールド座標 */
+Vector3 SideScrollingShooter::SelectEnemyShotTarget() {
+    // 操作対象と乱数列を変えず、両端末で同じ順序の標的を選ぶ
+    int selected = m_nextEnemyShotTarget % m_playerCount;
+    for (int i = 0; i < m_playerCount; ++i) {
+        const int candidate = (selected + i) % m_playerCount;
+        if (m_players[candidate].m_playerDestructionTimer == 0) {
+            selected = candidate;
+            break;
+        }
+    }
+    m_nextEnemyShotTarget = (selected + 1) % m_playerCount;
+    Vector3 target;
+    ForEachPlayer([&] { if (m_activePlayer == selected) target = PlayerWorldPosition(); });
+    return target;
+}
+
 void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool enemy,
-    float z, float railSpeed, int damage) {
+    float z, float railSpeed, int damage, const Vector3* target) {
     const float spawnZ = IsRailGameplayActive() ?
         (z >= 0.0f ? z : PlayerRailDepth() + 2.0f) : ToRailZFromSideX(x);
     if (enemy && !CanSpawnEnemyProjectile(x, y, spawnZ)) return;
@@ -1082,9 +1098,9 @@ void SideScrollingShooter::SpawnShot(float x, float y, float vx, float vy, bool 
         shot.vz = 0.0f;
         shot.damage = damage;
         if (IsRailGameplayActive()) {
-            const Vector3 player = PlayerWorldPosition();
-            const float targetX = IsTayamaBattle() ? FromWorldX(player.x) : Player().m_playerX + vx * 12.0f;
-            const float targetY = IsTayamaBattle() ? FromWorldY(player.y) : Player().m_playerY + vy * 12.0f;
+            const Vector3 player = target ? *target : SelectEnemyShotTarget();
+            const float targetX = FromWorldX(player.x) + (target || IsTayamaBattle() ? 0.0f : vx * 12.0f);
+            const float targetY = FromWorldY(player.y) + (target || IsTayamaBattle() ? 0.0f : vy * 12.0f);
             const float targetZ = player.z;
             const float dx = ToWorldX(targetX) - ToWorldX(x);
             const float dy = ToWorldY(targetY) - ToWorldY(y);
@@ -1295,8 +1311,9 @@ void SideScrollingShooter::FireSpecialShots() {
                 shot.transitionSideY = shot.y;
                 if (verticalRoute) {
                     // Stage 5第2部は視点に関わらず画面上方向を基準に拡散する
-                    shot.vx = std::sin(angle) * config.speed;
-                    shot.vy = std::cos(angle) * config.speed;
+                    const float speed = config.speed * ShooterStages::Stage5::Part2PlayerShotSpeedScale;
+                    shot.vx = std::sin(angle) * speed;
+                    shot.vy = std::cos(angle) * speed;
                     shot.vz = 0.0f;
                 } else if (railGameplay) {
                     // 3Dレールでは特殊弾を奥行き方向へ進ませ、拡散角を横移動へ適用する
@@ -1407,8 +1424,7 @@ int SideScrollingShooter::FindShotTarget(const Shot& shot, Vector3& target, cons
         Vector3 position {ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z};
         // 第2部の追尾弾は衝突判定と同じ自機弾平面へ透視投影する
         if (verticalRoute && IsRailGameplayActive() && !aimCamera) {
-            const Vector3 camera {ToWorldX(m_players[0].m_playerX) * 0.18f,
-                ToWorldY(m_players[0].m_playerY) * 0.12f + 1.72f, PlayerRailDepth() - 21.5f};
+            const Vector3 camera = ShotProjectionCameraPosition();
             position = camera + (position - camera) * PerspectiveDepthScale(camera.z, enemy.z, shot.z);
         }
         consider(position, baseId);
@@ -1440,6 +1456,17 @@ int SideScrollingShooter::FindShotTarget(const Shot& shot, Vector3& target, cons
     return selected;
 }
 
+/** @brief 自機弾の透視投影に使う共有カメラの位置を取得する @return 描画と同じワールド位置 */
+Vector3 SideScrollingShooter::ShotProjectionCameraPosition() const {
+    // 2Pの追尾更新中も描画と同じ1P基準でカメラを構成し、処理対象を復元する
+    const int owner = m_activePlayer;
+    m_activePlayer = 0;
+    Camera3D camera;
+    ConfigureRailCamera(camera, m_aimViewport);
+    m_activePlayer = owner;
+    return camera.Position();
+}
+
 /** @brief 通常の十字照準のワールド位置を取得する @return 照準位置 */
 Vector3 SideScrollingShooter::PlayerAimPoint() const {
     const Shot shot = MakeNormalPlayerShot(false);
@@ -1457,7 +1484,7 @@ SideScrollingShooter::Shot SideScrollingShooter::MakeNormalPlayerShot(bool snap)
     shot.y = Player().m_playerY + (vertical ? 0.12f : 0.0f);
     shot.z = rail ? PlayerRailDepth() + 2.0f : ToRailZFromSideX(shot.x);
     shot.vx = rail || vertical ? 0.0f : 0.045f;
-    shot.vy = vertical ? 0.045f : 0.0f;
+    shot.vy = vertical ? 0.045f * ShooterStages::Stage5::Part2PlayerShotSpeedScale : 0.0f;
     shot.vz = rail && !vertical ? 1.45f : 0.0f;
     // 周回戦では実際の機首からアリーナ中心へ発射する
     if (IsTayamaBattle()) {
@@ -1554,8 +1581,7 @@ void SideScrollingShooter::ApplyAimSnap(Shot& shot) const {
     if (vertical) {
         // 壁面の通常弾と特殊弾で異なる命中平面を、それぞれの衝突判定へ合わせる
         if (shot.special) {
-            const Vector3 camera {ToWorldX(m_players[0].m_playerX) * 0.18f,
-                ToWorldY(m_players[0].m_playerY) * 0.12f + 1.72f, PlayerRailDepth() - 21.5f};
+            const Vector3 camera = ShotProjectionCameraPosition();
             const Vector3 nextTarget = target + targetVelocity;
             const Vector3 projectedNext = camera + (nextTarget - camera) * PerspectiveDepthScale(camera.z, nextTarget.z, shot.z);
             target = camera + (target - camera) * PerspectiveDepthScale(camera.z, target.z, shot.z);
@@ -1606,9 +1632,11 @@ void SideScrollingShooter::UpdateHomingShot(Shot& shot) {
     Vector3 velocity = spatial ? Vector3 {ToWorldX(shot.vx), ToWorldY(shot.vy), shot.vz} :
         Vector3 {shot.vx, shot.vy, 0.0f};
     const auto& config = PlayerShotConfigs[static_cast<size_t>(Homing)];
-    const float speed = spatial ? 1.45f : config.speed;
+    const float sideSpeed = config.speed * (UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase) ?
+        ShooterStages::Stage5::Part2PlayerShotSpeedScale : 1.0f);
+    const float speed = spatial ? 1.45f : sideSpeed;
     // 曲線の広がりを2Dの弾速と横方向のワールド倍率から決める
-    const float curveSpeed = config.speed * (spatial ? WorldXScale : 1.0f);
+    const float curveSpeed = spatial ? config.speed * WorldXScale : sideSpeed;
     const int index = (std::max)(0, shot.barrageIndex);
     const int variant = index / 2 % 3;
     const float side = (index & 1) ? -1.0f : 1.0f;

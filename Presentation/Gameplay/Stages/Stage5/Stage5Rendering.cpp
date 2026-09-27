@@ -324,6 +324,15 @@ void SideScrollingShooter::Stage5Module::ApplyCameraCorrection(
 
     // 第2部道中は自機の近くから、壁面へ約45度の角度で上空側を見る
     if (ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) {
+        // 協力時は低い機体より下から二人の中央を見るため、後退せず両機を前方へ収める
+        if (shooter.m_playerCount == 2) {
+            const Vector3 offset {
+                ToWorldX((shooter.m_players[0].m_playerX + shooter.m_players[1].m_playerX) * 0.5f) - railPosition.x,
+                ToWorldY((std::min)(shooter.m_players[0].m_playerY, shooter.m_players[1].m_playerY) -
+                    shooter.Player().m_playerY), 0.0f};
+            railPosition += offset;
+            railTarget += offset;
+        }
         railPosition.y -= 11.0f;
         railPosition.z -= 4.0f;
         railTarget.z += 8.0f;

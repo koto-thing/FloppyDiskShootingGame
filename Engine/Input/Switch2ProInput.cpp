@@ -92,8 +92,8 @@ bool Switch2ProReport::Decode(std::span<const unsigned char> data, XINPUT_GAMEPA
  * @return 有効な補正済み入力の場合はtrue
  */
 bool Switch2ProReport::DecodeSwitchPro(std::span<const unsigned char> data, XINPUT_GAMEPAD& state) {
-    // USBは64報、Bluetoothは49報で、スティックの位置と12bit形式は共通
-    if (data.size() != 63 && data.size() != 48) return false;
+    // USBは64バイト、Bluetoothは49またはWindows HIDの最大長362バイトで位置は共通
+    if (data.size() != 63 && data.size() != 48 && data.size() != 361) return false;
     std::array<unsigned char, 63> normalized {};
     std::copy_n(data.begin(), 11, normalized.begin());
     const auto right = data[2], system = data[3], left = data[4];
@@ -142,7 +142,7 @@ struct Sample {
 
     /** @brief 初代Proの通知を公開する @param bytes 0x30ペイロード @return なし */
     void ReceiveSwitchPro(std::span<const unsigned char> bytes) {
-        if (bytes.size() != 63 && bytes.size() != 48) return;
+        if (bytes.size() != 63 && bytes.size() != 48 && bytes.size() != 361) return;
         std::lock_guard lock(mutex);
         lastReport = GetTickCount64();
         if (decoder.DecodeSwitchPro(bytes, state)) received = GetTickCount64();
@@ -244,7 +244,7 @@ bool WakeUsb(int slot) {
 struct UsbReader {
     HANDLE file = INVALID_HANDLE_VALUE;
     OVERLAPPED operation {};
-    std::array<unsigned char, 64> bytes {};
+    std::array<unsigned char, 362> bytes {};
     bool pending = false;
     bool originalPro = false;
     USHORT inputLength = 64;
@@ -302,7 +302,7 @@ struct UsbReader {
         file = CreateFileW(path.c_str(), originalPro ? GENERIC_READ | GENERIC_WRITE : GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE,
             nullptr, OPEN_EXISTING, FILE_FLAG_OVERLAPPED, nullptr);
         if (file == INVALID_HANDLE_VALUE) return false;
-        // WindowsのHID長を使い、Bluetoothの49バイト報にも対応する
+        // WindowsはBluetoothの短い報告も最大HID長362バイトで受信する
         PHIDP_PREPARSED_DATA preparsed = nullptr;
         HIDP_CAPS caps {};
         if (!HidD_GetPreparsedData(file, &preparsed)) { Close(); return false; }
@@ -364,7 +364,7 @@ struct UsbReader {
         if (count > 0 && originalPro && bytes[0] == 0x30) {
             sample.ReceiveSwitchPro(std::span(bytes).first(count).subspan(1));
         } else if (count == 64 && !originalPro && bytes[0] == 9) {
-            sample.Receive(std::span(bytes).subspan(1));
+            sample.Receive(std::span(bytes).first(count).subspan(1));
         }
         return count >= 0;
     }

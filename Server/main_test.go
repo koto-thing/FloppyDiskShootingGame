@@ -156,7 +156,7 @@ func TestValidation(t *testing.T) {
 
     s := fresh(t)
     if code, _ := request(s, "/v1/exchange", "wrong", "MATCH\n"); code != 401 { t.Fatal("missing auth") }
-    if code, _ := request(s, "/v1/session", "", "2 same\n"); code != 400 { t.Fatal("protocol mismatch") }
+    if code, _ := request(s, "/v1/session", "", "3 same\n"); code != 400 { t.Fatal("protocol mismatch") }
     if code, _ := request(s, "/v1/session", "", strings.Repeat("x", 8193)); code != 413 { t.Fatal("large body") }
     for _, command := range []string{"FRAME 6 2048 0\n", "FRAME -1 0 0\n", "FRAME 8 0 0\n", "FRAME 6 0 0 extra\n"} {
         state := fresh(t)

@@ -36,6 +36,9 @@ func (s *server) leave(p *session) {
 			peer.room = nil
 			peer.inbox = nil
 			peer.fault = "PEER_LEFT"
+			if peer.stream != nil {
+				peer.stream.offer("ERROR PEER_LEFT\n")
+			}
 		}
 	}
 }
@@ -47,6 +50,9 @@ func (s *server) expire(now time.Time) {
 	for token, p := range s.sessions {
 		if now.Sub(p.last) > 30*time.Second {
 			s.leave(p)
+			if p.stream != nil {
+				p.stream.stop()
+			}
 			delete(s.sessions, token)
 		}
 	}
@@ -79,7 +85,7 @@ func (s *server) createRoom(p *session, public bool) error {
 			return err
 		}
 
-		r := &room{code: code, public: public, seed: seed + 1, next: [2]uint32{6, 6}}
+		r := &room{code: code, public: public, seed: seed + 1, delay: 6, next: [2]uint32{6, 6}}
 		r.players[0], p.room, p.player = p, r, 0
 		s.rooms[code] = r
 		return nil

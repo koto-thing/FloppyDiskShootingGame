@@ -2205,6 +2205,20 @@ void SideScrollingShooter::Stage3Module::ApplyCameraCorrection(
     }
 }
 
+float SideScrollingShooter::Stage3Module::LimitCameraPullback(
+    const SideScrollingShooter& shooter, const Camera3D& camera, float pullback) {
+    if (!shooter.m_bossBattle || !shooter.m_enemies[0].active ||
+        shooter.m_enemies[0].phase < BossPhase2Deploy) return pullback;
+
+    // バリアの厚みとニアクリップ用の余白を取り、3Dへの移行に合わせて制限する
+    constexpr float rearZ = BossPhase2WorldZ -
+        Stage3BarrierCageView::BarrierHalfLength * BossModelScale + 0.5f;
+    const float forwardZ = camera.Forward().z;
+    if (forwardZ <= 0.0f) return pullback;
+    const float available = (std::max)(0.0f, (camera.Position().z - rearZ) / forwardZ);
+    return Math::Lerp(pullback, (std::min)(pullback, available), shooter.RailBlend());
+}
+
 float SideScrollingShooter::Stage3Module::SideCameraY(
     const SideScrollingShooter& shooter) {
     // Phase3終了位置の船体は動かさずカメラだけを少し上へ送る

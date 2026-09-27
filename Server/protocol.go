@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 )
@@ -27,6 +28,19 @@ func (s *server) command(p *session, fields []string) string {
 	if len(fields) == 0 {
 		return "BAD_COMMAND"
 	}
+	// ロビーで得た往復遅延を直近8回だけ保持する
+	if fields[0] == "LATENCY" && p.streamRequired {
+		if len(fields) != 2 {
+			return "BAD_COMMAND"
+		}
+		value, ok := number(fields[1], 10000)
+		if !ok {
+			return "BAD_COMMAND"
+		}
+		p.rtt[p.samples%8] = value
+		p.samples++
+		return ""
+	}
 
 	r := p.room
 	if r == nil {
@@ -38,7 +52,7 @@ func (s *server) command(p *session, fields []string) string {
 
 			if fields[0] == "MATCH" {
 				for _, candidate := range s.rooms {
-					if candidate.public && !candidate.started && candidate.players[1] == nil && candidate.players[0].build == p.build {
+					if candidate.public && !candidate.started && candidate.players[1] == nil && candidate.players[0].build == p.build && candidate.players[0].streamRequired == p.streamRequired {
 						candidate.players[1], p.room, p.player = p, candidate, 1
 						return ""
 					}
@@ -62,7 +76,7 @@ func (s *server) command(p *session, fields []string) string {
 
 			candidate := s.rooms[fields[1]]
 
-			if candidate == nil || candidate.started || candidate.players[1] != nil || candidate.players[0].build != p.build {
+			if candidate == nil || candidate.started || candidate.players[1] != nil || candidate.players[0].build != p.build || candidate.players[0].streamRequired != p.streamRequired {
 				return "ROOM_UNAVAILABLE"
 			}
 
@@ -113,7 +127,22 @@ func (s *server) command(p *session, fields []string) string {
 			return "HOST_ONLY"
 		}
 
-		if r.players[1] != nil && r.ready == [2]uint32{1, 1} {
+		if !r.started && r.players[1] != nil && r.ready == [2]uint32{1, 1} {
+			if p.streamRequired {
+				if r.players[0].samples < 3 || r.players[1].samples < 3 {
+					return ""
+				}
+				var typical [2]uint32
+				for i, peer := range r.players {
+					values := peer.rtt
+					count := min(peer.samples, uint32(len(values)))
+					slices.Sort(values[:count])
+					typical[i] = values[count/2]
+				}
+				// ponytail: 中央値と50msの余裕で最大30フレームに固定し、短いスパイクは待機で吸収する、継続的な変動には再合意かロールバックが必要
+				r.delay = min(30, max(6, ((typical[0]+typical[1]+100)*60+1999)/2000))
+				r.next = [2]uint32{r.delay, r.delay}
+			}
 			r.started = true
 		}
 
@@ -180,6 +209,13 @@ func (s *server) exchange(p *session, body string) string {
 	}
 
 	result := fmt.Sprintf("STATE %s %d %d %d %d %d %d %d %d %d\n", r.code, p.player, members, r.difficulty, r.shots[0], r.shots[1], r.ready[0], r.ready[1], started, r.seed)
+	if p.streamRequired {
+		calibrated := 0
+		if r.players[1] != nil && r.players[0].samples >= 3 && r.players[1].samples >= 3 {
+			calibrated = 1
+		}
+		result = strings.TrimSuffix(result, "\n") + fmt.Sprintf(" %d %d\n", r.delay, calibrated)
+	}
 	result += strings.Join(p.inbox, "")
 
 	p.inbox = nil

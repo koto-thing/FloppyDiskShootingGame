@@ -161,6 +161,8 @@ static_assert(Part2PlayerRailZ < Part2RailEnemyPlaneZ);
 inline constexpr float Part2RailEnemyExitY = -5.0f;
 inline constexpr float Part2RailShotMinY = Part2RailEnemyExitY;
 inline constexpr float Part2RailShotMaxY = Part2RailEnemyEntryY + Part2RailEnemyEntryStep * 2.0f;
+// 第2部の広い縦移動範囲でも自機弾が弾プールを占有し続けない速度倍率
+inline constexpr float Part2PlayerShotSpeedScale = 4.0f;
 inline constexpr float Part2RailPlayerMinY = 0.80f;
 inline constexpr float Part2RailPlayerMaxY = 16.0f;
 inline constexpr float Part2RailEnemyScale = 2.0f;

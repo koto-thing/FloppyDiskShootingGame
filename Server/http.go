@@ -17,6 +17,11 @@ import (
 // @param req 要求
 // @return なし
 func (s *server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	// 常時接続の読み書きはHTTP用の共有ロックから分離する
+	if req.URL.Path == "/v2/stream" {
+		s.serveStream(w, req)
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -89,7 +94,7 @@ func (s *server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	switch req.URL.Path {
 	case "/v1/session":
 		fields := strings.Fields(string(body))
-		if len(fields) != 2 || fields[0] != "1" || len(fields[1]) > 96 ||
+		if len(fields) != 2 || (fields[0] != "1" && fields[0] != "2") || len(fields[1]) > 96 ||
 			strings.IndexFunc(fields[1], func(r rune) bool {
 				return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' || r == '.')
 			}) >= 0 {
@@ -114,7 +119,7 @@ func (s *server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			return
 		}
 
-		s.sessions[token] = &session{build: fields[1], last: now}
+		s.sessions[token] = &session{build: fields[1], last: now, streamRequired: fields[0] == "2"}
 		fmt.Fprintln(w, token)
 
 	case "/v1/exchange", "/v1/leave":
@@ -127,8 +132,15 @@ func (s *server) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		}
 
 		p.last = now
+		if req.URL.Path == "/v1/exchange" && p.streamRequired {
+			http.Error(w, "websocket required", 409)
+			return
+		}
 		if req.URL.Path == "/v1/leave" {
 			s.leave(p)
+			if p.stream != nil {
+				p.stream.stop()
+			}
 			delete(s.sessions, token)
 			fmt.Fprintln(w, "OK")
 			return

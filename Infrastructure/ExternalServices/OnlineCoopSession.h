@@ -8,7 +8,7 @@
 #include <string>
 #include <thread>
 
-/** @brief Go HTTPサーバー経由のロビー、入力同期、共有ランキング */
+/** @brief GoサーバーとのWebSocket入力同期とHTTP共有ランキング */
 class OnlineCoopSession {
 public:
     /** @brief 通信専用スレッドを開始する @return なし */
@@ -43,8 +43,14 @@ public:
     bool Failed() const { return m_failed; }
     /** @brief 共通ゲーム入力用オーバーレイ状態 @return 常にfalse */
     bool OverlayActive() const { return false; }
-    /** @brief 開始条件を取得する @return 2人とも準備済みならtrue */
-    bool CanStart() const { return InLobby() && !m_failed && !m_inGame && m_members == 2 && m_ready[0] && m_ready[1]; }
+    /** @brief 開始条件を取得する @return 2人とも準備と回線計測が完了したらtrue */
+    bool CanStart() const { return InLobby() && !m_failed && !m_inGame && m_calibrated && m_members == 2 && m_ready[0] && m_ready[1]; }
+    /** @brief 合意済みの入力遅延を取得する @return フレーム数 */
+    unsigned InputDelay() const { return m_inputDelay; }
+    /** @brief 現在の入力送信先行量を取得する @return フレーム数 */
+    unsigned InputLookahead() const { return m_sendAhead; }
+    /** @brief 直近の往復遅延を取得する @return ミリ秒 */
+    unsigned RoundTripMs() const { return m_rttMs; }
     /** @brief 表示状態を取得する @return 状態文字列 */
     const char* Status() const { return m_status.c_str(); }
     /** @brief 部屋コードを取得する @return 6桁のコード */
@@ -68,7 +74,7 @@ public:
     /** @brief スコア送信状態を返す @return 表示用状態 */
     const char* ScoreStatus() const { return m_scoreStatus.c_str(); }
 private:
-    enum class Operation { Open, Exchange, Leave, Ranking, Score };
+    enum class Operation { Open, StreamOpen, StreamData, Leave, Ranking, Score };
     struct Request {
         Operation operation;
         unsigned generation;
@@ -76,33 +82,57 @@ private:
         std::string body, token;
         bool cooperative = false;
     };
-    struct Response { Request request; std::string body; bool success = false; };
+    struct Response {
+        Request request;
+        std::string body;
+        bool success = false;
+        std::chrono::steady_clock::time_point receivedAt {};
+        unsigned roundTripMs = 0;
+    };
     /** @brief 通信をキューへ追加する @param request 送信内容 @return なし */
     void Queue(Request request);
     /** @brief ワーカースレッドでHTTPを実行する @return なし */
     void Work();
-    /** @brief 操作を次回通信へ追加する @param command プロトコル行 @return なし */
+    /** @brief 常時接続で送信と受信を並行する @param token 認証トークン @param generation 接続世代 @return なし */
+    void Stream(std::string token, unsigned generation);
+    /** @brief 常時接続を終了してスレッドを回収する @return なし */
+    void StopStream();
+    /** @brief 通信統計を保存する @return なし */
+    void LogNetwork();
+    /** @brief 操作を通信スレッドへ直ちに渡す @param command プロトコル行 @return なし */
     void Command(const std::string& command);
     /** @brief 応答を検証して適用する @param body 応答本文 @return 正常ならtrue */
     bool Receive(const std::string& body);
-    /** @brief 通信異常で進行を停止する @param message 表示内容 @return なし */
-    void Fail(const char* message);
+    /** @brief 通信異常で進行を停止する @param message 表示内容 @param reason ログ用の原因識別子 @return なし */
+    void Fail(const char* message, const char* reason = "local_error");
     std::mutex m_mutex;
     std::condition_variable m_wake;
     std::deque<Request> m_requests;
     std::deque<Response> m_responses;
     bool m_stopping = false;
     std::thread m_worker;
+    std::condition_variable m_streamWake;
+    std::thread m_streamWorker;
+    bool m_streamStop = false, m_streamReady = false, m_calibrated = false;
+    struct Outgoing { std::string body; std::chrono::steady_clock::time_point queuedAt; };
+    std::deque<Outgoing> m_streamOutgoing;
+    unsigned m_sendQueueMaxMs = 0, m_sendMaxMs = 0;
     unsigned m_generation = 0;
-    bool m_active = false, m_pending = false, m_failed = false, m_inGame = false;
+    bool m_active = false, m_failed = false, m_inGame = false;
     int m_player = 0, m_members = 0, m_difficulty = 0;
     unsigned m_seed = 1;
     std::array<int, 2> m_shots {};
     std::array<bool, 2> m_ready {};
-    std::string m_token, m_room, m_commands, m_openCommand;
+    std::string m_token, m_room, m_openCommand;
     std::string m_status = "SELECT MATCHMAKING OR A PRIVATE ROOM";
+    const char* m_failureReason = "none";
     CooperativeFrames m_frames;
-    std::chrono::steady_clock::time_point m_nextPoll {}, m_lastFrame {};
+    std::chrono::steady_clock::time_point m_nextPing {}, m_pingSent {}, m_lastReceived {}, m_lastFrame {}, m_waitStarted {};
+    std::chrono::steady_clock::time_point m_nextAheadReduction {};
+    unsigned m_inputDelay = CooperativeFrames::Delay, m_rttMs = 0, m_rttMaxMs = 0, m_pingId = 0, m_pingPending = 0;
+    unsigned m_sendAhead = CooperativeFrames::Delay, m_sendAheadMax = CooperativeFrames::Delay;
+    unsigned m_waitCount = 0, m_waitMs = 0, m_waitMaxMs = 0, m_frameGapMs = 0;
+    unsigned m_mainLagMaxMs = 0;
     std::array<ScoreRepository::Rankings, 2> m_rankings {};
     std::array<bool, 2> m_rankPending {};
     std::array<std::string, 2> m_rankStatus {"", ""};

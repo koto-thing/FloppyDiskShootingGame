@@ -11,16 +11,18 @@ public:
 
     /**
      * @brief 入力遅延分の空フレームで初期化する
+     * @param delay 両者で合意した入力遅延フレーム数
      * @return なし
      */
-    void Reset() {
+    void Reset(std::uint32_t delay = Delay) {
         // フレームバッファと送信位置を初期化する
         m_frames = {};
-        m_next = {Delay, Delay};
+        m_delay = delay >= Delay && delay < Capacity ? delay : Delay;
+        m_next = {m_delay, m_delay};
         m_frame = 0;
 
         // 入力遅延分を空入力として消費済みにする
-        for (std::uint32_t i = 0; i < Delay; ++i) m_frames[i].ready = 3;
+        for (std::uint32_t i = 0; i < m_delay; ++i) m_frames[i].ready = 3;
     }
 
     /**
@@ -33,9 +35,13 @@ public:
     /**
      * @brief 送信先行が遅延幅以内か調べる
      * @param player プレイヤー番号
+     * @param lookahead 先行上限、0または範囲外なら開始時の遅延を使う
      * @return 送信可能ならtrue
      */
-    bool CanSubmit(int player) const { return m_next[player] <= m_frame + Delay; }
+    bool CanSubmit(int player, std::uint32_t lookahead = 0) const {
+        const auto limit = lookahead >= Delay && lookahead < Capacity ? lookahead : m_delay;
+        return m_next[player] >= m_frame && m_next[player] - m_frame <= limit;
+    }
 
     /**
      * @brief 順序とビットを検証して入力を保存する
@@ -79,4 +85,5 @@ private:
     std::array<Frame, Capacity> m_frames {};
     std::array<std::uint32_t, 2> m_next {Delay, Delay};
     std::uint32_t m_frame = 0;
+    std::uint32_t m_delay = Delay;
 };
