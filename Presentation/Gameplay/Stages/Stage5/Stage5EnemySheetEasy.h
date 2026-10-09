@@ -31,24 +31,24 @@ public:
     bool TrySelectEnemySpawn(int frame, int spawnIndex,
         EnemySpawnRule& spawn, int& chapterNumber) const override {
         static constexpr EnemySpawnRule Chapter1[] = {
-            {LinkedLaserEnemy, 150, 400, 1.12f, -0.45f, 0.0f, 60.0f },
-            {CircleShooterEnemy, 50, 600, 1.6f, 0.6f, 0.6f, 54.0f},
-            {CircleShooterEnemy, 50, 600, 1.6f, -0.6f, -0.6f, 54.0f},
-            {SquareShooterEnemy, 100, 200, 2.6f, 0.00f, 0.00f, 54.0f},
-            {MissileShooterEnemy,  50, 200, 1.6f, -0.80f, -1.60f, 60.0f},
-            {MissileShooterEnemy,  50, 200, 1.6f, 0.80f, -1.60f, 60.0f},
+            {LinkedLaserEnemy, 150, 600, 1.12f, -0.45f, 0.0f, 60.0f },
+            {CircleShooterEnemy, 50, 900, 1.6f, 0.6f, 0.6f, 54.0f},
+            {CircleShooterEnemy, 50, 900, 1.6f, -0.6f, -0.6f, 54.0f},
+            {SquareShooterEnemy, 100, 300, 2.6f, 0.00f, 0.00f, 54.0f},
+            {MissileShooterEnemy,  50, 300, 1.6f, -0.80f, -1.60f, 60.0f},
+            {MissileShooterEnemy,  50, 300, 1.6f, 0.80f, -1.60f, 60.0f},
         };
         static constexpr EnemySpawnRule Chapter2[] = {
-            {DiveRusherEnemy, 50, 100, 1.6f, 0.00f, 0.0f, 40.0f},
-            {StraightShooterEnemy, 25, 200, 1.6f, 1.00f, 1.00f, 40.0f},
-            {StraightShooterEnemy, 25, 200, 1.6f, -1.00f, -1.00f, 40.0f},
+            {DiveRusherEnemy, 50, 150, 1.6f, 0.00f, 0.0f, 40.0f},
+            {StraightShooterEnemy, 25, 300, 1.6f, 1.00f, 1.00f, 40.0f},
+            {StraightShooterEnemy, 25, 300, 1.6f, -1.00f, -1.00f, 40.0f},
         };
         static constexpr EnemySpawnRule Chapter3[] = {
-            {BasicEnemy, 25, 100, 2.6f, 0.42f, -0.8f, 60.0f},
-            {BasicEnemy, 25, 100, 2.6f, 0.42f, 0.80f, 60.0f},
-            {HeavyEnemy, 50, 100, 1.6f, 0.70f, 0.0f, 60.0f},
-            {HeavyEnemy, 50, 100, 1.6f, -0.70f, 1.60f, 60.0f},
-            {ArmoredEnemy, 50, 200, 1.6f, 0.0f, -1.60f, 60.0f},
+            {BasicEnemy, 25, 150, 2.6f, 0.42f, -0.8f, 60.0f},
+            {BasicEnemy, 25, 150, 2.6f, 0.42f, 0.80f, 60.0f},
+            {HeavyEnemy, 50, 150, 1.6f, 0.70f, 0.0f, 60.0f},
+            {HeavyEnemy, 50, 150, 1.6f, -0.70f, 1.60f, 60.0f},
+            {ArmoredEnemy, 50, 300, 1.6f, 0.0f, -1.60f, 60.0f},
         };
         constexpr Chapter Chapters[] = {
             MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)

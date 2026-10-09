@@ -12,9 +12,33 @@
 #include "../Presentation/Gameplay/Stages/Stage3/Stage3Module.h"
 #include "../Presentation/Gameplay/Stages/Stage3/Stage3BarrierCageView.h"
 #include "../Presentation/Gameplay/Stages/Stage5/Stage5Module.h"
+#include "../Presentation/Gameplay/Stages/Stage4/Stage4Module.h"
+#include "../Presentation/Gameplay/Stages/Common/StageDefinition.h"
 
 /** @brief ステージ固有の演出と被弾判定の協力プレイ回帰チェック */
 struct CoopStageTests {
+    /** @brief EASY道中の削減後の敵数と4面より5面が多いことを検証する @return なし */
+    static void CheckEasyEnemyCounts() {
+        using Game = SideScrollingShooter;
+        int counts[2] = {};
+        const Game::Stage* stages[] = {
+            &Game::Stage4Module::Definition(Easy), &Game::Stage5Module::Definition(Easy)
+        };
+        // 全チャプターの出現規則を走査し、連結レーザーは2体として数える
+        for (int i = 0; i < 2; ++i) {
+            for (int frame = 0; frame < stages[i]->ChapterFrameLength() * 3; ++frame) {
+                Game::Stage::EnemySpawnRule spawn;
+                int chapter = 0;
+                for (int index = 0; stages[i]->TrySelectEnemySpawn(frame, index, spawn, chapter); ++index) {
+                    counts[i] += spawn.enemyType == Game::Stage::LinkedLaserEnemy ? 2 : 1;
+                }
+            }
+        }
+        assert(counts[0] == 79 && counts[0] < 111);
+        assert(counts[1] == 106 && counts[1] < 160);
+        assert(counts[0] < counts[1]);
+    }
+
     /** @brief 第2部道中の協力カメラと連射時の弾プール回収を検証する @return なし */
     static void CheckStage5RouteCameraAndShots() {
         using Game = SideScrollingShooter;
@@ -316,6 +340,7 @@ struct CoopStageTests {
 
     /** @brief 実際のステージ処理をGPUなしで検証する @return なし */
     static void Run() {
+        CheckEasyEnemyCounts();
         CheckStage5RouteCameraAndShots();
         CheckStage3BarrierCamera();
         CheckSeaSerpentHitboxes();
