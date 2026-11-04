@@ -14,7 +14,7 @@
 {"CHAPTER SCORE  %06d", {"チャプタースコア  %06d", "PUNTOS DEL CAPÍTULO  %06d", "챕터 점수  %06d", "章节得分  %06d", "SCORE DU CHAPITRE  %06d", "PONTOS DO CAPÍTULO  %06d"}},
 {"TOTAL SCORE    %06d", {"合計スコア    %06d", "PUNTOS TOTALES    %06d", "총점    %06d", "总分    %06d", "SCORE TOTAL    %06d", "PONTUAÇÃO TOTAL    %06d"}},
 {"RESTART %d", {"再開 %d", "REINICIO %d", "재시작 %d", "重新开始 %d", "REPRISE %d", "REINÍCIO %d"}},
-{"MISSION %d START", {"ミッション %d 開始", "MISIÓN %d: INICIO", "미션 %d 시작", "任务 %d 开始", "MISSION %d : DÉBUT", "MISSÃO %d: INÍCIO"}},
+{"MISSION %d START", {JA_SHORT("MISSION %d START", "ミッション %d 開始"), "MISIÓN %d: INICIO", "미션 %d 시작", "任务 %d 开始", "MISSION %d : DÉBUT", "MISSÃO %d: INÍCIO"}},
 {"LESSON %d / %d", {"レッスン %d / %d", "LECCIÓN %d / %d", "훈련 %d / %d", "教程 %d / %d", "LEÇON %d / %d", "LIÇÃO %d / %d"}},
 {"GIANT MECHA TAYAMA  %03d%%", {"巨大メカ TAYAMA  %03d%%", "MECA GIGANTE TAYAMA  %03d%%", "거대 메카 TAYAMA  %03d%%", "巨型机甲 TAYAMA  %03d%%", "MÉCHA GÉANT TAYAMA  %03d%%", "MECHA GIGANTE TAYAMA  %03d%%"}},
 {"L-LIGHT[%c] R-LIGHT[%c] RADAR[%c] L-LEG[%c] R-LEG[%c] CORE[%c]", {"左灯[%c] 右灯[%c] レーダー[%c] 左脚[%c] 右脚[%c] コア[%c]", "LUZ I[%c] LUZ D[%c] RADAR[%c] PIERNA I[%c] PIERNA D[%c] NÚCLEO[%c]", "왼등[%c] 오른등[%c] 레이더[%c] 왼다리[%c] 오른다리[%c] 코어[%c]", "左灯[%c] 右灯[%c] 雷达[%c] 左腿[%c] 右腿[%c] 核心[%c]", "FEU G[%c] FEU D[%c] RADAR[%c] JAMBE G[%c] JAMBE D[%c] CŒUR[%c]", "LUZ E[%c] LUZ D[%c] RADAR[%c] PERNA E[%c] PERNA D[%c] NÚCLEO[%c]"}},
