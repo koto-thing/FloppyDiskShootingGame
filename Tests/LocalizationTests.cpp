@@ -72,7 +72,7 @@ int main() {
     assert(Localization::Translate("OPTIONS") == "設定");
 #endif
     assert(Localization::Translate("LANGUAGE") == "言語");
-    assert(Localization::Translate("LOCKS ON TO THE NEAREST ENEMY") == "最も近い敵を追尾");
+    assert(Localization::Translate("SELECT SHOT TYPE") == "ショットを選択");
 
     // 英語と未知キーは原文を保ち、不正な言語値は英語へ戻す
     Localization::SetLanguage(Localization::Language::English);

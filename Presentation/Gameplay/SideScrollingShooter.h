@@ -1089,6 +1089,7 @@ private:
      * @return なし
      */
     void DrawLinkedEnemyLasers(Renderer& renderer, const Camera3D& camera, float railWeight) const;
+public:
     /**
      * @brief Stage2主砲と同じRailgunシェーダーで線分レーザーを描画する
      * @param renderer 描画先レンダラー
@@ -1102,6 +1103,20 @@ private:
      */
     static void DrawRailgunBeamBetween(Renderer& renderer, const Camera3D& camera,
         const Vector3& start, const Vector3& end, float width, float progress, int effectType);
+    /**
+     * @brief ボムの六角形バリアを指定位置と半径で描画する
+     * @param renderer 描画先
+     * @param camera カメラ
+     * @param center 中心
+     * @param radius 半径
+     * @param age 位相
+     * @param hits 損傷段階0～2
+     * @param lineWidth 六角形の線幅
+     * @return なし
+     */
+    static void DrawBombShield(Renderer& renderer, const Camera3D& camera, const Vector3& center,
+        float radius, int age, int hits, float lineWidth = 0.025f);
+private:
     void DrawShotModel(Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw = 0.0f) const;
     /** @brief 爆発エフェクトをHLSLへ渡す描画コマンドとして記録する */
     static void DrawExplosion(Renderer& renderer, const Camera3D& camera, const Explosion& explosion);
@@ -1113,9 +1128,6 @@ private:
      * @return なし
      */
     void DrawBomb(Renderer& renderer, const Camera3D& camera, const Bomb& bomb) const;
-    /** @brief ボムの六角形バリアを指定位置と半径で描画する @param renderer 描画先 @param camera カメラ @param center 中心 @param radius 半径 @param age 位相 @param hits 損傷段階0～2 @return なし */
-    void DrawBombShield(Renderer& renderer, const Camera3D& camera, const Vector3& center,
-        float radius, int age, int hits) const;
     /** @brief 飛散中の機体部品を描画する */
     void DrawDebris(Renderer& renderer, const Camera3D& camera,
         const Debris& debris, float railWeight) const;

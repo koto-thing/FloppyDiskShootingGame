@@ -3,6 +3,7 @@
 #include "../Engine/Graphics/Renderer.h"
 #include "../Engine/Graphics/Utf8Text.h"
 #include "../Engine/Input/Input.h"
+#include "../Engine/Time/Time.h"
 #include "../Presentation/Scenes/ModeSelectionScene.h"
 #include "../Presentation/Scenes/OptionScene.h"
 #include "../Presentation/Scenes/TestStage.h"
@@ -102,7 +103,7 @@ static void CheckOptionsHeading(Scenes& scenes, Renderer& renderer, float y) {
     assert(headings == 1);
 }
 
-/** @brief 3機体の翻訳済み説明がパネル中央へ収まることを検査する @param scenes 実行中のシーン @param renderer 描画先 @return なし */
+/** @brief 3機体の見出しと図解の弾がループ全体でパネル内へ収まることを検査する @param scenes 実行中のシーン @param renderer 描画先 @return なし */
 static void CheckModePreview(Scenes& scenes, Renderer& renderer) {
     scenes.Initialize(SceneType::ModeSelection);
     InputTestAccess::Click(scenes, {0.0f, 0.16f});
@@ -110,20 +111,30 @@ static void CheckModePreview(Scenes& scenes, Renderer& renderer) {
     for (int shot = 0; shot < 3; ++shot) {
         InputTestAccess::MovePointer({-0.62f, 0.20f - shot * 0.20f});
         scenes.ProcessInput();
-        renderer.BeginFrame();
-        scenes.Render(renderer);
-        int labels = 0;
-        for (std::size_t i = 0; i < renderer.CommandCount(); ++i) {
-            const auto& text = renderer.Command(i);
-            if (text.type != RenderCommand::Type::Text || text.position.x < 0.0f ||
-                text.position.y > 0.5f || text.position.y < -0.7f) continue;
-            const auto metrics = Utf8Text::Measure(text.text.data(), text.size, text.characterSpacing);
-            const float left = text.position.x - metrics.firstGlyphOffset;
-            assert(std::abs(left + metrics.width * 0.5f - 0.47f) < 0.0001f);
-            assert(left >= -0.02f && left + metrics.width <= 0.96f);
-            ++labels;
+        // 最長のボム図解と散弾の近距離・遠距離を一巡する時間を確認する
+        for (float time = 0.0f; time < 8.0f; time += 0.1f) {
+            Time::unscaledTime = time;
+            renderer.BeginFrame();
+            scenes.Render(renderer);
+            assert(!renderer.HasOverflowed());
+            int labels = 0;
+            for (std::size_t i = 0; i < renderer.CommandCount(); ++i) {
+                const auto& command = renderer.Command(i);
+                if (command.type == RenderCommand::Type::PlayerShot) {
+                    const auto& visual = command.playerShot;
+                    assert(visual.position.x - visual.size.x >= -0.02f && visual.position.x + visual.size.x <= 0.96f);
+                    assert(visual.position.y >= -0.71f && visual.position.y <= 0.55f);
+                }
+                if (command.type != RenderCommand::Type::Text || command.position.x < 0.0f ||
+                    command.position.y > 0.5f || command.position.y < -0.7f) continue;
+                const auto metrics = Utf8Text::Measure(command.text.data(), command.size, command.characterSpacing);
+                const float left = command.position.x - metrics.firstGlyphOffset;
+                assert(std::abs(left + metrics.width * 0.5f - 0.47f) < 0.0001f);
+                assert(left >= -0.02f && left + metrics.width <= 0.96f);
+                ++labels;
+            }
+            assert(labels == 3);
         }
-        assert(labels == 7);
     }
 }
 

@@ -843,9 +843,9 @@ void SideScrollingShooter::DrawBomb(
     }
 }
 
-/** @brief 自機とボスで同じ球面バリアを描画する @param renderer 描画先 @param camera カメラ @param center 中心 @param radius 半径 @param age 位相 @param hits 損傷段階 @return なし */
+/** @brief 自機とボスで同じ球面バリアを描画する @param renderer 描画先 @param camera カメラ @param center 中心 @param radius 半径 @param age 位相 @param hits 損傷段階 @param lineWidth 線幅 @return なし */
 void SideScrollingShooter::DrawBombShield(Renderer& renderer, const Camera3D& camera,
-    const Vector3& center, float radius, int age, int hits) const {
+    const Vector3& center, float radius, int age, int hits, float lineWidth) {
     // 正二十面体の各面を切頂して六角形を作り、球面へ投影する
     // 球を閉じるための十二か所の五角形状の隙間は透明のまま残す
     constexpr float phi = 1.61803399f;
@@ -881,7 +881,7 @@ void SideScrollingShooter::DrawBombShield(Renderer& renderer, const Camera3D& ca
                 const Vector3 direction = (end - start).Normalized();
                 const Vector3 midpoint = (start + end) * 0.5f;
                 DrawModelPrimitive(renderer, camera, PrimitiveShape::Cylinder,
-                    midpoint.x, midpoint.y, midpoint.z, 0.025f, (end - start).Length(), 0.025f, rim,
+                    midpoint.x, midpoint.y, midpoint.z, lineWidth, (end - start).Length(), lineWidth, rim,
                     std::atan2(-direction.z, direction.x),
                     std::asin(std::clamp(direction.y, -1.0f, 1.0f)) - Math::HalfPi);
             }
