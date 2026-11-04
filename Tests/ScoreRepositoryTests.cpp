@@ -60,6 +60,16 @@ void RunScoreRepositoryTests() {
     const bool duplicateUnlock = repository.UnlockGalleryEntry(GalleryEntry::LightEnemy);
     const GameSettings unlockedSettings = repository.Load();
 
+    // ステージの解放は巻き戻らず、旧形式の設定ではSTAGE 1だけを解放する
+    repository.UnlockStage(3);
+    repository.UnlockStage(2);
+    const GameSettings stageSettings = repository.Load();
+    {
+        std::ofstream legacySettings(testRoot / L"SpaceYakuza" / L"settings.dat", std::ios::trunc);
+        legacySettings << "1\n1\n1\n1\n1\n1\n1\n";
+    }
+    const GameSettings legacyStageSettings = repository.Load();
+
     // 既存の1人用ファイル形式を読み取り、協力プレイの保存先から隔離する
     const std::filesystem::path soloPath = testRoot / L"SpaceYakuza" / L"rankings.dat";
     std::ofstream legacyScores(soloPath);
@@ -107,5 +117,12 @@ void RunScoreRepositoryTests() {
         unlockedSettings.masterVolume != expectedSettings.masterVolume ||
         (unlockedSettings.galleryUnlocks & GalleryEntryBit(GalleryEntry::LightEnemy)) == 0u) {
         throw std::runtime_error("Gallery unlocks must persist without replacing settings");
+    }
+    GameSettings outOfRangeStage;
+    outOfRangeStage.unlockedStage = 99;
+    if (stageSettings.unlockedStage != 3 || stageSettings.masterVolume != expectedSettings.masterVolume ||
+        legacyStageSettings.unlockedStage != 1 ||
+        SettingsRepository::Sanitize(outOfRangeStage).unlockedStage != 5) {
+        throw std::runtime_error("Stage progress must persist, never regress, and stay in range");
     }
 }

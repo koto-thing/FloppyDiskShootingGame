@@ -10,7 +10,6 @@
 #include "../../Domain/ValueObjects/CooperativeInput.h"
 #include "../../Domain/ValueObjects/GalleryEntry.h"
 #include "../../Domain/ValueObjects/PlayerType.h"
-#include "../../Domain/ValueObjects/ResumeCode.h"
 #include "../../Engine/Graphics/Camera3D.h"
 #include "Stages/Stage1/Stage1State.h"
 #include "Stages/Stage2/Stage2State.h"
@@ -31,13 +30,11 @@ class SideScrollingShooter {
     friend struct CoopGameplayTests;
     friend struct CoopStageTests;
     friend struct HudLayoutTests;
-    friend struct ResumeCodeTests;
+    friend struct StageSelectTests;
     friend struct EnemyModelHitTests;
 public:
-    /** @brief 現在地点のシングルプレイ再開コードを取得する @return コード、対象外なら空文字列 */
-    std::string GetResumeCode() const;
-    /** @brief 検証済みコードの開始地点と状態を復元する @param code 入力コード @return 復元成功ならtrue */
-    bool RestoreResumeCode(std::string_view code);
+    /** @brief 選択したステージの先頭から開始する @param stage 開始するステージ番号、1から5 @return なし */
+    void StartFromStage(int stage);
     /** @brief 自機弾の挙動を調整するパラメータ */
     struct PlayerShotParameters {
         int fireIntervalFrames;
@@ -1227,6 +1224,7 @@ private:
     const Stage* m_stage = nullptr;
     DifficultyType m_difficulty = Easy;
     std::uint32_t m_galleryUnlocks = DefaultGalleryUnlocks;
+    int m_unlockedStage = 1;
     float m_scroll = 0.0f;
     int m_frame = 0;
     int m_spawnCooldown = 0;

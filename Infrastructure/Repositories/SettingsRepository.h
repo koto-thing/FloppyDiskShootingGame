@@ -16,6 +16,7 @@ struct GameSettings {
     std::uint32_t galleryUnlocks = DefaultGalleryUnlocks;
     bool tutorialCompleted = false;
     bool automaticMatchmaking = true;
+    int unlockedStage = 1;
 };
 
 /** @brief ゲーム設定をユーザーの永続データ領域へ保存するリポジトリ */
@@ -46,6 +47,13 @@ public:
      * @return この呼び出しで初めて解放された場合true
      */
     bool UnlockGalleryEntry(GalleryEntry entry) const;
+
+    /**
+     * @brief ステージを解放して既存設定とともに保存する
+     * @param stage 解放するステージ番号
+     * @return なし
+     */
+    void UnlockStage(int stage) const;
 
     /**
      * @brief 設定値を有効範囲へ補正する

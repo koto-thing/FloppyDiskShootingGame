@@ -9,6 +9,7 @@
 #include "../../Engine/Graphics/Renderer.h"
 
 #include <cstdio>
+#include <utility>
 #if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
 #if defined(SPACEYAKUZA_EDITION_Steam)
 #include "../../Infrastructure/ExternalServices/SteamCoopSession.h"
@@ -42,13 +43,10 @@ void TestStage::Initialize() {
 #endif
     m_game->Initialize(getData().audio, getData().playerType, getData().difficulty,
         getData().playerCount, getData().secondPlayerType);
-    // 再開要求はシングルプレイだけで一度消費する
-    if (getData().playerCount == 1
-#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
-        && !getData().onlineGame
-#endif
-        ) m_game->RestoreResumeCode(getData().resumeCode);
-    getData().resumeCode.clear();
+    // 開始ステージの指定は一度だけ消費し、途中開始はランキングの対象外にする
+    const int startStage = std::exchange(getData().startStage, 1);
+    m_rankedRun = startStage == 1;
+    if (startStage > 1) m_game->StartFromStage(startStage);
 #if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
     // 通信プレイの初期入力を適用する
     if (getData().onlineGame) m_game->ApplyNetworkInput({});
@@ -154,12 +152,14 @@ void TestStage::Tick() {
 
     // 最終クリア表示を見せてからスコアを保存し、エンディングへ遷移する
     if (++m_allClearTimer != FinalClearDisplayFrames) return;
-    ScoreRepository {}.Save(getData().difficulty, m_game->Score(), getData().playerCount == 2);
+    if (m_rankedRun) {
+        ScoreRepository {}.Save(getData().difficulty, m_game->Score(), getData().playerCount == 2);
 #if defined(SPACEYAKUZA_EDITION_Online)
-    // 協力スコアはホストだけ送信して二重登録を防ぐ
-    if (!getData().onlineGame || getData().coop->IsHost())
-        getData().coop->SubmitScore(static_cast<int>(getData().difficulty), m_game->Score(), getData().playerCount == 2);
+        // 協力スコアはホストだけ送信して二重登録を防ぐ
+        if (!getData().onlineGame || getData().coop->IsHost())
+            getData().coop->SubmitScore(static_cast<int>(getData().difficulty), m_game->Score(), getData().playerCount == 2);
 #endif
+    }
     changeScene(SceneType::Ending);
 }
 
@@ -295,14 +295,6 @@ void TestStage::RenderPauseMenu(Renderer& renderer) const {
         m_returnToTitleButton->Render(renderer);
         m_openOptionsButton->Render(renderer);
         m_closeMenuButton->Render(renderer);
-        const std::string code = m_game->GetResumeCode();
-        if (!code.empty()) {
-            renderer.DrawText("RESUME CODE", TextAlign::Center, 0.018f, ColorF::White(), {0.0f, -0.40f}, 0.002f);
-            renderer.DrawText(code, TextAlign::Center, 0.010f, {1.0f, 0.82f, 0.18f, 1.0f},
-                {0.0f, -0.49f}, 0.001f);
-            renderer.DrawText("RESTARTS THIS CHAPTER / BOSS", TextAlign::Center, 0.010f,
-                ColorF::White(), {0.0f, -0.59f}, 0.001f);
-        }
         return;
     }
 

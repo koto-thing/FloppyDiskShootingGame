@@ -161,7 +161,7 @@ if(BUILD_TESTING AND NOT EMSCRIPTEN)
     endif()
     add_test(NAME portable_platform COMMAND PortablePlatformTests)
     # 既存のゲーム回帰チェックを新しいOSでもそのまま実行する
-    foreach(test CooperativeSetup HomingShot OrbitShot ResumeCode CoopGameplay)
+    foreach(test CooperativeSetup HomingShot OrbitShot StageSelect CoopGameplay)
         add_executable(${test}Tests "Tests/${test}Tests.cpp")
         if(test STREQUAL "CoopGameplay")
             target_sources(${test}Tests PRIVATE Tests/CoopStageTests.cpp)

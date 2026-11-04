@@ -46,6 +46,9 @@ GameSettings SettingsRepository::Load() const {
     // 旧形式では自動マッチングを既定のONにする
     int automaticMatchmaking = 1;
     if (input >> automaticMatchmaking) settings.automaticMatchmaking = automaticMatchmaking != 0;
+    // 旧形式ではSTAGE 1だけを解放済みにする
+    int unlockedStage = 1;
+    if (input >> unlockedStage) settings.unlockedStage = unlockedStage;
     return Sanitize(settings);
 }
 
@@ -69,7 +72,8 @@ void SettingsRepository::Save(const GameSettings& settings) const {
            << (sanitized.retroEffectEnabled ? 1 : 0) << '\n'
            << sanitized.galleryUnlocks << '\n'
            << (sanitized.tutorialCompleted ? 1 : 0) << '\n'
-           << (sanitized.automaticMatchmaking ? 1 : 0) << '\n';
+           << (sanitized.automaticMatchmaking ? 1 : 0) << '\n'
+           << sanitized.unlockedStage << '\n';
     output.close();
     if (!output) return;
 
@@ -94,6 +98,19 @@ bool SettingsRepository::UnlockGalleryEntry(GalleryEntry entry) const {
 }
 
 /**
+ * @brief ステージを解放して既存設定とともに保存する
+ * @param stage 解放するステージ番号
+ * @return なし
+ */
+void SettingsRepository::UnlockStage(int stage) const {
+    // 到達済みより手前のステージでは保存データを巻き戻さない
+    GameSettings settings = Load();
+    if (stage <= settings.unlockedStage) return;
+    settings.unlockedStage = stage;
+    Save(settings);
+}
+
+/**
  * @brief 設定値を有効範囲へ補正する
  * @param settings 補正前の設定
  * @return 補正後の設定
@@ -103,6 +120,7 @@ GameSettings SettingsRepository::Sanitize(GameSettings settings) {
     settings.bgmVolume = SanitizeVolume(settings.bgmVolume);
     settings.seVolume = SanitizeVolume(settings.seVolume);
     settings.galleryUnlocks = (settings.galleryUnlocks & ValidGalleryUnlocks) | DefaultGalleryUnlocks;
+    settings.unlockedStage = (std::clamp)(settings.unlockedStage, 1, 5);
     return settings;
 }
 
