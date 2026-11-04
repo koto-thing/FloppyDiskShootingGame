@@ -58,40 +58,13 @@ void SideScrollingShooter::DrawHitboxEllipsoid(
 
 void SideScrollingShooter::DrawEnemyHitbox(
     Renderer& renderer, const Camera3D& camera, const Enemy& enemy) const {
-    // 描画専用問い合わせで実際のボス部位判定を最後まで走査する
+    if (enemy.type == 2 && !enemy.collisionEnabled &&
+        !StageDispatch::CanHitBossWhileCollisionDisabled(*this)) return;
+    // 自機弾が実際に判定する描画形状を重ねる
     Shot query;
     query.hitboxRenderer = &renderer;
     query.hitboxCamera = &camera;
-    query.hitboxSideZ = enemy.z;
-    if (enemy.type == 2 && (!m_chapterResultActive || enemy.collisionEnabled) &&
-        (enemy.collisionEnabled || StageDispatch::CanHitBossWhileCollisionDisabled(*this))) {
-        BossPart part = BossNose;
-        TryHitBossPart(query, enemy, part);
-        StageDispatch::TryHitBossBody(*this, query, enemy);
-        StageDispatch::BlocksPlayerShot(*this, query, enemy);
-    }
-
-    // 接触判定が無効なボスは共通球の表示対象から除外する
-    if (enemy.type == 2 && !enemy.collisionEnabled) return;
-    const auto& behavior = enemy.behavior ? *enemy.behavior : EnemyBehaviorForType(enemy.type);
-    constexpr float color[4] = {1.0f, 0.0f, 0.0f, 0.24f};
-
-    // 衝突処理と同じ半径を使い、2D判定は軸ごとのワールド倍率を反映する
-    const bool rail = IsRailGameplayActive();
-    const float diameter = 2.0f * (rail ? behavior.CollisionRadius3D(enemy) : behavior.CollisionRadius(enemy));
-    DrawModelPrimitive(renderer, camera, 5, ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z,
-        rail ? diameter : diameter * WorldXScale,
-        rail ? diameter : diameter * WorldYScale,
-        rail ? diameter : diameter * WorldYScale, color);
-
-    // 3Dでは接触範囲とは異なる自機弾の命中半径も表示する
-    if (rail && (!m_chapterResultActive || enemy.collisionEnabled)) {
-        float radius = behavior.ShotHitRadius3D(enemy);
-        if (m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase)) {
-            radius *= ShooterStages::Stage5::Part2EnemyScaleMultiplier(RailBlend());
-        }
-        HitShotSphere(query, ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z, radius);
-    }
+    HitEnemyModel(query, enemy);
 }
 #endif
 
@@ -130,7 +103,9 @@ bool SideScrollingShooter::HitShotSphere(const Shot& shot, float x, float y, flo
         ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale, x, y, z, radius);
 }
 
-void SideScrollingShooter::Render(Renderer& renderer) const {
+void SideScrollingShooter::Render(Renderer& renderer, int localPlayer) const {
+    // 描画側だけで自機を選び、同期済みの戦闘状態には持ち込まない
+    m_renderPlayer = m_networkGame && localPlayer == 1 && m_playerCount == 2 ? 1 : 0;
     // 安定した2D表示では全オブジェクトを同じ奥行きへ固定する
     if (!IsRailRenderActive()) {
         Render2D(renderer);
@@ -192,9 +167,7 @@ void SideScrollingShooter::Render(Renderer& renderer) const {
         renderer.SetPipeline(PipelineId::Object);
         for (const auto& enemy : m_enemies) {
             if (!enemy.active) continue;
-            Enemy target = enemy;
-            if (!IsRailGameplayActive()) target.z = SidePlaneZ;
-            DrawEnemyHitbox(renderer, camera, target);
+            DrawEnemyHitbox(renderer, camera, enemy);
         }
         Shot query;
         query.hitboxRenderer = &renderer;
@@ -208,6 +181,78 @@ void SideScrollingShooter::Render(Renderer& renderer) const {
     DrawMissionBanner(renderer);
     DrawBossWarning(renderer);
     if (m_tutorialMode) DrawTutorialHud(renderer);
+}
+
+/** @brief 両視点共通の基板風ステータスと操作案内を描画する @param renderer 描画先 @return なし */
+void SideScrollingShooter::DrawArcadeHud(Renderer& renderer) const {
+    constexpr ColorF Gold {1.0f, 0.78f, 0.25f, 1.0f};
+    constexpr ColorF White {0.90f, 0.96f, 0.90f, 1.0f};
+    constexpr ColorF Empty {0.10f, 0.16f, 0.20f, 1.0f};
+    constexpr ColorF Muted {0.55f, 0.70f, 0.72f, 1.0f};
+
+    // 中央の上段にステージ、中段に共有スコアを配置する
+    char text[Localization::BufferSize(96)];
+    std::snprintf(text, sizeof(text), Localization::Text("STAGE %d/5  CHAPTER %d/3"), m_stageNumber, m_chapterNumber);
+    renderer.DrawText(text, TextAlign::Center, 0.011f, Gold, {0.0f, 0.968f}, 0.001f);
+    std::snprintf(text, sizeof(text), Localization::Text("SCORE %06d"), m_score);
+    renderer.DrawText(text, TextAlign::Center, 0.011f, White, {0.0f, 0.915f}, 0.001f);
+
+    // 左右の枠を固定し、未参加の2Pは空のゲージで表示する
+    for (int player = 0; player < 2; ++player) {
+        constexpr float width = 0.54f;
+        const float left = player == 0 ? -0.96f : 0.42f;
+        const bool active = player < m_playerCount;
+        const auto& state = m_players[player];
+        const ColorF color = !active ? Muted : player == 0 ? ColorF {0.30f, 0.80f, 1.0f, 1.0f} :
+            ColorF {0.40f, 1.0f, 0.55f, 1.0f};
+        renderer.DrawText(player == 0 ? "1P" : "2P", TextAlign::Center, 0.012f,
+            color, {left + width * 0.5f, 0.968f}, 0.001f);
+
+        // 16分割のパワーゲージは端数も正確に満たす
+        renderer.DrawText("POWER", TextAlign::Center, 0.010f, color,
+            {left + width * 0.12f, 0.919f}, 0.0f);
+        const float cellWidth = width * 0.70f / 16.0f;
+        for (int cell = 0; cell < 16; ++cell) {
+            const float half = cellWidth * 0.40f;
+            const float center = left + width * 0.29f + (cell + 0.5f) * cellWidth;
+            const float fill = active ? Math::Clamp01(state.m_power / MaxPower * 16.0f - cell) : 0.0f;
+            renderer.Draw(Rect {{center, 0.919f}, {half, 0.009f}}, Empty);
+            if (fill > 0.0f) renderer.Draw(Rect {{center - half * (1.0f - fill), 0.919f},
+                {half * fill, 0.009f}}, state.m_power >= MaxPower ? Gold : color);
+        }
+
+        // ボムは3つのドット絵記号で残数と消費済みスロットを区別する
+        renderer.DrawText("BOMB", TextAlign::Center, 0.010f, color,
+            {left + width * 0.12f, 0.872f}, 0.001f);
+        for (int bomb = 0; bomb < MaxBombCount; ++bomb) {
+            const ColorF ink = active && bomb < state.m_bombCount ? Gold : Empty;
+            const float center = left + width * (0.36f + bomb * 0.23f);
+            renderer.Draw(Rect {{center, 0.861f}, {0.010f, 0.007f}}, ink);
+            renderer.Draw(Rect {{center, 0.861f}, {0.006f, 0.010f}}, ink);
+            renderer.Draw(Rect {{center + 0.004f, 0.874f}, {0.003f, 0.002f}}, ink);
+        }
+    }
+
+    // 中央下段の航路上で自機マークをゴールフラッグへ進める
+    const int progress = ChapterProgressPercent();
+    renderer.DrawText("DIST", TextAlign::Center, 0.009f, Gold, {-0.33f, 0.868f}, 0.0f);
+    renderer.Draw(Rect {{0.045f, 0.853f}, {0.285f, 0.0015f}}, Muted);
+    for (int tick = 0; tick <= 8; ++tick) {
+        renderer.Draw(Rect {{-0.24f + tick * 0.07125f, 0.857f}, {0.001f, 0.004f}}, Muted);
+    }
+    const float shipX = -0.24f + 0.57f * Math::Clamp01(progress / 100.0f);
+    renderer.Draw(Rect {{shipX, 0.867f}, {0.018f, 0.005f}}, White);
+    renderer.Draw(Rect {{shipX - 0.005f, 0.867f}, {0.007f, 0.014f}}, Gold);
+    renderer.Draw(Rect {{shipX + 0.021f, 0.867f}, {0.004f, 0.003f}}, White);
+    renderer.Draw(Rect {{0.36f, 0.872f}, {0.0015f, 0.022f}}, White);
+    for (int row = 0; row < 2; ++row) for (int column = 0; column < 3; ++column) {
+        renderer.Draw(Rect {{0.366f + column * 0.009f, 0.890f - row * 0.009f},
+            {0.0045f, 0.0045f}}, (row + column) % 2 == 0 ? White : Empty);
+    }
+    renderer.DrawText(m_networkGame ? "ONLINE CO-OP  SHARED SCORE  VIEW: HOST" :
+        m_playerCount == 2 ? "LOCAL CO-OP  SHARED SCORE  VIEW: 1P  PAUSE: START/+" :
+        HudControlHint(StageDispatch::IsViewLocked(*this)), TextAlign::Center, 0.010f,
+        Muted, {0.0f, -0.935f}, 0.0f);
 }
 
 void SideScrollingShooter::Render2D(Renderer& renderer) const {
@@ -293,35 +338,7 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     // チュートリアル固有HUDだけを描画し、通常ステージ情報との重なりを防ぐ
     if (m_tutorialMode) return;
 
-    char stageStatus[Localization::BufferSize(48)];
-    char scoreStatus[Localization::BufferSize(32)];
-    char powerStatus[Localization::BufferSize(32)];
-    char progressStatus[Localization::BufferSize(32)];
-    char bombStatus[Localization::BufferSize(16)];
-    const int progress = ChapterProgressPercent();
-    std::snprintf(stageStatus, sizeof(stageStatus), Localization::Text("STAGE %d/5  CHAPTER %d/3"), m_stageNumber, m_chapterNumber);
-    std::snprintf(scoreStatus, sizeof(scoreStatus), Localization::Text("SCORE %06d"), m_score);
-    std::snprintf(powerStatus, sizeof(powerStatus), Localization::Text("POWER %.2f / %.2f"), Player().m_power, MaxPower);
-    std::snprintf(progressStatus, sizeof(progressStatus), Localization::Text("DIST %03d%%"), progress);
-    std::snprintf(bombStatus, sizeof(bombStatus), Localization::Text("BOMB %d"), Player().m_bombCount);
-    renderer.DrawText(stageStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.025f });
-    renderer.DrawText(scoreStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.025f });
-    if (m_playerCount == 1) renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
-    if (m_playerCount == 1) renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
-    if (m_playerCount == 1) renderer.DrawText(bombStatus, TextAlign::TopCenter, 0.014f, { 0.55f, 0.85f, 1.0f, 1.0f }, { 0.0f, -0.025f });
-    if (m_playerCount == 2) {
-        ForEachPlayer([&] {
-            char status[Localization::BufferSize(64)];
-            std::snprintf(status, sizeof(status), Localization::Text("%dP  POWER %.2f  BOMB %d"), m_activePlayer + 1,
-                Player().m_power, Player().m_bombCount);
-            const ColorF color = m_activePlayer == 0 ? ColorF {0.25f, 0.65f, 1.0f, 1.0f} : ColorF {0.25f, 1.0f, 0.40f, 1.0f};
-            renderer.DrawText(status, TextAlign::TopCenter, 0.014f, color,
-                {m_activePlayer == 0 ? -0.48f : 0.48f, -0.085f});
-        });
-    }
-    renderer.DrawText(m_networkGame ? "ONLINE CO-OP  SHARED SCORE  VIEW: HOST" : m_playerCount == 2 ? "LOCAL CO-OP  SHARED SCORE  VIEW: 1P  PAUSE: START/+" : HudControlHint(StageDispatch::IsViewLocked(*this)),
-        { -0.92f, -0.92f }, 0.012f,
-        { 0.55f, 0.70f, 0.65f, 1.0f });
+    DrawArcadeHud(renderer);
 
     DrawBossHud(renderer);
     DrawChapterResult(renderer);
@@ -462,7 +479,9 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     DrawHudBackground(renderer);
     StageDispatch::DrawOverlay3D(*this, renderer, camera);
     if (StageDispatch::IsCinematic(*this)) return;
-    ForEachPlayer([&] { DrawReticle(renderer, camera); });
+    ForEachPlayer([&] {
+        if (!m_networkGame || m_activePlayer == m_renderPlayer) DrawReticle(renderer, camera);
+    });
     const float playerZ = IsTayamaBattle() ? PlayerWorldPosition().z : Math::Lerp(SidePlaneZ, PlayerRailDepth(), railWeight);
     ForEachPlayer([&] { DrawPowerUp(renderer, camera, IsTayamaBattle() ? PlayerWorldPosition().z : playerZ); });
     DrawTutorialControlHint(renderer, camera, playerZ);
@@ -471,35 +490,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     // チュートリアル固有HUDだけを描画し、通常ステージ情報との重なりを防ぐ
     if (m_tutorialMode) return;
 
-    char stageStatus[Localization::BufferSize(48)];
-    char scoreStatus[Localization::BufferSize(32)];
-    char powerStatus[Localization::BufferSize(32)];
-    char progressStatus[Localization::BufferSize(32)];
-    char bombStatus[Localization::BufferSize(16)];
-    const int progress = ChapterProgressPercent();
-    std::snprintf(stageStatus, sizeof(stageStatus), Localization::Text("STAGE %d/5  CHAPTER %d/3"), m_stageNumber, m_chapterNumber);
-    std::snprintf(scoreStatus, sizeof(scoreStatus), Localization::Text("SCORE %06d"), m_score);
-    std::snprintf(powerStatus, sizeof(powerStatus), Localization::Text("POWER %.2f / %.2f"), Player().m_power, MaxPower);
-    std::snprintf(progressStatus, sizeof(progressStatus), Localization::Text("DIST %03d%%"), progress);
-    std::snprintf(bombStatus, sizeof(bombStatus), Localization::Text("BOMB %d"), Player().m_bombCount);
-    renderer.DrawText(stageStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.025f });
-    renderer.DrawText(scoreStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.025f });
-    if (m_playerCount == 1) renderer.DrawText(powerStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { -0.48f, -0.085f });
-    if (m_playerCount == 1) renderer.DrawText(progressStatus, TextAlign::TopCenter, 0.014f, { 0.75f, 0.95f, 0.85f, 1.0f }, { 0.48f, -0.085f });
-    if (m_playerCount == 1) renderer.DrawText(bombStatus, TextAlign::TopCenter, 0.014f, { 0.55f, 0.85f, 1.0f, 1.0f }, { 0.0f, -0.025f });
-    if (m_playerCount == 2) {
-        ForEachPlayer([&] {
-            char status[Localization::BufferSize(64)];
-            std::snprintf(status, sizeof(status), Localization::Text("%dP  POWER %.2f  BOMB %d"), m_activePlayer + 1,
-                Player().m_power, Player().m_bombCount);
-            const ColorF color = m_activePlayer == 0 ? ColorF {0.25f, 0.65f, 1.0f, 1.0f} : ColorF {0.25f, 1.0f, 0.40f, 1.0f};
-            renderer.DrawText(status, TextAlign::TopCenter, 0.014f, color,
-                {m_activePlayer == 0 ? -0.48f : 0.48f, -0.085f});
-        });
-    }
-    renderer.DrawText(m_networkGame ? "ONLINE CO-OP  SHARED SCORE  VIEW: HOST" : m_playerCount == 2 ? "LOCAL CO-OP  SHARED SCORE  VIEW: 1P  PAUSE: START/+" : HudControlHint(StageDispatch::IsViewLocked(*this)),
-        { -0.92f, -0.92f }, 0.012f,
-        { 0.55f, 0.70f, 0.65f, 1.0f });
+    DrawArcadeHud(renderer);
     if (m_viewTransitionTimer > 0) {
 #if defined(SPACEYAKUZA_EDITION_Online) || defined(SPACEYAKUZA_EDITION_Steam)
         // 視点切り替えの案内も言語によらず画面中央へ配置する

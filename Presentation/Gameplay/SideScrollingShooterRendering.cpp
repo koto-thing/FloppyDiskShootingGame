@@ -162,6 +162,9 @@ Vector3 RotateYawOffset(float x, float y, float z, float yaw) {
 #include "Stages/Common/StageDispatch.h"
 
 void SideScrollingShooter::ConfigureSideCamera(Camera3D& camera, Renderer& renderer) const {
+    // 背景の太陽への命中判定にも現在の画面比率を使用する
+    const Viewport viewport {0, 0, renderer.Width(), renderer.Height()};
+    if (!m_networkGame && viewport.IsValid()) m_aimViewport = viewport;
     const Vector2 shake = ScreenShakeOffset();
     const float cameraY = StageDispatch::SideCameraY(*this);
 
@@ -180,12 +183,17 @@ void SideScrollingShooter::ConfigureSideCamera(Camera3D& camera, Renderer& rende
 void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, Renderer& renderer) const {
     // 発射時の照準判定にも実際の画面サイズを使う
     const Viewport viewport {0, 0, renderer.Width(), renderer.Height()};
-    if (viewport.IsValid()) m_aimViewport = viewport;
-    ConfigureRailCamera(camera, viewport);
+    if (!m_networkGame && viewport.IsValid()) m_aimViewport = viewport;
+    // 通信の表示だけを自機追従へ切り替え、判定用カメラは共有のまま保つ
+    const int previous = m_activePlayer;
+    const bool personal = m_networkGame && !StageDispatch::IsCinematic(*this);
+    if (m_networkGame) m_activePlayer = personal ? m_renderPlayer : 0;
+    ConfigureRailCamera(camera, viewport, personal);
+    m_activePlayer = previous;
 }
 
-/** @brief 描画と照準に共通のカメラを設定する @param camera 設定先 @param viewport 描画領域 @return なし */
-void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, const Viewport& viewport) const {
+/** @brief 描画と照準に共通のカメラを設定する @param camera 設定先 @param viewport 描画領域 @param personal 自機だけを追従する場合true @return なし */
+void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, const Viewport& viewport, bool personal) const {
     const float railWeight = RailBlend();
     const Vector2 shake = ScreenShakeOffset();
     const float sideCameraY = StageDispatch::SideCameraY(*this);
@@ -197,7 +205,7 @@ void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, const Viewport&
     Vector3 railPosition = playerPosition + Vector3 {0.0f, 2.8f, -7.5f};
     Vector3 railTarget = playerPosition + Vector3 {0.0f, 0.5f, 14.0f};
 
-    StageDispatch::ApplyCameraCorrection(*this, railPosition, railTarget);
+    StageDispatch::ApplyCameraCorrection(*this, railPosition, railTarget, personal);
     if (IsTayamaBattle()) {
         // 2Dは切替角を固定し、3Dは自機の後方かつ上方へカメラを追従させる
         const Vector2 sideOrbit = TayamaOrbitXZ(m_stage5.tayamaSideViewAngle, 0.0f);
@@ -206,6 +214,7 @@ void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, const Viewport&
             -std::cos(m_stage5.tayamaSideViewAngle)
         };
         const Vector3 tayamaPlayer = PlayerWorldPosition();
+        const float sidePlayerY = personal ? ToWorldY(m_players[0].m_playerY) : tayamaPlayer.y;
         Vector3 orbitRadial {
             tayamaPlayer.x, 0.0f,
             tayamaPlayer.z - ShooterStages::Stage5::TayamaArenaCenterZ
@@ -214,12 +223,12 @@ void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, const Viewport&
         orbitRadial = orbitRadial / radialLength;
         sidePosition = {
             sideOrbit.x + sideRadial.x * ShooterStages::Stage5::TayamaCameraDistance,
-            tayamaPlayer.y + ShooterStages::Stage5::TayamaCameraHeight,
+            sidePlayerY + ShooterStages::Stage5::TayamaCameraHeight,
             sideOrbit.y + sideRadial.z * ShooterStages::Stage5::TayamaCameraDistance
         };
         sideTarget = {
             sideOrbit.x - sideRadial.x * ShooterStages::Stage5::TayamaCameraLookAhead,
-            tayamaPlayer.y,
+            sidePlayerY,
             sideOrbit.y - sideRadial.z * ShooterStages::Stage5::TayamaCameraLookAhead
         };
         railPosition = tayamaPlayer +
@@ -238,7 +247,7 @@ void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, const Viewport&
     camera.SetPosition(Vector3::Lerp(sidePosition, railPosition, railWeight) + shakeOffset);
     camera.LookAt(Vector3::Lerp(sideTarget, railTarget, railWeight) + shakeOffset);
     // 画角を保ったまま後退し、背後へ離れた機体も連続した距離計算で画面へ収める
-    if (m_playerCount == 2 && viewport.IsValid() && !StageDispatch::IsCinematic(*this)) {
+    if (!personal && m_playerCount == 2 && viewport.IsValid() && !StageDispatch::IsCinematic(*this)) {
         const float halfAngleTangent = std::tan(camera.FieldOfView() * 0.5f);
         float pullback = 0.0f;
         ForEachPlayer([&] {
@@ -801,47 +810,7 @@ void SideScrollingShooter::DrawBomb(
         return;
     }
     if (bomb.type == Spread) {
-        // 正二十面体の各面を切頂して六角形を作り、球面へ投影する
-        // 球を閉じるための十二か所の五角形状の隙間は透明のまま残す
-        constexpr float phi = 1.61803399f;
-        constexpr Vector3 vertices[] = {{-1, phi, 0}, {1, phi, 0}, {-1, -phi, 0}, {1, -phi, 0},
-            {0, -1, phi}, {0, 1, phi}, {0, -1, -phi}, {0, 1, -phi},
-            {phi, 0, -1}, {phi, 0, 1}, {-phi, 0, -1}, {-phi, 0, 1}};
-        constexpr unsigned char faces[][3] = {{0,11,5}, {0,5,1}, {0,1,7}, {0,7,10}, {0,10,11},
-            {1,5,9}, {5,11,4}, {11,10,2}, {10,7,6}, {7,1,8},
-            {3,9,4}, {3,4,2}, {3,2,6}, {3,6,8}, {3,8,9},
-            {4,9,5}, {2,4,11}, {6,2,10}, {8,6,7}, {9,8,1}};
-        const Matrix4x4 rotation = Matrix4x4::RotationY(bomb.age * Math::TwoPi / 360.0f);
-        const float rim[4] = {0.25f, 1.45f + 0.15f * std::sin(bomb.age * Math::TwoPi / 180.0f),
-            0.85f, 0.70f};
-        for (int faceIndex = 0; faceIndex < 20; ++faceIndex) {
-            // 被弾ごとに球面全体へ散らした七つのセルを欠損させる
-            if ((faceIndex * 7) % 20 < bomb.shieldHits * 7) continue;
-            const auto& face = faces[faceIndex];
-            Vector3 hex[6];
-            const Vector3 inset = (vertices[face[0]] + vertices[face[1]] + vertices[face[2]]) * 0.06f;
-            // 枠を少し縮めて隣のセルと離し、透明な内部から自機を見せる
-            for (int i = 0; i < 6; ++i) {
-                const Vector3 a = vertices[face[i / 2]], b = vertices[face[(i / 2 + 1) % 3]];
-                const Vector3 point = a * static_cast<float>(2 - i % 2) + b * static_cast<float>(1 + i % 2);
-                hex[i] = rotation.TransformVector((point * 0.94f + inset).Normalized());
-            }
-            for (int edge = 0; edge < 6; ++edge) {
-                // 一辺を二分して球面に沿わせ、細い円柱で切れ目なく結ぶ
-                const Vector3 arc[] = {hex[edge], (hex[edge] + hex[(edge + 1) % 6]).Normalized(),
-                    hex[(edge + 1) % 6]};
-                for (int part = 0; part < 2; ++part) {
-                    const Vector3 start = center + arc[part] * BombShieldRadius;
-                    const Vector3 end = center + arc[part + 1] * BombShieldRadius;
-                    const Vector3 direction = (end - start).Normalized();
-                    const Vector3 midpoint = (start + end) * 0.5f;
-                    DrawModelPrimitive(renderer, camera, PrimitiveShape::Cylinder,
-                        midpoint.x, midpoint.y, midpoint.z, 0.025f, (end - start).Length(), 0.025f, rim,
-                        std::atan2(-direction.z, direction.x),
-                        std::asin(std::clamp(direction.y, -1.0f, 1.0f)) - Math::HalfPi);
-                }
-            }
-        }
+        DrawBombShield(renderer, camera, center, BombShieldRadius, bomb.age, bomb.shieldHits);
         return;
     }
 
@@ -871,6 +840,52 @@ void SideScrollingShooter::DrawBomb(
         if (bomb.age > BombMissileLaunchFrames)
             DrawRailgunBeamBetween(renderer, camera, center - direction * ((4.0f + pulse) * BombMissileScale),
                 center - direction * BombMissileScale, 0.60f * BombMissileScale, 0.25f, 0);
+    }
+}
+
+/** @brief 自機とボスで同じ球面バリアを描画する @param renderer 描画先 @param camera カメラ @param center 中心 @param radius 半径 @param age 位相 @param hits 損傷段階 @return なし */
+void SideScrollingShooter::DrawBombShield(Renderer& renderer, const Camera3D& camera,
+    const Vector3& center, float radius, int age, int hits) const {
+    // 正二十面体の各面を切頂して六角形を作り、球面へ投影する
+    // 球を閉じるための十二か所の五角形状の隙間は透明のまま残す
+    constexpr float phi = 1.61803399f;
+    constexpr Vector3 vertices[] = {{-1, phi, 0}, {1, phi, 0}, {-1, -phi, 0}, {1, -phi, 0},
+        {0, -1, phi}, {0, 1, phi}, {0, -1, -phi}, {0, 1, -phi},
+        {phi, 0, -1}, {phi, 0, 1}, {-phi, 0, -1}, {-phi, 0, 1}};
+    constexpr unsigned char faces[][3] = {{0,11,5}, {0,5,1}, {0,1,7}, {0,7,10}, {0,10,11},
+        {1,5,9}, {5,11,4}, {11,10,2}, {10,7,6}, {7,1,8},
+        {3,9,4}, {3,4,2}, {3,2,6}, {3,6,8}, {3,8,9},
+        {4,9,5}, {2,4,11}, {6,2,10}, {8,6,7}, {9,8,1}};
+    const Matrix4x4 rotation = Matrix4x4::RotationY(age * Math::TwoPi / 360.0f);
+    const float rim[4] = {0.25f, 1.45f + 0.15f * std::sin(age * Math::TwoPi / 180.0f),
+        0.85f, 0.70f};
+    for (int faceIndex = 0; faceIndex < 20; ++faceIndex) {
+        // 被弾ごとに球面全体へ散らした七つのセルを欠損させる
+        if ((faceIndex * 7) % 20 < hits * 7) continue;
+        const auto& face = faces[faceIndex];
+        Vector3 hex[6];
+        const Vector3 inset = (vertices[face[0]] + vertices[face[1]] + vertices[face[2]]) * 0.06f;
+        // 枠を少し縮めて隣のセルと離し、透明な内部から自機を見せる
+        for (int i = 0; i < 6; ++i) {
+            const Vector3 a = vertices[face[i / 2]], b = vertices[face[(i / 2 + 1) % 3]];
+            const Vector3 point = a * static_cast<float>(2 - i % 2) + b * static_cast<float>(1 + i % 2);
+            hex[i] = rotation.TransformVector((point * 0.94f + inset).Normalized());
+        }
+        for (int edge = 0; edge < 6; ++edge) {
+            // 一辺を二分して球面に沿わせ、細い円柱で切れ目なく結ぶ
+            const Vector3 arc[] = {hex[edge], (hex[edge] + hex[(edge + 1) % 6]).Normalized(),
+                hex[(edge + 1) % 6]};
+            for (int part = 0; part < 2; ++part) {
+                const Vector3 start = center + arc[part] * radius;
+                const Vector3 end = center + arc[part + 1] * radius;
+                const Vector3 direction = (end - start).Normalized();
+                const Vector3 midpoint = (start + end) * 0.5f;
+                DrawModelPrimitive(renderer, camera, PrimitiveShape::Cylinder,
+                    midpoint.x, midpoint.y, midpoint.z, 0.025f, (end - start).Length(), 0.025f, rim,
+                    std::atan2(-direction.z, direction.x),
+                    std::asin(std::clamp(direction.y, -1.0f, 1.0f)) - Math::HalfPi);
+            }
+        }
     }
 }
 
@@ -1065,7 +1080,7 @@ void SideScrollingShooter::DrawRestart(Renderer& renderer) const {
 }
 
 /**
- * @brief 武装強化時の点滅メッセージを自機上へ描画する
+ * @brief 自機識別、武装強化、骨の回避案内を自機上へ描画する
  * @param renderer 描画先レンダラー
  * @param camera 現在の3Dカメラ
  * @param playerZ 描画中の自機のワールド座標Z
@@ -1073,7 +1088,13 @@ void SideScrollingShooter::DrawRestart(Renderer& renderer) const {
  */
 void SideScrollingShooter::DrawPowerUp(
     Renderer& renderer, const Camera3D& camera, float playerZ) const {
-    if (Player().m_powerUpTimer <= 0 || (Player().m_powerUpTimer / 8) % 2 == 0) return;
+    // オンラインのステージ開始中は自分の機体を優先して案内する
+    const bool you = m_networkGame && m_activePlayer == m_renderPlayer && m_missionStartTimer > 0;
+    // 視点操作を行う1Pの案内を優先し、Power Upとの重なりを避ける
+    const bool viewHint = m_stageNumber == 2 && m_activePlayer == 0 &&
+        m_stage2.viewHintTimer > 0 && !IsRailGameplayActive() && !m_stage2.boneArchDestroyed;
+    const int timer = viewHint ? m_stage2.viewHintTimer : Player().m_powerUpTimer;
+    if (!you && (timer <= 0 || (viewHint ? (timer / 16) % 2 == 0 : (timer / 8) % 2 == 0))) return;
 
     // 自機上方のワールド座標を画面座標へ投影する
     Vector2 screenPosition;
@@ -1087,7 +1108,7 @@ void SideScrollingShooter::DrawPowerUp(
                 static_cast<float>(viewport.width) * 2.0f - 1.0f,
         1.0f - (screenPosition.y - static_cast<float>(viewport.y)) /
                 static_cast<float>(viewport.height) * 2.0f};
-    renderer.DrawText("POWER UP", TextAlign::Center, 0.022f,
+    renderer.DrawText(you ? "YOU" : viewHint ? "X: SWITCH TO 3D" : "POWER UP", TextAlign::Center, 0.022f,
         {1.0f, 0.88f, 0.12f, 1.0f}, position);
 }
 
@@ -1210,10 +1231,14 @@ void SideScrollingShooter::DrawTutorialHud(Renderer& renderer) const {
 
 /** @brief 文字表示領域へ共通の黒いHUD背景を描画する @param renderer 描画先 @return なし */
 void SideScrollingShooter::DrawHudBackground(Renderer& renderer) const {
-    constexpr ColorF HudBackground {0.0f, 0.0f, 0.0f, 0.82f};
+    constexpr ColorF HudBackground {0.008f, 0.014f, 0.025f, 1.0f};
     // ステータスと操作文字の背面だけを覆い、残りはプレイ領域として開放する
     renderer.Draw(Rect {{0.0f, 0.92f}, {2.0f, 0.08f}}, HudBackground);
     renderer.Draw(Rect {{0.0f, -0.92f}, {2.0f, 0.08f}}, HudBackground);
+    // 既存の帯の内側へ細い罫線を置き、プレイ領域の広さを維持する
+    constexpr ColorF Trim {0.16f, 0.42f, 0.46f, 1.0f};
+    renderer.Draw(Rect {{0.0f, 0.843f}, {1.0f, 0.003f}}, Trim);
+    renderer.Draw(Rect {{0.0f, -0.843f}, {1.0f, 0.003f}}, Trim);
 }
 
 /**
@@ -1271,7 +1296,7 @@ void SideScrollingShooter::DrawReticle(Renderer& renderer, const Camera3D& camer
     // 通常弾の進行方向を投影し、周回戦と壁面の縦スクロール弾道へ追従する
     Vector2 screen;
     if (!camera.TryWorldToScreen(PlayerAimPoint(), screen)) return;
-    const Vector2 center = Player().m_crosshairInitialized ? Player().m_crosshairPosition : Vector2 {
+    const Vector2 center = !m_networkGame && Player().m_crosshairInitialized ? Player().m_crosshairPosition : Vector2 {
         (screen.x - viewport.x) / viewport.width * 2.0f - 1.0f,
         1.0f - (screen.y - viewport.y) / viewport.height * 2.0f};
     const float aspect = static_cast<float>(viewport.height) / viewport.width;

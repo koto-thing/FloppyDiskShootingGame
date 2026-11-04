@@ -102,14 +102,14 @@ inline constexpr int EastsourceWingHp = 240;
 inline constexpr int EastsourceEngineHp = 210;
 inline constexpr int EastsourceIntroFrames = 210;
 inline constexpr int EastsourceFallFrames = 180;
-inline constexpr int EastsourceNoseAttackCycleFrames = 72;
+inline constexpr int EastsourceNoseAttackCycleFrames = 60;
 inline constexpr int EastsourceDamagedNoseAttackCycleFrames = 96;
 inline constexpr int EastsourceNoseWarningFrames = 24;
 inline constexpr int EastsourceDamagedNoseWarningFrames = 36;
-inline constexpr int EastsourceNoseShotCount = 7;
+inline constexpr int EastsourceNoseShotCount = 11;
 inline constexpr int EastsourceDamagedNoseShotCount = 3;
-inline constexpr int EastsourceNoseShotIntervalFrames = 5;
-inline constexpr int EastsourceWingBarrageCycleFrames = 60;
+inline constexpr int EastsourceNoseShotIntervalFrames = 3;
+inline constexpr int EastsourceWingBarrageCycleFrames = 42;
 inline constexpr int EastsourcePursuitCycleFrames = 120;
 inline constexpr int EastsourcePursuitRetreatFrames = 48;
 inline constexpr int EastsourcePursuitWarningEndFrame = 66;
@@ -118,6 +118,15 @@ inline constexpr int EastsourcePursuitDamagedPassFrames = 34;
 inline constexpr int EastsourcePursuitAimFrame = 52;
 inline constexpr int EastsourcePursuitShotStartFrame = 72;
 inline constexpr int EastsourcePursuitShotEndFrame = 96;
+inline constexpr int EastsourceBombStartFrames = 180;
+inline constexpr int EastsourceBombIntervalFrames = 600;
+inline constexpr int EastsourceMissileHomingFrames = 12;
+inline constexpr float EastsourceMissileSpeed = 0.32f;
+inline constexpr int EastsourceLaserWarningFrames = 180;
+inline constexpr int EastsourceLaserActiveFrames = 90;
+inline constexpr float EastsourceLaserRadius = 2.4f;
+inline constexpr int EastsourceShieldHp = 180;
+inline constexpr float EastsourceShieldRadius = 5.5f;
 static_assert(EastsourceNoseWarningFrames +
     (EastsourceNoseShotCount - 1) * EastsourceNoseShotIntervalFrames <
     EastsourceNoseAttackCycleFrames);
@@ -908,6 +917,10 @@ enum Cue {
 
 /** @brief Stage 5全体の永続状態 */
 struct State {
+    int eastsourceShieldHp = 0;
+    int eastsourceLaserTimer = -1;
+    Vector3 eastsourceLaserDirection {};
+    bool eastsourceLaserRail = false;
     std::array<SearchlightState, SearchlightCount> searchlights {};
     std::array<TayamaWeakpointState, TayamaWeakpointCount> tayamaWeakpoints {};
     std::array<TayamaReflectFunnel, TayamaReflectFunnelCount> tayamaReflectFunnels {};

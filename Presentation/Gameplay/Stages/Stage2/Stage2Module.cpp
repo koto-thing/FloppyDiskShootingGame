@@ -120,7 +120,24 @@ const SideScrollingShooter::Stage& SideScrollingShooter::Stage2Module::Definitio
 }
 
 void SideScrollingShooter::Stage2Module::Reset(SideScrollingShooter& shooter) {
+    const bool hintShown = shooter.m_isRestartingChapter && shooter.m_stage2.viewHintShown;
     shooter.m_stage2 = {};
+    shooter.m_stage2.viewHintShown = hintShown;
+}
+
+void SideScrollingShooter::Stage2Module::TickWorld(SideScrollingShooter& shooter) {
+    auto& state = shooter.m_stage2;
+    state.viewHintTimer = (std::max)(0, state.viewHintTimer - 1);
+
+    // 最初の骨の左端が画面中央へ届いた時だけ案内を開始する
+    const float firstBoneX = 1.90f - shooter.m_scroll * 0.50f;
+    if (!state.viewHintShown && firstBoneX <= 0.32f && firstBoneX >= -0.32f) {
+        state.viewHintShown = true;
+        if (!state.boneArchDestroyed && !shooter.IsRailGameplayActive()) state.viewHintTimer = 240;
+    }
+
+    // 回避操作または骨の破壊が完了したら案内を終了する
+    if (shooter.IsRailGameplayActive() || state.boneArchDestroyed) state.viewHintTimer = 0;
 }
 
 void SideScrollingShooter::Stage2Module::TickSandstorm(SideScrollingShooter& shooter) {
@@ -662,7 +679,6 @@ bool SideScrollingShooter::Stage2Module::TryHitBossBody(
     constexpr float BodyLocalX = 0.55f;
     constexpr float BodyLocalY = 0.95f;
     constexpr float ModelScale = 1.92f;
-    constexpr float BodyRadius = 4.25f;
     const bool railMode = shooter.IsRailGameplayActive();
     const float yaw = railMode ? 0.0f : Math::HalfPi;
     const float patrolX = boss.phase >= 2.0f ?
@@ -676,9 +692,7 @@ bool SideScrollingShooter::Stage2Module::TryHitBossBody(
     };
     // 部位破壊後の追尾でも分離済み上部船体の中心を使う
     if (aimPosition) { *aimPosition = center; return true; }
-    return railMode ?
-        HitShotSphere(shot, center.x, center.y, center.z, BodyRadius) :
-        HitShotCircle(shot, FromWorldX(center.x), FromWorldY(center.y), BodyRadius / WorldXScale);
+    return shooter.HitEnemyModel(shot, boss);
 }
 
 /**

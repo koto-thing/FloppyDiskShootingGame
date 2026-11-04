@@ -1,7 +1,6 @@
 #include "TestStage.h"
 #include "../../Application/UseCases/Localization.h"
 #include "../Gameplay/SideScrollingShooter.h"
-#include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
 #include "../../Infrastructure/ExternalServices/AudioService.h"
 #include "../../Infrastructure/Repositories/ScoreRepository.h"
 #include "../../Infrastructure/Repositories/SettingsRepository.h"
@@ -10,7 +9,6 @@
 #include "../../Engine/Graphics/Renderer.h"
 
 #include <cstdio>
-#include <windows.h>
 #if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
 #if defined(SPACEYAKUZA_EDITION_Steam)
 #include "../../Infrastructure/ExternalServices/SteamCoopSession.h"
@@ -28,15 +26,7 @@ constexpr int FinalClearDisplayFrames = 180;
  * @return NDC座標へ変換済みのUI入力状態
  */
 UIInputState CurrentUIInput() {
-    int width = 1280;
-    int height = 720;
-    if (const HWND window = GetForegroundWindow()) {
-        RECT rect {};
-        GetClientRect(window, &rect);
-        if (rect.right - rect.left > 0) width = rect.right - rect.left;
-        if (rect.bottom - rect.top > 0) height = rect.bottom - rect.top;
-    }
-    return UIInput::Current(width, height);
+    return UIInput::Current();
 }
 }
 
@@ -190,7 +180,11 @@ void TestStage::Render(Renderer& renderer) {
     renderer.SetRetroEffectEnabled(m_retroEffectEnabled);
 
     // ステージ本体が背景、3Dオブジェクト、UIを一つのRenderer経路へ登録する
-    m_game->Render(renderer);
+    int localPlayer = 0;
+#if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
+    if (getData().onlineGame && !getData().coop->IsHost()) localPlayer = 1;
+#endif
+    m_game->Render(renderer, localPlayer);
 #if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
     if (getData().onlineGame && !m_pauseMenuOpen && (m_waitingForPeer || m_peerPaused)) {
         // 相手待ちまたは相手ポーズの状態を表示する

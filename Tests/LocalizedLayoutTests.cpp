@@ -6,6 +6,7 @@
 #include "../Presentation/Scenes/ModeSelectionScene.h"
 #include "../Presentation/Scenes/OptionScene.h"
 #include "../Presentation/Scenes/TestStage.h"
+#include "../Presentation/Gameplay/SideScrollingShooter.h"
 
 #include <cassert>
 #include <cmath>
@@ -126,7 +127,43 @@ static void CheckModePreview(Scenes& scenes, Renderer& renderer) {
     }
 }
 
-/** @brief 7言語と3画面比率で通常設定とポーズ設定の配置を検査する @return 成功時0 */
+/** @brief 翻訳済みHUDの画面内配置とラベル同士の非重複を検証する */
+struct HudLayoutTests {
+    /** @brief 現在言語の1P/2P表示を検査する @param renderer 対象比率の描画先 @return なし */
+    static void Check(Renderer& renderer) {
+        auto game = std::make_unique<SideScrollingShooter>();
+        for (int players : {1, 2}) {
+            game->m_playerCount = players;
+            game->m_score = 2147483647;
+            renderer.BeginFrame();
+            game->DrawArcadeHud(renderer);
+            assert(!renderer.HasOverflowed());
+            for (size_t i = 0; i < renderer.CommandCount(); ++i) {
+                const auto& text = renderer.Command(i);
+                if (text.type != RenderCommand::Type::Text) continue;
+                const auto metrics = Utf8Text::Measure(text.text.data(), text.size, text.characterSpacing, renderer.AspectRatio());
+                const float left = text.position.x - metrics.firstGlyphOffset;
+                assert(left >= -0.98f && left + metrics.width <= 0.98f);
+                assert(std::abs(text.position.y) - metrics.height * 0.5f >= 0.84f);
+                assert(std::abs(text.position.y) + metrics.height * 0.5f <= 1.0f);
+                // 同じ帯内で文字の外接矩形が重ならないことを確認する
+                for (size_t j = i + 1; j < renderer.CommandCount(); ++j) {
+                    const auto& other = renderer.Command(j);
+                    if (other.type != RenderCommand::Type::Text) continue;
+                    const auto bounds = Utf8Text::Measure(other.text.data(), other.size, other.characterSpacing, renderer.AspectRatio());
+                    const float otherLeft = other.position.x - bounds.firstGlyphOffset;
+                    const bool separate = std::abs(text.position.y - other.position.y) >= (metrics.height + bounds.height) * 0.5f ||
+                        left + metrics.width <= otherLeft || otherLeft + bounds.width <= left;
+                    if (!separate) std::fprintf(stderr, "HUD overlap: %s / %s (aspect %.3f, players %d)\n",
+                        text.text.data(), other.text.data(), renderer.AspectRatio(), players);
+                    assert(separate);
+                }
+            }
+        }
+    }
+};
+
+/** @brief 7言語と3画面比率で通常設定とポーズ設定とHUDの配置を検査する @return 成功時0 */
 int main() {
     // 設定保存をプロセス固有の一時領域へ隔離して既存プレイデータを保護する
     const auto testRoot = std::filesystem::temp_directory_path() /
@@ -143,6 +180,7 @@ int main() {
         Localization::SetLanguage(static_cast<Localization::Language>(language));
         for (const float aspect : {16.0f / 9.0f, 4.0f / 3.0f, 21.0f / 9.0f}) {
             backend.aspect = aspect;
+            HudLayoutTests::Check(renderer);
             scenes.Initialize(SceneType::Option);
             CheckOptionsHeading(scenes, renderer, 0.65f);
             scenes.Initialize(SceneType::TestStage);
@@ -155,5 +193,5 @@ int main() {
     // 削除対象が一時領域内であることを確認する
     assert(std::filesystem::equivalent(testRoot.parent_path(), std::filesystem::temp_directory_path()));
     std::filesystem::remove_all(testRoot);
-    std::puts("Localized layout passed: 7 languages, 3 aspect ratios, both settings screens, 3 shot previews");
+    std::puts("Localized layout passed: 7 languages, 3 aspect ratios, 1P/2P HUD, both settings screens, 3 shot previews");
 }

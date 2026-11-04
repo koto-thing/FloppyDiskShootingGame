@@ -17,8 +17,14 @@ public:
      */
     static void DrawTargetHitboxes(const SideScrollingShooter& shooter, const Shot& query);
 #endif
-    static constexpr int Phase2SurvivalFrames = 30 * 60;
-    static constexpr int Phase3SurvivalFrames = 60 * 60;
+    /**
+     * @brief 後半の各耐久フェーズの長さを取得する
+     * @param difficulty 使用する難易度
+     * @return 各フェーズの耐久フレーム数
+     */
+    static constexpr int SurvivalFrames(DifficultyType difficulty) {
+        return (difficulty == Hard ? 60 : difficulty == Normal ? 30 : 20) * 60;
+    }
 
     /**
      * @brief Phase2開始時HPからPhase3用に残すHPを取得する
@@ -27,9 +33,7 @@ public:
      */
     static constexpr int Phase3StartHp(int startHp) {
         if (startHp <= 0) return 0;
-        return (startHp * Phase3SurvivalFrames +
-            Phase2SurvivalFrames + Phase3SurvivalFrames - 1) /
-            (Phase2SurvivalFrames + Phase3SurvivalFrames);
+        return startHp / 2 + startHp % 2;
     }
 
     Stage3Module() = delete;
@@ -38,28 +42,32 @@ public:
      * @brief Phase2耐久戦の残り時間からボスHPを取得する
      * @param startHp Phase2開始時HP
      * @param remainingFrames 耐久戦の残りフレーム数
+     * @param difficulty 使用する難易度
      * @return 残り時間に比例して減少するHP
      */
-    static constexpr int Phase2HpForRemainingFrames(int startHp, int remainingFrames) {
+    static constexpr int Phase2HpForRemainingFrames(int startHp, int remainingFrames, DifficultyType difficulty) {
+        const int survivalFrames = SurvivalFrames(difficulty);
         const int phase3Hp = Phase3StartHp(startHp);
         if (startHp <= 0 || remainingFrames <= 0) return phase3Hp;
-        if (remainingFrames >= Phase2SurvivalFrames) return startHp;
+        if (remainingFrames >= survivalFrames) return startHp;
         return phase3Hp + ((startHp - phase3Hp) * remainingFrames +
-            Phase2SurvivalFrames - 1) / Phase2SurvivalFrames;
+            survivalFrames - 1) / survivalFrames;
     }
 
     /**
      * @brief Phase3耐久戦の残り時間からボスHPを取得する
      * @param startHp Phase2開始時HP
      * @param remainingFrames 耐久戦の残りフレーム数
+     * @param difficulty 使用する難易度
      * @return 残り時間に比例して減少するHP
      */
-    static constexpr int Phase3HpForRemainingFrames(int startHp, int remainingFrames) {
+    static constexpr int Phase3HpForRemainingFrames(int startHp, int remainingFrames, DifficultyType difficulty) {
+        const int survivalFrames = SurvivalFrames(difficulty);
         const int phase3Hp = Phase3StartHp(startHp);
         if (phase3Hp <= 0 || remainingFrames <= 0) return 0;
-        if (remainingFrames >= Phase3SurvivalFrames) return phase3Hp;
-        return (phase3Hp * remainingFrames + Phase3SurvivalFrames - 1) /
-            Phase3SurvivalFrames;
+        if (remainingFrames >= survivalFrames) return phase3Hp;
+        return (phase3Hp * remainingFrames + survivalFrames - 1) /
+            survivalFrames;
     }
 
     /**
@@ -173,7 +181,7 @@ public:
         const Shot& shot, const Enemy& boss);
 
     /**
-     * @brief 自機弾をPhase3反射ファンネルへ適用する
+     * @brief 自機弾を2Dの太陽とPhase3反射ファンネルへ適用する
      * @param shooter 更新するゲーム本体
      * @param shot 判定する自機弾
      * @return 命中処理を完了した場合true
@@ -363,11 +371,23 @@ private:
     static float WrapNdcX(float value);
 
     /**
-     * @brief 現在フレームの夜空から昼空への補間率を取得する
-     * @param frame Stage 3開始からの経過フレーム
+     * @brief 夜明けと太陽の被弾演出を反映した昼夜の補間率を取得する
+     * @param shooter 現在のゲーム状態
      * @return 夜空を1、昼空を0とする補間率
      */
-    static float NightBlend(int frame);
+    static float NightBlend(const SideScrollingShooter& shooter);
+
+    /** @brief 太陽の泣き顔と流れる涙を描画する
+     * @param shooter 現在のゲーム状態
+     * @param renderer 描画先
+     * @param camera 描画カメラ
+     * @param position 太陽の中心
+     * @param scale 太陽の拡大率
+     * @param alpha 昼夜遷移の不透明度
+     * @return なし
+     */
+    static void DrawSunFace(const SideScrollingShooter& shooter, Renderer& renderer,
+        const Camera3D& camera, const Vector3& position, float scale, float alpha);
 
     /**
      * @brief 現フレームのウミヘビ行動と胴体配置を取得する

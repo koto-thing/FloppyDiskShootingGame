@@ -331,10 +331,11 @@ public:
      * @param shooter 判定対象
      * @param railPosition 補正するカメラ位置
      * @param railTarget 補正する注視点
+     * @param personal 自機だけを追従する場合true
      * @return なし
      */
     static void ApplyCameraCorrection(const SideScrollingShooter& shooter,
-        Vector3& railPosition, Vector3& railTarget);
+        Vector3& railPosition, Vector3& railTarget, bool personal = false);
 
     /**
      * @brief 現在ステージ固有のレールカメラ画角を取得する

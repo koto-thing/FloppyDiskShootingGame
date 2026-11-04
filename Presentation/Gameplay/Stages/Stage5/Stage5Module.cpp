@@ -412,13 +412,29 @@ void SideScrollingShooter::Stage5Module::TickBoss(
 }
 
 /**
- * @brief ラスボス第一形態の低速追尾ミサイルを更新する
+ * @brief Stage5の追尾ミサイルと反射弾を更新する
  * @param shooter 更新対象
  * @param shot 更新する弾
  * @return なし
  */
 void SideScrollingShooter::Stage5Module::TickSpecialShotBeforeMove(
     SideScrollingShooter& shooter, Shot& shot) {
+    // EASTSOURCEのボムミサイルは発射直後の12フレームだけ追尾する
+    if (shooter.m_stage5.phase == Stage5Phase::EastsourceBattle && shot.enemy &&
+        shot.firedByBoss && shot.stage2.kind == ShooterStages::Stage2::ShotKind::Funnel) {
+        ++shot.age;
+        if (shot.age > BombMissileFrames) { shot.active = false; return; }
+        if (shot.age > ShooterStages::Stage5::EastsourceMissileHomingFrames) return;
+        const bool rail = shooter.IsRailGameplayActive();
+        const auto& target = shooter.m_players[shot.owner];
+        Vector3 direction {ToWorldX(target.m_playerX - shot.x),
+            ToWorldY(target.m_playerY - shot.y), rail ? shooter.PlayerRailDepth() - shot.z : 0.0f};
+        direction = direction.Normalized() * ShooterStages::Stage5::EastsourceMissileSpeed;
+        shot.vx = FromWorldX(direction.x);
+        shot.vy = FromWorldY(direction.y);
+        shot.vz = direction.z;
+        return;
+    }
     if (!shot.enemy || (!ShooterStages::Stage5::IsTayamaBattlePhase(
         shooter.m_stage5.phase) && !ShooterStages::Stage5::IsTayamaDragonBattlePhase(
             shooter.m_stage5.phase))) return;
@@ -541,6 +557,19 @@ void SideScrollingShooter::Stage5Module::TickSpecialShotAfterMove(
  */
 bool SideScrollingShooter::Stage5Module::TryDamageStageTarget(
     SideScrollingShooter& shooter, Shot& shot) {
+    // バリアは貫通弾とボムも本体・部位より先に受け止め、耐久値だけを減らす
+    if (!shot.enemy && shooter.m_stage5.phase == Stage5Phase::EastsourceBattle &&
+        shooter.m_stage5.eastsourceShieldHp > 0 && shooter.m_enemies[0].active) {
+        const auto center = EastsourceTransform(shooter, shooter.m_enemies[0]).position;
+        if (HitShotSphere(shot, center.x, center.y, center.z,
+            ShooterStages::Stage5::EastsourceShieldRadius)) {
+            shooter.m_stage5.eastsourceShieldHp = (std::max)(0,
+                shooter.m_stage5.eastsourceShieldHp - shot.damage);
+            shot.active = false;
+            shooter.PlayHitSound();
+            return true;
+        }
+    }
     // 反射ファンネルを龍本体より先に判定して背後の本体への貫通を防ぐ
     return TryDamageTayamaReflectFunnel(shooter, shot) ||
         TryDamageTayamaDragon(shooter, shot) || TryDamageTayama(shooter, shot) ||
@@ -589,15 +618,21 @@ bool SideScrollingShooter::Stage5Module::TryHitBossPart(
     const Stage5ModelTransform transform = EastsourceTransform(shooter, boss);
     const EastsourceModelState state = EastsourceState(boss);
 
-    // 描画と同じ26パーツから集約した各グループ境界へ線分判定する
+    // 部位中心の空洞へ誘導せず、実在する最初の描画部品の中心を照準にする
     for (int index = BossNose; index <= BossRightEngine; ++index) {
         if (boss.bossPartHp[index] <= 0 || (aimPosition && part != index)) continue;
-        const Stage5GroupBounds bounds = EastsourceModelView::GroupBounds(
-            transform, state, Groups[index]);
-        if (!bounds.valid) continue;
-        // 追尾と衝突で描画由来の部位境界を共有する
-        if (aimPosition) { *aimPosition = bounds.center; return true; }
-        if (!HitShotSphere(shot, bounds.center.x, bounds.center.y, bounds.center.z, bounds.radius)) continue;
+        bool hit = false;
+        EastsourceModelView::VisitParts(transform, state,
+            [&](PrimitiveShape shape, const Matrix4x4& world, const ColorF&, EastsourcePartGroup group) {
+                if (group != Groups[index] || hit) return;
+                if (aimPosition) {
+                    *aimPosition = shooter.ShotModelProjection(shot).TransformPoint(world.TransformPoint({}));
+                    hit = true;
+                } else {
+                    hit = shooter.HitShotModelPrimitive(shot, shape, world);
+                }
+            });
+        if (!hit) continue;
         part = static_cast<BossPart>(index);
         return true;
     }
@@ -634,6 +669,8 @@ void SideScrollingShooter::Stage5Module::SpawnEnemyShotAt(SideScrollingShooter& 
  * @return なし
  */
 void SideScrollingShooter::Stage5Module::Reset(SideScrollingShooter& shooter) {
+    shooter.m_stage5.eastsourceShieldHp = 0;
+    shooter.m_stage5.eastsourceLaserTimer = -1;
     shooter.m_stage5.phase = Stage5Phase::Approach;
     shooter.m_stage5.checkpoint = Stage5Checkpoint::Chapter1;
     shooter.m_stage5.phaseTimer = 0;
@@ -941,6 +978,8 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
  * @return なし
  */
 void SideScrollingShooter::Stage5Module::StartEastsourceBattle(SideScrollingShooter& shooter) {
+    shooter.m_stage5.eastsourceShieldHp = 0;
+    shooter.m_stage5.eastsourceLaserTimer = -1;
     shooter.m_bossBattle = true;
     Enemy& eastsource = shooter.m_enemies[0];
     if (!eastsource.active || eastsource.type != Stage::BossEnemy) {
@@ -990,19 +1029,27 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
         return;
     }
     if (shooter.m_stage5.phase != Stage5Phase::EastsourceBattle) return;
+    if (TickEastsourceBomb(shooter, eastsource)) return;
 
     const bool leftEngine = eastsource.bossPartHp[BossLeftEngine] > 0;
     const bool rightEngine = eastsource.bossPartHp[BossRightEngine] > 0;
     const float engineRate = (static_cast<float>(leftEngine) + static_cast<float>(rightEngine)) * 0.5f;
     const float moveAmplitude = 0.20f + engineRate * 0.38f;
     const float moveSpeed = 0.009f + engineRate * 0.009f;
-    eastsource.x = std::sin(static_cast<float>(eastsource.age) * moveSpeed) * moveAmplitude;
+    // 2DではKOTOと共通の右側アンカーを保ち、上下だけ移動する
     eastsource.y = std::sin(static_cast<float>(eastsource.age) * 0.021f) * 0.42f;
-    eastsource.z = 43.0f + std::sin(static_cast<float>(eastsource.age) * 0.013f) * 3.0f;
+    if (shooter.IsRailGameplayActive()) {
+        eastsource.x = std::sin(static_cast<float>(eastsource.age) * moveSpeed) * moveAmplitude;
+        eastsource.z = 43.0f + std::sin(static_cast<float>(eastsource.age) * 0.013f) * 3.0f;
+    } else {
+        eastsource.x = eastsource.baseX;
+        eastsource.z = ToRailZFromSideX(eastsource.x);
+    }
 
     const bool nose = eastsource.bossPartHp[BossNose] > 0;
     const int phase = eastsource.bossPhase;
-    if (phase == BossNormalPhase2 || phase == BossSpecialPhase2) {
+    if (shooter.IsRailGameplayActive() &&
+        (phase == BossNormalPhase2 || phase == BossSpecialPhase2)) {
         const int pursuitCycle = eastsource.age %
             ShooterStages::Stage5::EastsourcePursuitCycleFrames;
         const bool fromLeft = (eastsource.age /
@@ -1067,9 +1114,12 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
         for (int shotIndex = 0; shotIndex < shotCount; ++shotIndex) {
             if (cycle == warningFrames + shotIndex *
                 ShooterStages::Stage5::EastsourceNoseShotIntervalFrames) {
-                SpawnEnemyShotAt(shooter, eastsource.x, eastsource.y, eastsource.z,
-                    eastsource.attackWarningTargetX, eastsource.attackWarningTargetY,
-                    PlayerRailZ, 0.72f);
+                // 健全な機首は予告地点を中心とする3方向連射、破壊後は単発へ弱体化する
+                for (int lane = nose ? -1 : 0; lane <= (nose ? 1 : 0); ++lane) {
+                    SpawnEnemyShotAt(shooter, eastsource.x, eastsource.y, eastsource.z,
+                        eastsource.attackWarningTargetX, eastsource.attackWarningTargetY + lane * 0.18f,
+                        PlayerRailZ, 0.72f);
+                }
                 shooter.PlayEnemyShotSound();
             }
         }
@@ -1079,7 +1129,7 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
         const int cycle = eastsource.age %
             ShooterStages::Stage5::EastsourceWingBarrageCycleFrames;
         if (cycle == 14 && eastsource.bossPartHp[BossLeftWing] > 0) {
-            for (int lane = -4; lane <= 4; ++lane) {
+            for (int lane = -6; lane <= 6; ++lane) {
                 if (lane == 0) continue;
                 SpawnEnemyShotAt(shooter, eastsource.x - 0.42f, eastsource.y + 0.12f, eastsource.z,
                     shooter.Player().m_playerX + 0.25f, static_cast<float>(lane) * 0.16f, PlayerRailZ, 0.68f);
@@ -1087,7 +1137,7 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
             shooter.PlayEnemyShotSound();
         }
         if (cycle == 34 && eastsource.bossPartHp[BossRightWing] > 0) {
-            for (int lane = -4; lane <= 4; ++lane) {
+            for (int lane = -6; lane <= 6; ++lane) {
                 if (lane == 0) continue;
                 SpawnEnemyShotAt(shooter, eastsource.x + 0.42f, eastsource.y - 0.12f, eastsource.z,
                     shooter.Player().m_playerX - 0.25f, static_cast<float>(lane) * 0.16f, PlayerRailZ, 0.68f);
@@ -1110,15 +1160,94 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
                 ShooterStages::Stage5::EastsourcePursuitCycleFrames) % 2 == 0;
             const bool wing = eastsource.bossPartHp[fromLeft ? BossLeftWing : BossRightWing] > 0;
             const bool engine = eastsource.bossPartHp[fromLeft ? BossLeftEngine : BossRightEngine] > 0;
-            if (wing && cycle % (engine ? 3 : 5) == 0) {
+            if (wing && cycle % (engine ? 2 : 5) == 0) {
                 const float sourceX = fromLeft ? -1.25f : 1.25f;
-                SpawnEnemyShotAt(shooter, sourceX, eastsource.attackWarningTargetY, 18.0f,
-                    eastsource.attackWarningTargetX, eastsource.attackWarningTargetY,
-                    PlayerRailZ, engine ? 0.82f : 0.58f);
+                // 追撃も上下へ広げ、エンジン破壊後は発射間隔を維持して弱体化する
+                for (int lane = -1; lane <= 1; ++lane) {
+                    SpawnEnemyShotAt(shooter, sourceX, eastsource.attackWarningTargetY, 18.0f,
+                        eastsource.attackWarningTargetX, eastsource.attackWarningTargetY + lane * 0.18f,
+                        PlayerRailZ, engine ? 0.82f : 0.58f);
+                }
                 shooter.PlayEnemyShotSound();
             }
         }
     }
+}
+
+/** @brief EASTSOURCEの機首先端を取得する @param shooter 対象 @param boss 発射元 @return ワールド座標 */
+Vector3 SideScrollingShooter::Stage5Module::EastsourceLaserSource(
+    const SideScrollingShooter& shooter, const Enemy& boss) {
+    return Stage5ModelDetail::Matrix(EastsourceTransform(shooter, boss)).TransformPoint({0.0f, 0.75f, -4.75f});
+}
+
+/** @brief 機体別ボムを模した特殊攻撃を更新する @param shooter 更新対象 @param boss 発射元 @return レーザーの予告・照射中ならtrue */
+bool SideScrollingShooter::Stage5Module::TickEastsourceBomb(SideScrollingShooter& shooter, Enemy& boss) {
+    using namespace ShooterStages::Stage5;
+    auto& state = shooter.m_stage5;
+    const bool rail = shooter.IsRailGameplayActive();
+    const int age = boss.age - EastsourceBombStartFrames;
+    const int frame = age >= 0 ? age % EastsourceBombIntervalFrames : -1;
+    const int type = age >= 0 ? age / EastsourceBombIntervalFrames % 3 : -1;
+    if (state.eastsourceLaserTimer >= 0) ++state.eastsourceLaserTimer;
+
+    // 10発を本体から順に射出し、協力プレイでは狙う機体を交互にする
+    if (type == 0 && frame >= 0 && frame < 10 * BombMissileInterval && frame % BombMissileInterval == 0) {
+        for (int index = 0; index < shooter.ActiveShotCapacity(); ++index) {
+            auto& shot = shooter.m_shots[index];
+            if (shot.active) continue;
+            shot = {};
+            shot.x = boss.x;
+            shot.y = FromWorldY(EastsourceTransform(shooter, boss).position.y) +
+                (frame / BombMissileInterval % 2 == 0 ? 0.12f : -0.12f);
+            shot.z = boss.z;
+            shot.owner = frame / BombMissileInterval % shooter.m_playerCount;
+            shot.vx = rail ? 0.0f : FromWorldX(-EastsourceMissileSpeed);
+            shot.vz = rail ? -EastsourceMissileSpeed : 0.0f;
+            shot.hitRadius = 0.055f;
+            shot.enemy = shot.firedByBoss = shot.active = true;
+            shot.stage2.kind = ShooterStages::Stage2::ShotKind::Funnel;
+            shooter.PlayMissileLaunchSound();
+            break;
+        }
+    }
+    // バリアは時間切れにせず、破壊されるまで機体を保護する
+    if (type == 2 && frame == 0 && state.eastsourceShieldHp == 0) {
+        state.eastsourceShieldHp = EastsourceShieldHp;
+        PlayCue(shooter, BarrageWarning);
+    }
+
+    // 視点変更時は予告を最初からやり直し、座標変換直後の不意打ちを防ぐ
+    if ((type == 1 && frame == 0) ||
+        (state.eastsourceLaserTimer >= 0 && state.eastsourceLaserRail != rail)) {
+        state.eastsourceLaserTimer = 0;
+        state.eastsourceLaserRail = rail;
+        // 追撃の画面外待機からでも機首が見える基準位置でチャージする
+        if (rail) shooter.m_stage->ConfigureBossRailAnchor(boss);
+        else shooter.m_stage->ConfigureBossSideAnchor(boss);
+        boss.collisionEnabled = true;
+        const Vector3 source = EastsourceLaserSource(shooter, boss);
+        Vector3 target = shooter.SelectEnemyShotTarget();
+        if (!rail) target.z = source.z;
+        state.eastsourceLaserDirection = (target - source).Normalized();
+        PlayCue(shooter, BarrageWarning);
+    }
+    if (state.eastsourceLaserTimer >= EastsourceLaserWarningFrames + EastsourceLaserActiveFrames)
+        state.eastsourceLaserTimer = -1;
+    if (state.eastsourceLaserTimer < 0) return false;
+
+    // 3秒間は無害な予告線だけを出し、発射後も予告した方向を固定する
+    if (state.eastsourceLaserTimer >= EastsourceLaserWarningFrames) {
+        const Vector3 source = EastsourceLaserSource(shooter, boss);
+        const Vector3 end = source + state.eastsourceLaserDirection * BombLaserLength;
+        if (state.eastsourceLaserTimer == EastsourceLaserWarningFrames) shooter.PlayEnemyShotSound();
+        shooter.ForEachPlayer([&] {
+            Vector3 player = shooter.PlayerWorldPosition();
+            if (!rail) player.z = source.z;
+            if (shooter.DistancePointToSegment3D(player, source, end) <= EastsourceLaserRadius + 0.38f)
+                shooter.DamagePlayer();
+        });
+    }
+    return true;
 }
 
 /**
@@ -1129,6 +1258,8 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
  */
 void SideScrollingShooter::Stage5Module::DefeatEastsource(SideScrollingShooter& shooter, Enemy& eastsource) {
     if (shooter.m_stage5.phase != Stage5Phase::EastsourceBattle) return;
+    shooter.m_stage5.eastsourceShieldHp = 0;
+    shooter.m_stage5.eastsourceLaserTimer = -1;
     static const auto eastsourceDeathVoice =
         VoiceCodec::DecodeForAudioService(VoiceSamples::eastsourceDeath);
     if (shooter.m_audio) shooter.m_audio->PlayVoice(eastsourceDeathVoice);
@@ -1607,17 +1738,20 @@ bool SideScrollingShooter::Stage5Module::TryDamageTayama(SideScrollingShooter& s
         TayamaPartGroup::RightLiftEngine,
         TayamaPartGroup::CommandCore
     };
-    const Vector3 shotStart {ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz};
-    const Vector3 shotEnd {ToWorldX(shot.x), ToWorldY(shot.y), shot.z};
+    // グループの外接球ではなく、描画中の各部品を直接判定する
+    std::array<bool, static_cast<std::size_t>(TayamaPartGroup::Count)> hitGroups {};
+    TayamaModelView::VisitParts(transform, shooter.m_stage5.tayamaTransformation, modelState,
+        [&](PrimitiveShape shape, const Matrix4x4& world, const ColorF&, TayamaPartGroup group) {
+            auto& hit = hitGroups[static_cast<std::size_t>(group)];
+            if (!hit) hit = shooter.HitShotModelPrimitive(shot, shape, world);
+        });
 
     // 現フェーズの弱点だけを先に判定し、後続フェーズへの先行ダメージを防ぐ
     for (TayamaWeakpointState& weakpoint : shooter.m_stage5.tayamaWeakpoints) {
         if (!weakpoint.active || weakpoint.destroyed) continue;
         const TayamaPartGroup group = Groups[static_cast<std::size_t>(weakpoint.type)];
         const Stage5GroupBounds& bounds = groupBounds[static_cast<std::size_t>(group)];
-        if (!bounds.valid || !Hit3DSegment(shotStart.x, shotStart.y, shotStart.z,
-            shotEnd.x, shotEnd.y, shotEnd.z, shot.hitRadius * WorldXScale,
-            bounds.center.x, bounds.center.y, bounds.center.z, bounds.radius)) continue;
+        if (!bounds.valid || !hitGroups[static_cast<std::size_t>(group)]) continue;
 
         shot.RegisterHit();
         weakpoint.hp -= shot.damage;
@@ -1646,9 +1780,7 @@ bool SideScrollingShooter::Stage5Module::TryDamageTayama(SideScrollingShooter& s
     // 弱点以外の装甲への命中も本体HPへ適用する
     for (int group = 0; group < static_cast<int>(TayamaPartGroup::Count); ++group) {
         const Stage5GroupBounds& bounds = groupBounds[static_cast<std::size_t>(group)];
-        if (!bounds.valid || !Hit3DSegment(shotStart.x, shotStart.y, shotStart.z,
-            shotEnd.x, shotEnd.y, shotEnd.z, shot.hitRadius * WorldXScale,
-            bounds.center.x, bounds.center.y, bounds.center.z, bounds.radius)) continue;
+        if (!bounds.valid || !hitGroups[static_cast<std::size_t>(group)]) continue;
         shot.RegisterHit();
         shooter.m_stage5.tayamaHp = (std::max)(0, shooter.m_stage5.tayamaHp - shot.damage);
         shooter.SpawnExplosion(shot.x, shot.y, shot.z);
@@ -1823,13 +1955,12 @@ bool SideScrollingShooter::Stage5Module::TryDamageTayamaReflectFunnel(
     for (int index = 0; index < ShooterStages::Stage5::TayamaReflectFunnelCount; ++index) {
         auto& funnel = shooter.m_stage5.tayamaReflectFunnels[index];
         if (!funnel.active) continue;
-        const bool hit = shooter.IsRailGameplayActive() ?
-            Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
-                shot.z - shot.vz, ToWorldX(shot.x), ToWorldY(shot.y), shot.z,
-                shot.hitRadius * WorldXScale, ToWorldX(funnel.x), ToWorldY(funnel.y),
-                funnel.z, 0.72f) :
-            HitShotCircle(shot, funnel.x, funnel.y, 0.11f);
-        if (!hit) continue;
+        const Vector3 position {ToWorldX(funnel.x), ToWorldY(funnel.y), funnel.z};
+        Vector3 target;
+        shooter.ForEachPlayer([&] { if (shooter.m_activePlayer == 0) target = shooter.PlayerWorldPosition(); });
+        const float spin = funnel.spinFrames > 0 ? Math::TwoPi * 2.0f *
+            static_cast<float>(30 - funnel.spinFrames) / 29.0f : 0.0f;
+        if (!shooter.HitReflectFunnelModel(shot, position, target, spin)) continue;
 
         shooter.SpawnExplosion(shot.x, shot.y, shot.z);
         shot.RegisterHit();
@@ -1853,6 +1984,36 @@ bool SideScrollingShooter::Stage5Module::TryDamageTayamaReflectFunnel(
     return false;
 }
 
+/** @brief 龍の描画形状を衝突と可視化で共有する @param shooter 参照状態 @param shot 判定する弾 @return 命中時true */
+bool SideScrollingShooter::Stage5Module::HitTayamaDragonModel(
+    const SideScrollingShooter& shooter, const Shot& shot) {
+    auto& cache = shooter.m_enemyModelCollision[EnemyCapacity];
+    if (cache.frame != shooter.m_frame) {
+        auto& recorder = shooter.m_modelCollisionRenderer;
+        recorder.BeginFrame();
+        Camera3D camera;
+        camera.SetProjectionMode(ProjectionMode::Orthographic);
+        Matrix4x4 inverse;
+        if (!(camera.ProjectionMatrix() * camera.ViewMatrix()).TryInverse(inverse)) return false;
+        DrawTayamaDragon(shooter, recorder, camera, shooter.RailBlend(), false);
+        cache.primitives.clear();
+        for (std::size_t i = 0; i < recorder.CommandCount(); ++i) {
+            const auto& command = recorder.Command(i);
+            // ponytail: 半透明部品は演出扱い。半透明の機体を導入する際は部品へ衝突属性を付ける
+            if (command.type != RenderCommand::Type::Primitive3D || command.primitive.color.a < 0.99f) continue;
+            auto primitive = command.primitive;
+            primitive.wvpMatrix = inverse * primitive.wvpMatrix;
+            cache.primitives.push_back(primitive);
+        }
+        cache.frame = shooter.m_frame;
+    }
+    // 頭、角、節間の装甲、砲身も描画と同じ全身HPへ接続する
+    for (const auto& primitive : cache.primitives) {
+        if (shooter.HitShotModelPrimitive(shot, primitive.shape, primitive.wvpMatrix)) return true;
+    }
+    return false;
+}
+
 /**
  * @brief 自機弾をTAYAMA龍第2形態の全身へ適用する
  * @param shooter 更新対象
@@ -1862,37 +2023,22 @@ bool SideScrollingShooter::Stage5Module::TryDamageTayamaReflectFunnel(
 bool SideScrollingShooter::Stage5Module::TryDamageTayamaDragon(
     SideScrollingShooter& shooter, Shot& shot) {
     if (shooter.m_stage5.phase != Stage5Phase::TayamaDragonBattle) return false;
-    const float railWeight = shooter.RailBlend();
-    const Vector3 start {ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy),
-        shot.z - shot.vz};
-    const Vector3 end {ToWorldX(shot.x), ToWorldY(shot.y), shot.z};
-
-    // 全節を同じHPへ接続し、見えている胴体のどこを撃ってもダメージ対象にする
-    for (int index = 0; index < ShooterStages::Stage5::TayamaDragonSegmentCount; ++index) {
-        const Vector3 center = TayamaDragonSegmentPosition(shooter, index, railWeight);
-        const float radius = TayamaDragonSegmentRadius(index, railWeight);
-        const bool hit = railWeight <= Math::Epsilon ?
-            Hit3DSegment(start.x, start.y, 0.0f, end.x, end.y, 0.0f,
-                shot.hitRadius * WorldXScale, center.x, center.y, 0.0f, radius) :
-            Hit3DSegment(start.x, start.y, start.z, end.x, end.y, end.z,
-                shot.hitRadius * WorldXScale, center.x, center.y, center.z, radius);
-        if (!hit) continue;
-        shot.RegisterHit();
-        shooter.m_stage5.tayamaHp = (std::max)(0,
-            shooter.m_stage5.tayamaHp - shot.damage);
-        shooter.m_stage5.tayamaDragonHitFlashFrames = BossPartHitFlashFrames;
-        shooter.m_bossHp = shooter.m_stage5.tayamaHp;
-        shooter.SpawnExplosion(FromWorldX(center.x), FromWorldY(center.y), center.z,
-            shooter.m_stage5.tayamaHp <= 0);
-        if (shooter.m_stage5.tayamaHp <= 0) {
-            shooter.m_score += 10000;
-            StartPhase(shooter, Stage5Phase::TayamaDragonCollapse, false);
-        } else {
-            shooter.PlayHitSound();
-        }
-        return true;
+    if (!HitTayamaDragonModel(shooter, shot)) return false;
+    const Vector3 center {ToWorldX(shot.x), ToWorldY(shot.y), shot.z};
+    shot.RegisterHit();
+    shooter.m_stage5.tayamaHp = (std::max)(0,
+        shooter.m_stage5.tayamaHp - shot.damage);
+    shooter.m_stage5.tayamaDragonHitFlashFrames = BossPartHitFlashFrames;
+    shooter.m_bossHp = shooter.m_stage5.tayamaHp;
+    shooter.SpawnExplosion(FromWorldX(center.x), FromWorldY(center.y), center.z,
+        shooter.m_stage5.tayamaHp <= 0);
+    if (shooter.m_stage5.tayamaHp <= 0) {
+        shooter.m_score += 10000;
+        StartPhase(shooter, Stage5Phase::TayamaDragonCollapse, false);
+    } else {
+        shooter.PlayHitSound();
     }
-    return false;
+    return true;
 }
 
 /**

@@ -182,6 +182,8 @@
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
       <Optimization>MinSpace</Optimization>
+      <!-- Floppy版は暗黙のインライン展開を抑え、追加攻撃を含めて容量内へ収める -->
+      <InlineFunctionExpansion Condition="'$(Distribution)'=='Floppy'">OnlyExplicitInline</InlineFunctionExpansion>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>

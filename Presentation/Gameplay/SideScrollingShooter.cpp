@@ -610,6 +610,8 @@ void SideScrollingShooter::ApplyPlayerInput(const CooperativeInput& input) {
 void SideScrollingShooter::ApplyNetworkInput(const std::array<CooperativeInput, 2>& inputs) {
     // 通信中は実機入力やデバッグキーを参照せず、ホストの会話操作を保持する
     m_networkGame = true;
+    // 通信中の照準と命中判定は画面サイズや描画回数に依存させない
+    m_aimViewport = {0, 0, 1280, 720};
     m_networkHostInput = inputs[0];
     ForEachPlayer([&] { ApplyPlayerInput(inputs[m_activePlayer]); });
     if (m_restartTimer > 0 && (inputs[0].pressed || inputs[1].pressed)) m_restartTimer = 0;
@@ -1311,6 +1313,8 @@ void SideScrollingShooter::StartNextStage() {
 
 /** @brief 弾プールの一時コピーを作らず全弾を初期化する @return なし */
 void SideScrollingShooter::ResetShots() {
+    // ステージ切替・再開後に同じフレーム番号の旧モデルを再利用しない
+    for (auto& cache : m_enemyModelCollision) cache.frame = -1;
     // 各再開経路で同じ初期化を使い、大型プールをスタックへ積まない
     m_shots.fill({});
 }

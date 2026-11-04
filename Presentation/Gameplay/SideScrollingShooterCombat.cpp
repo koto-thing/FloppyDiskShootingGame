@@ -9,10 +9,13 @@
 #include "Stages/Common/StageDispatch.h"
 #include "Stages/Stage4/Stage4Module.h"
 #include "Stages/Stage2/Stage2Module.h"
+#include "Stages/Stage3/Stage3FunnelModelView.h"
 #include "Stages/Stage5/Stage5Module.h"
 
 #include "SideScrollingShooterEnemies.h"
 #include "Models/AircraftModelView.h"
+#include "Models/ModelShotCollision.h"
+#include "SideScrollingShooterShared.h"
 #include "GameplayRandom.h"
 #include "Stages/Common/StageDefinition.h"
 
@@ -498,6 +501,8 @@ void SideScrollingShooter::TickLinkedEnemyLasers() {
 }
 
 void SideScrollingShooter::TickShots() {
+    // 同フレームのテスト・再開・協力プレイでも前回更新のモデルを持ち越さない
+    for (auto& cache : m_enemyModelCollision) cache.frame = -1;
     // 得点済みの弾も含め、今フレームの接近状態を取り直す
     m_grazing = false;
     // Stage3以降の遅延点火ミサイルは画面外到達または命中時に爆発へ変換する
@@ -652,10 +657,115 @@ void SideScrollingShooter::TickShots() {
     ForEachPlayer([&] { UpdateAimSnap(); });
 }
 
+bool SideScrollingShooter::HitEnemyModel(const Shot& shot, const Enemy& enemy) const {
+    if (!StageDispatch::ShouldDrawEnemy(*this, enemy)) return false;
+    EnemyModelCollisionCache temporary;
+    auto* cache = &temporary;
+    for (std::size_t i = 0; i < m_enemies.size(); ++i) {
+        if (&enemy == &m_enemies[i]) { cache = &m_enemyModelCollision[i]; break; }
+    }
+    // 描画処理そのものを記録し、砲塔の照準・分離・破壊による形状変更も共有する
+    if (cache->frame != m_frame || cache->hp != enemy.bossPartHp) {
+        cache->primitives.clear();
+        auto& recorder = m_modelCollisionRenderer;
+        recorder.BeginFrame();
+        Camera3D camera;
+        camera.SetProjectionMode(ProjectionMode::Orthographic);
+        Matrix4x4 inverse;
+        if (!(camera.ProjectionMatrix() * camera.ViewMatrix()).TryInverse(inverse)) return false;
+        Enemy visible = enemy;
+        const float blend = IsRailRenderActive() ? RailBlend() : 0.0f;
+        if (IsRailRenderActive()) {
+            const bool entering = m_viewTransitionTimer > 0 && m_nextViewMode == ViewMode::Rail3D;
+            const bool exiting = m_viewTransitionTimer > 0 && m_viewMode == ViewMode::Rail3D;
+            const float sideX = entering ? enemy.transitionSideX :
+                (exiting ? enemy.x : ToSideXFromRailZ(enemy.z));
+            visible.x = Math::Lerp(sideX, exiting ? enemy.transitionSideX : enemy.x, blend);
+            visible.y = Math::Lerp(entering ? enemy.transitionSideY : enemy.y, enemy.y, blend);
+            visible.z = Math::Lerp(SidePlaneZ + (enemy.type == 2 ? 2.2f : 1.5f),
+                exiting ? enemy.transitionRailZ : enemy.z, blend);
+            if (enemy.type != 2) visible.y = Math::Lerp(visible.y,
+                (std::max)(visible.y, FromWorldY(StageDispatch::RailGroundY(*this) + 0.32f)), blend);
+        } else {
+            visible.z = SidePlaneZ + (enemy.type == 2 ? 2.2f : 1.5f);
+        }
+        // 2Pの弾でも描画時と同じ1P基準の砲塔姿勢を記録する
+        const int owner = m_activePlayer;
+        m_activePlayer = 0;
+        DrawEnemyModel(recorder, camera, visible, Math::Lerp(Math::HalfPi, 0.0f, blend));
+        m_activePlayer = owner;
+        for (std::size_t i = 0; i < recorder.CommandCount(); ++i) {
+            const auto& command = recorder.Command(i);
+            // ponytail: 半透明部品は演出扱い。半透明の機体を導入する際は部品へ衝突属性を付ける
+            if (command.type != RenderCommand::Type::Primitive3D || command.primitive.color.a < 0.99f) continue;
+            Primitive3D primitive = command.primitive;
+            primitive.wvpMatrix = inverse * primitive.wvpMatrix;
+            cache->primitives.push_back(primitive);
+        }
+        cache->frame = m_frame;
+        cache->hp = enemy.bossPartHp;
+    }
+    for (const auto& primitive : cache->primitives) {
+        if (HitShotModelPrimitive(shot, primitive.shape, primitive.wvpMatrix)) return true;
+    }
+    return false;
+}
+
+bool SideScrollingShooter::HitReflectFunnelModel(const Shot& shot, const Vector3& position,
+    const Vector3& target, float spin) const {
+    const Vector3 delta = target - position;
+    const float horizontal = (std::max)(0.001f, std::sqrt(delta.x * delta.x + delta.z * delta.z));
+    bool hit = false;
+    Stage3FunnelModelView::DrawReflectShot({position, {}, 0.0f, 1.6f},
+        std::atan2(delta.z, -delta.x) + spin, -std::atan2(delta.y, horizontal), 0.0f,
+        [&](int shape, const Vector3& center, const Vector3& scale, const float*, float yaw, float pitch) {
+            const auto world = Matrix4x4::Translation(center) * Matrix4x4::RotationY(yaw) *
+                Matrix4x4::RotationZ(pitch) * Matrix4x4::Scale(scale);
+            if (!hit) hit = HitShotModelPrimitive(shot, PrimitiveShapeFromLegacyIndex(shape), world);
+        });
+    return hit;
+}
+
+bool SideScrollingShooter::HitShotModelPrimitive(const Shot& shot, PrimitiveShape shape,
+    const Matrix4x4& world) const {
+#if defined(_DEBUG)
+    if (shot.hitboxRenderer && shot.hitboxCamera) {
+        shot.hitboxRenderer->Draw({shape,
+            shot.hitboxCamera->ProjectionMatrix() * shot.hitboxCamera->ViewMatrix() * world,
+            Vector3::One, {1.0f, 0.0f, 0.0f, 0.24f}});
+        return false;
+    }
+#endif
+    const bool rail = IsRailGameplayActive();
+    const bool flat = !rail || UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+    const Matrix4x4 projection = ShotModelProjection(shot);
+    const Vector3 end {ToWorldX(shot.x), ToWorldY(shot.y), shot.z};
+    const Vector3 start {ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz};
+    return ModelShotCollision::Hit(shape, projection * world,
+        start, end, shot.hitRadius * WorldXScale, flat);
+}
+
+Matrix4x4 SideScrollingShooter::ShotModelProjection(const Shot& shot) const {
+    const bool rail = IsRailGameplayActive();
+    const bool vertical = rail && UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+    Matrix4x4 projection = Matrix4x4::Identity;
+    // 横画面と縦画面の特殊弾は描画頂点を弾の平面へ投影し、奥行きによる輪郭の縮小も反映する
+    if (!rail || (vertical && shot.special)) {
+        const Vector2 shake = ScreenShakeOffset();
+        const Vector3 camera = rail ? ShotProjectionCameraPosition() :
+            Vector3 {shake.x, StageDispatch::SideCameraY(*this) + shake.y, SideScrollingShooterShared::SideCameraZ};
+        const float plane = rail ? shot.z : SidePlaneZ - (shot.bomb ? 0.5f : 0.4f);
+        const float distance = plane - camera.z;
+        projection = Matrix4x4 {distance, 0, camera.x, -camera.x * plane,
+            0, distance, camera.y, -camera.y * plane,
+            0, 0, 0, 0, 0, 0, 1, -camera.z};
+    }
+    return projection;
+}
+
 /** @brief 自機弾とボムに共通の敵・部位へのダメージを適用する @param shot 自機弾 @return なし */
 void SideScrollingShooter::HitPlayerShotTargets(Shot& shot) {
     const bool verticalRouteShot = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
-    const bool part2RailNormalShot = verticalRouteShot && IsRailGameplayActive() && !shot.special;
     if (StageDispatch::TryDamageStageTarget(*this, shot) && (!shot.bomb || !shot.active)) return;
 
     for (auto& enemy : m_enemies) {
@@ -666,6 +776,9 @@ void SideScrollingShooter::HitPlayerShotTargets(Shot& shot) {
         if (enemy.behavior == nullptr) {
             enemy.behavior = &EnemyBehaviorForType(enemy.type);
         }
+        // 全敵を描画形状で判定し、従来の部位球が機体の外へはみ出しても命中させない
+        if (verticalRouteShot && m_viewTransitionTimer > 0) continue;
+        if (!HitEnemyModel(shot, enemy)) continue;
         // ボスへのボムは最大HP比で計算する。ミサイル全10発で約20%、レーザー全30ヒットで約15%
         const int damage = shot.bomb && enemy.type == 2 && enemy.maxHp > 0 ?
             BossBombDamage(enemy.maxHp, shot.piercing) : shot.damage;
@@ -705,7 +818,7 @@ void SideScrollingShooter::HitPlayerShotTargets(Shot& shot) {
             PlayHitSound();
             break;
         }
-        if (enemy.type == 2 && StageDispatch::TryHitBossBody(*this, shot, enemy)) {
+        if (enemy.type == 2 && m_stageNumber == 2) {
             SpawnExplosion(shot.bomb ? enemy.x : shot.x, shot.bomb ? enemy.y : shot.y, shot.bomb ? enemy.z : shot.z);
             shot.RegisterHit();
             if (DamageBoss(enemy, damage)) DefeatBoss(enemy);
@@ -716,31 +829,6 @@ void SideScrollingShooter::HitPlayerShotTargets(Shot& shot) {
         }
         // 専用部位判定後に本体接触無効中のボスを共通形状判定から除外する
         if (enemy.type == 2 && !enemy.collisionEnabled) continue;
-        const float enemyRadius = enemy.behavior->CollisionRadius(enemy);
-        Vector3 railTarget {ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z};
-        float railTargetRadius = enemy.behavior->ShotHitRadius3D(enemy);
-        if (IsRailGameplayActive() && m_stageNumber == 5 &&
-            ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase)) {
-            railTargetRadius *= ShooterStages::Stage5::Part2EnemyScaleMultiplier(RailBlend());
-        }
-        if (verticalRouteShot && m_viewTransitionTimer > 0) continue;
-        if (verticalRouteShot && shot.special && IsRailGameplayActive()) {
-            // 敵を自機弾の奥行き平面へ透視投影し、画面上で重なった場合だけ命中させる
-            const Vector3 cameraPosition = ShotProjectionCameraPosition();
-            const float projectionScale = PerspectiveDepthScale(
-                cameraPosition.z, enemy.z, shot.z);
-            railTarget = cameraPosition + (railTarget - cameraPosition) * projectionScale;
-            railTargetRadius *= projectionScale;
-        }
-        // 第2部3Dの通常ショットは敵の演出用奥行きに依存せず縦画面座標で判定する
-        const bool enemyHit = part2RailNormalShot ?
-            HitShotCircle(shot, enemy.x, enemy.y, enemyRadius) :
-            IsRailGameplayActive() ?
-            Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
-                ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
-                railTarget.x, railTarget.y, railTarget.z, railTargetRadius) :
-            HitShotCircle(shot, enemy.x, enemy.y, enemyRadius);
-        if (!enemyHit) continue;
         SpawnExplosion(shot.bomb ? enemy.x : shot.x, shot.bomb ? enemy.y : shot.y, shot.bomb ? enemy.z : shot.z);
         shot.RegisterHit();
         if (enemy.type == 2) DamageBoss(enemy, damage);
@@ -1422,6 +1510,11 @@ int SideScrollingShooter::FindShotTarget(const Shot& shot, Vector3& target, cons
             if (!enemy.collisionEnabled) continue;
         }
         Vector3 position {ToWorldX(enemy.x), ToWorldY(enemy.y), enemy.z};
+        // 2Dの誘導先も見えている機体の中心へ合わせる
+        if (!IsRailGameplayActive() && !aimCamera) {
+            position.z = SidePlaneZ + (enemy.type == 2 ? 2.2f : 1.5f);
+            position = ShotModelProjection(shot).TransformPoint(position);
+        }
         // 第2部の追尾弾は衝突判定と同じ自機弾平面へ透視投影する
         if (verticalRoute && IsRailGameplayActive() && !aimCamera) {
             const Vector3 camera = ShotProjectionCameraPosition();
