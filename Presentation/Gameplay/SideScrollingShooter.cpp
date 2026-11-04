@@ -312,7 +312,9 @@ void SideScrollingShooter::Initialize(AudioService* audio, PlayerType playerType
     Player().m_playerType = static_cast<PlayerType>((std::clamp)(static_cast<int>(playerType), 0, 2));
     m_players[1].m_playerType = static_cast<PlayerType>((std::clamp)(static_cast<int>(secondPlayerType), 0, 2));
     m_difficulty = difficulty;
-    m_galleryUnlocks = SettingsRepository {}.Load().galleryUnlocks;
+    const GameSettings settings = SettingsRepository {}.Load();
+    m_galleryUnlocks = settings.galleryUnlocks;
+    m_unlockedStage = settings.unlockedStage;
     Reset(true);
 }
 
@@ -468,78 +470,16 @@ void SideScrollingShooter::StartDebugCheckpoint(
     }
 }
 
-std::string SideScrollingShooter::GetResumeCode() const {
-    if (m_playerCount != 1 || m_networkGame || m_tutorialMode) return {};
-    ResumeCode code;
-    code.stage = m_stageNumber;
-    code.chapter = m_bossBattle || m_bossBattlePending ? 'B' : static_cast<char>('0' + m_chapterNumber);
-    if (m_stageNumber == 5) {
-        // 演出中もその戦闘または次区間の開始地点を指す
-        const auto phase = m_stage5.phase;
-        if (phase >= Stage5Phase::CloudSea) {
-            code.part = 2;
-            code.chapter = 'D';
-        } else if (phase >= Stage5Phase::RooftopArrival) {
-            code.part = 2;
-            code.chapter = 'B';
-        } else if (phase >= Stage5Phase::WallClimbTransition) {
-            code.part = 2;
-            code.chapter = phase <= Stage5Phase::WallClimbLower ? '1' :
-                phase == Stage5Phase::WallClimbMiddle ? '2' : '3';
-        } else if (phase >= Stage5Phase::EastsourceIntro) code.chapter = 'B';
-    }
-    code.difficulty = m_difficulty;
-    code.player = Player().m_playerType;
-    code.power = static_cast<int>(std::lround(Player().m_power * 100.0f));
-    code.score = m_score;
-    code.bombs = Player().m_bombCount;
-    code.kills = m_kills;
-    code.retries = m_chapterRetryCounts;
-    return code.Encode();
-}
-
-bool SideScrollingShooter::RestoreResumeCode(std::string_view text) {
-    ResumeCode code;
-    if (m_playerCount != 1 || m_networkGame || m_tutorialMode || !ResumeCode::Parse(text, code)) return false;
-
-    // 既存の地点初期化へ渡す前に難易度と引き継ぐ状態を反映する
-    m_difficulty = code.difficulty;
-    Reset(true);
-    Player().m_playerType = code.player;
-    Player().m_power = code.power / 100.0f;
-    Player().m_bombCount = code.bombs;
-    m_score = code.score;
-    m_kills = code.kills;
-    const bool boss = code.chapter == 'B' || code.chapter == 'D';
-    const int chapter = boss ? 3 : code.chapter - '0';
-    if (code.stage == 5 && code.part == 2) {
-        const auto phase = code.chapter == 'D' ? Stage5Phase::TayamaDragonBattle :
-            code.chapter == 'B' ? Stage5Phase::TayamaFireControl :
-            chapter == 1 ? Stage5Phase::WallClimbLower :
-            chapter == 2 ? Stage5Phase::WallClimbMiddle : Stage5Phase::WallClimbUpper;
-        Stage5Module::StartDebugPhase(*this, phase);
-        m_chapterNumber = chapter;
-        if (!boss) {
-            m_frame = m_stage->ChapterEndFrame(chapter - 1);
-            m_scroll = static_cast<float>(m_frame) * 0.008f;
-            m_missionStartTimer = MissionBannerDisplayFrames;
-        }
-    } else {
-        StartDebugCheckpoint(code.stage, chapter, boss);
-    }
-
-    // 被弾時も復元済みのスコアへ戻せるよう開始時スナップショットを揃える
-    m_chapterRetryCounts = code.retries;
-    m_chapterStartPower = Player().m_power;
-    m_chapterStartScore = m_score;
-    m_chapterStartKills = m_kills;
+/**
+ * @brief 選択したステージの先頭から開始する
+ * @param stage 開始するステージ番号、1から5
+ * @return なし
+ */
+void SideScrollingShooter::StartFromStage(int stage) {
+    // ボスが1体ごとに落とすパワーアイテム1.00個分を到達済みとして渡す
+    Player().m_power = static_cast<float>(stage - 1);
+    StartDebugCheckpoint(stage, 1, false);
     m_stage5.checkpointPower = Player().m_power;
-    m_stage5.checkpointScore = m_score;
-    m_stage5.checkpointKills = m_kills;
-    Player().m_invincible = 90;
-    if (boss) PlayCurrentBossBgm(true);
-    else PlayCurrentStageBgm(true);
-    return true;
 }
 
 void SideScrollingShooter::ProcessInput() {
@@ -610,6 +550,8 @@ void SideScrollingShooter::ApplyPlayerInput(const CooperativeInput& input) {
 void SideScrollingShooter::ApplyNetworkInput(const std::array<CooperativeInput, 2>& inputs) {
     // 通信中は実機入力やデバッグキーを参照せず、ホストの会話操作を保持する
     m_networkGame = true;
+    // 通信中の照準と命中判定は画面サイズや描画回数に依存させない
+    m_aimViewport = {0, 0, 1280, 720};
     m_networkHostInput = inputs[0];
     ForEachPlayer([&] { ApplyPlayerInput(inputs[m_activePlayer]); });
     if (m_restartTimer > 0 && (inputs[0].pressed || inputs[1].pressed)) m_restartTimer = 0;
@@ -661,6 +603,11 @@ void SideScrollingShooter::Tick() {
         m_displayBossHp = static_cast<float>(m_bossHp);
     }
     if (m_clear) {
+        // ボス撃破の時点で解放し、メモリ上の値で同じプレイ中の重複I/Oを防ぐ
+        if (!m_tutorialMode && StageDispatch::HasNextStage(*this) && m_stageNumber >= m_unlockedStage) {
+            m_unlockedStage = m_stageNumber + 1;
+            SettingsRepository {}.UnlockStage(m_unlockedStage);
+        }
         static_assert(MissionClearSecondVoiceFrame + VoicePlaybackFrames(VoiceSamples::arrested) <=
             ClearWaitFrames);
         if (!m_tutorialMode && m_audio && m_clearTimer > 0 && m_clearTimer <= ClearWaitFrames) {
@@ -1311,6 +1258,8 @@ void SideScrollingShooter::StartNextStage() {
 
 /** @brief 弾プールの一時コピーを作らず全弾を初期化する @return なし */
 void SideScrollingShooter::ResetShots() {
+    // ステージ切替・再開後に同じフレーム番号の旧モデルを再利用しない
+    for (auto& cache : m_enemyModelCollision) cache.frame = -1;
     // 各再開経路で同じ初期化を使い、大型プールをスタックへ積まない
     m_shots.fill({});
 }

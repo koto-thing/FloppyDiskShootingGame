@@ -3,12 +3,13 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <vector>
+#include "../../Engine/Graphics/Renderer.h"
 
 #include "../../Domain/ValueObjects/DifficultyType.h"
 #include "../../Domain/ValueObjects/CooperativeInput.h"
 #include "../../Domain/ValueObjects/GalleryEntry.h"
 #include "../../Domain/ValueObjects/PlayerType.h"
-#include "../../Domain/ValueObjects/ResumeCode.h"
 #include "../../Engine/Graphics/Camera3D.h"
 #include "Stages/Stage1/Stage1State.h"
 #include "Stages/Stage2/Stage2State.h"
@@ -28,12 +29,12 @@ class SideScrollingShooter {
     friend struct OrbitShotTests;
     friend struct CoopGameplayTests;
     friend struct CoopStageTests;
-    friend struct ResumeCodeTests;
+    friend struct HudLayoutTests;
+    friend struct StageSelectTests;
+    friend struct EnemyModelHitTests;
 public:
-    /** @brief 現在地点のシングルプレイ再開コードを取得する @return コード、対象外なら空文字列 */
-    std::string GetResumeCode() const;
-    /** @brief 検証済みコードの開始地点と状態を復元する @param code 入力コード @return 復元成功ならtrue */
-    bool RestoreResumeCode(std::string_view code);
+    /** @brief 選択したステージの先頭から開始する @param stage 開始するステージ番号、1から5 @return なし */
+    void StartFromStage(int stage);
     /** @brief 自機弾の挙動を調整するパラメータ */
     struct PlayerShotParameters {
         int fireIntervalFrames;
@@ -85,8 +86,8 @@ public:
     void ApplyNetworkInput(const std::array<CooperativeInput, 2>& inputs);
     /** @brief ゲーム状態を固定更新する @return なし */
     void Tick();
-    /** @brief ゲーム画面を描画する @param renderer 描画先 @return なし */
-    void Render(Renderer& renderer) const;
+    /** @brief ゲーム画面を描画する @param renderer 描画先 @param localPlayer 通信時の自機番号 @return なし */
+    void Render(Renderer& renderer, int localPlayer = 0) const;
     /**
      * @brief ゲーム画面の揺れを開始する
      * @param intensity 揺れの最大振幅
@@ -913,8 +914,8 @@ private:
     bool CanToggleView() const;
     void ConfigureSideCamera(Camera3D& camera, Renderer& renderer) const;
     void ConfigureRailCamera(Camera3D& camera, Renderer& renderer) const;
-    /** @brief 描画と照準に共通のカメラを設定する @param camera 設定先 @param viewport 描画領域 @return なし */
-    void ConfigureRailCamera(Camera3D& camera, const Viewport& viewport) const;
+    /** @brief 描画と照準に共通のカメラを設定する @param camera 設定先 @param viewport 描画領域 @param personal 自機だけを追従する場合true @return なし */
+    void ConfigureRailCamera(Camera3D& camera, const Viewport& viewport, bool personal = false) const;
     /**
      * @brief 現在フレームの画面揺れオフセットを取得する
      * @return カメラへ加算するXYオフセット
@@ -1053,6 +1054,14 @@ private:
         float x, float y, float z, bool visible,
         float yaw = 0.0f, float pitch = 0.0f, float roll = 0.0f) const;
     void DrawEnemyModel(Renderer& renderer, const Camera3D& camera, const Enemy& enemy, float yaw = 0.0f) const;
+    /** @brief 描画モデルと弾の掃引範囲を判定する @param shot 自機弾 @param enemy 対象の敵 @return 見える機体へ命中した場合true */
+    bool HitEnemyModel(const Shot& shot, const Enemy& enemy) const;
+    /** @brief 描画部品へ弾を当てる @param shot 自機弾 @param shape 描画形状 @param world ワールド行列 @return 命中時true */
+    bool HitShotModelPrimitive(const Shot& shot, PrimitiveShape shape, const Matrix4x4& world) const;
+    /** @brief 描画座標を弾の判定空間へ投影する @param shot 判定する弾 @return 2D輪郭投影または3D単位行列 */
+    Matrix4x4 ShotModelProjection(const Shot& shot) const;
+    /** @brief 反射ファンネルの描画形状へ弾を当てる @param shot 自機弾 @param position 本体位置 @param target 砲塔の照準先 @param spin 旋回角 @return 命中時true */
+    bool HitReflectFunnelModel(const Shot& shot, const Vector3& position, const Vector3& target, float spin) const;
 #if defined(_DEBUG)
     bool m_showHitboxes = true;
     /**
@@ -1080,6 +1089,7 @@ private:
      * @return なし
      */
     void DrawLinkedEnemyLasers(Renderer& renderer, const Camera3D& camera, float railWeight) const;
+public:
     /**
      * @brief Stage2主砲と同じRailgunシェーダーで線分レーザーを描画する
      * @param renderer 描画先レンダラー
@@ -1093,6 +1103,20 @@ private:
      */
     static void DrawRailgunBeamBetween(Renderer& renderer, const Camera3D& camera,
         const Vector3& start, const Vector3& end, float width, float progress, int effectType);
+    /**
+     * @brief ボムの六角形バリアを指定位置と半径で描画する
+     * @param renderer 描画先
+     * @param camera カメラ
+     * @param center 中心
+     * @param radius 半径
+     * @param age 位相
+     * @param hits 損傷段階0～2
+     * @param lineWidth 六角形の線幅
+     * @return なし
+     */
+    static void DrawBombShield(Renderer& renderer, const Camera3D& camera, const Vector3& center,
+        float radius, int age, int hits, float lineWidth = 0.025f);
+private:
     void DrawShotModel(Renderer& renderer, const Camera3D& camera, const Shot& shot, float yaw = 0.0f) const;
     /** @brief 爆発エフェクトをHLSLへ渡す描画コマンドとして記録する */
     static void DrawExplosion(Renderer& renderer, const Camera3D& camera, const Explosion& explosion);
@@ -1115,7 +1139,7 @@ private:
     /** @brief リスタート中のカウントダウンを描画する */
     void DrawRestart(Renderer& renderer) const;
     /**
-     * @brief 武装強化時の点滅メッセージを自機上へ描画する
+     * @brief 自機識別、武装強化、骨の回避案内を自機上へ描画する
      * @param renderer 描画先レンダラー
      * @param camera 現在の3Dカメラ
      * @param playerZ 描画中の自機のワールド座標Z
@@ -1135,6 +1159,8 @@ private:
     void DrawMissionBanner(Renderer& renderer) const;
     /** @brief 文字表示領域へ共通の黒いHUD背景を描画する @param renderer 描画先 @return なし */
     void DrawHudBackground(Renderer& renderer) const;
+    /** @brief 両視点共通の基板風ステータスと操作案内を描画する @param renderer 描画先 @return なし */
+    void DrawArcadeHud(Renderer& renderer) const;
 
     /** @brief 各プレイヤーが独立して保持する戦闘状態 */
     struct PlayerState {
@@ -1171,6 +1197,7 @@ private:
     int m_playerCount = 1;
     int m_nextEnemyShotTarget = 0;
     mutable int m_activePlayer = 0;
+    mutable int m_renderPlayer = 0;
     mutable Viewport m_aimViewport {0, 0, 1280, 720};
     /** @brief 処理対象の自機状態を取得する @return 自機状態 */
     PlayerState& Player() { return m_players[m_activePlayer]; }
@@ -1186,6 +1213,14 @@ private:
 
     std::array<Shot, Stage5ShotCapacity> m_shots {};
     std::array<Enemy, EnemyCapacity> m_enemies {};
+    // 描画命令だけをフレーム内で共有し、部位破壊後は再構築する
+    struct EnemyModelCollisionCache {
+        int frame = -1;
+        std::array<int, BossPartCount> hp {};
+        std::vector<Primitive3D> primitives;
+    };
+    mutable std::array<EnemyModelCollisionCache, EnemyCapacity + 1> m_enemyModelCollision {};
+    mutable Renderer m_modelCollisionRenderer;
     std::array<Item, ItemCapacity> m_items {};
     std::array<Explosion, ExplosionCapacity> m_explosions {};
     std::array<Debris, DebrisCapacity> m_debris {};
@@ -1201,6 +1236,7 @@ private:
     const Stage* m_stage = nullptr;
     DifficultyType m_difficulty = Easy;
     std::uint32_t m_galleryUnlocks = DefaultGalleryUnlocks;
+    int m_unlockedStage = 1;
     float m_scroll = 0.0f;
     int m_frame = 0;
     int m_spawnCooldown = 0;

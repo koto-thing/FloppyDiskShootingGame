@@ -1,3 +1,27 @@
+#if defined(SPACEYAKUZA_PORTABLE)
+#include "MMLData.h"
+#include "MMLSource.h"
+
+/** @brief 移植版の埋め込み原譜を参照する @param name 曲名 @return 対応する原譜、不明時は空 */
+std::string_view MMLData::GetByName(std::string_view name) {
+    // 容量制限のない版ではWindows専用圧縮へ依存せず原譜を共有する
+    if (name == "stage1") return MMLSource::stage1;
+    if (name == "stage2") return MMLSource::stage2;
+    if (name == "stage3") return MMLSource::stage3;
+    if (name == "stage4") return MMLSource::stage4;
+    if (name == "stage5") return MMLSource::stage5;
+    if (name == "stage6") return MMLSource::stage6;
+    if (name == "boss1") return MMLSource::boss1;
+    if (name == "boss2") return MMLSource::boss2;
+    if (name == "boss3") return MMLSource::boss3;
+    if (name == "boss4") return MMLSource::boss4;
+    if (name == "boss5") return MMLSource::boss5;
+    if (name == "boss6") return MMLSource::boss6;
+    if (name == "title") return MMLSource::title;
+    if (name == "ending") return MMLSource::ending;
+    return {};
+}
+#else
 #include "MMLData.h"
 #include "PackedMMLData.h"
 #include <windows.h>
@@ -43,3 +67,5 @@ std::string_view GetByName(std::string_view name) {
 }
 
 } // namespace MMLData
+
+#endif

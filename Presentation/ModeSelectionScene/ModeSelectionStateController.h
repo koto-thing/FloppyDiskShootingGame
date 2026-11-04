@@ -8,7 +8,7 @@ enum class ModeSelectionState {
     ControllerSelect,
     DifficultySelect,
     PlayerTypeSelect,
-    ResumeCodeInput,
+    StageSelect,
 };
 
 /** @brief モードセレクト画面の選択段階を管理するクラス */

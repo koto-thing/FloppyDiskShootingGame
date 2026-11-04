@@ -1,6 +1,10 @@
 #include "Input.h"
 
+#if defined(SPACEYAKUZA_PORTABLE)
+#include "SdlInputBackend.h"
+#else
 #include "WindowsInputBackend.h"
+#endif
 
 std::array<bool, static_cast<std::size_t>(KeyCode::Count)> Input::m_currentKeys{};
 std::array<bool, static_cast<std::size_t>(KeyCode::Count)> Input::m_currentGamepadKeys{};
@@ -27,7 +31,11 @@ float Input::m_mouseWheelDelta = 0.0f;
  * @param hwnd 入力メッセージを受信するウィンドウハンドル
  * @return 初期化に成功した場合はtrue
  */
+#if defined(SPACEYAKUZA_PORTABLE)
+bool Input::Initialize(SDL_Window* hwnd) {
+#else
 bool Input::Initialize(HWND hwnd) {
+#endif
     // すべてのデジタル入力状態を未入力に戻す
     m_currentKeys.fill(false);
     m_currentGamepadKeys.fill(false);
@@ -51,7 +59,11 @@ bool Input::Initialize(HWND hwnd) {
     m_mouseDelta = {};
     m_mouseWheelDelta = 0.0f;
 
+#if defined(SPACEYAKUZA_PORTABLE)
+    return SdlInputBackend::Initialize(hwnd);
+#else
     return WindowsInputBackend::Initialize(hwnd);
+#endif
 }
 
 /**
@@ -88,7 +100,11 @@ void Input::BeginFrame() {
  */
 void Input::PollGamepad() {
     // メッセージ入力を先に反映して入力元の持ち替え順を維持する
+#if defined(SPACEYAKUZA_PORTABLE)
+    SdlInputBackend::Update();
+#else
     WindowsInputBackend::Update();
+#endif
 
     // フレーム中に入力元だけが入れ替わった操作は連続押下として扱う
     for (std::size_t i = 0; i < m_frameStartKeySources.size(); ++i) {
@@ -250,9 +266,16 @@ float Input::GetMouseWheelDelta() {
  * @param wParam メッセージ固有の追加情報
  * @param lParam メッセージ固有の追加情報
  */
+#if defined(SPACEYAKUZA_PORTABLE)
+/** @brief SDLイベントを入力へ反映する @param event 入力イベント @return なし */
+void Input::ProcessEvent(const SDL_Event& event) { SdlInputBackend::ProcessEvent(event); }
+/** @brief SDL入力のハンドルを解放する @return なし */
+void Input::Shutdown() { SdlInputBackend::Shutdown(); }
+#else
 void Input::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam) {
     WindowsInputBackend::ProcessMessage(message, wParam, lParam);
 }
+#endif
 
 /**
  * @brief Win32仮想キーの状態を反映する
@@ -260,7 +283,7 @@ void Input::ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam) {
  * @param isPressed 押下中の場合はtrue
  * @return なし
  */
-void Input::SetNativeKeyState(UINT virtualKey, bool isPressed) {
+void Input::SetNativeKeyState(unsigned int virtualKey, bool isPressed) {
     // 対応する抽象キーを検索して状態を更新する
     for (std::size_t i = 1; i < m_currentKeys.size(); ++i) {
         if (ToVirtualKey(static_cast<KeyCode>(i)) == static_cast<int>(virtualKey)) {
@@ -414,6 +437,9 @@ void Input::SetMousePosition(float x, float y) {
  * @return Win32仮想キーコード、未対応の場合は0
  */
 int Input::ToVirtualKey(KeyCode key) {
+#if defined(SPACEYAKUZA_PORTABLE)
+    return SdlInputBackend::ToScancode(key);
+#else
     // 連続している英数字キーをまとめて変換する
     if (key >= KeyCode::A && key <= KeyCode::Z) {
         return 'A' + static_cast<int>(key) - static_cast<int>(KeyCode::A);
@@ -477,4 +503,5 @@ int Input::ToVirtualKey(KeyCode key) {
         case KeyCode::Pause: return VK_PAUSE;
         default: return 0;
     }
+#endif
 }

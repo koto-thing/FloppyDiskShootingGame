@@ -4,6 +4,7 @@
 #include "../Engine/Graphics/Utf8Text.h"
 
 #include <cassert>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -52,6 +53,26 @@ int main() {
         }
     }
     assert(Localization::Entries().size() > 300);
+
+    // Online日本語版の定型表現と説明文の使い分け、Steam版の翻訳維持を検査する
+    Localization::SetLanguage(Localization::Language::Japanese);
+#if defined(SPACEYAKUZA_EDITION_Online)
+    for (const char* source : {"START GAME", "GALLERY", "RANKING", "OPTIONS", "EXIT GAME",
+        "CREDITS", "BACK TO TITLE", "TITLE", "BACK", "SKIP", "NEXT", "EASY", "NORMAL", "HARD",
+        "READY", "RETURN TO TITLE", "CLOSE MENU", "BACK TO MENU", "PAUSED", "CHAPTER RESULT",
+        "BOMB GET", "POWER UP", "TUTORIAL COMPLETE", "TUTORIAL START", "ARRESTED", "MISSION %d START"}) {
+        assert(Localization::Translate(source) == source);
+        assert(std::string_view(Localization::Text(source)) == source);
+    }
+    char mission[64];
+    std::snprintf(mission, sizeof(mission), Localization::Text("MISSION %d START"), 3);
+    assert(Localization::Translate(mission) == "MISSION 3 START");
+#else
+    assert(Localization::Translate("MISSION %d START") == "ミッション %d 開始");
+    assert(Localization::Translate("OPTIONS") == "設定");
+#endif
+    assert(Localization::Translate("LANGUAGE") == "言語");
+    assert(Localization::Translate("SELECT SHOT TYPE") == "ショットを選択");
 
     // 英語と未知キーは原文を保ち、不正な言語値は英語へ戻す
     Localization::SetLanguage(Localization::Language::English);

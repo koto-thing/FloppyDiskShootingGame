@@ -2,8 +2,6 @@
 #include "BuildVersion.h"
 #include "../../Infrastructure/ExternalServices/MMLData.h"
 #include "../../Infrastructure/ExternalServices/AudioService.h"
-#include "../../Infrastructure/ExternalServices/D3D12RenderingService.h"
-#include <windows.h>
 #include "../../Engine/Graphics/Renderer.h"
 #include "../../Engine/Time/Time.h"
 #include "../Common/SpaceBackground.h"
@@ -74,7 +72,15 @@ void TitleScene::Initialize() {
         "EXIT GAME",
         Vector2 { 0.0f, -0.60f }
     );
-    m_exitButton->SetOnClick([]() { PostQuitMessage(0); });
+    m_exitButton->SetOnClick([]() {
+#if defined(SPACEYAKUZA_PORTABLE)
+        SDL_Event event {};
+        event.type = SDL_QUIT;
+        SDL_PushEvent(&event);
+#else
+        PostQuitMessage(0);
+#endif
+    });
     
     // 左下にクレジットシーンへ移動するボタンを配置する
     m_creditButton = std::make_unique<Button>(
@@ -90,26 +96,8 @@ void TitleScene::Initialize() {
  * @brief タイトルシーンの入力処理
  */
 void TitleScene::ProcessInput() {
-    HWND hwnd = GetForegroundWindow();
 
-    int w = 1280;
-    int h = 720;
-
-    if (hwnd) {
-        RECT r;
-
-        GetClientRect(hwnd, &r);
-
-        if (r.right - r.left > 0) {
-            w = r.right - r.left;
-        }
-
-        if (r.bottom - r.top > 0) {
-            h = r.bottom - r.top;
-        }
-    }
-
-    UIInputState inputState = UIInput::Current(w, h);
+    UIInputState inputState = UIInput::Current();
 
     // ゲーム開始ボタンにマウス入力を渡す
     if (m_startButton != nullptr) {

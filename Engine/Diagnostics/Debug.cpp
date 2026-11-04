@@ -1,6 +1,11 @@
 #include "Debug.h"
 
+#if defined(SPACEYAKUZA_PORTABLE)
+#include "../../Infrastructure/Repositories/UserDataPath.h"
+#include <cstdio>
+#else
 #include <Windows.h>
+#endif
 
 #include <chrono>
 #include <filesystem>
@@ -52,6 +57,9 @@ const char* ToString(LogLevel level) {
  */
 std::filesystem::path GetExecutableDirectory() {
     // Windows API を使用して実行可能ファイルのパスを取得し、ディレクトリ部分を返す
+#if defined(SPACEYAKUZA_PORTABLE)
+    return UserDataPath();
+#else
     std::wstring path(MAX_PATH, L'\0');
     const DWORD length = GetModuleFileNameW(nullptr, path.data(), static_cast<DWORD>(path.size()));
     if (length == 0 || length >= path.size()) {
@@ -61,6 +69,7 @@ std::filesystem::path GetExecutableDirectory() {
     // 文字列の長さを正確に設定して、余分な null 文字を削除
     path.resize(length);
     return std::filesystem::path(path).parent_path();
+#endif
 }
 
 /**
@@ -76,7 +85,11 @@ std::string BuildTimestamp() {
     
     // Windows環境でのローカルタイム変換
     std::tm localTime{};
+#if defined(_WIN32)
     localtime_s(&localTime, &time);
+#else
+    localtime_r(&time, &localTime);
+#endif
 
     // 文字列ストリームを使用してフォーマットされたタイムスタンプを作成
     std::ostringstream stream;
@@ -90,6 +103,7 @@ std::string BuildTimestamp() {
  * @param text UTF-8文字列
  * @return std::wstring ワイド文字列
  */
+#if !defined(SPACEYAKUZA_PORTABLE)
 std::wstring Utf8ToWide(std::string_view text) {
     if (text.empty()) {
         return {};
@@ -108,6 +122,7 @@ std::wstring Utf8ToWide(std::string_view text) {
         CP_UTF8, 0, text.data(), static_cast<int>(text.size()), result.data(), length);
     return result;
 }
+#endif
 } // namespace
 
 /**
@@ -231,12 +246,16 @@ void Debug::Write(
     const std::string line = stream.str();
 
     // デバッグ出力にメッセージを出力する (UTF-8 -> ワイド文字列変換)
+#if defined(SPACEYAKUZA_PORTABLE)
+    std::fwrite(line.data(), 1, line.size(), stderr);
+#else
     const std::wstring wideLine = Utf8ToWide(line);
     if (!wideLine.empty()) {
         OutputDebugStringW(wideLine.c_str());
     } else {
         OutputDebugStringA(line.c_str());
     }
+#endif
 
     // ログファイルにメッセージを書き込む
     DebugState& state = GetState();

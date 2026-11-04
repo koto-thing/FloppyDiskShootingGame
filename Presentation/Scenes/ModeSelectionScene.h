@@ -9,7 +9,7 @@
 #include "../../Engine/UI/Button.h"
 #include "../ModeSelectionScene/ModeSelectionStateController.h"
 
-/** @brief 人数、コントローラー、難易度、ショットタイプを選択するシーン */
+/** @brief 人数、コントローラー、難易度、ショットタイプ、開始ステージを選択するシーン */
 class ModeSelectionScene : public IScene<SceneType, SceneSharedData> {
 public:
     /** @brief モード選択シーンを生成する */
@@ -52,9 +52,6 @@ private:
     std::array<std::unique_ptr<Button>, 3> m_difficultyButtons;
     std::array<std::unique_ptr<Button>, 3> m_playerTypeButtons;
     std::unique_ptr<Button> m_backButton;
-    std::unique_ptr<Button> m_resumeButton;
-    std::unique_ptr<Button> m_startButton;
-    std::string m_resumeCode;
-    bool m_invalidResumeCode = false;
+    std::array<std::unique_ptr<Button>, 5> m_stageButtons;
     PlayerType m_previewPlayerType = Homing;
 };

@@ -23,21 +23,22 @@ void SideScrollingShooter::Stage5Module::DrawTargetHitboxes(
     // 本体と弱点の双方が命中対象なので有効なグループ境界を一度ずつ描画する
     if (shooter.m_stage5.phase >= Stage5Phase::TayamaFireControl &&
         shooter.m_stage5.phase <= Stage5Phase::TayamaCommandCore) {
-        const auto bounds = TayamaModelView::AllGroupBounds(TayamaTransform(shooter),
-            shooter.m_stage5.tayamaTransformation, TayamaState(shooter));
-        for (const auto& group : bounds) {
-            if (!group.valid) continue;
-            HitShotSphere(query, group.center.x, group.center.y, group.center.z, group.radius);
-        }
+        TayamaModelView::VisitParts(TayamaTransform(shooter),
+            shooter.m_stage5.tayamaTransformation, TayamaState(shooter),
+            [&](PrimitiveShape shape, const Matrix4x4& world, const ColorF&, TayamaPartGroup) {
+                shooter.HitShotModelPrimitive(query, shape, world);
+            });
     }
 
-    // 龍形態は命中判定と接触判定で共有する節中心と半径を使用する
+    // 龍形態も実際の描画形状を命中判定と共有する
     if (shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle) {
-        const float railWeight = shooter.RailBlend();
-        for (int index = 0; index < ShooterStages::Stage5::TayamaDragonSegmentCount; ++index) {
-            const Vector3 center = TayamaDragonSegmentPosition(shooter, index, railWeight);
-            HitShotSphere(query, center.x, center.y, center.z,
-                TayamaDragonSegmentRadius(index, railWeight));
+        HitTayamaDragonModel(shooter, query);
+        for (const auto& funnel : shooter.m_stage5.tayamaReflectFunnels) {
+            if (!funnel.active) continue;
+            const float spin = funnel.spinFrames > 0 ? Math::TwoPi * 2.0f *
+                static_cast<float>(30 - funnel.spinFrames) / 29.0f : 0.0f;
+            shooter.HitReflectFunnelModel(query, {ToWorldX(funnel.x), ToWorldY(funnel.y), funnel.z},
+                shooter.PlayerWorldPosition(), spin);
         }
     }
 
@@ -291,10 +292,11 @@ static_assert(RainViewMargin - RainViewTravel < -1.0f);
  * @param shooter 判定対象
  * @param railPosition 補正するカメラ位置
  * @param railTarget 補正する注視点
+ * @param personal 自機だけを追従する場合true
  * @return なし
  */
 void SideScrollingShooter::Stage5Module::ApplyCameraCorrection(
-    const SideScrollingShooter& shooter, Vector3& railPosition, Vector3& railTarget) {
+    const SideScrollingShooter& shooter, Vector3& railPosition, Vector3& railTarget, bool personal) {
     if (shooter.m_stage5.phase == Stage5Phase::WallClimbTransition) {
         // 暗転解除後は道路を進み、ビル直前から壁面上方へカメラを向ける
         const float approach = SmoothStep(ShooterStages::Stage5::WallApproachProgress(
@@ -325,7 +327,7 @@ void SideScrollingShooter::Stage5Module::ApplyCameraCorrection(
     // 第2部道中は自機の近くから、壁面へ約45度の角度で上空側を見る
     if (ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) {
         // 協力時は低い機体より下から二人の中央を見るため、後退せず両機を前方へ収める
-        if (shooter.m_playerCount == 2) {
+        if (!personal && shooter.m_playerCount == 2) {
             const Vector3 offset {
                 ToWorldX((shooter.m_players[0].m_playerX + shooter.m_players[1].m_playerX) * 0.5f) - railPosition.x,
                 ToWorldY((std::min)(shooter.m_players[0].m_playerY, shooter.m_players[1].m_playerY) -
@@ -697,6 +699,32 @@ bool SideScrollingShooter::Stage5Module::DrawBossModel(
             shooter.DrawModelPrimitive(renderer, camera,
                 static_cast<int>(shape), world, partColor);
         });
+
+    // 自機ボムと同じ六角形バリアを機体全体の大きさに拡張する
+    if (shooter.m_stage5.phase == Stage5Phase::EastsourceBattle) {
+        using namespace ShooterStages::Stage5;
+        if (shooter.m_stage5.eastsourceShieldHp > 0) {
+            const int damage = (EastsourceShieldHp - shooter.m_stage5.eastsourceShieldHp) * 3 / EastsourceShieldHp;
+            shooter.DrawBombShield(renderer, camera, transform.position,
+                EastsourceShieldRadius, enemy.age % 360, damage);
+        }
+        // TAYAMA第2形態と同じ予告線・金色の外光・白熱芯を機首へ接続する
+        const int timer = shooter.m_stage5.eastsourceLaserTimer;
+        if (timer >= 0) {
+            const Vector3 source = EastsourceLaserSource(shooter, enemy);
+            const Vector3 end = source + shooter.m_stage5.eastsourceLaserDirection * BombLaserLength;
+            if (timer < EastsourceLaserWarningFrames) {
+                shooter.DrawRailgunBeamBetween(renderer, camera, source, end, 0.16f,
+                    static_cast<float>(timer) / EastsourceLaserWarningFrames, 3);
+            } else {
+                const float pulse = static_cast<float>(timer % 12) / 12.0f;
+                shooter.DrawRailgunBeamBetween(renderer, camera, source, end,
+                    EastsourceLaserRadius * 1.7f, pulse, TayamaGoldenLaserGlowEffect);
+                shooter.DrawRailgunBeamBetween(renderer, camera, source, end,
+                    EastsourceLaserRadius, pulse, TayamaGoldenLaserCoreEffect);
+            }
+        }
+    }
 
     constexpr EastsourcePartGroup Groups[] = {
         EastsourcePartGroup::Nose,
@@ -1272,7 +1300,7 @@ void SideScrollingShooter::Stage5Module::DrawCloudSea(
  */
 void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
     const SideScrollingShooter& shooter, Renderer& renderer,
-    const Camera3D& camera, float railWeight) {
+    const Camera3D& camera, float railWeight, bool drawFunnels) {
     constexpr float HitColor[] = {1.0f, 0.18f, 0.10f, 1.0f};
     const bool collapsing = shooter.m_stage5.phase == Stage5Phase::TayamaDragonCollapse;
     const int destroyed = collapsing ?
@@ -1292,7 +1320,7 @@ void SideScrollingShooter::Stage5Module::DrawTayamaDragon(
 
     // ステージ3と同じ反射ファンネルモデルを自機周囲へ描画する
     for (const auto& state : shooter.m_stage5.tayamaReflectFunnels) {
-        if (!state.active) continue;
+        if (!drawFunnels || !state.active) continue;
         const Vector3 position {ToWorldX(state.x), ToWorldY(state.y), state.z};
         const Vector3 target = shooter.PlayerWorldPosition();
         const Vector3 delta = target - position;

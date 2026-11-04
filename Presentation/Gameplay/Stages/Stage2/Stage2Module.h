@@ -21,6 +21,9 @@ public:
      */
     static void Reset(SideScrollingShooter& shooter);
 
+    /** @brief 最初の骨の接近時に視点切り替えを案内する @param shooter 更新するゲーム本体 @return なし */
+    static void TickWorld(SideScrollingShooter& shooter);
+
     /**
      * @brief 登場と会話と撃破演出中も砂嵐の時間と濃度を更新する
      * @param shooter 更新するゲーム本体

@@ -12,11 +12,333 @@
 #include "../Presentation/Gameplay/Stages/Stage3/Stage3Module.h"
 #include "../Presentation/Gameplay/Stages/Stage3/Stage3BarrierCageView.h"
 #include "../Presentation/Gameplay/Stages/Stage5/Stage5Module.h"
+#include "../Presentation/Gameplay/Stages/Stage5/Stage5ModelView.h"
 #include "../Presentation/Gameplay/Stages/Stage4/Stage4Module.h"
 #include "../Presentation/Gameplay/Stages/Common/StageDefinition.h"
 
 /** @brief ステージ固有の演出と被弾判定の協力プレイ回帰チェック */
 struct CoopStageTests {
+    /** @brief 骨の初回案内、切り替え、リトライとステージ再開始を検証する @return なし */
+    static void CheckStage2ViewHint() {
+        using Game = SideScrollingShooter;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.m_stageNumber = 2;
+        g.m_viewMode = Game::ViewMode::Side2D;
+        g.m_scroll = 3.15f;
+        Game::Stage2Module::TickWorld(g);
+        assert(!g.m_stage2.viewHintShown && g.m_stage2.viewHintTimer == 0);
+        g.m_scroll = 3.17f;
+        Game::Stage2Module::TickWorld(g);
+        assert(g.m_stage2.viewHintShown && g.m_stage2.viewHintTimer == 240);
+        Game::Stage2Module::TickWorld(g);
+        assert(g.m_stage2.viewHintTimer == 239);
+
+        // 3Dへの遷移開始で消え、2Dへ戻しても再表示しない
+        g.RequestViewMode(Game::ViewMode::Rail3D);
+        Game::Stage2Module::TickWorld(g);
+        assert(g.m_stage2.viewHintTimer == 0);
+        g.m_viewTransitionTimer = 0;
+        g.m_viewMode = Game::ViewMode::Side2D;
+        Game::Stage2Module::TickWorld(g);
+        assert(g.m_stage2.viewHintTimer == 0);
+
+        // リトライでは表示済み状態を維持し、新しい開始では初期化する
+        g.m_isRestartingChapter = true;
+        Game::Stage2Module::Reset(g);
+        Game::Stage2Module::TickWorld(g);
+        assert(g.m_stage2.viewHintShown && g.m_stage2.viewHintTimer == 0);
+        g.m_isRestartingChapter = false;
+        Game::Stage2Module::Reset(g);
+        Game::Stage2Module::TickWorld(g);
+        assert(g.m_stage2.viewHintTimer == 240);
+        for (int i = 0; i < 240; ++i) Game::Stage2Module::TickWorld(g);
+        assert(g.m_stage2.viewHintTimer == 0);
+
+        // 破壊済みまたは3Dで通過した最初の骨には案内を出さない
+        Game::Stage2Module::Reset(g);
+        g.m_stage2.boneArchDestroyed = true;
+        Game::Stage2Module::TickWorld(g);
+        assert(g.m_stage2.viewHintTimer == 0);
+        Game::Stage2Module::Reset(g);
+        g.m_viewMode = Game::ViewMode::Rail3D;
+        Game::Stage2Module::TickWorld(g);
+        assert(g.m_stage2.viewHintShown && g.m_stage2.viewHintTimer == 0);
+    }
+
+    /** @brief 太陽の画面上の命中位置、耐久値、視点制限とリセットを検証する @return なし */
+    static void CheckStage3Sun() {
+        using Game = SideScrollingShooter;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.m_stageNumber = 3;
+        g.m_frame = 800;
+        g.m_viewMode = Game::ViewMode::Side2D;
+        g.m_viewTransitionTimer = 0;
+        for (const Viewport viewport : {Viewport{0, 0, 1280, 720}, Viewport{0, 0, 800, 600}}) {
+            Game::Stage3Module::Reset(g);
+            g.m_aimViewport = viewport;
+            const float halfHeight = 46.0f * std::tan(Math::ToRadians(38.0f) * 0.5f) * 1.01f;
+            const float projection = 25.6f / 37.6f;
+            Game::Shot shot {};
+            shot.active = true;
+            shot.x = Game::FromWorldX(halfHeight * viewport.AspectRatio() * 0.56f * projection);
+            shot.y = Game::FromWorldY(halfHeight * 0.56f * projection);
+            shot.damage = 1;
+            shot.hitRadius = 0.02f;
+            // 敵弾、3D、視点遷移中、外れ弾は太陽を傷つけない
+            shot.enemy = true;
+            assert(!Game::Stage3Module::TryDamageStageTarget(g, shot));
+            shot.enemy = false;
+            g.m_viewMode = Game::ViewMode::Rail3D;
+            assert(!Game::Stage3Module::TryDamageStageTarget(g, shot));
+            g.m_viewMode = Game::ViewMode::Side2D;
+            g.m_viewTransitionTimer = 1;
+            assert(!Game::Stage3Module::TryDamageStageTarget(g, shot));
+            g.m_viewTransitionTimer = 0;
+            shot.y -= 0.5f;
+            assert(!Game::Stage3Module::TryDamageStageTarget(g, shot));
+            shot.y += 0.5f;
+            // 両プレイヤーのダメージを合算し、20発目だけで演出を開始する
+            for (int hit = 1; hit <= 20; ++hit) {
+                shot.active = true;
+                shot.owner = hit % 2;
+                assert(Game::Stage3Module::TryDamageStageTarget(g, shot));
+                assert(!shot.active && g.m_stage3.sunHp == 20 - hit);
+                assert(g.m_stage3.sunCryStartFrame == (hit == 20 ? 800 : -1));
+            }
+            // 泣き顔の待ち時間、夜への補間、視点切替後の夜の維持を描画色で確認する
+            Renderer renderer;
+            float previousRed = 1.0f;
+            for (int age : {0, 60, 120, 180, 600}) {
+                g.m_frame = 800 + age;
+                g.m_viewMode = age == 600 ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+                renderer.BeginFrame();
+                Game::Stage3Module::DrawSky(g, renderer);
+                const float red = renderer.Command(0).color.r;
+                assert(red <= previousRed);
+                if (age <= 60) assert(std::abs(red - 0.30f) < 0.0001f);
+                if (age >= 180) assert(std::abs(red - 0.015f) < 0.0001f);
+                previousRed = red;
+            }
+            g.m_viewMode = Game::ViewMode::Side2D;
+            g.m_frame = 1000;
+            assert(!Game::Stage3Module::TryDamageStageTarget(g, shot));
+            assert(g.m_stage3.sunCryStartFrame == 800);
+            Game::Stage3Module::Reset(g);
+            assert(g.m_stage3.sunHp == 20 && g.m_stage3.sunCryStartFrame == -1);
+            g.m_frame = 800;
+            // 移動区間が太陽を横切る高速弾と、大ダメージでもHPは負にならない
+            shot.active = true;
+            shot.x += 0.3f;
+            shot.vx = 0.6f;
+            shot.damage = 80;
+            assert(Game::Stage3Module::TryDamageStageTarget(g, shot));
+            assert(g.m_stage3.sunHp == 0);
+        }
+    }
+    /** @brief EASTSOURCEボムの追尾期限、予告時間、バリア耐久を両視点で検証する @return なし */
+    static void CheckEastsourceBombs() {
+        using Game = SideScrollingShooter;
+        using namespace ShooterStages::Stage5;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.m_stageNumber = 5;
+        g.m_stage = &Game::Stage5Module::Definition(Easy);
+        g.m_playerCount = 2;
+        for (bool rail : {false, true}) {
+            g.m_viewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+            g.m_viewTransitionTimer = 0;
+            g.m_stage5.phase = Phase::EastsourceBattle;
+            g.m_stage5.eastsourceLaserTimer = -1;
+            g.m_stage5.eastsourceShieldHp = 0;
+            auto& boss = g.m_enemies[0];
+            g.m_stage->ConfigureBoss(boss, rail);
+            g.m_stage->ConfigureBossPartHp(boss);
+            if (!rail) g.m_stage->ConfigureBossSideAnchor(boss);
+            g.ResetShots();
+            // ボムと同じ10発を生成し、両機体を狙うことを確認する
+            for (int frame = 0; frame < 10 * Game::BombMissileInterval; ++frame) {
+                boss.age = EastsourceBombStartFrames + frame;
+                g.m_stage->TickBoss(g, boss);
+            }
+            int missiles = 0;
+            int targets = 0;
+            for (auto& shot : g.m_shots) {
+                if (!shot.active || shot.stage2.kind != ShooterStages::Stage2::ShotKind::Funnel) continue;
+                ++missiles;
+                targets |= 1 << shot.owner;
+                for (int frame = 0; frame < EastsourceMissileHomingFrames; ++frame)
+                    Game::Stage5Module::TickSpecialShotBeforeMove(g, shot);
+                const Vector3 velocity {Game::ToWorldX(shot.vx), Game::ToWorldY(shot.vy), shot.vz};
+                assert(std::abs(velocity.Length() - EastsourceMissileSpeed) < 0.0001f);
+                assert(velocity.Length() < Game::BombMissileSpeed * 0.4f);
+                g.m_players[shot.owner].m_playerY += 0.8f;
+                Game::Stage5Module::TickSpecialShotBeforeMove(g, shot);
+                assert(shot.vx == Game::FromWorldX(velocity.x) && shot.vy == Game::FromWorldY(velocity.y));
+                assert(shot.vz == velocity.z);
+            }
+            assert(missiles == 10 && targets == 3);
+
+            // 予告180フレームは無傷、181回目の更新で予告方向上の両機へ命中する
+            boss.age = EastsourceBombStartFrames + EastsourceBombIntervalFrames;
+            g.m_players[0].m_playerX = g.m_players[1].m_playerX = -0.6f;
+            g.m_players[0].m_playerY = g.m_players[1].m_playerY = 0.0f;
+            g.ForEachPlayer([&] {
+                g.Player().m_invincible = 0;
+                g.Player().m_playerDestructionTimer = 0;
+                g.Player().m_bomb = {};
+                g.Player().m_bomb.type = Spread;
+                g.Player().m_bomb.active = true;
+            });
+            for (int frame = 0; frame < EastsourceLaserWarningFrames; ++frame) {
+                g.m_stage->TickBoss(g, boss);
+                ++boss.age;
+                assert(g.m_players[0].m_bomb.shieldHits == 0 && g.m_players[1].m_bomb.shieldHits == 0);
+            }
+            g.m_stage->TickBoss(g, boss);
+            assert(g.m_stage5.eastsourceLaserTimer == 180);
+            assert(g.m_players[0].m_bomb.shieldHits == 1 && g.m_players[1].m_bomb.shieldHits == 1);
+            g.RequestViewMode(rail ? Game::ViewMode::Side2D : Game::ViewMode::Rail3D);
+            ++boss.age;
+            g.m_stage->TickBoss(g, boss);
+            assert(g.m_stage5.eastsourceLaserTimer == 0);
+
+            // 高耐久バリアは貫通弾・ボムを吸収して本体HPを保護する
+            g.m_viewMode = g.m_nextViewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+            g.m_viewTransitionTimer = 0;
+            g.m_stage5.eastsourceLaserTimer = -1;
+            boss.age = EastsourceBombStartFrames + EastsourceBombIntervalFrames * 2;
+            g.m_stage->TickBoss(g, boss);
+            assert(g.m_stage5.eastsourceShieldHp == EastsourceShieldHp);
+            const int hp = boss.hp;
+            for (bool bomb : {false, true}) {
+                Game::Shot shot;
+                shot.x = boss.x;
+                shot.y = boss.y;
+                shot.z = boss.z;
+                shot.damage = 8;
+                shot.active = shot.piercing = true;
+                shot.bomb = bomb;
+                g.HitPlayerShotTargets(shot);
+                assert(!shot.active && boss.hp == hp);
+            }
+            assert(g.m_stage5.eastsourceShieldHp == EastsourceShieldHp - 16);
+            g.m_stage5.eastsourceShieldHp = 1;
+            Game::Shot finalShot;
+            finalShot.x = boss.x;
+            finalShot.y = boss.y;
+            finalShot.z = boss.z;
+            finalShot.active = true;
+            g.HitPlayerShotTargets(finalShot);
+            assert(g.m_stage5.eastsourceShieldHp == 0 && boss.hp == hp);
+            Game::Stage5Module::Reset(g);
+            assert(g.m_stage5.eastsourceLaserTimer == -1 && g.m_stage5.eastsourceShieldHp == 0);
+        }
+        // 全パーツの外接球より大きいバリアで翼端と機首まで覆う
+        EastsourceModelView::VisitParts({{}, {}, 0.72f}, {},
+            [&](PrimitiveShape, const Matrix4x4& world, const ColorF&, EastsourcePartGroup) {
+                assert(world.TransformPoint(Vector3::Zero).Length() +
+                    Stage5ModelDetail::WorldPartRadius(world) <= EastsourceShieldRadius);
+            });
+        // 両視点と遷移途中でも予告線・照射本体・バリアの描画を維持する
+        auto renderer = std::make_unique<Renderer>();
+        Camera3D camera;
+        camera.SetViewport({0, 0, 1280, 720});
+        g.m_stage5.phase = Phase::EastsourceBattle;
+        g.m_stage5.eastsourceLaserDirection = {-1.0f, 0.0f, 0.0f};
+        g.m_viewMode = Game::ViewMode::Side2D;
+        g.m_nextViewMode = Game::ViewMode::Rail3D;
+        g.m_viewTransitionTimer = 1;
+        for (float weight : {0.0f, 0.5f, 1.0f}) {
+            g.m_viewTransitionProgress = weight;
+            for (int timer : {179, 180}) {
+                g.m_stage5.eastsourceLaserTimer = timer;
+                g.m_stage5.eastsourceShieldHp = EastsourceShieldHp;
+                renderer->BeginFrame();
+                assert(Game::Stage5Module::DrawBossModel(g, *renderer, camera, g.m_enemies[0]));
+                int beams = 0;
+                for (std::size_t index = 0; index < renderer->CommandCount(); ++index) {
+                    const auto& command = renderer->Command(index);
+                    if (command.type != RenderCommand::Type::Railgun) continue;
+                    ++beams;
+                    for (const auto& row : command.railgun.wvpMatrix.m)
+                        for (float value : row) assert(std::isfinite(value));
+                }
+                assert(beams == (timer == 179 ? 1 : 2));
+                assert(!renderer->HasOverflowed());
+                const auto intact = renderer->CommandCount();
+                g.m_stage5.eastsourceShieldHp = EastsourceShieldHp / 3;
+                renderer->BeginFrame();
+                Game::Stage5Module::DrawBossModel(g, *renderer, camera, g.m_enemies[0]);
+                assert(renderer->CommandCount() + 14 * 12 == intact);
+            }
+        }
+    }
+
+    /** @brief EASTSOURCEの2D配置と全フェーズの弾数をKOTOと比較する @return なし */
+    static void CheckEastsourceBattle() {
+        using Game = SideScrollingShooter;
+        auto game = std::make_unique<Game>();
+        auto kotoGame = std::make_unique<Game>();
+        auto& g = *game;
+        auto& k = *kotoGame;
+        g.m_stageNumber = 5;
+        g.m_stage = &Game::Stage5Module::Definition(Easy);
+        g.m_stage5.phase = Game::Stage5Phase::EastsourceBattle;
+        k.m_stageNumber = 1;
+        k.m_stage = &Game::Stage1Module::Definition(Easy);
+        for (bool rail : {false, true}) {
+            g.m_viewMode = k.m_viewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+            for (auto phase : {Game::BossNormalPhase1, Game::BossSpecialPhase1,
+                Game::BossNormalPhase2, Game::BossSpecialPhase2}) {
+                g.m_stage5.eastsourceLaserTimer = -1;
+                auto& boss = g.m_enemies[0];
+                auto& koto = k.m_enemies[0];
+                g.m_stage->ConfigureBoss(boss, rail);
+                g.m_stage->ConfigureBossPartHp(boss);
+                if (!rail) g.m_stage->ConfigureBossSideAnchor(boss);
+                k.m_stage->ConfigureBoss(koto, rail);
+                k.m_stage->ConfigureBossPartHp(koto);
+                if (!rail) k.m_stage->ConfigureBossSideAnchor(koto);
+                boss.bossPhase = koto.bossPhase = phase;
+                int eastsourceShots = 0;
+                int kotoShots = 0;
+                // 発射直後に回収し、弾プール上限や衝突から独立して同じ時間の発射数を比較する
+                for (int frame = 0; frame < 840; ++frame) {
+                    boss.age = koto.age = frame;
+                    g.m_stage->TickBoss(g, boss);
+                    k.m_stage->TickBoss(k, koto);
+                    if (!rail) {
+                        assert(std::abs(boss.x - koto.baseX) < 0.0001f);
+                        assert(std::abs(boss.z - Game::ToRailZFromSideX(boss.x)) < 0.0001f);
+                    }
+                    if (frame % k.m_stage->BossAttackInterval(phase) == 0) k.FireBossPartBarrage(koto);
+                    if (frame % koto.shotInterval == 0) ++kotoShots;
+                    for (auto& shot : g.m_shots) {
+                        if (shot.active && shot.enemy) ++eastsourceShots;
+                        shot.active = false;
+                    }
+                    for (auto& shot : k.m_shots) {
+                        if (shot.active && shot.enemy) ++kotoShots;
+                        shot.active = false;
+                    }
+                }
+                assert(eastsourceShots > kotoShots);
+            }
+        }
+        // 往復の座標初期化後も共通アンカーから右側の移動を継続する
+        g.m_viewMode = Game::ViewMode::Side2D;
+        g.InitializeSideObjects();
+        g.m_stage->TickBoss(g, g.m_enemies[0]);
+        assert(g.m_enemies[0].x > 1.7f);
+        g.m_viewMode = Game::ViewMode::Rail3D;
+        g.InitializeRailObjects();
+        g.m_enemies[0].bossPhase = Game::BossNormalPhase1;
+        g.m_stage->TickBoss(g, g.m_enemies[0]);
+        assert(std::abs(g.m_enemies[0].x) <= 0.58f);
+    }
+
     /** @brief EASY道中の削減後の敵数と4面より5面が多いことを検証する @return なし */
     static void CheckEasyEnemyCounts() {
         using Game = SideScrollingShooter;
@@ -340,6 +662,10 @@ struct CoopStageTests {
 
     /** @brief 実際のステージ処理をGPUなしで検証する @return なし */
     static void Run() {
+        CheckStage2ViewHint();
+        CheckStage3Sun();
+        CheckEastsourceBombs();
+        CheckEastsourceBattle();
         CheckEasyEnemyCounts();
         CheckStage5RouteCameraAndShots();
         CheckStage3BarrierCamera();
@@ -419,7 +745,7 @@ struct CoopStageTests {
             g.m_stageNumber = 3;
             g.m_stage = &Game::Stage3Module::Definition(Easy);
             boss.phase = 5.0f;
-            boss.motionAge = Game::Stage3Module::Phase2SurvivalFrames - 120;
+            boss.motionAge = Game::Stage3Module::SurvivalFrames(g.m_difficulty) - 120;
             g.m_stage3.laserTargetInitialized = true;
             g.m_stage3.laserTargetX = g.m_stage3.laserTargetY = 0.0f;
             g.m_stage3.laserTargetZ = rail ? Game::PlayerRailZ : Game::SidePlaneZ;

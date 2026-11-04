@@ -9,11 +9,18 @@
 namespace Localization {
 namespace {
 Language currentLanguage = Language::English;
+// Online日本語版の短い定型表現は英語で表示する
+#if defined(SPACEYAKUZA_EDITION_Online)
+#define JA_SHORT(english, japanese) english
+#else
+#define JA_SHORT(english, japanese) japanese
+#endif
 constexpr Entry entries[] = {
 #include "LocalizationUi.inc"
 #include "LocalizationDynamic.inc"
 #include "LocalizationStory.inc"
 };
+#undef JA_SHORT
 
 /** @brief 完全一致する翻訳を検索する @param source 原文 @return 翻訳、未登録ならnullptr */
 const char* Lookup(std::string_view source) {

@@ -2,7 +2,6 @@
 #include "../../Application/UseCases/Localization.h"
 
 #include <cstdio>
-#include <windows.h>
 
 #include "../../Engine/Graphics/Renderer.h"
 #include "../../Engine/Time/Time.h"
@@ -84,24 +83,8 @@ void OptionScene::Initialize() {
 }
 
 void OptionScene::ProcessInput() {
-    HWND hwnd = GetForegroundWindow();
     
-    int w = 1280;
-    int h = 720;
-    
-    if (hwnd) {
-        RECT rect;
-        
-        GetClientRect(hwnd, &rect);
-        if (rect.right - rect.left > 0) {
-            w = rect.right - rect.left;
-        }
-        if (rect.bottom - rect.top > 0) {
-            h = rect.bottom - rect.top;
-        }
-    }
-    
-    UIInputState inputState = UIInput::Current(w, h);
+    UIInputState inputState = UIInput::Current();
     
     
     if (m_backToTitleButton != nullptr) {

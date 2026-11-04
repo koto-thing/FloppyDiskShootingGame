@@ -41,6 +41,18 @@ x86/
 [Bb]in/
 [Oo]bj/
 dist/
+/build/
+/build-*/
+# 検証の出力は残さず、プロジェクトと資料が参照するファイルだけ追跡する
+Temp/*
+!Temp/Bullet.h
+!Temp/Enemy.h
+!Temp/Player.h
+!Temp/ShootingGame.h
+!Temp/AudioCompressionComparison/
+# JVMのクラッシュログ
+hs_err_pid*.log
+replay_pid*.log
 .buildnumbers/
 Steamworks.local.props
 *.user

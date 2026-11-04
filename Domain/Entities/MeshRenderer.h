@@ -1,5 +1,6 @@
 #pragma once
 #include "Component.h"
+#include <DirectXMath.h>
 #include "Mesh.h"
 #include <memory>
 #include <wrl/client.h>

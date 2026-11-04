@@ -795,14 +795,23 @@ const SideScrollingShooter::Stage& SideScrollingShooter::Stage3Module::Definitio
         Stage3BarrierCageView::BarrierHalfLength * BossModelScale < PlayerRailZ - 15.5f);
     static_assert(BossPhase2WorldZ +
         Stage3BarrierCageView::BarrierHalfLength * BossModelScale > PlayerRailZ + 22.0f);
-    static_assert(Phase2SurvivalFrames == 30 * 60);
-    static_assert(Phase3StartHp(600) == 400);
-    static_assert(Phase2HpForRemainingFrames(600, 900) == 500);
-    static_assert(Phase2HpForRemainingFrames(600, 0) == 400);
-    static_assert(Phase3SurvivalFrames == 60 * 60);
-    static_assert(Phase3HpForRemainingFrames(600, 3600) == 400);
-    static_assert(Phase3HpForRemainingFrames(600, 1800) == 200);
-    static_assert(Phase3HpForRemainingFrames(600, 0) == 0);
+    static_assert(SurvivalFrames(Easy) == 20 * 60);
+    static_assert(SurvivalFrames(Normal) == 30 * 60);
+    static_assert(SurvivalFrames(Hard) == 60 * 60);
+    static_assert(Phase3StartHp(600) == 300);
+    static_assert(Phase3StartHp(601) == 301);
+    static_assert([] {
+        for (const auto difficulty : {Easy, Normal, Hard}) {
+            const int frames = SurvivalFrames(difficulty);
+            if (Phase2HpForRemainingFrames(600, frames, difficulty) != 600 ||
+                Phase2HpForRemainingFrames(600, frames / 2, difficulty) != 450 ||
+                Phase2HpForRemainingFrames(600, 0, difficulty) != 300 ||
+                Phase3HpForRemainingFrames(600, frames, difficulty) != 300 ||
+                Phase3HpForRemainingFrames(600, frames / 2, difficulty) != 150 ||
+                Phase3HpForRemainingFrames(600, 0, difficulty) != 0) return false;
+        }
+        return true;
+    }());
     static const Stage3EnemySheetEasy easySheet;
     static const Stage3EnemySheetNormal normalSheet;
     static const Stage3EnemySheetHard hardSheet;
@@ -896,17 +905,17 @@ void SideScrollingShooter::Stage3Module::TickBoss(
             return;
         }
         boss.phase = BossPhase2Survival;
-        boss.motionAge = Phase2SurvivalFrames;
+        boss.motionAge = SurvivalFrames(shooter.m_difficulty);
         boss.actionX = static_cast<float>(boss.hp);
         return;
     }
 
-    // ゴンドラ全武装を周期発射し、30秒でPhase3開始HPまで均等に減らす
+    // ゴンドラ全武装を周期発射し、難易度ごとの耐久時間でPhase3開始HPまで均等に減らす
     if (boss.phase == BossPhase2Survival) {
         FireBossPartBarrage(shooter, boss);
         boss.motionAge = (std::max)(0, boss.motionAge - 1);
         boss.hp = Phase2HpForRemainingFrames(
-            static_cast<int>(boss.actionX), boss.motionAge);
+            static_cast<int>(boss.actionX), boss.motionAge, shooter.m_difficulty);
         shooter.m_bossHp = boss.hp;
         if (boss.motionAge > 0) return;
 
@@ -941,7 +950,7 @@ void SideScrollingShooter::Stage3Module::TickBoss(
         PlayBossDestructionSound(shooter.m_audio, false);
         shooter.m_stage3 = {};
         boss.phase = BossPhase3Survival;
-        boss.motionAge = Phase3SurvivalFrames;
+        boss.motionAge = SurvivalFrames(shooter.m_difficulty);
         shooter.m_bossHp = boss.hp;
         return;
     }
@@ -949,7 +958,7 @@ void SideScrollingShooter::Stage3Module::TickBoss(
     // Phase3は射出口ごとの再装填を管理し、最大5基で反射攻撃を継続する
     if (boss.phase == BossPhase3Survival) {
         boss.motionAge = (std::max)(0, boss.motionAge - 1);
-        boss.hp = Phase3HpForRemainingFrames(static_cast<int>(boss.actionX), boss.motionAge);
+        boss.hp = Phase3HpForRemainingFrames(static_cast<int>(boss.actionX), boss.motionAge, shooter.m_difficulty);
         shooter.m_bossHp = boss.hp;
 
         const BossModelTransform transform = BossTransform(shooter, boss);
@@ -1318,29 +1327,58 @@ void SideScrollingShooter::Stage3Module::DrawTargetHitboxes(
     if (shooter.m_enemies.empty() || shooter.m_enemies[0].phase != BossPhase3Survival) return;
     for (const auto& funnel : shooter.m_stage3.reflectFunnels) {
         if (!funnel.active) continue;
-        if (shooter.IsRailGameplayActive()) {
-            HitShotSphere(query, ToWorldX(funnel.x), ToWorldY(funnel.y), funnel.z, 0.72f);
-        } else {
-            HitShotCircle(query, funnel.x, funnel.y, 0.11f);
-        }
+        const float blend = shooter.RailBlend();
+        const auto boss = BossTransform(shooter, shooter.m_enemies[0]);
+        const Vector3 position {ToWorldX(funnel.x), ToWorldY(funnel.y), Math::Lerp(boss.position.z, funnel.z, blend)};
+        const Vector3 target {ToWorldX(shooter.Player().m_playerX), ToWorldY(shooter.Player().m_playerY),
+            Math::Lerp(boss.position.z, PlayerRailZ, blend)};
+        shooter.HitReflectFunnelModel(query, position, target, ReflectFunnelSpinYaw(funnel.spinFrames));
     }
 }
 #endif
 
 bool SideScrollingShooter::Stage3Module::TryDamageStageTarget(
     SideScrollingShooter& shooter, Shot& shot) {
+    // 安定した2Dの昼だけ、背景の太陽を弾の描画平面へ透視投影して判定する
+    auto& state = shooter.m_stage3;
+    if (!shot.enemy && state.sunHp > 0 && shooter.m_viewTransitionTimer == 0 &&
+        !shooter.IsRailGameplayActive() && NightBlend(shooter) < 0.99f) {
+        const float halfHeight = (SidePlaneZ + 20.0f - SideCameraZ) *
+            std::tan(Math::ToRadians(SideCameraFieldOfView) * 0.5f) * 1.01f;
+        constexpr float projection = (SidePlaneZ - 0.4f - SideCameraZ) /
+            (SidePlaneZ + 11.6f - SideCameraZ);
+        const Vector2 shake = shooter.ScreenShakeOffset();
+        const float cameraY = SideCameraY(shooter) + shake.y;
+        const float x = shake.x + (halfHeight * shooter.m_aimViewport.AspectRatio() *
+            0.56f - shake.x) * projection;
+        const float y = cameraY + (halfHeight *
+            (0.26f + (1.0f - NightBlend(shooter)) * 0.30f) - cameraY) * projection;
+        // 高速弾も移動区間で判定し、小さな太陽を飛び越させない
+        if (Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), 0.0f,
+            ToWorldX(shot.x), ToWorldY(shot.y), 0.0f, shot.hitRadius * WorldXScale,
+            x, y, 0.0f, 0.525f * projection)) {
+            state.sunHp = (std::max)(0, state.sunHp - (std::max)(0, shot.damage));
+            if (state.sunHp == 0) state.sunCryStartFrame = shooter.m_frame;
+            shot.RegisterHit();
+            shooter.SpawnExplosion(shot.x, shot.y, shot.z);
+            shooter.PlayHitSound();
+            return true;
+        }
+    }
     if (shot.enemy || shooter.m_enemies.empty() ||
         shooter.m_enemies[0].phase != BossPhase3Survival) return false;
 
     for (int index = 0; index < ShooterStages::Stage3::ReflectFunnelCount; ++index) {
         auto& funnel = shooter.m_stage3.reflectFunnels[index];
         if (!funnel.active) continue;
-        const bool hit = shooter.IsRailGameplayActive() ?
-            Hit3DSegment(ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz,
-                ToWorldX(shot.x), ToWorldY(shot.y), shot.z, shot.hitRadius * WorldXScale,
-                ToWorldX(funnel.x), ToWorldY(funnel.y), funnel.z, 0.72f) :
-            HitShotCircle(shot, funnel.x, funnel.y, 0.11f);
-        if (!hit) continue;
+        const float blend = shooter.RailBlend();
+        const auto bossTransform = BossTransform(shooter, shooter.m_enemies[0]);
+        const Vector3 position {ToWorldX(funnel.x), ToWorldY(funnel.y),
+            Math::Lerp(bossTransform.position.z, funnel.z, blend)};
+        const Vector3 target {ToWorldX(shooter.m_players[0].m_playerX), ToWorldY(shooter.m_players[0].m_playerY),
+            Math::Lerp(bossTransform.position.z, PlayerRailZ, blend)};
+        const float spin = ReflectFunnelSpinYaw(funnel.spinFrames);
+        if (!shooter.HitReflectFunnelModel(shot, position, target, spin)) continue;
 
         shooter.SpawnExplosion(shot.x, shot.y, shot.z);
         shot.RegisterHit();
@@ -1366,7 +1404,7 @@ bool SideScrollingShooter::Stage3Module::TryDamageStageTarget(
 void SideScrollingShooter::Stage3Module::FireBossPartBarrage(
     SideScrollingShooter& shooter, const Enemy& boss) {
     if (boss.phase == BossPhase2Survival) {
-        const int elapsed = Phase2SurvivalFrames - boss.motionAge;
+        const int elapsed = SurvivalFrames(shooter.m_difficulty) - boss.motionAge;
         const int cycle = elapsed % BossLaserCycleFrames;
         const bool machineGunFrame =
             cycle == 0 || cycle == 16 || cycle == 32 || cycle == 48 || cycle == 64;
@@ -2009,7 +2047,7 @@ bool SideScrollingShooter::Stage3Module::DrawBossModel(
         }
 
         // Phase2生存戦では2秒チャージ後に両主砲から3秒間レーザーを照射する
-        const int laserCycle = Phase2SurvivalFrames - boss.motionAge;
+        const int laserCycle = SurvivalFrames(shooter.m_difficulty) - boss.motionAge;
         if (boss.phase == BossPhase2Survival &&
             laserCycle % BossLaserCycleFrames <
                 BossLaserChargeFrames + BossLaserFireFrames &&
@@ -2182,7 +2220,7 @@ void SideScrollingShooter::Stage3Module::ApplyCameraCorrection(
     const float focusZ = Phase1FocusZ(shooter.m_enemies[0]);
     const float advanceZ = Phase1AdvanceZ(shooter.m_enemies[0]);
     const Vector3 deckPosition {
-        ToWorldX(shooter.m_players[0].m_playerX) * 0.12f,
+        ToWorldX(shooter.Player().m_playerX) * 0.12f,
         11.5f,
         -22.0f - advanceZ * BossCameraAdvanceRate
     };
@@ -2292,14 +2330,18 @@ float SideScrollingShooter::Stage3Module::RailGroundY(
         shooter.m_enemies[0].phase >= BossPhase2Travel) {
         return BossPhase2GroundY;
     }
+    // 低い艦尾機銃にも水平射撃できるよう、取付基部の底面まで下降を許可する
+    const float sternDeckY = BossFinalWorldY + BossModelScale *
+        (Stage3BossModelView::TopGunMount(
+            Stage3BossModelView::Phase1TopGunIndex(0, 0)).localPosition.y - 0.16f);
     if (shooter.m_bossIntroductionPhase != BossIntroductionPhase::Entrance) {
-        return BossDeckTopY;
+        return sternDeckY;
     }
     const float deckArrival = SmoothStep(Math::Clamp01(
         static_cast<float>(shooter.m_bossIntroductionTimer -
             BossAscentFrames - BossRevealFrames) /
         static_cast<float>(BossFlyOverFrames)));
-    return Math::Lerp(-3.65f, BossDeckTopY, deckArrival);
+    return Math::Lerp(-3.65f, sternDeckY, deckArrival);
 }
 
 float SideScrollingShooter::Stage3Module::RailPlayerMaxY(
@@ -2376,9 +2418,42 @@ float SideScrollingShooter::Stage3Module::WrapNdcX(float value) {
     return wrapped - 1.0f;
 }
 
-float SideScrollingShooter::Stage3Module::NightBlend(int frame) {
-    return 1.0f - Math::Clamp01(static_cast<float>(frame - DawnStartFrame) /
+float SideScrollingShooter::Stage3Module::NightBlend(const SideScrollingShooter& shooter) {
+    // 1秒間泣き顔を見せた後、2秒かけて夜へ戻し、そのまま維持する
+    if (shooter.m_stage3.sunCryStartFrame >= 0) {
+        const int age = shooter.m_frame - shooter.m_stage3.sunCryStartFrame;
+        const float initialNight = 1.0f - Math::Clamp01(
+            static_cast<float>(shooter.m_stage3.sunCryStartFrame - DawnStartFrame) /
+            static_cast<float>(DawnFrame - DawnStartFrame));
+        return Math::Lerp(initialNight, 1.0f, SmoothStep(Math::Clamp01(
+            static_cast<float>(age - 60) / 120.0f)));
+    }
+    return 1.0f - Math::Clamp01(static_cast<float>(shooter.m_frame - DawnStartFrame) /
         static_cast<float>(DawnFrame - DawnStartFrame));
+}
+
+void SideScrollingShooter::Stage3Module::DrawSunFace(const SideScrollingShooter& shooter,
+    Renderer& renderer, const Camera3D& camera, const Vector3& position, float scale, float alpha) {
+    if (shooter.m_stage3.sunCryStartFrame < 0) return;
+    const float face[4] = {0.18f, 0.09f, 0.05f, alpha};
+    const float tears[4] = {0.30f, 0.85f, 1.0f, alpha};
+    const float fall = static_cast<float>((shooter.m_frame -
+        shooter.m_stage3.sunCryStartFrame) % 30) / 30.0f;
+    const float z = position.z - 0.22f * scale;
+    // 閉じた両目から涙を流す
+    for (float side : {-1.0f, 1.0f}) {
+        DrawModelPrimitive(renderer, camera, 1, position.x + side * 0.23f * scale,
+            position.y + 0.13f * scale, z, 0.25f * scale, 0.08f * scale, 0.03f * scale, face);
+        DrawModelPrimitive(renderer, camera, 1, position.x + side * 0.25f * scale,
+            position.y - (0.06f + fall * 0.65f) * scale, z,
+            0.10f * scale, 0.26f * scale, 0.04f * scale, tears);
+    }
+    // 口を逆への字にして泣き顔を示す
+    for (int i = -1; i <= 1; ++i) {
+        DrawModelPrimitive(renderer, camera, 1, position.x + i * 0.12f * scale,
+            position.y - (0.15f + std::abs(i) * 0.08f) * scale, z,
+            0.14f * scale, 0.08f * scale, 0.03f * scale, face);
+    }
 }
 
 bool SideScrollingShooter::Stage3Module::GetSeaSerpentMotion(
@@ -2447,7 +2522,7 @@ SideScrollingShooter::Stage3Module::GetSeaSerpentSegment(
 
 void SideScrollingShooter::Stage3Module::DrawSky(
     const SideScrollingShooter& shooter, Renderer& renderer) {
-    const float nightBlend = NightBlend(shooter.m_frame);
+    const float nightBlend = NightBlend(shooter);
     const ColorF skyColor {
         Math::Lerp(DaySkyColor[0], NightSkyColor[0], nightBlend),
         Math::Lerp(DaySkyColor[1], NightSkyColor[1], nightBlend),
@@ -2463,7 +2538,7 @@ void SideScrollingShooter::Stage3Module::DrawBackground2D(
     const float backgroundHalfHeight = (BackgroundZ - SideCameraZ) *
         std::tan(Math::ToRadians(SideCameraFieldOfView) * 0.5f) * 1.01f;
     const float backgroundHalfWidth = backgroundHalfHeight * renderer.AspectRatio();
-    const float nightBlend = NightBlend(shooter.m_frame);
+    const float nightBlend = NightBlend(shooter);
     const float dayBlend = 1.0f - nightBlend;
     const float waterColor[4] = {
         Math::Lerp(WaterColor[0], WaterColor[0] * 0.30f, nightBlend),
@@ -2496,6 +2571,7 @@ void SideScrollingShooter::Stage3Module::DrawBackground2D(
             0.28f, 0.28f, 0.15f, sunColor);
         DrawModelPrimitive(renderer, camera, 1, sunX + 0.62f, sunY, SkyZ,
             0.28f, 0.28f, 0.15f, sunColor);
+        DrawSunFace(shooter, renderer, camera, {sunX, sunY, SkyZ}, 1.0f, dayBlend);
         for (int i = 0; i < 7; ++i) {
             const float x = WrapNdcX(i * 0.53f - shooter.m_scroll * 0.06f) * backgroundHalfWidth;
             const float y = backgroundHalfHeight *
@@ -2540,7 +2616,7 @@ void SideScrollingShooter::Stage3Module::DrawBackground3D(
     const float sideBackgroundHalfHeight = (SideBackgroundZ - SideCameraZ) *
         std::tan(Math::ToRadians(SideCameraFieldOfView) * 0.5f) * 1.01f;
     const float sideBackgroundHalfWidth = sideBackgroundHalfHeight * renderer.AspectRatio();
-    const float nightBlend = NightBlend(shooter.m_frame);
+    const float nightBlend = NightBlend(shooter);
     const float dayBlend = 1.0f - nightBlend;
     const float waterColor[4] = {
         Math::Lerp(WaterColor[0], WaterColor[0] * 0.30f, nightBlend),
@@ -2584,6 +2660,8 @@ void SideScrollingShooter::Stage3Module::DrawBackground3D(
             Math::Lerp(0.28f, 0.70f, railWeight),
             Math::Lerp(0.28f, 0.70f, railWeight),
             Math::Lerp(0.15f, 0.36f, railWeight), sunColor);
+        DrawSunFace(shooter, renderer, camera, {sunX, sunY, sunZ},
+            Math::Lerp(1.0f, 2.8f / 1.05f, railWeight), dayBlend);
         for (int i = 0; i < 7; ++i) {
             const float sideX = WrapNdcX(i * 0.53f - shooter.m_scroll * 0.06f) *
                 sideBackgroundHalfWidth;

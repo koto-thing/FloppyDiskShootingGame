@@ -111,6 +111,8 @@ struct State {
     int sandstormExposure = 0;
     int boneArchHp = BoneArchMaxHp;
     bool boneArchDestroyed = false;
+    bool viewHintShown = false;
+    int viewHintTimer = 0;
 };
 
 }

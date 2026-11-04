@@ -131,6 +131,9 @@ bool SideScrollingShooter::StageDispatch::TryRestartCheckpoint(SideScrollingShoo
 
 void SideScrollingShooter::StageDispatch::TickWorld(SideScrollingShooter& shooter) {
     switch (shooter.m_stageNumber) {
+    case 2:
+        Stage2Module::TickWorld(shooter);
+        break;
     case 1:
         Stage1Module::TickWorld(shooter);
         break;
@@ -447,13 +450,13 @@ bool SideScrollingShooter::StageDispatch::DrawBossModel(
 }
 
 void SideScrollingShooter::StageDispatch::ApplyCameraCorrection(
-    const SideScrollingShooter& shooter, Vector3& railPosition, Vector3& railTarget) {
+    const SideScrollingShooter& shooter, Vector3& railPosition, Vector3& railTarget, bool personal) {
     switch (shooter.m_stageNumber) {
     case 3:
         Stage3Module::ApplyCameraCorrection(shooter, railPosition, railTarget);
         break;
     case 5:
-        Stage5Module::ApplyCameraCorrection(shooter, railPosition, railTarget);
+        Stage5Module::ApplyCameraCorrection(shooter, railPosition, railTarget, personal);
         break;
     }
 }

@@ -33,6 +33,8 @@ constexpr bool IsFunnelMineExpired(int age) {
 
 /** @brief Stage3固有の永続状態 */
 struct State {
+    int sunHp = 20;
+    int sunCryStartFrame = -1;
     std::array<ReflectFunnel, ReflectFunnelCount> reflectFunnels {};
     std::array<int, 3> funnelPortCooldowns {};
     float laserTargetX = 0.0f;

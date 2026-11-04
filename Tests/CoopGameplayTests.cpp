@@ -17,6 +17,8 @@ void RunCoopStageTests();
 /** @brief カメラ検証に画面寸法だけを提供する描画先 */
 class CoopCameraBackend final : public IRenderBackend {
 public:
+    int width = 1280;
+    int height = 720;
     /** @brief フレームを開始する @return なし */
     void BeginFrame() override {}
     /** @brief 円の描画を省略する @param circle 円 @param color 色 @return なし */
@@ -30,11 +32,11 @@ public:
     /** @brief フレームを終了する @return なし */
     void EndFrame() override {}
     /** @brief 画面幅を取得する @return ピクセル幅 */
-    int Width() const override { return 1280; }
+    int Width() const override { return width; }
     /** @brief 画面高さを取得する @return ピクセル高さ */
-    int Height() const override { return 720; }
+    int Height() const override { return height; }
     /** @brief 縦横比を取得する @return 横幅と高さの比 */
-    float AspectRatio() const override { return 1280.0f / 720.0f; }
+    float AspectRatio() const override { return static_cast<float>(width) / height; }
 };
 
 class InputTestAccess {
@@ -439,6 +441,13 @@ struct CoopGameplayTests {
             // 一発の命中は他の九発を終了させず、通常敵へ高威力を適用する
             auto& first = player.m_bomb.missiles[0];
             enemy.x = first.x; enemy.y = first.y; enemy.z = first.z;
+            // 2Dでは奥行きのある機体の実際の表示中心へ弾を合わせる
+            if (!rail) {
+                const Vector3 visible = game.ShotModelProjection(first).TransformPoint(
+                    {Game::ToWorldX(enemy.x), Game::ToWorldY(enemy.y), Game::SidePlaneZ + 1.5f});
+                first.x = Game::FromWorldX(visible.x);
+                first.y = Game::FromWorldY(visible.y);
+            }
             game.HitPlayerShotTargets(first);
             assert(!first.active && enemy.hp == 20 && player.m_bomb.active);
             for (int i = 1; i < 10; ++i) assert(player.m_bomb.missiles[i].active);
@@ -807,35 +816,164 @@ struct CoopGameplayTests {
         }
     }
 
-    /** @brief 同じ乱数種と入力で別インスタンスの進行が一致することを検証する @return なし */
-    static void CheckNetworkSimulation() {
+    /** @brief 各ステージ開始中だけオンラインの自機へYOUを表示することを検証する @return なし */
+    static void CheckYouLabel() {
+        auto game = std::make_unique<Game>();
+        game->Initialize(nullptr, Homing, Normal, 2, Spread);
+        CoopCameraBackend backend;
+        Renderer renderer(backend);
+        // 実際の次ステージ初期化を通し、両プレイヤー・両視点を検証する
+        for (int stage = 1; stage <= 5; ++stage) {
+            if (stage > 1) game->StartNextStage();
+            assert(game->m_missionStartTimer > 0);
+            for (bool online : {false, true}) for (int local : {0, 1}) for (bool rail : {false, true}) {
+                game->m_networkGame = online;
+                game->m_renderPlayer = local;
+                game->m_viewMode = game->m_nextViewMode = rail ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+                Camera3D camera;
+                if (rail) game->ConfigureRailCamera(camera, renderer);
+                else game->ConfigureSideCamera(camera, renderer);
+                for (int player = 0; player < 2; ++player) {
+                    game->m_activePlayer = player;
+                    renderer.BeginFrame();
+                    game->DrawPowerUp(renderer, camera, rail ? game->PlayerRailDepth() : Game::SidePlaneZ);
+                    assert(renderer.CommandCount() == (online && player == local ? 1 : 0));
+                    if (renderer.CommandCount()) assert(std::string_view(renderer.Command(0).text.data()) == "YOU");
+                }
+                game->m_activePlayer = 0;
+            }
+            // 開始表示終了後は消え、武装強化の表示へ戻る
+            game->m_missionStartTimer = 0;
+            game->m_renderPlayer = 0;
+            Camera3D camera;
+            game->ConfigureSideCamera(camera, renderer);
+            renderer.BeginFrame();
+            game->DrawPowerUp(renderer, camera, Game::SidePlaneZ);
+            assert(renderer.CommandCount() == 0);
+            game->Player().m_powerUpTimer = 8;
+            game->DrawPowerUp(renderer, camera, Game::SidePlaneZ);
+            assert(renderer.CommandCount() == 1);
+            assert(std::string_view(renderer.Command(0).text.data()) == "POWER UP");
+            game->Player().m_powerUpTimer = 0;
+        }
+    }
+
+    /** @brief オンラインの各自カメラと共有の判定カメラを検証する @return なし */
+    static void CheckPersonalCamera() {
+        auto game = std::make_unique<Game>();
+        Prepare(*game);
+        auto& g = *game;
+        CoopCameraBackend backend;
+        Renderer renderer(backend);
+        g.ApplyNetworkInput({});
+        g.m_viewMode = g.m_nextViewMode = Game::ViewMode::Rail3D;
+        g.m_viewTransitionTimer = 0;
+        g.m_players[0].m_playerX = -0.8f;
+        g.m_players[1].m_playerX = 0.8f;
+        g.m_players[0].m_playerY = -0.2f;
+        g.m_players[1].m_playerY = 0.6f;
+        // 道中、壁面、周回戦で各自の機体を映し、描画対象を戦闘へ持ち越さない
+        for (int scenario = 0; scenario < 3; ++scenario) {
+            g.m_stageNumber = scenario == 0 ? 2 : 5;
+            g.m_stage5.phase = scenario == 1 ? Game::Stage5Phase::WallClimbMiddle :
+                Game::Stage5Phase::TayamaFireControl;
+            Camera3D views[2];
+            const Vector3 simulationCamera = g.ShotProjectionCameraPosition();
+            for (int player = 0; player < 2; ++player) {
+                renderer.BeginFrame();
+                g.Render(renderer, player);
+                g.ConfigureRailCamera(views[player], renderer);
+                assert(g.m_activePlayer == 0);
+                assert((g.ShotProjectionCameraPosition() - simulationCamera).Length() < 0.00001f);
+                g.m_activePlayer = player;
+                Vector2 screen;
+                assert(views[player].TryWorldToScreen(g.PlayerWorldPosition(), screen));
+                assert(views[player].GetViewport().Contains(screen));
+                g.m_activePlayer = 0;
+                if (scenario == 0) {
+                    // 相方の移動で自機用カメラを引いたり横へ動かしたりしない
+                    const float otherX = g.m_players[1 - player].m_playerX;
+                    g.m_players[1 - player].m_playerX += 3.0f;
+                    Camera3D moved;
+                    g.ConfigureRailCamera(moved, renderer);
+                    assert((moved.Position() - views[player].Position()).Length() < 0.00001f);
+                    g.m_players[1 - player].m_playerX = otherX;
+                }
+            }
+            assert((views[0].Position() - views[1].Position()).Length() > 0.1f);
+        }
+        // 両方向の補間で2D側の終点を共通に保つ
+        g.m_stageNumber = 2;
+        for (bool reverse : {false, true}) {
+            g.m_viewMode = reverse ? Game::ViewMode::Rail3D : Game::ViewMode::Side2D;
+            g.m_nextViewMode = reverse ? Game::ViewMode::Side2D : Game::ViewMode::Rail3D;
+            g.m_viewTransitionTimer = 1;
+            for (int step = 0; step <= 10; ++step) {
+                g.m_viewTransitionProgress = step / 10.0f;
+                Camera3D a, b;
+                g.m_renderPlayer = 0; g.ConfigureRailCamera(a, renderer);
+                g.m_renderPlayer = 1; g.ConfigureRailCamera(b, renderer);
+                assert(g.m_activePlayer == 0);
+                const float distance = (a.Position() - b.Position()).Length();
+                if (g.RailBlend() == 0.0f) assert(distance < 0.00001f);
+                else assert(distance > 0.0f && std::isfinite(distance));
+            }
+        }
+    }
+
+    /** @brief 描画条件が異なっても同じ乱数種と入力で進行が一致することを検証する @param stage 開始ステージ @return なし */
+    static void CheckNetworkSimulation(int stage) {
         auto host = std::make_unique<Game>();
         auto guest = std::make_unique<Game>();
         GameplayRandom::State = 12345;
         host->Initialize(nullptr, Homing, Normal, 2, Spread);
+        if (stage > 1) host->StartDebugCheckpoint(stage, 3, true, false);
         unsigned hostRandom = GameplayRandom::State;
         GameplayRandom::State = 12345;
         guest->Initialize(nullptr, Homing, Normal, 2, Spread);
+        if (stage > 1) guest->StartDebugCheckpoint(stage, 3, true, false);
         unsigned guestRandom = GameplayRandom::State;
+        CoopCameraBackend backend;
+        Renderer renderer(backend);
+        Camera3D camera;
+        // 通信開始前の画面サイズも両PCで異なる状態にする
+        backend.width = 1024; backend.height = 768;
+        guest->ConfigureSideCamera(camera, renderer);
         for (int frame = 0; frame < 1800; ++frame) {
             std::array<CooperativeInput, 2> inputs {};
             inputs[0].held = CooperativeInput::Fire | (frame % 120 < 60 ? CooperativeInput::Up : CooperativeInput::Down);
             inputs[1].held = CooperativeInput::Fire | CooperativeInput::Slow;
-            inputs[0].pressed = frame % 180 == 0 ? CooperativeInput::Bomb : CooperativeInput::Confirm;
+            inputs[0].pressed = frame % 180 == 0 ? CooperativeInput::View : CooperativeInput::Confirm;
             GameplayRandom::State = hostRandom;
             host->ApplyNetworkInput(inputs); host->Tick();
             hostRandom = GameplayRandom::State;
             GameplayRandom::State = guestRandom;
             guest->ApplyNetworkInput(inputs); guest->Tick();
             guestRandom = GameplayRandom::State;
+            // 描画頻度とリサイズが違っても次の固定更新の照準条件を変えない
+            if (frame % 3 == 0) {
+                backend.width = frame % 2 ? 1024 : 2560;
+                backend.height = frame % 2 ? 768 : 1080;
+                guest->ConfigureSideCamera(camera, renderer);
+                guest->ConfigureRailCamera(camera, renderer);
+            }
+            if (frame % 60 == 0) {
+                renderer.BeginFrame(); host->Render(renderer, 0);
+                renderer.BeginFrame(); guest->Render(renderer, 1);
+                assert(host->m_activePlayer == 0 && guest->m_activePlayer == 0);
+            }
+            assert(host->m_aimViewport.width == guest->m_aimViewport.width);
+            assert(host->m_aimViewport.height == guest->m_aimViewport.height);
             assert(hostRandom == guestRandom && host->m_frame == guest->m_frame);
+            assert(host->m_stageNumber == guest->m_stageNumber && host->m_clear == guest->m_clear);
+            assert(host->m_chapterNumber == guest->m_chapterNumber && host->m_clearTimer == guest->m_clearTimer);
             assert(host->Score() == guest->Score() && host->m_bossHp == guest->m_bossHp);
             assert(host->m_nextEnemyShotTarget == guest->m_nextEnemyShotTarget);
             for (size_t i = 0; i < host->m_shots.size(); ++i) {
                 const auto& a = host->m_shots[i];
                 const auto& b = guest->m_shots[i];
                 assert(a.active == b.active);
-                if (!a.active || !a.enemy) continue;
+                if (!a.active) continue;
                 assert(a.x == b.x && a.y == b.y && a.z == b.z);
                 assert(a.vx == b.vx && a.vy == b.vy && a.vz == b.vz);
             }
@@ -929,6 +1067,7 @@ struct CoopGameplayTests {
     static void Run() {
         CheckStage3BarrierBounds();
         auto game = std::make_unique<Game>();
+        CheckArcadeHud(*game);
         CheckEnemyShotTargets(*game);
         CheckGrazeRecovery(*game);
         CheckInputAndShots(*game);
@@ -941,9 +1080,91 @@ struct CoopGameplayTests {
         CheckDebugHitboxToggle(*game);
         CheckNetworkInput(*game);
         CheckNetworkFrames();
-        CheckNetworkSimulation();
+        CheckYouLabel();
+        CheckPersonalCamera();
+        for (int stage = 1; stage <= 5; ++stage) CheckNetworkSimulation(stage);
         RunCoopStageTests();
         std::puts("CoopGameplayTests passed");
+    }
+
+    /** @brief HUDの実値反映と1P/2P・両視点の配置を検査する @param game 検証対象 @return なし */
+    static void CheckArcadeHud(Game& game) {
+        Prepare(game);
+        CoopCameraBackend backend;
+        Renderer renderer(backend);
+        for (int players : {1, 2}) for (int bombs : {0, 1, 3}) for (float power : {0.0f, 1.125f, 4.0f}) {
+            game.m_playerCount = players;
+            game.m_score = 12345678;
+            game.m_activePlayer = players - 1;
+            for (int player = 0; player < players; ++player) {
+                game.m_players[player].m_power = power;
+                game.m_players[player].m_bombCount = bombs;
+            }
+            renderer.BeginFrame();
+            game.DrawArcadeHud(renderer);
+            assert(!renderer.HasOverflowed() && game.m_activePlayer == players - 1);
+            int labels = 0, bombInk = 0, scores = 0;
+            float powerWidth = 0;
+            for (size_t i = 0; i < renderer.CommandCount(); ++i) {
+                const auto& command = renderer.Command(i);
+                if (command.type == RenderCommand::Type::Text) {
+                    const std::string_view text(command.text.data());
+                    labels += text == "1P" || text == "2P";
+                    scores += text == "SCORE 12345678";
+                    // 実ビットマップ描画と同じ横幅で帯の内側を検査する
+                    const float halfGlyph = command.size * backend.AspectRatio();
+                    const float width = (text.size() - 1) * (command.size * 1.5f + command.characterSpacing) + 2 * halfGlyph;
+                    assert(command.position.x - halfGlyph >= -0.98f);
+                    assert(command.position.x - halfGlyph + width <= 0.98f);
+                    assert(std::abs(command.position.y) - command.size >= 0.84f);
+                    assert(std::abs(command.position.y) + command.size <= 1.0f);
+                } else if (command.type == RenderCommand::Type::Rect) {
+                    const auto& rect = command.rect;
+                    assert(std::abs(rect.position.x) + rect.size.x <= 1.0f);
+                    assert(std::abs(rect.position.y) - rect.size.y >= 0.84f);
+                    assert(std::abs(rect.position.y) + rect.size.y <= 1.0f);
+                    // 金色のボム本体と、背景色以外のパワー充填幅を集計する
+                    bombInk += std::abs(rect.position.y - 0.861f) < 0.0001f && command.color.r == 1.0f;
+                    if (std::abs(rect.position.y - 0.919f) < 0.0001f && command.color.r > 0.1f)
+                        powerWidth += rect.size.x * 2;
+                }
+            }
+            assert(labels == 2 && scores == 1 && bombInk == players * bombs * 2);
+            assert(std::abs(powerWidth - players * 0.54f * 0.70f * 0.8f * power / 4.0f) < 0.0001f);
+        }
+
+        // 航路の機体が進行率へ追従し、HUD中央の範囲を越えないことを検査する
+        float previousX = -1.0f;
+        for (int frame : {0, 500, 100000}) {
+            game.m_frame = frame;
+            renderer.BeginFrame();
+            game.DrawArcadeHud(renderer);
+            int ships = 0;
+            for (size_t i = 0; i < renderer.CommandCount(); ++i) {
+                const auto& command = renderer.Command(i);
+                if (command.type != RenderCommand::Type::Rect ||
+                    std::abs(command.rect.size.x - 0.018f) > 0.0001f) continue;
+                const float x = command.rect.position.x;
+                assert(std::abs(x - (-0.24f + 0.57f * game.ChapterProgressPercent() / 100.0f)) < 0.0001f);
+                assert(x >= previousX && x >= -0.24f && x <= 0.3301f);
+                previousX = x;
+                ++ships;
+            }
+            assert(ships == 1);
+        }
+
+        // 実際の2D/3D描画経路にもスコアが1回だけ現れることを検査する
+        for (bool rail : {false, true}) {
+            renderer.BeginFrame();
+            if (rail) game.Render3D(renderer); else game.Render2D(renderer);
+            int scores = 0;
+            for (size_t i = 0; i < renderer.CommandCount(); ++i) {
+                const auto& command = renderer.Command(i);
+                scores += command.type == RenderCommand::Type::Text &&
+                    std::string_view(command.text.data()) == "SCORE 12345678";
+            }
+            assert(scores == 1 && !renderer.HasOverflowed());
+        }
     }
 
     /** @brief 両視点で継続グレイズと離脱時の回復速度を検証する @param game 検証対象 @return なし */

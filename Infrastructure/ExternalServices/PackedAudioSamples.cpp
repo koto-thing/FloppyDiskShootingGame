@@ -1,3 +1,77 @@
+#if defined(SPACEYAKUZA_PORTABLE)
+#include "PackedAudioSamples.h"
+#include "WavSamplesSource.h"
+#include "../../Presentation/Gameplay/Voices/VoiceSamplesSource.h"
+#include <array>
+#include <algorithm>
+
+/** @brief 原音源を同じオフセット配置で参照する @param offset バイト位置 @param size 長さ @return 範囲内のデータ、不正時nullptr */
+const std::uint8_t* Audio::PackedAudioSamples::Get(std::size_t offset, std::size_t size) {
+    if (size == 0 || offset > TotalSize || size > TotalSize - offset) return nullptr;
+    // パック済み版と同じ索引を使い、Windows圧縮APIだけを取り除く
+    static const auto samples = [] {
+        std::array<std::uint8_t, TotalSize> output{};
+#define COPY_SAMPLE(source, entry) static_assert(sizeof(source) == entry.size); std::copy_n(source, entry.size, output.data() + entry.offset)
+        COPY_SAMPLE(WavSamplesSource::sample_AcousticGrandPiano, sample_AcousticGrandPiano);
+        COPY_SAMPLE(WavSamplesSource::sample_Agogo, sample_Agogo);
+        COPY_SAMPLE(WavSamplesSource::sample_BlownBottle, sample_BlownBottle);
+        COPY_SAMPLE(WavSamplesSource::sample_BrassSection, sample_BrassSection);
+        COPY_SAMPLE(WavSamplesSource::sample_ChurchOrgan, sample_ChurchOrgan);
+        COPY_SAMPLE(WavSamplesSource::sample_Clavi, sample_Clavi);
+        COPY_SAMPLE(WavSamplesSource::sample_Crash, sample_Crash);
+        COPY_SAMPLE(WavSamplesSource::sample_DistortionGuitar, sample_DistortionGuitar);
+        COPY_SAMPLE(WavSamplesSource::sample_DrawbarOrgan, sample_DrawbarOrgan);
+        COPY_SAMPLE(WavSamplesSource::sample_Dulcimer, sample_Dulcimer);
+        COPY_SAMPLE(WavSamplesSource::sample_ElectricPiano1, sample_ElectricPiano1);
+        COPY_SAMPLE(WavSamplesSource::sample_FrenchHorn, sample_FrenchHorn);
+        COPY_SAMPLE(WavSamplesSource::sample_GuitarFretNoise, sample_GuitarFretNoise);
+        COPY_SAMPLE(WavSamplesSource::sample_Harpsichord, sample_Harpsichord);
+        COPY_SAMPLE(WavSamplesSource::sample_HiHatOpen, sample_HiHatOpen);
+        COPY_SAMPLE(WavSamplesSource::sample_Kick, sample_Kick);
+        COPY_SAMPLE(WavSamplesSource::sample_LeadCalliope, sample_LeadCalliope);
+        COPY_SAMPLE(WavSamplesSource::sample_LeadCharang, sample_LeadCharang);
+        COPY_SAMPLE(WavSamplesSource::sample_LeadFifths, sample_LeadFifths);
+        COPY_SAMPLE(WavSamplesSource::sample_LeadSawtooth, sample_LeadSawtooth);
+        COPY_SAMPLE(WavSamplesSource::sample_LeadSquare, sample_LeadSquare);
+        COPY_SAMPLE(WavSamplesSource::sample_MelodicTom, sample_MelodicTom);
+        COPY_SAMPLE(WavSamplesSource::sample_MusicBox, sample_MusicBox);
+        COPY_SAMPLE(WavSamplesSource::sample_NylonAcousticGuitar, sample_NylonAcousticGuitar);
+        COPY_SAMPLE(WavSamplesSource::sample_Ocarina, sample_Ocarina);
+        COPY_SAMPLE(WavSamplesSource::sample_OverdrivenGuitar, sample_OverdrivenGuitar);
+        COPY_SAMPLE(WavSamplesSource::sample_RockOrgan, sample_RockOrgan);
+        COPY_SAMPLE(WavSamplesSource::sample_Snare, sample_Snare);
+        COPY_SAMPLE(WavSamplesSource::sample_StringEnsemble1, sample_StringEnsemble1);
+        COPY_SAMPLE(WavSamplesSource::sample_SynthDrum, sample_SynthDrum);
+        COPY_SAMPLE(WavSamplesSource::sample_Tambourine, sample_Tambourine);
+        COPY_SAMPLE(WavSamplesSource::sample_TomHigh, sample_TomHigh);
+        COPY_SAMPLE(WavSamplesSource::sample_TomLow, sample_TomLow);
+        COPY_SAMPLE(WavSamplesSource::sample_TomMid, sample_TomMid);
+        COPY_SAMPLE(WavSamplesSource::sample_Trumpet, sample_Trumpet);
+        COPY_SAMPLE(WavSamplesSource::sample_Woodblock, sample_Woodblock);
+        COPY_SAMPLE(WavSamplesSource::sample_ChoirAahs, sample_ChoirAahs);
+        COPY_SAMPLE(WavSamplesSource::sample_Oboe, sample_Oboe);
+        COPY_SAMPLE(WavSamplesSource::sample_SynthBass1, sample_SynthBass1);
+        COPY_SAMPLE(WavSamplesSource::sample_Vibraphone, sample_Vibraphone);
+        COPY_SAMPLE(VoiceSamplesSource::tayamaDeathData, tayamaDeathData);
+        COPY_SAMPLE(VoiceSamplesSource::eastsourceDeathData, eastsourceDeathData);
+        COPY_SAMPLE(VoiceSamplesSource::momijiDeathData, momijiDeathData);
+        COPY_SAMPLE(VoiceSamplesSource::missionData, missionData);
+        COPY_SAMPLE(VoiceSamplesSource::startData, startData);
+        COPY_SAMPLE(VoiceSamplesSource::arrestedData, arrestedData);
+        COPY_SAMPLE(VoiceSamplesSource::suspectData, suspectData);
+        COPY_SAMPLE(VoiceSamplesSource::kotoDeathData, kotoDeathData);
+        COPY_SAMPLE(VoiceSamplesSource::ryotaDeathData, ryotaDeathData);
+        COPY_SAMPLE(VoiceSamplesSource::lumiDeathData, lumiDeathData);
+        COPY_SAMPLE(VoiceSamplesSource::botamochiDeathBotaData, botamochiDeathBotaData);
+        COPY_SAMPLE(VoiceSamplesSource::botamochiDeathMochiData, botamochiDeathMochiData);
+        COPY_SAMPLE(VoiceSamplesSource::momijiDeathRattle2Data, momijiDeathRattle2Data);
+        COPY_SAMPLE(VoiceSamplesSource::momijiDeathRattle5Data, momijiDeathRattle5Data);
+#undef COPY_SAMPLE
+        return output;
+    }();
+    return samples.data() + offset;
+}
+#else
 #define FLOPPY_AUDIO_IMPLEMENTATION
 #include "PackedAudioSamples.h"
 #include <windows.h>
@@ -69,3 +143,5 @@ void RunFailureChecks() {
 }
 #endif
 } // namespace Audio::PackedAudioSamples
+
+#endif

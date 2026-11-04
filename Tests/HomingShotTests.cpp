@@ -7,8 +7,46 @@
 #include "../Presentation/Gameplay/Stages/Stage5/Stage5Module.h"
 #include "../Presentation/Gameplay/Stages/Stage2/Stage2Module.h"
 #include "../Presentation/Gameplay/Stages/Stage4/Stage4Module.h"
+#include "../Presentation/Gameplay/Stages/Stage3/Stage3Module.h"
 
 struct HomingShotTests {
+    /** @brief Stage3の低い艦尾機銃へ移動可能範囲から通常弾が届くことを検証する @return なし */
+    static void CheckStage3SternGun() {
+        using Game = SideScrollingShooter;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.m_stageNumber = 3;
+        g.m_stage = &Game::Stage3Module::Definition(Easy);
+        g.m_bossBattle = true;
+        g.m_viewMode = g.m_nextViewMode = Game::ViewMode::Rail3D;
+        auto& boss = g.m_enemies[0];
+        boss.active = boss.collisionEnabled = true;
+        boss.type = 2;
+        boss.hp = 1200;
+        boss.bossPartHp.fill(100);
+
+        // 艦尾から全区画の機銃へ、自機の高度制限内で水平射撃する
+        for (int section = 0; section < 3; ++section) {
+            boss.phase = static_cast<float>(section);
+            for (int slot = 0; slot < 2; ++slot) {
+                auto part = static_cast<Game::BossPart>(section * 2 + slot);
+                Vector3 target;
+                assert(g.TryHitBossPart({}, boss, part, &target));
+                g.Player().m_playerX = Game::FromWorldX(target.x);
+                g.Player().m_playerY = Game::FromWorldY(target.y);
+                assert(g.Player().m_playerY >= g.PlayerRailMinY());
+                assert(g.Player().m_playerY <= Game::Stage3Module::RailPlayerMaxY(g));
+                auto shot = g.MakeNormalPlayerShot(false);
+                bool hit = false;
+                for (int frame = 0; frame < 100 && !hit; ++frame) {
+                    shot.z += shot.vz;
+                    hit = g.TryHitBossPart(shot, boss, part);
+                }
+                assert(hit && part == section * 2 + slot);
+                boss.bossPartHp[part] = 0;
+            }
+        }
+    }
     /** @brief 実発射の左右・上下の弾が外へ開き、3Dでも巻き返しまで画面内に残ることを検証する @return なし */
     static void CheckLaunchVolley() {
         using Game = SideScrollingShooter;
@@ -139,9 +177,12 @@ struct HomingShotTests {
                     if (frame == launchFrames - 1) assert(spatial ? shot.vz > 0.0f : shot.vx > 0.0f);
                     widest = (std::max)(widest, spatial ? std::hypot(
                         Game::ToWorldX(shot.x), Game::ToWorldY(shot.y)) : std::abs(shot.y));
+                    // 2Dの追尾は奥行きを投影した表示中心へ収束する
+                    const Vector3 visible = g.ShotModelProjection(shot).TransformPoint(
+                        {Game::ToWorldX(enemy.x), Game::ToWorldY(enemy.y), spatial ? enemy.z : Game::SidePlaneZ + 1.5f});
                     const Vector3 delta = spatial ? Vector3 {
-                        Game::ToWorldX(enemy.x - shot.x), Game::ToWorldY(enemy.y - shot.y), enemy.z - shot.z} :
-                        Vector3 {enemy.x - shot.x, enemy.y - shot.y, 0.0f};
+                        visible.x - Game::ToWorldX(shot.x), visible.y - Game::ToWorldY(shot.y), visible.z - shot.z} :
+                        Vector3 {Game::FromWorldX(visible.x) - shot.x, Game::FromWorldY(visible.y) - shot.y, 0.0f};
                     hit = delta.Length() < speed;
                 }
                 const float curveSpeed = Game::PlayerShotConfigs[Homing].speed * (spatial ? Game::WorldXScale : 1.0f);
@@ -1057,6 +1098,7 @@ struct HomingShotTests {
 
 /** @brief 追尾回帰チェックを実行する @return 成功時0 */
 int main() {
+    HomingShotTests::CheckStage3SternGun();
     HomingShotTests::CheckLaunchVolley();
     HomingShotTests::CheckSpiral();
     HomingShotTests::CheckHomingLifetime();
