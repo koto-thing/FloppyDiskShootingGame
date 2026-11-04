@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <windows.h>
 
 #include "../../Engine/Graphics/Renderer.h"
 #include "../../Engine/Time/Time.h"
@@ -35,16 +34,7 @@ void StoryScene::Initialize() {
 
 /** @brief スキップボタンへマウス入力を渡す */
 void StoryScene::ProcessInput() {
-    int width = 1280;
-    int height = 720;
-    if (const HWND hwnd = GetForegroundWindow()) {
-        RECT clientRect {};
-        if (GetClientRect(hwnd, &clientRect)) {
-            width = clientRect.right > 0 ? clientRect.right : width;
-            height = clientRect.bottom > 0 ? clientRect.bottom : height;
-        }
-    }
-    m_skipButton->Update(UIInput::Current(width, height));
+    m_skipButton->Update(UIInput::Current());
 }
 
 /** @brief スクロール終了後にフェードと待機を順番に進める */

@@ -1,7 +1,6 @@
 #include "ModeSelectionScene.h"
 
 #include <cmath>
-#include <windows.h>
 
 #include "../../Engine/Graphics/Renderer.h"
 #include "../../Engine/Input/Input.h"
@@ -260,17 +259,8 @@ void ModeSelectionScene::ProcessInput() {
     }
 
     // 現在のクライアント領域からUI入力座標を取得する
-    int width = 1280;
-    int height = 720;
-    if (const HWND hwnd = GetForegroundWindow()) {
-        RECT clientRect {};
-        if (GetClientRect(hwnd, &clientRect)) {
-            width = clientRect.right > 0 ? clientRect.right : width;
-            height = clientRect.bottom > 0 ? clientRect.bottom : height;
-        }
-    }
 
-    UpdateActiveButtons(UIInput::Current(width, height));
+    UpdateActiveButtons(UIInput::Current());
     UpdatePlayerPreview();
 }
 

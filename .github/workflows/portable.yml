@@ -1,0 +1,89 @@
+name: Portable editions
+
+on:
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - distribution: Linux
+            os: ubuntu-24.04
+            architecture: x86_64
+          - distribution: Mac
+            os: macos-15
+            architecture: arm64
+          - distribution: Mac
+            os: macos-15-intel
+            architecture: x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build and smoke-test tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libsdl2-dev libvulkan-dev glslang-tools spirv-cross mesa-vulkan-drivers xvfb xauth
+      - name: Install Mac build tools
+        if: runner.os == 'macOS'
+        run: brew install ninja glslang spirv-cross molten-vk vulkan-headers
+      - name: Configure Linux
+        if: runner.os == 'Linux'
+        run: cmake -S . -B build -G Ninja -DDistribution=Linux -DCMAKE_BUILD_TYPE=Release
+      - name: Configure Mac
+        if: runner.os == 'macOS'
+        run: >-
+          cmake -S . -B build -G Ninja -DDistribution=Mac -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_OSX_ARCHITECTURES=${{ matrix.architecture }}
+          -DVulkan_INCLUDE_DIR="$(brew --prefix vulkan-headers)/include"
+          -DMOLTENVK_LIBRARY="$(brew --prefix molten-vk)/lib/libMoltenVK.dylib"
+      - name: Build and check platform contracts
+        run: |
+          cmake --build build --parallel 3
+          ctest --test-dir build --output-on-failure -LE gpu
+      - name: Render Linux smoke frames
+        if: runner.os == 'Linux'
+        env:
+          SDL_AUDIODRIVER: dummy
+        run: |
+          xvfb-run -a ctest --test-dir build --output-on-failure -L gpu
+          xvfb-run -a timeout 120 build/SpaceYakuza --smoke-test
+      - name: Package
+        run: cpack --config build/CPackConfig.cmake -B dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SpaceYakuza-${{ matrix.distribution }}-${{ matrix.architecture }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  web:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install shader tools and Emscripten
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build glslang-tools spirv-cross
+          git clone --depth 1 https://github.com/emscripten-core/emsdk.git "$RUNNER_TEMP/emsdk"
+          "$RUNNER_TEMP/emsdk/emsdk" install 6.0.12
+          "$RUNNER_TEMP/emsdk/emsdk" activate 6.0.12
+      - name: Build and check WebGL shaders
+        run: |
+          source "$RUNNER_TEMP/emsdk/emsdk_env.sh"
+          emcmake cmake -S . -B build -G Ninja -DDistribution=Web -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --parallel 3
+          ctest --test-dir build --output-on-failure
+          cpack --config build/CPackConfig.cmake -B dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SpaceYakuza-Web
+          path: dist/*.zip
+          if-no-files-found: error

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Space Yakuza — Web Edition</title>
+<style>
+body { margin:0; background:#090b18; color:#e8eefc; font:16px system-ui,sans-serif; text-align:center }
+main { max-width:1280px; margin:auto; padding:16px }
+canvas { display:block; width:100%; aspect-ratio:16/9; background:#000; outline-offset:3px }
+button { font:inherit; padding:10px 22px; margin:12px 8px; cursor:pointer }
+button:disabled { cursor:wait }
+</style>
+<main>
+<h1>Space Yakuza</h1>
+<p id="status" role="status">Loading…</p>
+<button id="start" disabled>Start game</button>
+<button id="fullscreen">Fullscreen</button>
+<canvas id="canvas" width="1280" height="720" tabindex="0" aria-label="Space Yakuza game"></canvas>
+<p>Use the keyboard or a gamepad. Scores and settings are saved in this browser.</p>
+</main>
+<script>
+var Module = {
+    noInitialRun: true,
+    canvas: document.getElementById('canvas'),
+    setStatus: function (message) { document.getElementById('status').textContent = message; },
+    onRuntimeInitialized: function () {
+        Module.setStatus('Ready');
+        document.getElementById('start').disabled = false;
+    },
+    onAbort: function (message) { Module.setStatus('Unable to start: ' + message); }
+};
+document.getElementById('start').onclick = function () {
+    this.hidden = true;
+    Module.canvas.focus();
+    Module.setStatus('');
+    Module.callMain([]);
+};
+document.getElementById('fullscreen').onclick = function () {
+    Module.canvas.requestFullscreen().catch(function (error) { Module.setStatus(error.message); });
+};
+Module.canvas.addEventListener('contextmenu', function (event) { event.preventDefault(); });
+Module.canvas.addEventListener('keydown', function (event) {
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(event.key)) event.preventDefault();
+});
+Module.canvas.addEventListener('webglcontextlost', function (event) {
+    event.preventDefault();
+    Module.setStatus('Graphics context lost. Reload the page to resume.');
+});
+</script>
+{{{ SCRIPT }}}
+</html>

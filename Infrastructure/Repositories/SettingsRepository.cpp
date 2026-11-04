@@ -6,7 +6,6 @@
 #include <cmath>
 #include <filesystem>
 #include <fstream>
-#include <windows.h>
 
 namespace {
 /**
@@ -75,11 +74,7 @@ void SettingsRepository::Save(const GameSettings& settings) const {
     if (!output) return;
 
     // 一時ファイルを置き換えて、書き込み途中のデータ破損を防ぐ
-    if (std::filesystem::exists(path, error)) {
-        ReplaceFileW(path.c_str(), temporaryPath.c_str(), nullptr, REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr);
-    } else {
-        MoveFileExW(temporaryPath.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING);
-    }
+    ReplaceUserDataFile(path, temporaryPath);
 }
 
 /**
@@ -136,6 +131,6 @@ void SettingsRepository::SaveLanguage(Localization::Language language) const {
     output << value << '\n';
     output.close();
     if (!output) return;
-    MoveFileExW(temporary.c_str(), path.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+    ReplaceUserDataFile(path, temporary);
 }
 #endif

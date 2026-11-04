@@ -1,6 +1,5 @@
 #include "TutorialStage.h"
 
-#include <windows.h>
 
 #include "../Gameplay/SideScrollingShooter.h"
 #include "../../Engine/Graphics/Renderer.h"
@@ -24,17 +23,8 @@ void TutorialStage::Initialize() {
 /** @brief ゲーム操作とスキップボタンへ入力を渡す */
 void TutorialStage::ProcessInput() {
     m_game->ProcessInput();
-    int width = 1280;
-    int height = 720;
-    if (const HWND window = GetForegroundWindow()) {
-        RECT rect {};
-        if (GetClientRect(window, &rect)) {
-            width = rect.right > 0 ? rect.right : width;
-            height = rect.bottom > 0 ? rect.bottom : height;
-        }
-    }
-    m_skipButton->Update(UIInput::Current(width, height));
-    m_nextButton->Update(UIInput::Current(width, height));
+    m_skipButton->Update(UIInput::Current());
+    m_nextButton->Update(UIInput::Current());
 }
 
 /** @brief 課題を更新し、全達成時はStage1へ進む */

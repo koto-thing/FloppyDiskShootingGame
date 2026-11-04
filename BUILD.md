@@ -1,13 +1,107 @@
 # 配布版のビルド
 
-同じソースから `Distribution` プロパティで3版を生成する
-未指定時は `Floppy` を使用する
+同じソースから `Distribution` で配布版を選ぶ
+Windowsの3版はMSBuild、Mac・Linux・Webの3版はCMakeで生成する
+MSBuildで未指定時は `Floppy` を使用する
 
 | Distribution | 配布サイズ上限 | 用途 |
 | --- | --- | --- |
 | Floppy | 1,474,560 bytes | オフラインのフロッピー版 |
 | Online | なし | 協力プレイ・共有ランキング向け |
 | Steam | なし | Online版の機能とSteam連携向け |
+| Mac | なし | Floppy相当、VulkanをMoltenVK経由でMetalへ変換 |
+| Linux | なし | Floppy相当、Vulkan |
+| Web | なし | Floppy相当、WebAssemblyとWebGL 2 |
+
+## Mac・Linux・Web版
+
+3版とも全ステージ、ストーリー、ギャラリー、ローカルランキング、設定保存、ローカル2人プレイを共有する
+Online/Steamの通信・翻訳機能は含めない
+MacとLinuxは同じVulkan実装、Webは同じHLSLから生成したWebGL 2シェーダーを使用する
+Windows版のD3D12実装・フロッピー容量チェックは引き続き既存プロジェクトを使用する
+
+必要な共通ビルドツールはCMake 3.24以上、C++20コンパイラー、Python 3.10以上、Git、glslang、SPIRV-Cross
+SDL 2.32.10は固定コミットからビルド時に取得して静的リンクする
+既にあるSDL2を使う場合だけ `-DSPACEYAKUZA_SYSTEM_SDL=ON` を指定する（共有ライブラリの場合は実行環境にも必要）
+ツールを検出できない場合は `-DGLSLANG_EXECUTABLE=実行ファイル` と `-DSPIRV_CROSS_EXECUTABLE=実行ファイル` を渡す
+新しい版のビルド番号も `.buildnumbers/Mac.txt`・`Linux.txt`・`Web.txt` に版別で保存する
+
+### Mac
+
+Mac上でXcode Command Line Toolsを準備して実行する
+Homebrewを使用する例:
+
+```sh
+brew install cmake ninja glslang spirv-cross molten-vk vulkan-headers
+cmake -S . -B build/Mac -G Ninja -DDistribution=Mac -DCMAKE_BUILD_TYPE=Release \
+  -DVulkan_INCLUDE_DIR="$(brew --prefix vulkan-headers)/include" \
+  -DMOLTENVK_LIBRARY="$(brew --prefix molten-vk)/lib/libMoltenVK.dylib"
+cmake --build build/Mac --parallel 3
+ctest --test-dir build/Mac --output-on-failure
+cmake --install build/Mac --prefix dist/Mac
+```
+
+`dist/Mac/SpaceYakuza.app` にMoltenVKとシェーダーを同梱する
+ビルドしたMacと同じCPU向けが既定（Apple Siliconはarm64、Intelはx86_64）
+CPUの指定は `-DCMAKE_OSX_ARCHITECTURES=arm64` または `x86_64` で行い、依存ライブラリも同じCPU向けを用意する
+Apple Silicon版とIntel版を1本にしたmacOS Universal Binaryはこの配布版名とは別の設定
+ローカル動作用にad-hoc署名するが、一般配布向けのDeveloper ID署名・公証は別途必要
+
+### Linux
+
+Ubuntu 24.04での例（他のディストリビューションでは対応する開発パッケージを使う）:
+
+```sh
+sudo apt-get install build-essential cmake ninja-build git python3 libsdl2-dev libvulkan-dev glslang-tools spirv-cross
+cmake -S . -B build/Linux -G Ninja -DDistribution=Linux -DCMAKE_BUILD_TYPE=Release
+cmake --build build/Linux --parallel 3
+ctest --test-dir build/Linux --output-on-failure
+cmake --install build/Linux --prefix dist/Linux
+./dist/Linux/SpaceYakuza
+```
+
+`dist/Linux` 全体を配布する
+実行側にはVulkanローダーとGPUに対応したVulkanドライバーが必要
+ビルドした環境より古いglibcの互換性は保証しないため、対象の最古環境でビルドする
+
+### Web
+
+Emscripten SDK 6.0.12で検証した構成
+SDKをインストール・有効化し、`emsdk_env.sh`（Windowsは`emsdk_env.bat`）で環境を設定して実行する
+glslangとSPIRV-CrossはWebAssembly版ではなく、ビルドするPC用の実行ファイルを使う
+
+```sh
+emcmake cmake -S . -B build/Web -G Ninja -DDistribution=Web -DCMAKE_BUILD_TYPE=Release
+cmake --build build/Web --parallel 3
+ctest --test-dir build/Web --output-on-failure
+cmake --install build/Web --prefix dist/Web
+python3 -m http.server 8000 --directory dist/Web
+```
+
+ブラウザで `http://localhost:8000/SpaceYakuza.html` を開き、Start gameを押す
+HTML・JS・WASM・DATAを同じフォルダーに置いてHTTP/HTTPSで配信する（ファイルの直接起動は不可）
+実行時に外部CDNやゲームサーバーへの接続は不要
+キーボードとブラウザが認識するゲームパッドを使用し、2人プレイには2台のパッドを使用する
+スマートフォン向けのタッチ操作は含まない
+保存データは同じサイトのIndexedDBに保存し、読み込み完了前にはゲームを開始しない
+サイトデータの消去やURLのオリジン変更で保存データを引き継げなくなる
+音声生成を初回起動時に行うため、Start game直後は数秒かかる場合がある
+
+### 検証とパッケージ
+
+```sh
+# GPUなしの環境ではGPUラベルだけ除外
+ctest --test-dir build/Linux --output-on-failure -LE gpu
+# 配布用ZIPを生成
+cpack --config build/Linux/CPackConfig.cmake -B dist
+```
+
+`.github/workflows/portable.yml` はLinux、Mac arm64、Mac x86_64、WebをビルドしてZIPを成果物にする
+公開サイトやストアへのデプロイは行わない
+入力、音源参照、音声ミキサー、協力プレイと弾道の既存回帰テスト、シェーダーのレイアウト、実GPU描画を検証する
+Vulkanの描画確認と共通コードの開発には、Windows上で `-DDistribution=Linux -DSPACEYAKUZA_HOST_SMOKE=ON` を使用できるが、生成されるWindows実行ファイルはLinux配布物ではない
+実機確認では2D→3D→2Dの遷移、全ステージ、コントローラー、音声、保存、ウィンドウのリサイズを確認する
+SDL側のリバーブとリミッターはソフトウェア実装のため、XAudio2版と音が完全に一致するわけではない
 
 Floppy版の2人用はローカル協力プレイ
 Steam版の2人用はSteamフレンド招待ロビーとP2P入力同期を使用する

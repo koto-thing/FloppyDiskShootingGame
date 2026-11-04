@@ -4,7 +4,6 @@
 #endif
 
 #include <cstdio>
-#include <windows.h>
 
 #include "../../Engine/Graphics/Renderer.h"
 #include "../../Engine/UI/Button.h"
@@ -15,15 +14,7 @@ namespace {
  * @return NDC座標へ変換済みのUI入力状態
  */
 UIInputState CurrentUIInput() {
-    int width = 1280;
-    int height = 720;
-    if (const HWND window = GetForegroundWindow()) {
-        RECT rect {};
-        GetClientRect(window, &rect);
-        if (rect.right - rect.left > 0) width = rect.right - rect.left;
-        if (rect.bottom - rect.top > 0) height = rect.bottom - rect.top;
-    }
-    return UIInput::Current(width, height);
+    return UIInput::Current();
 }
 }
 

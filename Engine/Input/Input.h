@@ -2,6 +2,10 @@
 
 #include <array>
 #include <cstddef>
+#if defined(SPACEYAKUZA_PORTABLE)
+struct SDL_Window;
+union SDL_Event;
+#else
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
@@ -12,11 +16,14 @@
 #undef DrawText
 #endif
 
+#endif
+
 #include "KeyCode.h"
 #include "MouseButton.h"
 #include "../Math/Vector2.h"
 
 class WindowsInputBackend;
+class SdlInputBackend;
 class InputTestAccess;
 
 /**
@@ -29,7 +36,16 @@ public:
      * @param hwnd 入力メッセージを受信するウィンドウハンドル
      * @return 初期化に成功した場合はtrue
      */
+#if defined(SPACEYAKUZA_PORTABLE)
+    /** @brief SDL入力を初期化する @param window 入力先 @return 成功時true */
+    static bool Initialize(SDL_Window* window);
+    /** @brief コントローラーを解放する @return なし */
+    static void Shutdown();
+    /** @brief SDLイベントを反映する @param event 入力イベント @return なし */
+    static void ProcessEvent(const SDL_Event& event);
+#else
     static bool Initialize(HWND hwnd);
+#endif
 
     /**
      * @brief 新しいフレームの入力受付を開始する
@@ -136,10 +152,13 @@ public:
      * @param wParam メッセージ固有の追加情報
      * @param lParam メッセージ固有の追加情報
      */
+#if !defined(SPACEYAKUZA_PORTABLE)
     static void ProcessMessage(UINT message, WPARAM wParam, LPARAM lParam);
+#endif
 
 private:
     friend class WindowsInputBackend;
+    friend class SdlInputBackend;
     friend class InputTestAccess;
 
     static std::array<bool, static_cast<std::size_t>(KeyCode::Count)> m_currentKeys;
@@ -168,7 +187,7 @@ private:
      * @param isPressed 押下中の場合はtrue
      * @return なし
      */
-    static void SetNativeKeyState(UINT virtualKey, bool isPressed);
+    static void SetNativeKeyState(unsigned int virtualKey, bool isPressed);
 
     /**
      * @brief ゲームパッドから割り当てたキー状態を反映する

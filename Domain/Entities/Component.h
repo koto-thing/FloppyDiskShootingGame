@@ -1,5 +1,6 @@
 #pragma once
-#include <DirectXMath.h>
+// 旧DirectX描画APIは参照型だけを宣言し、共通のゲーム処理へSDK依存を漏らさない
+namespace DirectX { struct XMMATRIX; }
 
 class GameObject;
 class Transform;
