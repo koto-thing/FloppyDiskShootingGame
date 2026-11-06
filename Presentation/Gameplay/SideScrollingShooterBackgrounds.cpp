@@ -9,6 +9,7 @@
 #include "../../Engine/Input/Input.h"
 #include "Stages/Common/StageDispatch.h"
 #include "Stages/Stage2/Stage2Module.h"
+#include "Models/StageEnemyModelView.h"
 
 
 #include "SideScrollingShooterEnemies.h"
@@ -253,6 +254,36 @@ void SideScrollingShooter::DrawArcadeHud(Renderer& renderer) const {
         m_playerCount == 2 ? "LOCAL CO-OP  SHARED SCORE  VIEW: 1P  PAUSE: START/+" :
         HudControlHint(StageDispatch::IsViewLocked(*this)), TextAlign::Center, 0.010f,
         Muted, {0.0f, -0.935f}, 0.0f);
+}
+
+/** @brief 戦闘更新や音声再生を行わず通常の2D背景と鑑賞用の飛行機を描画する @param renderer 描画先 @param stage ステージ番号 @param frame 経過フレーム @return なし */
+void SideScrollingShooter::RenderBackgroundPreview(Renderer& renderer, int stage, int frame) {
+    // 鑑賞用の時間とステージだけを設定し、敵生成や保存処理へ進めない
+    m_stageNumber = (std::clamp)(stage, 1, 5);
+    m_frame = (std::max)(0, frame);
+    m_scroll = static_cast<float>(m_frame) * 0.008f;
+    renderer.ResetCamera();
+    StageDispatch::DrawSky(*this, renderer);
+    Camera3D camera;
+    ConfigureSideCamera(camera, renderer);
+    renderer.SetPipeline(PipelineId::Model3D);
+    renderer.SetCamera(camera);
+    StageDispatch::DrawBackground2D(*this, renderer, camera);
+    // 戦闘用の敵を生成せず、既存の飛行機モデルを滑らかな周回軌道に置く
+    const Matrix4x4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
+    for (int i = 0; i < 4; ++i) {
+        const float phase = static_cast<float>(m_frame % 21600) * (Math::Pi / 10800.0f) *
+            (5 + i) + i * Math::HalfPi;
+        const Vector3 position {24.0f * std::sin(phase),
+            2.8f + i * 0.65f + 1.3f * std::sin(phase * 2.0f),
+            SidePlaneZ + 3.0f + 2.0f * std::cos(phase)};
+        const float yaw = std::atan2(24.0f * std::cos(phase), -2.0f * std::sin(phase));
+        StageEnemyModelView::Draw(1 + i % 2, position, yaw, 0.65f + i * 0.08f,
+            [&](PrimitiveShape shape, const Matrix4x4& world, const ColorF& color) {
+                renderer.Draw({shape, viewProjection * world, Vector3::One, color});
+            });
+    }
+    renderer.ResetCamera();
 }
 
 void SideScrollingShooter::Render2D(Renderer& renderer) const {

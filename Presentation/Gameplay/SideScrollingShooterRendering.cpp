@@ -15,6 +15,7 @@
 #include "Models/AircraftModelView.h"
 #include "Models/StageEnemyModelView.h"
 #include "SideScrollingShooterShared.h"
+#include "Stages/Stage5/Stage5Module.h"
 #include "Stages/Stage3/Stage3Module.h"
 
 namespace {
@@ -260,11 +261,11 @@ void SideScrollingShooter::ConfigureRailCamera(Camera3D& camera, const Viewport&
         });
         const float limitedPullback = m_stageNumber == 3 ?
             Stage3Module::LimitCameraPullback(*this, camera, pullback) :
-            (UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase) ? pullback * (1.0f - railWeight) : pullback);
+            (m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase) ? pullback * (1.0f - railWeight) : pullback);
         camera.SetPosition(camera.Position() - camera.Forward() * limitedPullback);
         camera.SetFarClip(camera.FarClip() + pullback);
 
-        // バリア内や外壁道中で後退を止めた場合は、不足する表示範囲だけ画角を広げる
+        // バリア内やビル内部で後退を止めた場合は、不足する表示範囲だけ画角を広げる
         if (limitedPullback < pullback) {
             float tangent = halfAngleTangent;
             ForEachPlayer([&] {
@@ -569,33 +570,13 @@ void SideScrollingShooter::DrawEnemyModel(Renderer& renderer, const Camera3D& ca
         return;
     }
 
-    // 第2部は敵種ごとに過去4ステージの通常敵モデルを再登場させる
     const float scale = enemy.behavior != nullptr ? enemy.behavior->RenderScale() : 1.0f;
-    const bool stage5Part2 = m_stageNumber == 5 &&
-        m_stage5.phase >= Stage5Phase::WallClimbLower &&
-        m_stage5.phase <= Stage5Phase::WallClimbUpper;
-    const float railWeight = RailBlend();
-    const bool groundwardEnemy = stage5Part2 && enemy.entersFromTop;
-    const float groundwardRoll = groundwardEnemy ?
-        Math::Lerp(Math::HalfPi, 0.0f, railWeight) : 0.0f;
-    const float groundwardPitch = groundwardEnemy ?
-        Math::Lerp(0.0f, Math::HalfPi, railWeight) : 0.0f;
-    const int enemyModelStage = stage5Part2 ? 1 + enemy.type % 4 : m_stageNumber;
-    if (enemyModelStage >= 1 && enemyModelStage <= 4) {
+    if (m_stageNumber >= 1 && m_stageNumber <= 4) {
         const Matrix4x4 viewProjection = camera.ProjectionMatrix() * camera.ViewMatrix();
-        const float modelYaw = yaw + Math::Pi;
-        const Matrix4x4 groundwardRotation = Matrix4x4::Translation({x, y, z}) *
-            Matrix4x4::RotationZ(groundwardRoll) *
-            Matrix4x4::RotationY(modelYaw) * Matrix4x4::RotationX(groundwardPitch) *
-            Matrix4x4::RotationY(-modelYaw) *
-            Matrix4x4::Translation({-x, -y, -z});
         auto drawPart = [&](PrimitiveShape shape, const Matrix4x4& world, const ColorF& color) {
-            renderer.Draw({shape, viewProjection * groundwardRotation * world,
-                Vector3::One, color});
+            renderer.Draw({shape, viewProjection * world, Vector3::One, color});
         };
-        StageEnemyModelView::Draw(enemyModelStage, {x, y, z}, modelYaw,
-            scale * (stage5Part2 ?
-                ShooterStages::Stage5::Part2EnemyScaleMultiplier(railWeight) : 1.0f), drawPart);
+        StageEnemyModelView::Draw(m_stageNumber, {x, y, z}, yaw + Math::Pi, scale, drawPart);
         return;
     }
 
@@ -653,9 +634,15 @@ void SideScrollingShooter::DrawRailgunBeamBetween(Renderer& renderer, const Came
     const Vector3 center = start + direction * (length * 0.5f);
     const float yaw = std::atan2(direction.z, -direction.x);
     const float pitch = -std::asin(direction.y);
-    const Matrix4x4 world = Matrix4x4::Translation(center) *
-        Matrix4x4::RotationY(yaw) * Matrix4x4::RotationZ(pitch) *
-        Matrix4x4::Scale({length * 0.5f, width, 1.0f});
+    const Matrix4x4 orientation = Matrix4x4::RotationY(yaw) * Matrix4x4::RotationZ(pitch);
+
+    // 帯を光軸まわりに回してカメラへ向け、自機を正面から狙う光線も端から見えないようにする
+    const Vector3 toCamera = camera.Position() - center;
+    const float roll = std::atan2(
+        -Vector3::Dot(toCamera, orientation.TransformPoint({0.0f, 1.0f, 0.0f})),
+        Vector3::Dot(toCamera, orientation.TransformPoint({0.0f, 0.0f, 1.0f})));
+    const Matrix4x4 world = Matrix4x4::Translation(center) * orientation *
+        Matrix4x4::RotationX(roll) * Matrix4x4::Scale({length * 0.5f, width, 1.0f});
     renderer.DrawRailgun({
         camera.ProjectionMatrix() * camera.ViewMatrix() * world,
         progress, effectType});
@@ -788,7 +775,7 @@ void SideScrollingShooter::DrawBomb(
     if (!IsTayamaBattle()) center.z = Math::Lerp(SidePlaneZ, PlayerRailDepth(), blend);
     const float yaw = IsTayamaBattle() ? std::atan2(-center.x,
         ShooterStages::Stage5::TayamaArenaCenterZ - center.z) : Math::Lerp(Math::HalfPi, 0.0f, blend);
-    const float roll = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase) ?
+    const float roll = m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase) ?
         Math::Lerp(Math::HalfPi, 0.0f, blend) : 0.0f;
     float pitch = 0.0f;
     StageDispatch::ApplyPlayerRenderCorrection(*this, center, pitch);
@@ -1242,6 +1229,26 @@ void SideScrollingShooter::DrawHudBackground(Renderer& renderer) const {
 }
 
 /**
+ * @brief 自機から上下へずらした位置をUI座標へ変換する
+ * @param camera 現在の視点のカメラ
+ * @param playerZ 自機のZ座標、TAYAMA戦では使用しない
+ * @param worldOffsetY 自機からのワールドY方向のずれ
+ * @param position 変換後のUI座標
+ * @return カメラの前方にあり変換できた場合true
+ */
+bool SideScrollingShooter::TryPlayerHudPosition(const Camera3D& camera, float playerZ,
+    float worldOffsetY, Vector2& position) const {
+    Vector2 screen;
+    Vector3 player = PlayerWorldPosition();
+    if (!IsTayamaBattle()) player.z = playerZ;
+    if (!camera.TryWorldToScreen({player.x, player.y + worldOffsetY, player.z}, screen)) return false;
+    const Viewport& viewport = camera.GetViewport();
+    position = {(screen.x - static_cast<float>(viewport.x)) / static_cast<float>(viewport.width) * 2.0f - 1.0f,
+        1.0f - (screen.y - static_cast<float>(viewport.y)) / static_cast<float>(viewport.height) * 2.0f};
+    return true;
+}
+
+/**
  * @brief チュートリアルの操作キーを自機上部へ表示する
  * @param renderer 描画先レンダラー
  * @param camera 自機位置の投影に使うカメラ
@@ -1262,17 +1269,8 @@ void SideScrollingShooter::DrawTutorialControlHint(
     constexpr const char* Switch2Hints[] = {
         "MOVE L STICK", "SLOW L/ZL", "A/R/ZR ATTACK", "Y BOMB", "X SHIFT"
     };
-    Vector2 screenPosition;
-    Vector3 player = PlayerWorldPosition();
-    if (!IsTayamaBattle()) player.z = playerZ;
-    if (!camera.TryWorldToScreen(
-            {player.x, player.y + 0.95f, player.z}, screenPosition)) return;
-    const Viewport& viewport = camera.GetViewport();
-    const Vector2 position {
-        (screenPosition.x - static_cast<float>(viewport.x)) /
-                static_cast<float>(viewport.width) * 2.0f - 1.0f,
-        1.0f - (screenPosition.y - static_cast<float>(viewport.y)) /
-                static_cast<float>(viewport.height) * 2.0f};
+    Vector2 position;
+    if (!TryPlayerHudPosition(camera, playerZ, 0.95f, position)) return;
     const char* hint = (Input::IsSwitch2ProConnected() ? Switch2Hints :
         Input::IsGamepadConnected() ? GamepadHints : KeyboardHints)[m_tutorialStep];
     renderer.DrawText(hint, TextAlign::Center, 0.015f,
@@ -1286,14 +1284,13 @@ void SideScrollingShooter::DrawTutorialControlHint(
  * @return なし
  */
 void SideScrollingShooter::DrawReticle(Renderer& renderer, const Camera3D& camera) const {
-    // 2D、視点遷移、演出中、撃墜中、Stage5の第2部道中は照準を表示しない
+    // 2D、視点遷移、演出中、撃墜中は照準を表示しない
     if (m_viewMode != ViewMode::Rail3D || m_viewTransitionTimer > 0 ||
-        (m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase)) ||
         m_clear || Player().m_playerDestructionTimer > 0 || StageDispatch::IsCinematic(*this)) return;
     const Viewport& viewport = camera.GetViewport();
     if (viewport.width <= 0 || viewport.height <= 0) return;
 
-    // 通常弾の進行方向を投影し、周回戦と壁面の縦スクロール弾道へ追従する
+    // 通常弾の進行方向を投影し、周回戦の弾道へ追従する
     Vector2 screen;
     if (!camera.TryWorldToScreen(PlayerAimPoint(), screen)) return;
     const Vector2 center = !m_networkGame && Player().m_crosshairInitialized ? Player().m_crosshairPosition : Vector2 {
@@ -1425,6 +1422,7 @@ void SideScrollingShooter::DrawBossWarning(Renderer& renderer) const {
  */
 void SideScrollingShooter::DrawViewToggleCooldownHud(
     Renderer& renderer, const Camera3D& camera, float playerZ) const {
+    if (m_stageNumber == 5) Stage5Module::DrawSwitchViewWarning(*this, renderer, camera, playerZ);
     constexpr int FadeFrames = 12;
     constexpr float BarWidth = 0.11f;
     const float readyRate = ViewToggleReadyRate(m_viewToggleCooldown, ViewToggleCooldownFrames);
@@ -1437,17 +1435,8 @@ void SideScrollingShooter::DrawViewToggleCooldownHud(
         m_grazing ? 0.12f : 0.82f, m_grazing ? 0.08f : 1.00f, opacity};
 
     // 自機下方のワールド座標を画面座標へ投影してメーターを追従させる
-    Vector2 screenPosition;
-    Vector3 player = PlayerWorldPosition();
-    if (!IsTayamaBattle()) player.z = playerZ;
-    if (!camera.TryWorldToScreen(
-            {player.x, player.y - 0.70f, player.z}, screenPosition)) return;
-    const Viewport& viewport = camera.GetViewport();
-    Vector2 position {
-        (screenPosition.x - static_cast<float>(viewport.x)) /
-                static_cast<float>(viewport.width) * 2.0f - 1.0f,
-        1.0f - (screenPosition.y - static_cast<float>(viewport.y)) /
-                static_cast<float>(viewport.height) * 2.0f};
+    Vector2 position;
+    if (!TryPlayerHudPosition(camera, playerZ, -0.70f, position)) return;
 
     // グレイズ中はトラックとゲージを一緒に揺らし、回復量の読みやすさを保つ
     if (m_grazing) {

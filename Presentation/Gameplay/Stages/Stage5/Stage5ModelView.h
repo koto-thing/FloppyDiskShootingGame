@@ -212,18 +212,14 @@ public:
     inline static constexpr Vector3 RightSearchlightPivot {-4.8f, 10.7f, -2.5f};
 
     /**
-     * @brief 左右腕へ肩支点の回転行列を生成する
+     * @brief 左右腕へ胴体軸の水平旋回行列を生成する
      * @param group 判定するパーツグループ
-     * @param angle 水平なX軸を時計回りに回す角度
-     * @return 腕グループなら肩支点回転、それ以外なら単位行列
+     * @param angle 胴体の縦軸まわりの角度
+     * @return 腕グループなら旋回行列、それ以外なら単位行列
      */
     static Matrix4x4 ArmMotion(TayamaPartGroup group, float angle) {
-        const bool left = group == TayamaPartGroup::LeftFlightDeck;
-        if (!left && group != TayamaPartGroup::RightFlightDeck) return Matrix4x4::Identity;
-        const Vector3 pivot = left ? LeftArmShoulder : RightArmShoulder;
-        return Matrix4x4::Translation(pivot) *
-            Matrix4x4::RotationX(angle) *
-            Matrix4x4::Translation(-pivot);
+        return group == TayamaPartGroup::LeftFlightDeck || group == TayamaPartGroup::RightFlightDeck ?
+            Matrix4x4::RotationY(angle) : Matrix4x4::Identity;
     }
 
     /**
@@ -261,7 +257,7 @@ public:
      * @brief 腕の肩と先端を描画と同じ変換でワールド座標へ解決する
      * @param transform モデル全体のTransform
      * @param left 左腕を取得する場合true
-     * @param angle 水平なX軸を時計回りに回す角度
+     * @param angle 胴体の縦軸まわりの角度
      * @param shoulder 肩のワールド座標格納先
      * @param tip 先端のワールド座標格納先
      * @return なし
@@ -725,14 +721,8 @@ public:
      */
     static Stage5GroupBounds GroupBounds(const Stage5ModelTransform& transform, float progress,
         const TayamaModelState& state, TayamaPartGroup group) {
-        Stage5GroupBounds bounds;
-        VisitParts(transform, progress, state,
-            [&](PrimitiveShape, const Matrix4x4& world, const ColorF&, TayamaPartGroup partGroup) {
-                if (partGroup != group) return;
-                Stage5ModelDetail::Include(bounds, world.TransformPoint(Vector3::Zero),
-                    Stage5ModelDetail::WorldPartRadius(world));
-            });
-        return bounds;
+        // 部品走査テンプレートの実体を増やさないよう全グループ版を共有する
+        return AllGroupBounds(transform, progress, state)[static_cast<std::size_t>(group)];
     }
 };
 

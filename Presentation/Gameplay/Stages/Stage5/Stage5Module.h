@@ -171,6 +171,23 @@ public:
      */
     static bool TryDamageStageTarget(SideScrollingShooter& shooter, Shot& shot);
 
+    /** @brief 関門と視点が合っていない間、自機の上へ切替の警告を表示する @param shooter 描画対象 @param renderer 描画先 @param camera 現在の視点のカメラ @param playerZ 自機のZ座標 @return なし */
+    static void DrawSwitchViewWarning(const SideScrollingShooter& shooter, Renderer& renderer,
+        const Camera3D& camera, float playerZ);
+
+    /**
+     * @brief ビル内部の落下物との接触を判定する
+     * @param shooter 判定対象
+     * @param x 判定中心のゲーム座標X
+     * @param y 判定中心のゲーム座標Y
+     * @param z 判定中心のワールドZ
+     * @param radius 判定半径
+     * @param debugQuery 判定表示の問い合わせ、指定時は判定しない
+     * @return 接触する場合true
+     */
+    static bool HitsHazard(const SideScrollingShooter& shooter,
+        float x, float y, float z, float radius, const Shot* debugQuery = nullptr);
+
     /**
      * @brief 現フェーズで攻撃可能な専用標的の中心を取得する
      * @param shooter 更新対象
@@ -411,8 +428,23 @@ private:
         const SearchlightState& light, int lightIndex);
     static void TickSearchlights(SideScrollingShooter& shooter,
         int activeCount, bool tayamaWeakpoints);
-    static void TickWallEnemyWave(SideScrollingShooter& shooter,
-        int overheadInterval, int droneInterval);
+    /** @brief 第2部の警備ドローンを生成する @param shooter 更新対象 @param droneInterval 生成間隔 @return なし */
+    static void TickWallEnemyWave(SideScrollingShooter& shooter, int droneInterval);
+    /** @brief ビル内部の落下物を生成して進める @param shooter 更新対象 @param chapterFrames 現在区画の長さ @return なし */
+    static void TickShaftObstacles(SideScrollingShooter& shooter, int chapterFrames);
+    /** @brief 配置パターンをビル内部へ生成する @param shooter 更新対象 @param pattern 配置パターン @param hash 配置の疑似乱数 @return なし */
+    static void SpawnShaftPattern(SideScrollingShooter& shooter,
+        ShooterStages::Stage5::ShaftPattern pattern, std::uint32_t hash);
+    /** @brief 自機弾を落下物へ適用する @param shooter 更新対象 @param shot 判定する自機弾 @return 命中した場合true */
+    static bool TryDamageShaftObstacle(SideScrollingShooter& shooter, Shot& shot);
+    /** @brief 入口爆破ムービーの爆発を更新する @param shooter 更新対象 @return なし */
+    static void TickEntranceBlast(SideScrollingShooter& shooter);
+    /** @brief ビル内部の落下物を描画する @param shooter 描画対象 @param renderer 描画先 @param camera 現在の3Dカメラ @param weight 3D視点の補間率 @return なし */
+    static void DrawShaftObstacles(const SideScrollingShooter& shooter, Renderer& renderer,
+        const Camera3D& camera, float weight);
+    /** @brief 入口の扉と爆破後の穴を描画する @param shooter 描画対象 @param renderer 描画先 @param camera 現在の3Dカメラ @return なし */
+    static void DrawEntranceDoor(const SideScrollingShooter& shooter, Renderer& renderer,
+        const Camera3D& camera);
     static void SpawnEnemyShotAt(SideScrollingShooter& shooter,
         float sourceX, float sourceY, float sourceZ,
         float targetX, float targetY, float targetZ, float speed);
@@ -431,6 +463,19 @@ private:
     static void StartTayamaPhase(SideScrollingShooter& shooter,
         Stage5Phase phase, bool resetCurrentHp = true);
     static void TickTayama(SideScrollingShooter& shooter);
+    /**
+     * @brief 第一形態の光線攻撃の線分を描画と判定で共有するため取得する
+     * @param shooter 参照状態
+     * @param transform TAYAMAの親Transform
+     * @param side 左右の番号、単発の光線は0だけが有効
+     * @param start 始点の出力先
+     * @param end 終点の出力先
+     * @param radius 判定半径の出力先
+     * @return 予告中または照射中の光線があればtrue
+     */
+    static bool TayamaBeamSegment(const SideScrollingShooter& shooter,
+        const Stage5ModelTransform& transform, int side,
+        Vector3& start, Vector3& end, float& radius);
     static void TickTayamaDragon(SideScrollingShooter& shooter);
     static void TickStateMachine(SideScrollingShooter& shooter);
     static void PlayCue(SideScrollingShooter& shooter, int cue);

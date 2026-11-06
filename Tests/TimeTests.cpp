@@ -28,6 +28,7 @@ void RunStage5ModelViewTests();
 void RunVoiceDpcmDecoderTests();
 void RunWavSamplesTests();
 void RunAudioServiceTests();
+void RunGalleryAudioTests();
 #include <thread>
 
 namespace {
@@ -194,6 +195,7 @@ int main()
         RunWavSamplesTests();
         std::cout << "Checking audio output" << std::endl;
         RunAudioServiceTests();
+        RunGalleryAudioTests();
         InitializeResetsState();
         BeginFrameUpdatesScaledAndUnscaledTime();
         PauseStopsScaledTimeButNotUnscaledTime();

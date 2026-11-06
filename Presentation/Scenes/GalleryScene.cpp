@@ -5,12 +5,17 @@
 #include <array>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 
 #include "../../Engine/Graphics/Renderer.h"
 #include "../../Engine/Input/Input.h"
 #include "../../Engine/Time/Time.h"
 #include "../../Engine/UI/Button.h"
 #include "../../Infrastructure/Repositories/SettingsRepository.h"
+#include "../../Infrastructure/ExternalServices/MMLData.h"
+#include "../Gameplay/GameplaySounds.h"
+#include "../Gameplay/SideScrollingShooterShared.h"
+#include "../Gameplay/Voices/VoiceDpcmDecoder.h"
 #include "../Gameplay/Models/AircraftModelView.h"
 #include "../Gameplay/Models/LegacyBossModelView.h"
 #include "../Gameplay/Models/StageEnemyModelView.h"
@@ -25,6 +30,50 @@
 #include "../Gameplay/Stages/Stage5/WallSecurityDroneModelView.h"
 
 namespace {
+constexpr std::array<const char*, 4> Categories {"MODEL", "BGM", "SE", "VOICE"};
+
+// 圧縮済みの原譜とボイスを参照し、試聴用リソースは追加しない
+struct MusicDefinition { const char* name; const char* key; };
+constexpr std::array<MusicDefinition, 14> Music {{
+    {"TITLE", "title"}, {"STAGE 1", "stage1"}, {"BOSS 1", "boss1"},
+    {"STAGE 2", "stage2"}, {"BOSS 2", "boss2"},
+    {"STAGE 3", "stage3"}, {"BOSS 3", "boss3"},
+    {"STAGE 4", "stage4"}, {"BOSS 4", "boss4"},
+    {"STAGE 5", "stage5"}, {"BOSS 5", "boss5"},
+    {"STAGE 6", "stage6"}, {"BOSS 6", "boss6"}, {"ENDING", "ending"}
+}};
+struct SoundDefinition { const char* name; void (*play)(AudioService*); };
+const std::array<SoundDefinition, 7> Sounds {{
+    {"SHOT", GameplaySounds::PlayShotSound},
+    {"HIT", GameplaySounds::PlayHitSound},
+    {"ENEMY SHOT", GameplaySounds::PlayEnemyShotSound},
+    {"MISSILE", GameplaySounds::PlayMissileLaunchSound},
+    {"MACHINE GUN", GameplaySounds::PlayBossMachineGunSound},
+    {"EXPLOSION", [](AudioService* audio) { audio->PlaySE(Audio::SfxrPreset::Explosion); }},
+    {"BOSS WARNING", [](AudioService* audio) {
+        audio->PlayMMLSE(SideScrollingShooterShared::BossWarningSirenMml);
+    }}
+}};
+struct VoiceDefinition {
+    const char* name;
+    const VoiceSamples::ImaAdpcmSample* sample;
+    bool radio = false;
+};
+constexpr std::array<VoiceDefinition, 14> Voices {{
+    {"MOMIJI 1", &VoiceSamples::momijiDeath, true},
+    {"MOMIJI 2", &VoiceSamples::momijiDeathRattle2, true},
+    {"MOMIJI 3", &VoiceSamples::momijiDeathRattle5, true},
+    {"KOTO", &VoiceSamples::kotoDeath},
+    {"LUMI", &VoiceSamples::lumiDeath},
+    {"RYOTA", &VoiceSamples::ryotaDeath},
+    {"BOTAMOCHI 1", &VoiceSamples::botamochiDeathBota},
+    {"BOTAMOCHI 2", &VoiceSamples::botamochiDeathMochi},
+    {"EASTSOURCE", &VoiceSamples::eastsourceDeath},
+    {"TAYAMA", &VoiceSamples::tayamaDeath},
+    {"MISSION", &VoiceSamples::mission}, {"START", &VoiceSamples::start},
+    {"SUSPECT", &VoiceSamples::suspect}, {"ARRESTED", &VoiceSamples::arrested}
+}};
+
 /** @brief ギャラリーUIとカメラ調整に使う展示定義 */
 struct ExhibitDefinition {
     GalleryEntry entry;
@@ -123,7 +172,7 @@ UIInputState CurrentUIInput() {
  * @param count 要素数
  * @return 0以上count未満の添字
  */
-int WrapIndex(int value, int count) {
+constexpr int WrapIndex(int value, int count) {
     return (value % count + count) % count;
 }
 
@@ -148,12 +197,151 @@ void GalleryScene::Initialize() {
         Vector2 {0.38f, 0.09f}, RectAlign::BottomRight, "BACK TO TITLE", Vector2 {-0.04f, 0.04f});
     m_returnButton->SetClickSound(Button::ClickSound::Cancel);
     m_returnButton->SetOnClick([this]() { changeScene(SceneType::Title); });
+    // 共通タブと音声操作は既存Buttonの入力と翻訳を使う
+    for (int i = 0; i < static_cast<int>(Categories.size()); ++i) {
+        m_categoryButtons[i] = std::make_unique<Button>(
+            Vector2 {0.25f, 0.08f}, RectAlign::TopCenter, Categories[i],
+            Vector2 {-0.42f + i * 0.28f, -0.04f});
+        m_categoryButtons[i]->SetOnClick([this, i]() { SelectCategory(i); });
+        m_categoryButtons[i]->disabledColor = {0.55f, 0.32f, 0.08f, 1.0f};
+    }
+    constexpr std::array<const char*, 4> controls {"<", "PLAY", "STOP", ">"};
+    for (int i = 0; i < static_cast<int>(controls.size()); ++i) {
+        m_audioButtons[i] = std::make_unique<Button>(
+            Vector2 {0.16f, 0.06f}, RectAlign::Center, controls[i],
+            Vector2 {-0.27f + i * 0.18f, -0.64f});
+        m_audioButtons[i]->textSize = 0.010f;
+    }
+    m_audioButtons[0]->SetOnClick([this]() { SelectAudio(-1); });
+    m_audioButtons[1]->SetOnClick([this]() { PlayAudio(); });
+    m_audioButtons[2]->SetOnClick([this]() { StopAudio(); });
+    m_audioButtons[3]->SetOnClick([this]() { SelectAudio(1); });
+    m_audioButtons[1]->SetEnabled(getData().audio != nullptr);
+    m_audioButtons[2]->SetEnabled(getData().audio != nullptr);
+    m_categoryButtons[0]->SetEnabled(false);
+    // 背景は戦闘を初期化せず、描画だけに使う
+    m_background = std::make_unique<SideScrollingShooter>();
+    m_uiHideLevel = 0;
+    m_backgroundStage = 1;
+    m_backgroundFrame = 0;
+    for (int i = 0; i < 2; ++i) {
+        m_backgroundButtons[i] = std::make_unique<Button>(
+            Vector2 {0.075f, 0.05f}, RectAlign::Center, i == 0 ? "<" : ">",
+            Vector2 {i == 0 ? -0.23f : 0.23f, -0.79f});
+        m_backgroundButtons[i]->textSize = 0.010f;
+        m_backgroundButtons[i]->SetOnClick([this, i]() { SelectBackground(i == 0 ? -1 : 1); });
+    }
     ResetExhibit();
+}
+
+void GalleryScene::SelectCategory(int category) {
+    StopAudio();
+    m_category = WrapIndex(category, static_cast<int>(Categories.size()));
+    for (int i = 0; i < static_cast<int>(Categories.size()); ++i)
+        m_categoryButtons[i]->SetEnabled(i != m_category);
+}
+
+int GalleryScene::AudioCount() const {
+    switch (m_category) {
+    case 1: return static_cast<int>(Music.size());
+    case 2: return static_cast<int>(Sounds.size());
+    case 3: return static_cast<int>(Voices.size());
+    default: return 0;
+    }
+}
+
+const char* GalleryScene::AudioName() const {
+    const int index = m_audioIndices[m_category];
+    switch (m_category) {
+    case 1: return Music[index].name;
+    case 2: return Sounds[index].name;
+    case 3: return Voices[index].name;
+    default: return "";
+    }
+}
+
+void GalleryScene::SelectBackground(int step) {
+    // 音声の選択と再生位置を維持する
+    m_backgroundStage = WrapIndex(m_backgroundStage - 1 + step, 5) + 1;
+    m_backgroundFrame = 0;
+}
+
+void GalleryScene::SelectAudio(int step) {
+    if (AudioCount() == 0) return;
+    StopAudio();
+    m_audioIndices[m_category] = WrapIndex(m_audioIndices[m_category] + step, AudioCount());
+}
+
+void GalleryScene::StopAudio() {
+    if (!getData().audio) return;
+    getData().audio->StopBGM();
+    getData().audio->StopAllSE();
+}
+
+void GalleryScene::PlayAudio() {
+    auto* audio = getData().audio;
+    if (!audio || AudioCount() == 0) return;
+    // クリック音と前の試聴を止め、選択した音声だけを先頭から鳴らす
+    StopAudio();
+    const int index = m_audioIndices[m_category];
+    switch (m_category) {
+    case 1:
+        audio->PlayMMLBGM(std::string(MMLData::GetByName(Music[index].key)), true);
+        break;
+    case 2:
+        Sounds[index].play(audio);
+        break;
+    case 3: {
+        const auto& voice = Voices[index];
+        audio->PlayVoice(voice.radio ? VoiceCodec::DecodeRadioForAudioService(*voice.sample) :
+            VoiceCodec::DecodeForAudioService(*voice.sample));
+        break;
+    }
+    }
 }
 
 /** @brief 展示選択、カメラ、アニメーション操作を受け付ける */
 void GalleryScene::ProcessInput() {
-    m_returnButton->Update(CurrentUIInput());
+    const auto input = CurrentUIInput();
+    // Hで3段階にUIを減らし、4回目またはEscで全表示へ戻す
+    if (m_category != 0 && (Input::GetKeyDown(KeyCode::H) ||
+        (m_uiHideLevel > 0 && Input::GetKeyDown(KeyCode::Escape)))) {
+        m_uiHideLevel = Input::GetKeyDown(KeyCode::Escape) ? 0 : (m_uiHideLevel + 1) % 4;
+        m_returnButton->Update({});
+        for (auto& button : m_categoryButtons) button->Update({});
+        for (auto& button : m_audioButtons) button->Update({});
+        for (auto& button : m_backgroundButtons) button->Update({});
+        return;
+    }
+    if (m_uiHideLevel == 3) return;
+    if (m_uiHideLevel == 0) m_returnButton->Update(input);
+    if (Input::GetKeyDown(KeyCode::Escape)) {
+        changeScene(SceneType::Title);
+        return;
+    }
+    if (m_uiHideLevel == 0) {
+        for (auto& button : m_categoryButtons) button->Update(input);
+        if (Input::GetKeyDown(KeyCode::Tab)) SelectCategory(m_category + 1);
+    }
+
+    // 音声表示中はモデルのカメラと動作に入力を渡さない
+    if (m_category != 0) {
+        for (auto& button : m_audioButtons) button->Update(input);
+        // 表示中の背景操作だけに入力を渡す
+        if (m_uiHideLevel < 2) {
+            for (auto& button : m_backgroundButtons) button->Update(input);
+            const int backgroundStep = static_cast<int>(Input::GetKeyDown(KeyCode::DownArrow)) -
+                static_cast<int>(Input::GetKeyDown(KeyCode::UpArrow));
+            if (backgroundStep != 0) SelectBackground(backgroundStep);
+        }
+        const int step = static_cast<int>(Input::GetKeyDown(KeyCode::RightArrow)) -
+            static_cast<int>(Input::GetKeyDown(KeyCode::LeftArrow));
+        if (step != 0) SelectAudio(step);
+        if (Input::GetKeyDown(KeyCode::Space) &&
+            !Input::GetMouseButtonDown(MouseButton::Left)) PlayAudio();
+        if (Input::GetKeyDown(KeyCode::X)) StopAudio();
+        return;
+    }
 
     // 左右キーで展示、上下キーで展示内アニメーションを循環選択する
     int exhibitStep = static_cast<int>(Input::GetKeyDown(KeyCode::RightArrow)) -
@@ -181,7 +369,10 @@ void GalleryScene::ProcessInput() {
     const float keyOrbit = static_cast<float>(Input::GetKey(KeyCode::D)) -
         static_cast<float>(Input::GetKey(KeyCode::A));
     m_orbitYaw += keyOrbit * Time::fixedDeltaTime * 1.4f;
-    if (Input::GetMouseButton(MouseButton::Left)) {
+    const bool overUi = m_returnButton->Bounds().Contains(input.position) ||
+        std::any_of(m_categoryButtons.begin(), m_categoryButtons.end(),
+            [&](const auto& button) { return button->Bounds().Contains(input.position); });
+    if (Input::GetMouseButton(MouseButton::Left) && !overUi) {
         const Vector2 delta = Input::GetMouseDelta();
         m_orbitYaw += delta.x * 0.006f;
         m_orbitPitch = (std::clamp)(m_orbitPitch - delta.y * 0.006f, -0.65f, 0.85f);
@@ -196,11 +387,19 @@ void GalleryScene::ProcessInput() {
 
 /** @brief 再生中アニメーションの時間を更新する */
 void GalleryScene::Tick() {
-    if (m_playing && IsUnlocked()) m_animationTime += Time::fixedDeltaTime;
+    // 長時間の連続試聴でも整数をオーバーフローさせない
+    if (m_category != 0) m_backgroundFrame =
+        m_backgroundFrame == (std::numeric_limits<int>::max)() ? 0 : m_backgroundFrame + 1;
+    if (m_category == 0 && m_playing && IsUnlocked()) m_animationTime += Time::fixedDeltaTime;
 }
 
 /** @brief ギャラリーが保持するUIを解放する */
 void GalleryScene::Dispose() {
+    StopAudio();
+    for (auto& button : m_categoryButtons) button.reset();
+    for (auto& button : m_audioButtons) button.reset();
+    for (auto& button : m_backgroundButtons) button.reset();
+    m_background.reset();
     m_returnButton.reset();
 }
 
@@ -209,6 +408,45 @@ void GalleryScene::Dispose() {
  * @param renderer 描画先Renderer
  */
 void GalleryScene::Render(Renderer& renderer) {
+    // 背景の上に音声操作を重ね、モデルの説明は表示しない
+    if (m_category != 0) {
+        m_background->RenderBackgroundPreview(renderer, m_backgroundStage, m_backgroundFrame);
+        if (m_uiHideLevel == 3) return;
+        renderer.ResetCamera();
+        if (m_uiHideLevel < 2) {
+            // 画面下部の小さなパネルに試聴操作をまとめ、中央の飛行演出を見せる
+            renderer.Draw(Rect {{0.0f, -0.69f}, {0.54f, 0.19f}}, {0.01f, 0.02f, 0.04f, 0.78f});
+            char backgroundName[32];
+            std::snprintf(backgroundName, sizeof(backgroundName), "STAGE %d", m_backgroundStage);
+            renderer.DrawText(backgroundName, TextAlign::Center, 0.012f,
+                ColorF::White(), {0.0f, -0.79f});
+            renderer.DrawText("UP/DOWN: BACKGROUND   H: HIDE UI", TextAlign::Center, 0.008f,
+                ColorF::White(), {0.0f, -0.85f});
+            for (const auto& button : m_backgroundButtons) button->Render(renderer);
+        }
+        renderer.DrawText(AudioName(), TextAlign::Center, 0.014f,
+            ColorF::White(), {0.0f, -0.55f});
+        if (m_uiHideLevel == 0)
+            for (const auto& button : m_categoryButtons) button->Render(renderer);
+        for (const auto& button : m_audioButtons) button->Render(renderer);
+        // 再生サンプル位置を細い目盛り付きバーで示す
+        const float progress = getData().audio ? getData().audio->GetPlaybackProgress() : 0.0f;
+        constexpr float left = -0.35f, width = 0.70f, y = -0.72f;
+        renderer.Draw(Rect {{0.0f, y}, {width * 0.5f, 0.002f}}, {0.25f, 0.48f, 0.58f, 1.0f});
+        for (int i = 0; i <= 10; ++i)
+            renderer.Draw(Rect {{left + width * i / 10.0f, y + 0.007f}, {0.001f, 0.005f}},
+                {0.46f, 0.61f, 0.65f, 1.0f});
+        renderer.Draw(Rect {{left + width * progress * 0.5f, y}, {width * progress * 0.5f, 0.002f}},
+            {1.0f, 0.76f, 0.20f, 1.0f});
+        renderer.Draw(Rect {{left + width * progress, y + 0.009f}, {0.006f, 0.012f}},
+            {1.0f, 0.76f, 0.20f, 1.0f});
+        if (m_uiHideLevel == 0) {
+            m_returnButton->Render(renderer);
+            renderer.DrawText("TAB: CATEGORY   LEFT/RIGHT: SELECT   SPACE: PLAY   X: STOP",
+                TextAlign::BottomLeft, 0.010f, {0.62f, 0.66f, 0.72f, 1.0f}, {0.04f, 0.045f});
+        }
+        return;
+    }
     const ExhibitDefinition& exhibit = Exhibits[static_cast<std::size_t>(m_exhibitIndex)];
     const float distance = exhibit.cameraDistance * m_zoom;
     const float horizontalDistance = std::cos(m_orbitPitch) * distance;
@@ -234,6 +472,7 @@ void GalleryScene::Render(Renderer& renderer) {
 
     renderer.ResetCamera();
     RenderUi(renderer);
+    for (const auto& button : m_categoryButtons) button->Render(renderer);
     m_returnButton->Render(renderer);
 }
 
@@ -627,9 +866,9 @@ void GalleryScene::RenderUi(Renderer& renderer) const {
 
     // 上部へ展示名、一言説明、展示の進捗を表示する
     renderer.DrawText(unlocked ? exhibit.name : "????????", TextAlign::TopCenter, 0.032f,
-        unlocked ? ColorF::White() : ColorF {0.38f, 0.42f, 0.48f, 1.0f}, {0.0f, -0.05f});
+        unlocked ? ColorF::White() : ColorF {0.38f, 0.42f, 0.48f, 1.0f}, {0.0f, -0.17f});
     renderer.DrawText(unlocked ? exhibit.description : "UNIDENTIFIED MODEL",
-        TextAlign::TopCenter, 0.013f, {0.72f, 0.76f, 0.82f, 1.0f}, {0.0f, -0.16f});
+        TextAlign::TopCenter, 0.013f, {0.72f, 0.76f, 0.82f, 1.0f}, {0.0f, -0.28f});
     renderer.DrawText(counter, TextAlign::TopRight, 0.016f,
         {0.65f, 0.72f, 0.82f, 1.0f}, {-0.04f, -0.06f});
 
@@ -645,11 +884,157 @@ void GalleryScene::RenderUi(Renderer& renderer) const {
             {1.0f, 0.64f, 0.18f, 1.0f}, {0.0f, 0.055f});
     }
 
-    // 操作案内を画面左下へまとめる
-    renderer.DrawText("LEFT/RIGHT: MODEL   UP/DOWN: ANIMATION",
-        TextAlign::BottomLeft, 0.011f, {0.66f, 0.70f, 0.76f, 1.0f}, {0.04f, 0.135f});
-    renderer.DrawText("A/D OR LEFT DRAG: ORBIT   W/S OR WHEEL: ZOOM",
-        TextAlign::BottomLeft, 0.010f, {0.62f, 0.66f, 0.72f, 1.0f}, {0.04f, 0.09f});
-    renderer.DrawText("SPACE: PLAY/PAUSE   R: RESET",
-        TextAlign::BottomLeft, 0.010f, {0.58f, 0.62f, 0.68f, 1.0f}, {0.04f, 0.045f});
+    // 左側の余白へ短い二行の操作案内を縦に並べ、下部の再生状態と分離する
+    constexpr std::array<const char*, 7> controls {
+        "LEFT/RIGHT\nMODEL", "UP/DOWN\nANIMATION", "A/D / LEFT DRAG\nORBIT",
+        "W/S / WHEEL\nZOOM", "SPACE\nPLAY/PAUSE", "R\nRESET", "TAB\nCATEGORY"
+    };
+    for (std::size_t i = 0; i < controls.size(); ++i)
+        renderer.DrawText(controls[i], TextAlign::TopLeft, 0.010f,
+            {0.66f, 0.70f, 0.76f, 1.0f}, {0.04f, -0.36f - static_cast<float>(i) * 0.19f});
 }
+
+#if defined(FLOPPY_AUDIO_TESTS) && !defined(SPACEYAKUZA_PORTABLE)
+#include <cassert>
+#include "../../Application/UseCases/SceneManager.h"
+#include "../../Infrastructure/ExternalServices/MMLParser.h"
+void SetTestNativeKey(int key, bool pressed);
+
+/** @brief 全試聴データとカテゴリ境界、音声デバイスなしでの終了を検証する @return なし */
+void RunGalleryAudioTests() {
+    // カタログの参照切れと先頭・末尾での循環を検出する
+    GalleryScene gallery;
+    assert(gallery.AudioCount() == 0);
+    for (int category = 1; category < 4; ++category) {
+        gallery.m_category = category;
+        const int count = gallery.AudioCount();
+        assert(count > 0 && WrapIndex(-1, count) == count - 1);
+        assert(WrapIndex(count, count) == 0);
+        for (int i = 0; i < count; ++i) {
+            gallery.m_audioIndices[category] = i;
+            assert(gallery.AudioName()[0] != '\0');
+        }
+    }
+    Audio::MMLParser parser;
+    for (const auto& music : Music) {
+        const auto mml = MMLData::GetByName(music.key);
+        assert(!mml.empty());
+        assert(parser.Parse(std::string(mml)).maxDurationSec > 0.0);
+    }
+    for (const auto& voice : Voices) {
+        const auto pcm = voice.radio ? VoiceCodec::DecodeRadioForAudioService(*voice.sample) :
+            VoiceCodec::DecodeForAudioService(*voice.sample);
+        assert(!pcm.empty());
+        assert(std::any_of(pcm.begin(), pcm.end(), [](auto sample) { return sample != 0; }));
+    }
+
+    // 既存の再生処理はデバイス未初期化でも安全に呼べ、音量設定を変更しない
+    AudioService audio;
+    audio.SetMasterVolume(0.37f);
+    audio.SetBGMVolume(0.42f);
+    audio.SetSEVolume(0.53f);
+    for (const auto& sound : Sounds) sound.play(&audio);
+    assert(audio.GetMasterVolume() == 0.37f);
+    assert(audio.GetBGMVolume() == 0.42f && audio.GetSEVolume() == 0.53f);
+
+    // シーンの生成と解放は共有音声がなくても安全
+    SceneManager<SceneType, SceneSharedData> manager;
+    manager.AddScene<GalleryScene>(SceneType::Gallery);
+    manager.Initialize(SceneType::Gallery);
+    manager.Dispose();
+
+    // 実シーンへキー入力を渡し、カテゴリ境界と再生・停止・モデル復帰を検証する
+    manager.getSharedData().audio = &audio;
+    manager.Initialize(SceneType::Gallery);
+    Renderer renderer;
+    auto press = [&](int key) {
+        Input::BeginFrame();
+        SetTestNativeKey(key, true);
+        manager.ProcessInput();
+        Input::BeginFrame();
+        SetTestNativeKey(key, false);
+        manager.ProcessInput();
+    };
+    auto shows = [&](const char* name) {
+        renderer.BeginFrame();
+        manager.Render(renderer);
+        for (std::size_t i = 0; i < renderer.CommandCount(); ++i)
+            if (std::string_view(renderer.Command(i).text.data()) == Localization::Text(name)) return true;
+        return false;
+    };
+    assert(shows("POLICE INTERCEPTOR"));
+    press(VK_RIGHT);
+    press(VK_RIGHT);
+    assert(shows("03 / 19"));
+    press(VK_TAB);
+    assert(shows("TITLE"));
+    // 赤枠、青枠とパネル、残りの順に非表示となり、隠れた操作は反応しない
+    auto hasPanel = [&] {
+        for (std::size_t i = 0; i < renderer.CommandCount(); ++i) {
+            const auto& command = renderer.Command(i);
+            if (command.type == RenderCommand::Type::Rect &&
+                command.rect.position.y == -0.69f && command.rect.size.y == 0.19f) return true;
+        }
+        return false;
+    };
+    assert(shows("BACK TO TITLE") && shows("BGM"));
+    press('H');
+    assert(shows("TITLE") && shows("PLAY") && shows("STAGE 1") && hasPanel());
+    assert(!shows("BACK TO TITLE") && !shows("BGM"));
+    press(VK_TAB);
+    assert(shows("TITLE"));
+    press(VK_LEFT);
+    assert(shows("ENDING"));
+    press(VK_RIGHT);
+    press('H');
+    assert(shows("TITLE") && shows("PLAY") && !hasPanel());
+    assert(!shows("STAGE 1") && !shows("UP/DOWN: BACKGROUND   H: HIDE UI"));
+    press(VK_DOWN);
+    press('H');
+    assert(!shows("TITLE"));
+    assert(renderer.CommandCount() > 40);
+    for (std::size_t i = 0; i < renderer.CommandCount(); ++i)
+        assert(renderer.Command(i).type != RenderCommand::Type::Text);
+    const auto beforeFlight = renderer.Command(renderer.CommandCount() - 2).primitive;
+    for (int frame = 0; frame < 120; ++frame) manager.Tick();
+    press(VK_RIGHT);
+    press(VK_TAB);
+    assert(!shows("TITLE"));
+    const auto afterFlight = renderer.Command(renderer.CommandCount() - 2).primitive;
+    assert(beforeFlight.wvpMatrix(0, 3) != afterFlight.wvpMatrix(0, 3));
+    press('H');
+    assert(shows("TITLE") && shows("STAGE 1") && shows("BACK TO TITLE") && hasPanel());
+    for (int level = 1; level <= 3; ++level) {
+        for (int i = 0; i < level; ++i) press('H');
+        press(VK_ESCAPE);
+        assert(shows("TITLE") && shows("BGM") && shows("STAGE 1") && hasPanel());
+    }
+    // 全背景の循環と背景更新後も曲選択が維持されることを検証する
+    press(VK_UP);
+    assert(shows("STAGE 5"));
+    for (int stage = 1; stage <= 5; ++stage) {
+        press(VK_DOWN);
+        char name[16];
+        std::snprintf(name, sizeof(name), "STAGE %d", stage);
+        for (int frame = 0; frame < 120; ++frame) manager.Tick();
+        assert(shows(name));
+        assert(shows("TITLE"));
+        assert(renderer.CommandCount() > 40);
+    }
+    press(VK_DOWN);
+    assert(shows("STAGE 1"));
+    press(VK_LEFT);
+    assert(shows("ENDING"));
+    press(VK_RIGHT);
+    assert(shows("TITLE"));
+    for (int category = 1; category < 4; ++category) {
+        press(VK_SPACE);
+        press('X');
+        press(VK_TAB);
+    }
+    assert(shows("03 / 19"));
+    assert(audio.GetMasterVolume() == 0.37f);
+    assert(audio.GetBGMVolume() == 0.42f && audio.GetSEVolume() == 0.53f);
+    manager.Dispose();
+}
+#endif

@@ -77,6 +77,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Tests\TimeTests.cpp" />
+    <ClCompile Include="Presentation\Scenes\GalleryScene.cpp" />
+    <ClCompile Include="Presentation\Gameplay\**\*.cpp" />
     <ClCompile Include="Tests\TransformTests.cpp" />
     <ClCompile Include="Tests\GeometryTests.cpp" />
     <ClCompile Include="Tests\RendererTests.cpp" />

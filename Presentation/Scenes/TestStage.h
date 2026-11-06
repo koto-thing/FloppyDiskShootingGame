@@ -63,6 +63,10 @@ private:
     bool m_optionsOpen = false;
     int m_allClearTimer = 0;
     bool m_rankedRun = true;
+    bool m_demoMode = false;
+    bool m_demoExitRequested = false;
+    int m_demoFrame = 0;
+    unsigned m_savedRandomState = 0;
 #if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
     CooperativeInput m_networkInput {};
     bool m_waitingForPeer = false;

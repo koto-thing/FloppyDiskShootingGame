@@ -213,6 +213,20 @@ constexpr int WallTier(ShooterStages::Stage5::Phase phase) {
     return 0;
 }
 
+/**
+ * @brief 接近中で視点の切替が必要になる関門を取得する
+ * @param state Stage 5の状態
+ * @return 接近中の関門、なければnullptr
+ */
+const ShooterStages::Stage5::ShaftObstacle* ApproachingShaftGate(const ShooterStages::Stage5::State& state) {
+    for (const auto& obstacle : state.shaftObstacles) {
+        if (obstacle.active && obstacle.travel <= 0.8f &&
+            (obstacle.kind == ShooterStages::Stage5::ShaftObstacleKind::Beam ||
+                obstacle.kind == ShooterStages::Stage5::ShaftObstacleKind::Bulkhead)) return &obstacle;
+    }
+    return nullptr;
+}
+
 static_assert(WallTier(ShooterStages::Stage5::Phase::WallClimbLower) == 0);
 static_assert(WallTier(ShooterStages::Stage5::Phase::WallClimbMiddle) == 1);
 static_assert(WallTier(ShooterStages::Stage5::Phase::WallClimbUpper) == 2);
@@ -271,12 +285,15 @@ constexpr float RainIntensity(ShooterStages::Stage5::Phase phase, int chapter,
     (void)chapter;
     (void)tayamaTransformation;
     (void)phaseTimer;
-    return phase <= ShooterStages::Stage5::Phase::TayamaCollapse ? 1.0f : 0.0f;
+    // ビル内部の道中だけは屋内のため降らせない
+    return ShooterStages::Stage5::IsPart2RoutePhase(phase) ? 0.0f :
+        (phase <= ShooterStages::Stage5::Phase::TayamaCollapse ? 1.0f : 0.0f);
 }
 
 static_assert(RainIntensity(ShooterStages::Stage5::Phase::Approach, 1, 0.0f, 0) == 1.0f);
 static_assert(RainIntensity(ShooterStages::Stage5::Phase::EastsourceBattle, 3, 0.0f, 0) == 1.0f);
 static_assert(RainIntensity(ShooterStages::Stage5::Phase::WallClimbTransition, 3, 0.0f, 0) > 0.0f);
+static_assert(RainIntensity(ShooterStages::Stage5::Phase::WallClimbMiddle, 3, 0.0f, 0) == 0.0f);
 static_assert(RainIntensity(ShooterStages::Stage5::Phase::CarrierTransformation, 3, 0.5f, 90) > 0.0f);
 static_assert(RainIntensity(ShooterStages::Stage5::Phase::TayamaCommandCore, 3, 1.0f, 180) == 1.0f);
 static_assert(RainFallPhase(0, 0) == 0);
@@ -298,47 +315,32 @@ static_assert(RainViewMargin - RainViewTravel < -1.0f);
 void SideScrollingShooter::Stage5Module::ApplyCameraCorrection(
     const SideScrollingShooter& shooter, Vector3& railPosition, Vector3& railTarget, bool personal) {
     if (shooter.m_stage5.phase == Stage5Phase::WallClimbTransition) {
-        // 暗転解除後は道路を進み、ビル直前から壁面上方へカメラを向ける
+        // 暗転解除後は道路を進み、爆破した入口へ自機を追って近づく
         const float approach = SmoothStep(ShooterStages::Stage5::WallApproachProgress(
             shooter.m_stage5.phaseTimer));
-        const float climb = SmoothStep(ShooterStages::Stage5::WallClimbProgress(
+        const float flyIn = SmoothStep(ShooterStages::Stage5::EntranceFlyInProgress(
             shooter.m_stage5.phaseTimer));
-        const float turn = SmoothStep(Math::Clamp01(climb * 4.0f));
         const Vector3 playerPosition {
-            ToWorldX(shooter.m_players[0].m_playerX),
-            -0.65f + climb * ShooterStages::Stage5::WallClimbHeight,
+            ToWorldX(shooter.m_players[0].m_playerX), -0.65f,
             Math::Lerp(ShooterStages::Stage5::WallApproachStartZ,
                 ShooterStages::Stage5::WallApproachEndZ, approach)
         };
-        const Vector3 roadCamera = playerPosition + Vector3 {0.0f, 1.2f, -9.0f};
-        const Vector3 climbCamera = playerPosition + Vector3 {0.0f, 0.5f, -16.0f};
-        const Vector3 roadTarget = playerPosition + Vector3 {0.0f, 0.0f, 14.0f};
-        constexpr float BuildingTopY = -3.65f + ShooterStages::Stage5::PandDBuildingHeight;
-        const Vector3 climbTarget {
-            playerPosition.x,
-            (std::min)(playerPosition.y + 48.0f, BuildingTopY),
-            42.0f
-        };
-        railPosition = Vector3::Lerp(roadCamera, climbCamera, turn);
-        railTarget = Vector3::Lerp(roadTarget, climbTarget, turn);
+        railPosition = playerPosition + Vector3 {0.0f, 1.2f, -9.0f + flyIn * 12.0f};
+        railTarget = Vector3::Lerp(playerPosition + Vector3 {0.0f, 0.0f, 14.0f},
+            {0.0f, -1.2f, ShooterStages::Stage5::EntranceDoorZ}, flyIn);
         return;
     }
 
-    // 第2部道中は自機の近くから、壁面へ約45度の角度で上空側を見る
+    // 第2部道中は自機の真後ろからシャフトの奥を見上げ、移動の一部を画面内の動きとして残す
     if (ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) {
-        // 協力時は低い機体より下から二人の中央を見るため、後退せず両機を前方へ収める
+        constexpr float FollowRate = 0.75f;
+        Vector3 center = railPosition - Vector3 {0.0f, 2.8f, -7.5f};
         if (!personal && shooter.m_playerCount == 2) {
-            const Vector3 offset {
-                ToWorldX((shooter.m_players[0].m_playerX + shooter.m_players[1].m_playerX) * 0.5f) - railPosition.x,
-                ToWorldY((std::min)(shooter.m_players[0].m_playerY, shooter.m_players[1].m_playerY) -
-                    shooter.Player().m_playerY), 0.0f};
-            railPosition += offset;
-            railTarget += offset;
+            center.x = ToWorldX((shooter.m_players[0].m_playerX + shooter.m_players[1].m_playerX) * 0.5f);
+            center.y = ToWorldY((shooter.m_players[0].m_playerY + shooter.m_players[1].m_playerY) * 0.5f);
         }
-        railPosition.y -= 11.0f;
-        railPosition.z -= 4.0f;
-        railTarget.z += 8.0f;
-        railTarget.y = railPosition.y + railTarget.z - railPosition.z;
+        railPosition = {center.x * FollowRate, center.y * FollowRate + 0.6f, center.z - 9.0f};
+        railTarget = {center.x * FollowRate, center.y * FollowRate + 0.2f, center.z + 20.0f};
         return;
     }
 
@@ -424,8 +426,8 @@ void SideScrollingShooter::Stage5Module::ApplyCameraCorrection(
 float SideScrollingShooter::Stage5Module::CameraFieldOfView(
     const SideScrollingShooter& shooter, float defaultFieldOfView) {
     if (ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) {
-        // 広角化して中央外壁の上方と下方の市街を同時に画面へ残す
-        return Math::Lerp(defaultFieldOfView, 70.0f, shooter.RailBlend());
+        // 広角化して四方の壁が奥へ収束する遠近感を強める
+        return Math::Lerp(defaultFieldOfView, 62.0f, shooter.RailBlend());
     }
     if (shooter.m_stage5.phase == Stage5Phase::RooftopArrival ||
         shooter.m_stage5.phase == Stage5Phase::CarrierTransformation) {
@@ -442,13 +444,7 @@ float SideScrollingShooter::Stage5Module::CameraFieldOfView(
     if (ShooterStages::Stage5::IsCloudSeaPhase(shooter.m_stage5.phase)) {
         return Math::Lerp(defaultFieldOfView, 54.0f, shooter.RailBlend());
     }
-    if (shooter.m_stage5.phase != Stage5Phase::WallClimbTransition) {
-        return defaultFieldOfView;
-    }
-    const float climb = SmoothStep(ShooterStages::Stage5::WallClimbProgress(
-        shooter.m_stage5.phaseTimer));
-    return Math::Lerp(70.0f, 132.0f,
-        SmoothStep(Math::Clamp01(climb * 4.0f)));
+    return shooter.m_stage5.phase == Stage5Phase::WallClimbTransition ? 70.0f : defaultFieldOfView;
 }
 
 /**
@@ -518,18 +514,20 @@ void SideScrollingShooter::Stage5Module::ApplyPlayerRenderCorrection(
     if (shooter.m_stage5.phase == Stage5Phase::WallClimbTransition) {
         const float approach = SmoothStep(ShooterStages::Stage5::WallApproachProgress(
             shooter.m_stage5.phaseTimer));
-        const float climb = SmoothStep(ShooterStages::Stage5::WallClimbProgress(
+        const float flyIn = SmoothStep(ShooterStages::Stage5::EntranceFlyInProgress(
             shooter.m_stage5.phaseTimer));
-        const float turn = SmoothStep(Math::Clamp01(climb * 4.0f));
-        position.y = -0.65f + climb * ShooterStages::Stage5::WallClimbHeight;
-        position.z = Math::Lerp(ShooterStages::Stage5::WallApproachStartZ,
-            ShooterStages::Stage5::WallApproachEndZ, approach);
-        pitch = Math::Lerp(0.0f, -Math::HalfPi, turn);
+        position.y = -0.65f;
+        position.z = Math::Lerp(Math::Lerp(ShooterStages::Stage5::WallApproachStartZ,
+            ShooterStages::Stage5::WallApproachEndZ, approach),
+            ShooterStages::Stage5::EntranceDoorZ - 0.2f, flyIn);
         return;
     }
-    if (ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) {
-        // 2Dから3Dへ切り替わる間も機首を連続的に壁面上方へ向ける
-        pitch = Math::Lerp(0.0f, -Math::HalfPi, shooter.RailBlend());
+    if (ShooterStages::Stage5::IsPart2PlayerFlyingAway(
+        shooter.m_stage5.phase, shooter.m_stage5.phaseTimer)) {
+        // 3Dの脱出はシャフトの奥へ加速して屋上到達の暗転へつなぐ
+        const int frame = shooter.m_stage5.phaseTimer - (ShooterStages::Stage5::WallClimbUpperFrames -
+            ShooterStages::Stage5::WallClimbExitFadeFrames - ShooterStages::Stage5::Part2PlayerFlyAwayFrames);
+        position.z += static_cast<float>(frame * frame) * 0.03f * shooter.RailBlend();
         return;
     }
     if (shooter.m_stage5.phase == Stage5Phase::TayamaCollapse) {
@@ -566,6 +564,29 @@ void SideScrollingShooter::Stage5Module::ApplyPlayerRenderCorrection(
 void SideScrollingShooter::Stage5Module::DrawOverlay3D(
     const SideScrollingShooter& shooter, Renderer& renderer, const Camera3D& camera) {
     DrawScreenEffects(shooter, renderer, &camera);
+}
+
+/**
+ * @brief 関門と視点が合っていない間、自機の上へ切替の警告を点滅表示する
+ * @param shooter 描画対象
+ * @param renderer 描画先レンダラー
+ * @param camera 現在の視点のカメラ
+ * @param playerZ 自機のZ座標
+ * @return なし
+ */
+void SideScrollingShooter::Stage5Module::DrawSwitchViewWarning(const SideScrollingShooter& shooter,
+    Renderer& renderer, const Camera3D& camera, float playerZ) {
+    if (!ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase) ||
+        shooter.m_frame / 8 % 2 != 0) return;
+    const auto* gate = ApproachingShaftGate(shooter.m_stage5);
+    if (gate == nullptr || (gate->kind == ShooterStages::Stage5::ShaftObstacleKind::Beam) ==
+        shooter.IsRailGameplayActive()) return;
+
+    // 自機が画面端にいても文字が欠けない範囲へ収める
+    Vector2 position;
+    if (!shooter.TryPlayerHudPosition(camera, playerZ, 1.2f, position)) return;
+    renderer.DrawText("PRESS X", TextAlign::Center, 0.024f, {1.0f, 0.20f, 0.14f, 1.0f},
+        {(std::clamp)(position.x, -0.72f, 0.72f), (std::min)(position.y, 0.70f)});
 }
 
 /**
@@ -628,7 +649,7 @@ bool SideScrollingShooter::Stage5Module::DrawBossModel(
         pose.machineGunPitch = pose.sensorPitch;
         pose.machineGunDeployment = SmoothStep(Math::Clamp01(
             (EnemyRailFarZ - enemy.z) / 12.0f));
-        pose.contactExtension = pose.machineGunDeployment;
+        pose.contactExtension = 0.0f;
         pose.warningLightColor = enemy.motionAge > 0 ?
             WallSecurityDroneModelView::AttackWarning : (enemy.recoilAge > 0 ?
                 WallSecurityDroneModelView::DetectedWarning :
@@ -644,23 +665,7 @@ bool SideScrollingShooter::Stage5Module::DrawBossModel(
                     static_cast<int>(shape), world, partColor);
             });
 
-        // 巡回中に壁面を擦る磁着パッドから短命な火花を交互に散らす
-        constexpr int SparkCycleFrames = 8;
-        const int sparkContact = (enemy.age / SparkCycleFrames) & 3;
-        const float sparkProgress = static_cast<float>(enemy.age % SparkCycleFrames) /
-            static_cast<float>(SparkCycleFrames);
-        const Vector3 sparkPosition = Stage5ModelDetail::Matrix(transform).TransformPoint(
-            WallSecurityDroneModelView::WallContactLocalPosition(
-                (sparkContact & 1) == 0 ? -1.0f : 1.0f,
-                (sparkContact & 2) == 0 ? -1.0f : 1.0f,
-                pose.contactExtension));
-        const float sparkSize = 0.34f + sparkProgress * 0.42f;
-        const Matrix4x4 sparkWorld = Matrix4x4::Translation(sparkPosition) *
-            Matrix4x4::Scale({sparkSize, sparkSize, 1.0f});
-        renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * sparkWorld,
-            sparkProgress});
-
-        // ビル上空から壁面へ到着するまではレーザーポインターを停止する
+        // シャフト上方から巡回高度へ到着するまではレーザーポインターを停止する
         if (enemy.entersWallFromTop) return true;
 
         // 灯体レンズから走査地点まで細い赤色光軸と着弾点を描画する
@@ -884,176 +889,247 @@ void SideScrollingShooter::Stage5Module::DrawCityBuildings(
 }
 
 /**
- * @brief 第2部道中のNEO AIZU市街とPANDD会ビルを描画する
+ * @brief 第2部道中のくり抜かれたPANDD会ビル内部を描画する
  * @param shooter 描画対象
  * @param renderer 描画先
  * @param camera 現在の3Dカメラ
- * @param railWeight 横視点からレール視点への補間率
+ * @param railWeight 2D視点から3D視点への補間率
  * @return なし
  */
 void SideScrollingShooter::Stage5Module::DrawPart2Background(
     const SideScrollingShooter& shooter, Renderer& renderer,
     const Camera3D& camera, float railWeight) {
-    constexpr float SideBackgroundZ = SidePlaneZ + 20.0f;
-    constexpr float GroundTopY = -3.65f;
-    constexpr float BuildingZ = 45.0f;
-    constexpr float EdgeColor[] = {0.20f, 0.34f, 0.48f, 1.0f};
+    using namespace ShooterStages::Stage5;
+    constexpr float SideBackZ = SidePlaneZ + 20.0f;
+    constexpr float FarZ = 76.0f;
+    constexpr float NearZ = -6.0f;
+    constexpr int RibCount = 14;
+    constexpr int DustCount = 36;
+    constexpr float WallX = ShaftHalfWidth * WorldXScale;
+    constexpr float WallY = ShaftHalfHeight * WorldYScale;
+    constexpr float WallLength = FarZ - NearZ;
+    constexpr float WallCenterZ = (FarZ + NearZ) * 0.5f;
+    constexpr float DustColor[] = {0.62f, 0.60f, 0.56f, 0.55f};
+    constexpr float BackColor[] = {0.012f, 0.014f, 0.022f, 1.0f};
     const float weight = SmoothStep(Math::Clamp01(railWeight));
-    const float moveWeight = SmoothStep(Math::Clamp01(railWeight * 2.0f));
-    const float expandWeight = SmoothStep(Math::Clamp01(railWeight * 2.0f - 1.0f));
     const float sideHalfHeight =
-        (SideBackgroundZ - SideScrollingShooterShared::SideCameraZ) *
+        (SideBackZ - SideScrollingShooterShared::SideCameraZ) *
         std::tan(Math::ToRadians(SideScrollingShooterShared::SideCameraFieldOfView) * 0.5f) * 1.01f;
     const float sideHalfWidth = sideHalfHeight * renderer.AspectRatio();
-    const int routeFrame = ShooterStages::Stage5::Part2RouteElapsedFrames(
-        shooter.m_stage5.phase, shooter.m_stage5.phaseTimer);
-    const int wallTier = WallTier(shooter.m_stage5.phase);
-    const float* facadeColor = wallTier == 0 ? WallLowerFacadeColor :
-        (wallTier == 1 ? WallMiddleFacadeColor : WallUpperFacadeColor);
-    const float* accentColor = wallTier == 0 ? WallLowerAccentColor :
-        (wallTier == 1 ? WallMiddleAccentColor : WallUpperAccentColor);
-    const float* lightColor = wallTier == 0 ? WallLowerLightColor :
-        (wallTier == 1 ? WallMiddleLightColor : WallUpperLightColor);
+    const int tier = WallTier(shooter.m_stage5.phase);
+    const float* facadeColor = tier == 0 ? WallLowerFacadeColor :
+        (tier == 1 ? WallMiddleFacadeColor : WallUpperFacadeColor);
+    const float* accentColor = tier == 0 ? WallLowerAccentColor :
+        (tier == 1 ? WallMiddleAccentColor : WallUpperAccentColor);
+    const float* lightColor = tier == 0 ? WallLowerLightColor :
+        (tier == 1 ? WallMiddleLightColor : WallUpperLightColor);
 
-    // ムービー終端と同じ嵐空を道中でも継続する
-    DrawPart2StormSky(shooter, renderer, camera);
+    // 2Dと3Dの配置を一つの箱へ補間し、視点切替で背景を連続変形させる
+    const auto Morph = [&](const Vector3& side, const Vector3& sideSize,
+        const Vector3& rail, const Vector3& railSize, const float* color) {
+        shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
+            Vector3::Lerp(side, rail, weight), Vector3::Lerp(sideSize, railSize, weight),
+            {}, color);
+    };
 
-    // 2Dでは右三分の一、3Dでは画面中央奥へ同じ外壁を連続移動する
-    const float sideBuildingWidth = sideHalfWidth * 0.68f;
-    const float sideBuildingHeight = sideHalfHeight * 2.18f;
-    const float sideBuildingX = sideHalfWidth - sideBuildingWidth * 0.5f;
-    constexpr float RailBuildingBottomY = -36.0f;
-    const float compactHeight = Math::Lerp(sideBuildingHeight, 32.0f, moveWeight);
-    const float expandedHeight = ShooterStages::Stage5::PandDBuildingHeight +
-        GroundTopY - RailBuildingBottomY;
-    const float buildingHeight = Math::Lerp(compactHeight,
-        expandedHeight, expandWeight);
-    const float compactY = Math::Lerp(0.0f, GroundTopY + 16.0f, moveWeight);
-    const float buildingY = Math::Lerp(compactY,
-        RailBuildingBottomY + expandedHeight * 0.5f, expandWeight);
-    const float buildingX = Math::Lerp(sideBuildingX, 0.0f, moveWeight);
-    const float buildingZ = Math::Lerp(SidePlaneZ + 12.8f, BuildingZ, moveWeight);
-    const float buildingWidth = Math::Lerp(sideBuildingWidth,
-        ShooterStages::Stage5::PandDBuildingWidth, weight);
-    const float buildingDepth = Math::Lerp(0.55f, 6.0f, moveWeight);
-    // 超巨大部分は単純なビル躯体とし、新規モデルを縦に引き延ばさない
-    shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
-        buildingX, buildingY, buildingZ,
-        buildingWidth, buildingHeight, buildingDepth, facadeColor);
+    // 奥の闇と、シャフト上端から差し込む光で高さを示す
+    Morph({0.0f, 0.0f, SideBackZ}, {sideHalfWidth * 2.1f, sideHalfHeight * 2.1f, 0.2f},
+        {0.0f, 0.0f, FarZ}, {WallX * 2.0f, WallY * 2.0f, 0.2f}, BackColor);
+    const float hatchPulse = 0.72f + std::sin(static_cast<float>(shooter.m_frame) * 0.05f) * 0.18f;
+    const float hatchColor[] = {lightColor[0], lightColor[1], lightColor[2], hatchPulse};
+    Morph({0.0f, sideHalfHeight * 0.98f, SideBackZ - 0.1f}, {sideHalfWidth * 2.0f, 0.9f, 0.1f},
+        {0.0f, 0.0f, FarZ - 0.2f}, {WallX * 0.5f, WallY * 0.5f, 0.1f}, hatchColor);
 
-    // PANDD会建造物は元の縦横比のまま超巨大ビルの屋上へ載せる
-    const Vector3 capSize = TayamaModelView::TowerSize *
-        ShooterStages::Stage5::PandDBuildingCapScale;
-    const Matrix4x4 capRoot = TayamaModelView::BuildingRoot(
-        buildingX, buildingY + buildingHeight * 0.5f, buildingZ, capSize);
-    TayamaModelView::VisitParts(capRoot, 0.0f, TayamaModelState {},
-        [&](PrimitiveShape shape, const Matrix4x4& world,
-            const ColorF& color, TayamaPartGroup) {
-            const float partColor[] = {color.r, color.g, color.b, color.a};
-            shooter.DrawModelPrimitive(renderer, camera,
-                static_cast<int>(shape), world, partColor);
-        });
-
-    // 外壁両端の縦線で3D時に上方へ収束する輪郭を強調する
+    // 四方の壁は3Dで奥へ収束させ、2Dでは左右の壁だけを残す
     for (int side = -1; side <= 1; side += 2) {
-        shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
-            buildingX + static_cast<float>(side) * buildingWidth * 0.495f,
-            buildingY, buildingZ - buildingDepth * 0.51f,
-            Math::Lerp(0.12f, 0.42f, weight), buildingHeight,
-            Math::Lerp(0.08f, 0.22f, weight), EdgeColor);
-    }
-
-    // 窓列を高速で上から下へ循環させ、外壁に沿った上昇速度を見せる
-    constexpr int WindowRowCount = 12;
-    const float sideWindowSpacing = sideHalfHeight * 0.24f;
-    const float sideWindowScroll = std::fmod(
-        static_cast<float>(routeFrame) *
-            ShooterStages::Stage5::Part2SideSceneryFallSpeed,
-        sideWindowSpacing);
-    constexpr float RailWindowSpacing = 12.0f;
-    constexpr int WindowStartRowOffset = 4;
-    const float railWindowScroll = std::fmod(
-        static_cast<float>(routeFrame) *
-            ShooterStages::Stage5::Part2RailSceneryFallSpeed,
-        RailWindowSpacing);
-    for (int row = 0; row < WindowRowCount; ++row) {
-        for (int column = 0;
-            column < ShooterStages::Stage5::PandDBuildingWindowColumns; ++column) {
-            const float columnOffset =
-                (static_cast<float>(column) /
-                    static_cast<float>(ShooterStages::Stage5::PandDBuildingWindowColumns - 1) -
-                    0.5f) * 0.75f;
-            const float sideWindowX = sideBuildingX + columnOffset * sideBuildingWidth;
-            const float sideWindowY = -sideHalfHeight - sideWindowSpacing +
-                static_cast<float>(row + WindowStartRowOffset) * sideWindowSpacing - sideWindowScroll;
-            const float railWindowX = columnOffset *
-                ShooterStages::Stage5::PandDBuildingWidth;
-            const float railWindowY = GroundTopY - RailWindowSpacing +
-                static_cast<float>(row + WindowStartRowOffset) * RailWindowSpacing - railWindowScroll;
-            shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
-                Math::Lerp(sideWindowX, railWindowX, weight),
-                Math::Lerp(sideWindowY, railWindowY, weight),
-                Math::Lerp(SidePlaneZ + 12.45f, 41.82f, weight),
-                Math::Lerp(sideBuildingWidth * 0.10f,
-                    ShooterStages::Stage5::PandDBuildingWidth * 0.08f, weight),
-                Math::Lerp(0.32f, 0.52f, weight),
-                Math::Lerp(0.08f, 0.18f, weight), lightColor);
+        const float sign = static_cast<float>(side);
+        Morph({sign * (WallX + 1.0f), 0.0f, SidePlaneZ + 0.6f}, {2.0f, sideHalfHeight * 2.0f, 0.4f},
+            {sign * (WallX + 0.5f), 0.0f, WallCenterZ}, {1.0f, WallY * 2.0f + 2.0f, WallLength}, facadeColor);
+        if (weight > 0.001f) {
+            Morph({0.0f, sign * sideHalfHeight * 1.2f, SideBackZ}, {},
+                {0.0f, sign * (WallY + 0.5f), WallCenterZ}, {WallX * 2.0f + 2.0f, 1.0f, WallLength}, facadeColor);
         }
     }
 
-    // 階層ごとに真鍮帯、深紅の組格子、黒漆と金の紋章へ豪華さを増す
-    constexpr int OrnamentRowCount = 6;
-    const float sideOrnamentSpacing = sideHalfHeight * 0.48f;
-    const float sideOrnamentScroll = std::fmod(
-        static_cast<float>(routeFrame) *
-            ShooterStages::Stage5::Part2SideSceneryFallSpeed,
-        sideOrnamentSpacing);
-    constexpr float RailOrnamentSpacing = 24.0f;
-    const float railOrnamentScroll = std::fmod(
-        static_cast<float>(routeFrame) *
-            ShooterStages::Stage5::Part2RailSceneryFallSpeed,
-        RailOrnamentSpacing);
-    for (int row = 0; row < OrnamentRowCount; ++row) {
-        const float sideY = -sideHalfHeight - sideOrnamentSpacing +
-            static_cast<float>(row) * sideOrnamentSpacing - sideOrnamentScroll;
-        const float railY = GroundTopY - RailOrnamentSpacing +
-            static_cast<float>(row) * RailOrnamentSpacing - railOrnamentScroll;
-        const float ornamentY = Math::Lerp(sideY, railY, weight);
-        const float ornamentZ = Math::Lerp(SidePlaneZ + 12.38f, 41.70f, weight);
-
-        // 全階層を貫く横帯は上層ほど太く明るくする
-        shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
-            buildingX, ornamentY, ornamentZ,
-            buildingWidth * 0.92f,
-            Math::Lerp(0.10f + wallTier * 0.05f, 0.30f + wallTier * 0.12f, weight),
-            Math::Lerp(0.10f, 0.24f, weight), accentColor);
-
-        // 中層は菱形の組格子、上層は金縁の代紋を左右対称に配置する
-        if (wallTier == 0) continue;
+    // 落下物と同じ速さで床の縁と窓を流し、上昇速度を見せる
+    const float cycle = ShaftTravelPerFrame(tier) * (ShaftFarZ - ShaftNearZ) / WallLength;
+    for (int rib = 0; rib < RibCount; ++rib) {
+        const float phase = WrapCityDistance(static_cast<float>(rib) / RibCount +
+            static_cast<float>(shooter.m_stage5.phaseTimer) * cycle, 1.0f);
+        const float z = Math::Lerp(FarZ, NearZ, phase);
+        const float sideY = Math::Lerp(sideHalfHeight * 1.1f, -sideHalfHeight * 1.1f, phase);
+        const std::uint32_t hash = WallWaveHash(rib, tier + 71);
         for (int side = -1; side <= 1; side += 2) {
-            const float sideX = sideBuildingX + static_cast<float>(side) *
-                sideBuildingWidth * 0.27f;
-            const float railX = static_cast<float>(side) *
-                ShooterStages::Stage5::PandDBuildingWidth * 0.28f;
-            const float emblemSize = wallTier == 1 ? 0.72f : 1.05f;
-            for (int diagonal = -1; diagonal <= 1; diagonal += 2) {
-                shooter.DrawModelPrimitive(renderer, camera,
-                    static_cast<int>(PrimitiveShape::Box),
-                    {Math::Lerp(sideX, railX, weight), ornamentY, ornamentZ - 0.06f},
-                    {Math::Lerp(emblemSize, emblemSize * 3.2f, weight),
-                        Math::Lerp(0.08f, 0.20f, weight),
-                        Math::Lerp(0.08f, 0.20f, weight)},
-                    {0.0f, 0.0f, static_cast<float>(diagonal) * Math::Pi * 0.25f},
-                    accentColor);
+            const float sign = static_cast<float>(side);
+
+            // 左右の床の縁は2Dでは背景を横切る帯になる
+            Morph({sign * sideHalfWidth * 0.5f, sideY, SideBackZ - 0.1f}, {sideHalfWidth, 0.16f, 0.1f},
+                {sign * (WallX - 0.25f), 0.0f, z}, {0.5f, WallY * 2.0f, 0.7f}, accentColor);
+            if (weight > 0.001f) {
+                Morph({0.0f, sideY, SideBackZ - 0.1f}, {},
+                    {0.0f, sign * (WallY - 0.25f), z}, {WallX * 2.0f, 0.5f, 0.7f}, accentColor);
             }
-            if (wallTier < 2) continue;
-            shooter.DrawModelPrimitive(renderer, camera,
-                static_cast<int>(PrimitiveShape::Box),
-                Math::Lerp(sideX, railX, weight), ornamentY, ornamentZ - 0.14f,
-                Math::Lerp(0.32f, 1.10f, weight),
-                Math::Lerp(0.32f, 1.10f, weight),
-                Math::Lerp(0.10f, 0.28f, weight), lightColor);
+
+            // 窓は明滅を混ぜ、破壊された階層の荒れた雰囲気を出す
+            for (int window = 0; window < 3; ++window) {
+                if (((hash >> (window * 3 + (side > 0 ? 9 : 0))) & 7u) == 0u) continue;
+                const float column = static_cast<float>(window) - 1.0f;
+                Morph({sign * sideHalfWidth * (0.5f + column * 0.28f), sideY - 1.4f, SideBackZ - 0.05f},
+                    {1.6f, 0.55f, 0.1f},
+                    {sign * (WallX - 0.04f), column * WallY * 0.6f, z + 3.0f}, {0.12f, 1.8f, 3.2f}, lightColor);
+            }
+
+            // 演出用の小さな張り出しで壁面に凹凸を付ける
+            if ((hash >> (side > 0 ? 20 : 24) & 3u) != 0u) continue;
+            const float jutY = (static_cast<float>(hash >> 26 & 7u) / 3.5f - 1.0f) * WallY * 0.7f;
+            Morph({sign * (sideHalfWidth * 0.86f), sideY, SideBackZ - 0.2f}, {sideHalfWidth * 0.28f, 1.1f, 0.3f},
+                {sign * (WallX - 1.1f), jutY, z}, {2.2f, 1.4f, 2.4f}, facadeColor);
         }
+    }
+
+    // 粉塵を落下物より速く流して崩壊中のビルを表現する
+    for (int dust = 0; dust < DustCount; ++dust) {
+        const std::uint32_t hash = WallWaveHash(dust, 91);
+        const float phase = WrapCityDistance(static_cast<float>(hash & 0xffu) / 255.0f +
+            static_cast<float>(shooter.m_frame) * (0.008f + static_cast<float>(hash >> 8 & 7u) * 0.001f), 1.0f);
+        const float x = (static_cast<float>(hash >> 12 & 0xffu) / 127.5f - 1.0f) * WallX * 0.95f;
+        const float y = (static_cast<float>(hash >> 20 & 0xffu) / 127.5f - 1.0f) * WallY * 0.95f;
+        const float size = 0.08f + static_cast<float>(hash >> 28 & 3u) * 0.04f;
+        Morph({x, Math::Lerp(sideHalfHeight, -sideHalfHeight, phase), SidePlaneZ + 1.0f},
+            {size, size * 3.0f, size},
+            {x, y, Math::Lerp(FarZ, NearZ, phase)}, {size, size, size * 4.0f}, DustColor);
+    }
+
+    DrawShaftObstacles(shooter, renderer, camera, weight);
+}
+
+/**
+ * @brief ビル内部の落下物を描画する
+ * @param shooter 描画対象
+ * @param renderer 描画先
+ * @param camera 現在の3Dカメラ
+ * @param weight 3D視点の補間率
+ * @return なし
+ */
+void SideScrollingShooter::Stage5Module::DrawShaftObstacles(const SideScrollingShooter& shooter,
+    Renderer& renderer, const Camera3D& camera, float weight) {
+    using namespace ShooterStages::Stage5;
+    constexpr float JutColor[] = {0.27f, 0.25f, 0.24f, 1.0f};
+    constexpr float DebrisColor[] = {0.46f, 0.30f, 0.20f, 1.0f};
+    constexpr float BeamColor[] = {0.42f, 0.10f, 0.07f, 1.0f};
+    constexpr float BulkheadColor[] = {0.08f, 0.22f, 0.30f, 1.0f};
+    constexpr float FlashColor[] = {1.0f, 0.95f, 0.8f, 1.0f};
+    constexpr float JutEdgeColor[] = {0.95f, 0.72f, 0.12f, 1.0f};
+    const float pulse = 0.65f + std::sin(static_cast<float>(shooter.m_frame) * 0.25f) * 0.35f;
+    const float beamEdge[] = {1.0f, 0.42f * pulse, 0.08f, 1.0f};
+    const float bulkheadEdge[] = {0.25f * pulse, 0.95f, 1.0f, 1.0f};
+    for (const auto& obstacle : shooter.m_stage5.shaftObstacles) {
+        if (!obstacle.active) continue;
+        const bool inSlice = ShaftObstacleInSideSlice(obstacle);
+        if (!inSlice && weight <= 0.001f) continue;
+
+        // 断面に掛からない部品は2Dへ向かうほど潰し、隔壁の隙間を見せる
+        const float worldX = ToWorldX(obstacle.x);
+        const float width = obstacle.halfWidth * 2.0f * WorldXScale;
+        const float sideY = ToWorldY(ShaftObstacleSideY(obstacle.travel));
+        const float sideThickness = inSlice ? ShaftObstacleSideHalfThickness * 2.0f * WorldYScale : 0.0f;
+        const Vector3 center = Vector3::Lerp({worldX, sideY, SidePlaneZ + 0.4f},
+            {worldX, ToWorldY(obstacle.y), ShaftObstacleZ(obstacle.travel)}, weight);
+        const Vector3 size = Vector3::Lerp({width, sideThickness, inSlice ? 0.8f : 0.0f},
+            {width, obstacle.halfHeight * 2.0f * WorldYScale, ShaftObstacleHalfDepth * 2.0f}, weight);
+        const float* baseColor = obstacle.hitFlashFrames > 0 ? FlashColor :
+            (obstacle.kind == ShaftObstacleKind::Debris ? DebrisColor :
+            (obstacle.kind == ShaftObstacleKind::Beam ? BeamColor :
+            (obstacle.kind == ShaftObstacleKind::Bulkhead ? BulkheadColor : JutColor)));
+
+        // 出現直後は本体と発光縁を同じ割合のディザで徐々に埋める
+        const float alpha = ShaftObstacleRevealAlpha(obstacle.travel);
+        const float color[] = {baseColor[0], baseColor[1], baseColor[2], alpha};
+
+        // 残骸だけを3Dで回転させ、2Dは判定と形がずれない小さな揺れに留める
+        const float spin = obstacle.kind == ShaftObstacleKind::Debris ?
+            obstacle.travel * 18.0f : 0.0f;
+        shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
+            center, size, {spin * 0.7f * weight, spin * weight,
+                Math::Lerp(std::sin(spin) * 0.15f, spin * 0.4f, weight)}, color);
+        if (obstacle.kind == ShaftObstacleKind::Debris) continue;
+
+        // 通路側の縁を発光させ、抜ける方向を示す
+        const float* baseEdge = obstacle.kind == ShaftObstacleKind::Beam ? beamEdge :
+            (obstacle.kind == ShaftObstacleKind::Bulkhead ? bulkheadEdge : JutEdgeColor);
+        const float edge[] = {baseEdge[0], baseEdge[1], baseEdge[2], alpha};
+        const float sign = obstacle.y > 0.0f ? -1.0f : 1.0f;
+        shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
+            center + Vector3 {0.0f, sign * size.y * 0.5f, -size.z * 0.5f}, {width, 0.2f, 0.2f}, {}, edge);
+    }
+}
+
+/**
+ * @brief 入口の扉と爆破後の穴を描画する
+ * @param shooter 描画対象
+ * @param renderer 描画先
+ * @param camera 現在の3Dカメラ
+ * @return なし
+ */
+void SideScrollingShooter::Stage5Module::DrawEntranceDoor(const SideScrollingShooter& shooter,
+    Renderer& renderer, const Camera3D& camera) {
+    using namespace ShooterStages::Stage5;
+    constexpr float GroundTopY = -3.65f;
+    constexpr float CenterY = GroundTopY + EntranceDoorHeight * 0.5f;
+    constexpr float SteelColor[] = {0.20f, 0.21f, 0.24f, 1.0f};
+    constexpr float FrameColor[] = {0.78f, 0.42f, 0.055f, 1.0f};
+    constexpr float ScorchedColor[] = {0.05f, 0.04f, 0.04f, 1.0f};
+    constexpr float HoleColor[] = {0.0f, 0.0f, 0.0f, 1.0f};
+    constexpr float WarningColor[] = {1.0f, 0.08f, 0.05f, 1.0f};
+    constexpr float MissileColor[] = {1.0f, 0.86f, 0.42f, 1.0f};
+    const int frame = shooter.m_stage5.phaseTimer - EntranceBlastFrame;
+    const auto Box = [&](float x, float y, float z, float width, float height, float depth, const float* color) {
+        shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
+            x, y, z, width, height, depth, color);
+    };
+
+    // 枠は爆破後に焼け焦げた色へ変える
+    const float* frameColor = frame < 0 ? FrameColor : ScorchedColor;
+    Box(0.0f, GroundTopY + EntranceDoorHeight, EntranceDoorZ - 0.1f,
+        EntranceDoorWidth + 1.2f, 0.5f, 0.4f, frameColor);
+    for (int side = -1; side <= 1; side += 2) {
+        Box(static_cast<float>(side) * (EntranceDoorWidth * 0.5f + 0.35f), CenterY, EntranceDoorZ - 0.1f,
+            0.6f, EntranceDoorHeight, 0.4f, frameColor);
+    }
+
+    if (frame < 0) {
+        // 閉じた鋼鉄扉と警告灯を描き、自機のミサイルを着弾まで飛ばす
+        Box(0.0f, CenterY, EntranceDoorZ, EntranceDoorWidth, EntranceDoorHeight, 0.3f, SteelColor);
+        Box(0.0f, CenterY, EntranceDoorZ - 0.2f, 0.16f, EntranceDoorHeight, 0.1f, FrameColor);
+        for (int side = -1; side <= 1; side += 2) {
+            if (shooter.m_frame / 12 % 2 == 0) {
+                Box(static_cast<float>(side) * 4.5f, GroundTopY + EntranceDoorHeight - 0.6f,
+                    EntranceDoorZ - 0.2f, 0.7f, 0.5f, 0.1f, WarningColor);
+            }
+        }
+        const int missileFrame = shooter.m_stage5.phaseTimer - EntranceMissileFireFrame;
+        if (missileFrame < 0) return;
+        const float flight = static_cast<float>(missileFrame) /
+            static_cast<float>(EntranceBlastFrame - EntranceMissileFireFrame);
+        const Vector3 missile = Vector3::Lerp({0.0f, -0.65f, WallApproachEndZ + 1.0f},
+            {0.0f, CenterY, EntranceDoorZ}, flight * flight);
+        shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Sphere),
+            missile.x, missile.y, missile.z, 0.45f, 0.45f, 0.9f, MissileColor);
+        return;
+    }
+
+    // 爆破後は暗い穴の奥に残り火を揺らす
+    Box(0.0f, CenterY, EntranceDoorZ, EntranceDoorWidth, EntranceDoorHeight, 0.3f, HoleColor);
+    constexpr int FlameCount = 14;
+    const float fade = Math::Clamp01(1.0f - static_cast<float>(frame) / 200.0f);
+    for (int flame = 0; flame < FlameCount; ++flame) {
+        const std::uint32_t hash = ShooterStages::Stage5::WallWaveHash(flame, 53);
+        const float rise = WrapCityDistance(static_cast<float>(hash & 0xffu) / 255.0f +
+            static_cast<float>(shooter.m_frame) * 0.02f, 1.0f);
+        const float flameColor[] = {1.0f, 0.42f + rise * 0.3f, 0.05f, (1.0f - rise) * (0.25f + fade * 0.7f)};
+        Box((static_cast<float>(flame) / (FlameCount - 1) - 0.5f) * EntranceDoorWidth * 0.95f,
+            GroundTopY + 0.3f + rise * EntranceDoorHeight * 0.7f, EntranceDoorZ - 0.25f,
+            1.0f + static_cast<float>(hash >> 8 & 3u) * 0.4f, 0.9f, 0.1f, flameColor);
     }
 }
 
@@ -1641,7 +1717,7 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
         // 半透明の嵐雲を先に描き、巨大ビルが必ず手前を覆うようにする
         DrawPart2StormSky(shooter, renderer, camera);
 
-        // 外壁上昇用の超巨大ビル躯体を道路へ接地する
+        // 超巨大ビル躯体を道路へ接地する
         constexpr float GroundTopY = -3.65f;
         constexpr float BuildingZ = 45.0f;
         constexpr float CrossRoadWidth = 180.0f;
@@ -1751,7 +1827,10 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
             }
         }
 
-        // 接近と壁面上昇の全区間で見える窓を超巨大ビル正面へ規則配置する
+        // 入口の扉は窓より手前の専用関数で状態ごとに描き分ける
+        DrawEntranceDoor(shooter, renderer, camera);
+
+        // 接近中に見える窓を超巨大ビル正面へ規則配置する
         constexpr int WindowRowCount = 50;
         constexpr float WindowRowSpacing = 24.0f;
         for (int row = 0; row < WindowRowCount; ++row) {
@@ -1788,7 +1867,7 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
         return;
     }
 
-    // 第2部道中は背景側で同じ巨大ビルモデルを描画済み
+    // 第2部道中は背景側でビル内部を描画済み
     if (ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) return;
 
     if (shooter.m_stage5.phase <= Stage5Phase::EastsourceFall) {
@@ -1897,34 +1976,44 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
             shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(shape), world, partColor);
         });
 
-    // 正面でロックしたプレイヤー位置へ予告線と両目の太いレーザーを描画する
-    if (shooter.m_stage5.phase >= Stage5Phase::TayamaFireControl &&
-        shooter.m_stage5.phase <= Stage5Phase::TayamaCommandCore &&
-        shooter.m_stage5.headLaserArmed) {
-        const int attackTimer = ShooterStages::Stage5::TayamaArmAttackTimer(
-            shooter.m_stage5.attackTimer);
-        const int laserFrame = attackTimer %
-            ShooterStages::Stage5::TayamaHeadLaserCycleFrames;
-        const bool active = ShooterStages::Stage5::IsTayamaHeadLaserActive(attackTimer);
-        if (laserFrame < ShooterStages::Stage5::TayamaHeadLaserWarningFrames || active) {
-            const float progress = static_cast<float>(laserFrame) /
-                static_cast<float>(ShooterStages::Stage5::TayamaHeadLaserWarningFrames);
-            for (const Vector3& eye : TayamaModelView::EyeWorldPositions(transform)) {
-                const Vector3 direction =
-                    (shooter.m_stage5.headLaserTarget - eye).Normalized();
-                const Vector3 end = eye + direction *
-                    ShooterStages::Stage5::TayamaHeadLaserLength;
-                if (active) {
-                    const float pulse = static_cast<float>(shooter.m_frame % 12) / 12.0f;
-                    shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
-                        ShooterStages::Stage5::TayamaHeadLaserHitRadius * 1.7f, pulse, 2);
-                    shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
-                        ShooterStages::Stage5::TayamaHeadLaserHitRadius, pulse, 0);
-                } else {
-                    shooter.DrawRailgunBeamBetween(renderer, camera, eye, end,
-                        0.16f, progress, 3);
-                }
+    // 第一形態の光線は判定と同じ線分へ予告線と太い光線を描画する
+    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase)) {
+        const bool beamActive = ShooterStages::Stage5::IsTayamaBeamActive(
+            shooter.m_stage5.tayamaAttack, shooter.m_stage5.attackTimer);
+        const float pulse = static_cast<float>(shooter.m_frame % 12) / 12.0f;
+        for (int side = 0; side < 2; ++side) {
+            Vector3 start;
+            Vector3 end;
+            float radius = 0.0f;
+            if (!TayamaBeamSegment(shooter, transform, side, start, end, radius)) continue;
+            if (beamActive) {
+                DrawRailgunBeamBetween(renderer, camera, start, end, radius * 1.7f, pulse, 2);
+                DrawRailgunBeamBetween(renderer, camera, start, end, radius, pulse, 0);
+            } else {
+                // 予告線は判定幅へ近づくほど太くする
+                const float warning = ShooterStages::Stage5::TayamaAttackCharge(
+                    shooter.m_stage5.tayamaAttack, shooter.m_stage5.attackTimer);
+                DrawRailgunBeamBetween(renderer, camera, start, end,
+                    0.16f + radius * warning * 0.25f, warning, 3);
             }
+        }
+    }
+
+    // 踏みつけの衝撃波を屋上面に広がる光の輪として描画する
+    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase) &&
+        shooter.m_stage5.tayamaShockwaveTimer > 0) {
+        const float ringRadius = static_cast<float>(shooter.m_stage5.tayamaShockwaveTimer) *
+            ShooterStages::Stage5::TayamaShockwaveSpeed;
+        constexpr float ShockwaveColor[] = {1.0f, 0.46f, 0.10f, 0.9f};
+        constexpr int ShockwavePieces = 48;
+        const float pieceLength = ringRadius * Math::TwoPi / static_cast<float>(ShockwavePieces) * 0.9f;
+        for (int piece = 0; piece < ShockwavePieces; ++piece) {
+            const float angle = static_cast<float>(piece) * Math::TwoPi / static_cast<float>(ShockwavePieces);
+            shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
+                shooter.m_stage5.tayamaShockwaveCenter +
+                    Vector3 {std::cos(angle) * ringRadius, 2.0f, std::sin(angle) * ringRadius},
+                {ShooterStages::Stage5::TayamaShockwaveBand, 4.0f, pieceLength},
+                {0.0f, -angle, 0.0f}, ShockwaveColor);
         }
     }
 
@@ -2021,9 +2110,6 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
     // 現フェーズのサーチライト基部と、追尾上限を持つ光軸を同じ座標で描画する
     int activeLights = 0;
     bool tayamaLights = false;
-    if (shooter.m_stage5.phase == Stage5Phase::WallClimbLower) activeLights = 1;
-    if (shooter.m_stage5.phase == Stage5Phase::WallClimbMiddle) activeLights = 2;
-    if (shooter.m_stage5.phase == Stage5Phase::WallClimbUpper) activeLights = 3;
     if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase)) {
         activeLights = 2;
         tayamaLights = true;
@@ -2088,30 +2174,64 @@ void SideScrollingShooter::Stage5Module::DrawStageWorld3D(const SideScrollingSho
             const Stage5GroupBounds bounds = TayamaModelView::GroupBounds(transform,
                 shooter.m_stage5.tayamaTransformation, state, Groups[static_cast<std::size_t>(weakpoint.type)]);
             if (!bounds.valid) continue;
-            const float size = (std::max)(0.75f, (std::min)(2.2f, bounds.radius * 0.45f));
-            const Matrix4x4 world = Matrix4x4::Translation(bounds.center + Vector3 {0.0f, 0.0f, -0.12f}) *
+
+            // 露出したコアだけ大きく脈動させ、周回中も全弱点のリングをカメラへ向ける
+            const bool core = weakpoint.type == TayamaWeakpoint::CommandCore;
+            const float size = core ? bounds.radius * (1.5f + std::sin(
+                static_cast<float>(shooter.m_frame) * 0.2f) * 0.3f) :
+                (std::max)(0.75f, (std::min)(2.2f, bounds.radius * 0.45f));
+            const Vector3 view = camera.Forward();
+            const Matrix4x4 world = Matrix4x4::Translation(bounds.center - view * bounds.radius) *
+                Matrix4x4::RotationY(std::atan2(view.x, view.z)) *
                 Matrix4x4::Scale({size, size, 1.0f});
             renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * world,
                 static_cast<float>(shooter.m_frame % 30) / 30.0f, 0});
         }
     }
 
-    // 生存中の胸部コアへ射撃予告と同期した収束光を重ねる
-    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase) &&
-        !shooter.m_stage5.tayamaWeakpoints[
-            static_cast<int>(TayamaWeakpoint::CommandCore)].destroyed &&
-        shooter.m_stage5.phaseTimer > 75 &&
-        shooter.m_stage5.attackTimer % 180 < 42) {
-        const Stage5GroupBounds core = TayamaModelView::GroupBounds(transform,
-            shooter.m_stage5.tayamaTransformation, state, TayamaPartGroup::CommandCore);
-        if (core.valid) {
-            const float charge = static_cast<float>(shooter.m_stage5.attackTimer % 180) / 42.0f;
-            const Matrix4x4 chargeWorld = Matrix4x4::Translation(
-                core.center + Vector3 {0.0f, 0.0f, -1.0f}) *
-                Matrix4x4::Scale({1.0f + charge * 1.8f,
-                    1.0f + charge * 1.8f, 1.0f});
-            renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * chargeWorld,
-                charge, 0});
+    // 選択中の攻撃の発射元へ収束光を重ね、どの攻撃が来るか発射前に読ませる
+    // 段階移行中は同じ光を胴体の巨大な衝撃波として使う
+    const bool stageShift = ShooterStages::Stage5::IsTayamaStageShift(shooter.m_stage5.phase,
+        shooter.m_stage5.phaseTimer, shooter.m_stage5.tayamaStageShifted);
+    const float attackCharge = stageShift ? static_cast<float>(
+        shooter.m_stage5.phaseTimer % ShooterStages::Stage5::TayamaStageShiftBlastFrames) /
+        static_cast<float>(ShooterStages::Stage5::TayamaStageShiftBlastFrames) :
+        (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase) ?
+            ShooterStages::Stage5::TayamaAttackCharge(
+                shooter.m_stage5.tayamaAttack, shooter.m_stage5.attackTimer) : 0.0f);
+    if (attackCharge > 0.0f) {
+        // TayamaAttackの順に発射元の二部位を持ち、片側だけなら同じ部位を並べる
+        constexpr TayamaPartGroup Sources[][2] = {
+            {TayamaPartGroup::Bridge, TayamaPartGroup::Bridge},
+            {TayamaPartGroup::LeftFlightDeck, TayamaPartGroup::RightFlightDeck},
+            {TayamaPartGroup::FireControlRadar, TayamaPartGroup::FireControlRadar},
+            {TayamaPartGroup::FireControlRadar, TayamaPartGroup::FireControlRadar},
+            {TayamaPartGroup::LeftLiftEngine, TayamaPartGroup::RightLiftEngine},
+            {TayamaPartGroup::CommandCore, TayamaPartGroup::CommandCore},
+            {TayamaPartGroup::CommandCore, TayamaPartGroup::CommandCore},
+            {TayamaPartGroup::MainThruster, TayamaPartGroup::MainThruster},
+            {TayamaPartGroup::LeftLiftEngine, TayamaPartGroup::RightLiftEngine}
+        };
+        static_assert(std::size(Sources) == ShooterStages::Stage5::TayamaSelectableAttackCount);
+        constexpr TayamaPartGroup ShiftSource[2] = {
+            TayamaPartGroup::CentralHull, TayamaPartGroup::CentralHull
+        };
+        const TayamaPartGroup* source = stageShift ? ShiftSource :
+            Sources[static_cast<int>(shooter.m_stage5.tayamaAttack) - 1];
+
+        // 周回中も光が真横を向かないようカメラ正面へ向ける
+        const Vector3 view = camera.Forward();
+        for (int side = source[0] == source[1] ? 1 : 0; side < 2; ++side) {
+            const Stage5GroupBounds bounds = TayamaModelView::GroupBounds(transform,
+                shooter.m_stage5.tayamaTransformation, state, source[side]);
+            if (!bounds.valid) continue;
+            const float size = bounds.radius * (stageShift ?
+                0.6f + attackCharge * 3.4f : 0.5f + attackCharge * 1.1f);
+            const Matrix4x4 world = Matrix4x4::Translation(bounds.center - view * bounds.radius) *
+                Matrix4x4::RotationY(std::atan2(view.x, view.z)) *
+                Matrix4x4::Scale({size, size, 1.0f});
+            renderer.DrawExplosion({camera.ProjectionMatrix() * camera.ViewMatrix() * world,
+                attackCharge, 0});
         }
     }
 
@@ -2155,11 +2275,7 @@ void SideScrollingShooter::Stage5Module::DrawRain3D(const SideScrollingShooter& 
     const bool transformationCinematic =
         shooter.m_stage5.phase == Stage5Phase::RooftopArrival ||
         shooter.m_stage5.phase == Stage5Phase::CarrierTransformation;
-    const bool part2Route = ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase);
     const bool tayamaBattle = shooter.IsTayamaBattle();
-    const float cinematicAltitude = shooter.m_stage5.phase == Stage5Phase::WallClimbTransition ?
-        SmoothStep(ShooterStages::Stage5::WallClimbProgress(shooter.m_stage5.phaseTimer)) *
-            ShooterStages::Stage5::WallClimbHeight : 0.0f;
 
     // 横視点は前景、中景、後景の3層とし、遷移に合わせて3D降雨域へ展開する
     for (int index = 0; index < rainCount; ++index) {
@@ -2173,7 +2289,7 @@ void SideScrollingShooter::Stage5Module::DrawRain3D(const SideScrollingShooter& 
         const float sideZ = SidePlaneZ - 3.0f + static_cast<float>(index % 3) * 4.0f;
         const Vector3 sidePosition {
             -17.0f + static_cast<float>(sideColumn) * 0.1f,
-            SideGroundY + cinematicAltitude + streakLength * 0.5f + fallRate * 18.0f,
+            SideGroundY + streakLength * 0.5f + fallRate * 18.0f,
             sideZ
         };
 
@@ -2183,27 +2299,12 @@ void SideScrollingShooter::Stage5Module::DrawRain3D(const SideScrollingShooter& 
         const float railZ = -2.0f + static_cast<float>((index * 197) % 960) * 0.1f;
         Vector3 railPosition {
             -rainWidth * 0.5f + static_cast<float>(railColumn) / 400.0f * rainWidth,
-            RailGroundY + cinematicAltitude + railStreakLength * 0.5f + fallRate *
+            RailGroundY + railStreakLength * 0.5f + fallRate *
                 (transformationCinematic ?
                     TayamaModelView::TowerSize.y * ShooterStages::Stage5::TayamaBossScale : 24.0f),
             railZ
         };
-        if (part2Route) {
-            // 壁面上昇中は現在の視錐台上端外から下端外まで雨を通過させる
-            const float viewDepth = 18.0f +
-                static_cast<float>((index * 197) % 600) * 0.1f;
-            const float halfHeight = viewDepth * std::tan(camera.FieldOfView() * 0.5f);
-            const float lateral = (-1.0f + static_cast<float>(railColumn) / 200.0f) *
-                halfHeight * renderer.AspectRatio() * 1.12f;
-            const Vector3 topPosition = camera.Position() +
-                camera.Forward() * viewDepth + camera.Right() * lateral +
-                camera.Up() * (halfHeight * RainViewMargin + railStreakLength * 0.5f);
-            const float worldFallProjection = (std::max)(0.2f,
-                camera.Up().y + RainViewMargin *
-                    std::tan(camera.FieldOfView() * 0.5f) * camera.Forward().y);
-            railPosition = topPosition - Vector3::Up *
-                ((1.0f - fallRate) * halfHeight * RainViewTravel / worldFallProjection);
-        } else if (tayamaBattle) {
+        if (tayamaBattle) {
             constexpr float RainHeight =
                 TayamaModelView::TowerSize.y * ShooterStages::Stage5::TayamaBossScale + 32.0f;
             const float lateral = -72.0f + static_cast<float>(railColumn) / 400.0f * 144.0f;
@@ -2246,14 +2347,14 @@ void SideScrollingShooter::Stage5Module::DrawRain3D(const SideScrollingShooter& 
             const Vector3 sideSplash {
                 -17.0f + static_cast<float>(sideImpactColumn) * 0.1f +
                     direction * splashProgress * 0.24f,
-                SideGroundY + cinematicAltitude + particleSize * 0.5f + arc *
+                SideGroundY + particleSize * 0.5f + arc *
                     (0.28f + static_cast<float>(particle % 2) * 0.12f),
                 sideZ + (particle % 2 == 0 ? -1.0f : 1.0f) * splashProgress * 0.16f
             };
             Vector3 railSplash {
                 -rainWidth * 0.5f + static_cast<float>(railImpactColumn) / 400.0f * rainWidth +
                     direction * splashProgress * 0.42f,
-                RailGroundY + cinematicAltitude + particleSize * 0.5f + arc *
+                RailGroundY + particleSize * 0.5f + arc *
                     (0.42f + static_cast<float>(particle % 2) * 0.18f),
                 railZ + direction * splashProgress * 0.28f
             };
@@ -2295,6 +2396,18 @@ void SideScrollingShooter::Stage5Module::DrawScreenEffects(
             {0.82f, 0.42f, 0.26f, dawn * 0.10f});
     }
 
+    // 収束砲の発射と段階移行の瞬間だけ画面を一度染める、点滅を避けるため繰り返さない
+    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase)) {
+        constexpr int FlashFrames = 18;
+        const int age = shooter.m_stage5.tayamaAttack == ShooterStages::Stage5::TayamaAttack::CoreCannon ?
+            shooter.m_stage5.attackTimer - ShooterStages::Stage5::TayamaCoreCannonChargeFrames :
+            (shooter.m_stage5.tayamaStageShifted ? shooter.m_stage5.phaseTimer : -1);
+        if (age >= 0 && age < FlashFrames) {
+            renderer.Draw(Rect {{0.0f, 0.0f}, {2.0f, 2.0f}}, {1.0f, 0.62f, 0.36f,
+                0.38f * (1.0f - static_cast<float>(age) / static_cast<float>(FlashFrames))});
+        }
+    }
+
     // 爆発前の暗がりから一度だけ白く染め、熱の余韻を残して雲海へ戻す
     if (shooter.m_stage5.phase == Stage5Phase::TayamaDragonCollapse) {
         const int age = shooter.m_stage5.phaseTimer -
@@ -2321,7 +2434,16 @@ void SideScrollingShooter::Stage5Module::DrawScreenEffects(
         renderer.Draw(Rect {{0.0f, 0.0f}, {2.0f, 2.0f}}, {0.72f, 0.82f, 1.0f, alpha});
     }
 
-    // 撃破地点、壁面ムービー、第2部開始、終幕の雲海を暗転でつなぐ
+    // 入口爆破の瞬間だけ画面全体を白く焼く
+    if (shooter.m_stage5.phase == Stage5Phase::WallClimbTransition) {
+        const int blast = shooter.m_stage5.phaseTimer - ShooterStages::Stage5::EntranceBlastFrame;
+        if (blast >= 0 && blast < 24) {
+            renderer.Draw(Rect {{0.0f, 0.0f}, {2.0f, 2.0f}},
+                {1.0f, 0.92f, 0.78f, (1.0f - static_cast<float>(blast) / 24.0f) * 0.9f});
+        }
+    }
+
+    // 撃破地点、入口爆破ムービー、第2部開始、終幕の雲海を暗転でつなぐ
     const float fadeAlpha = SmoothStep(ShooterStages::Stage5::CinematicFadeAlpha(
         shooter.m_stage5.phase, shooter.m_stage5.phaseTimer));
     if (fadeAlpha > 0.0f) {
@@ -2349,31 +2471,32 @@ void SideScrollingShooter::Stage5Module::DrawScreenEffects(
     const Vector2 coreTarget = ScreenPosition(shooter.m_stage5.coreTargetX,
         shooter.m_stage5.coreTargetY, shooter.m_stage5.coreTargetZ);
 
-    // 胸部掃射、脚部斉射、コアレーザーは発射前だけ危険範囲を固定表示する
-    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase) &&
-        !shooter.m_stage5.tayamaWeakpoints[
-            static_cast<int>(TayamaWeakpoint::FireControlRadar)].destroyed &&
-        shooter.m_stage5.phaseTimer > 75 && shooter.m_stage5.attackTimer % 210 < 36) {
+    // 胸部掃射、脚部斉射、コア三連射は発射前だけ危険範囲を固定表示する
+    const auto tayamaAttack = ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase) ?
+        shooter.m_stage5.tayamaAttack : ShooterStages::Stage5::TayamaAttack::None;
+    const int tayamaAttackFrame = shooter.m_stage5.attackTimer;
+    if ((tayamaAttack == ShooterStages::Stage5::TayamaAttack::ChestSweep &&
+        tayamaAttackFrame < ShooterStages::Stage5::TayamaChestSweepFireFrame) ||
+        (tayamaAttack == ShooterStages::Stage5::TayamaAttack::ArmSpin &&
+            tayamaAttackFrame < ShooterStages::Stage5::TayamaArmSpinWarningFrames)) {
         renderer.Draw(Rect {{0.0f, coreTarget.y}, {1.86f, 0.055f}},
             {1.0f, 0.12f, 0.08f, 0.36f});
     }
-    const bool liftEngineActive = !shooter.m_stage5.tayamaWeakpoints[
-        static_cast<int>(TayamaWeakpoint::LeftLiftEngine)].destroyed ||
-        !shooter.m_stage5.tayamaWeakpoints[
-            static_cast<int>(TayamaWeakpoint::RightLiftEngine)].destroyed;
-    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase) &&
-        liftEngineActive && shooter.m_stage5.phaseTimer > 75 &&
-        shooter.m_stage5.attackTimer % 132 < 32) {
+    if (tayamaAttack == ShooterStages::Stage5::TayamaAttack::LegVolley &&
+        tayamaAttackFrame < ShooterStages::Stage5::TayamaLegVolleyFireFrame) {
         renderer.Draw(Rect {coreTarget, {0.38f, 0.075f}},
             {1.0f, 0.34f, 0.08f, 0.42f});
         renderer.Draw(Circle {coreTarget, 0.12f},
             {1.0f, 0.58f, 0.12f, 0.58f});
     }
-    if (ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase) &&
-        !shooter.m_stage5.tayamaWeakpoints[
-            static_cast<int>(TayamaWeakpoint::CommandCore)].destroyed &&
-        shooter.m_stage5.phaseTimer > 75 && shooter.m_stage5.attackTimer % 180 < 42) {
+    if (tayamaAttack == ShooterStages::Stage5::TayamaAttack::CoreBarrage &&
+        tayamaAttackFrame < ShooterStages::Stage5::TayamaCoreSalvoFireFrame) {
         renderer.Draw(Circle {coreTarget, 0.11f}, {1.0f, 0.08f, 0.04f, 0.62f});
+    }
+    if (tayamaAttack == ShooterStages::Stage5::TayamaAttack::CoreCannon &&
+        tayamaAttackFrame < ShooterStages::Stage5::TayamaCoreCannonChargeFrames) {
+        renderer.Draw(Circle {coreTarget, 0.05f + static_cast<float>(tayamaAttackFrame) * 0.0022f},
+            {1.0f, 0.10f, 0.04f, 0.42f});
     }
 
     // TAYAMA戦はレーザー照準点、壁面区画は検出円と固定ロック地点を表示する
@@ -2452,8 +2575,17 @@ void SideScrollingShooter::Stage5Module::DrawStage5Hud(const SideScrollingShoote
             {1.0f, 0.18f, 0.18f, 1.0f}, {0.0f, 0.12f});
         return;
     }
-    if (shooter.m_stage5.phase >= Stage5Phase::WallClimbTransition &&
-        shooter.m_stage5.phase <= Stage5Phase::WallClimbUpper) return;
+    if (ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) {
+        // 接近中の関門に必要な視点を画面上部へ示す
+        const auto* gate = ApproachingShaftGate(shooter.m_stage5);
+        if (gate == nullptr) return;
+        const bool needsRail = gate->kind == ShooterStages::Stage5::ShaftObstacleKind::Beam;
+        renderer.DrawText(needsRail ? "3D ROUTE ONLY" : "2D ROUTE ONLY", TextAlign::Center, 0.020f,
+            needsRail == shooter.IsRailGameplayActive() ?
+                ColorF {0.35f, 1.0f, 0.55f, 1.0f} : ColorF {1.0f, 0.82f, 0.30f, 1.0f}, {0.0f, 0.78f});
+        return;
+    }
+    if (shooter.m_stage5.phase == Stage5Phase::WallClimbTransition) return;
     if (shooter.m_stage5.phase == Stage5Phase::RooftopArrival ||
         shooter.m_stage5.phase == Stage5Phase::CarrierTransformation) {
         char status[Localization::BufferSize(48)];
@@ -2472,20 +2604,21 @@ void SideScrollingShooter::Stage5Module::DrawStage5Hud(const SideScrollingShoote
         BarWidth * hpRate, 0.018f, Accent);
     renderer.DrawText("TAYAMA", TextAlign::Center, 0.022f,
         {0.20f, 0.88f, 1.0f, 1.0f}, {0.0f, 0.86f});
-    char components[Localization::BufferSize(96)];
     if (shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle) {
-        std::snprintf(components, sizeof(components),
-            Localization::Text("ALL BODY SECTIONS VULNERABLE"));
-    } else {
-        std::snprintf(components, sizeof(components),
-            Localization::Text("L-LIGHT[%c] R-LIGHT[%c] RADAR[%c] L-LEG[%c] R-LEG[%c] CORE[%c]"),
-            shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::LeftSearchlight)].destroyed ? 'X' : ' ',
-            shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::RightSearchlight)].destroyed ? 'X' : ' ',
-            shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::FireControlRadar)].destroyed ? 'X' : ' ',
-            shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::LeftLiftEngine)].destroyed ? 'X' : ' ',
-            shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::RightLiftEngine)].destroyed ? 'X' : ' ',
-            shooter.m_stage5.tayamaWeakpoints[static_cast<int>(TayamaWeakpoint::CommandCore)].destroyed ? 'X' : ' ');
+        renderer.DrawText("ALL BODY SECTIONS VULNERABLE", TextAlign::Center, 0.010f,
+            {0.72f, 0.86f, 0.92f, 1.0f}, {0.0f, 0.79f});
     }
-    renderer.DrawText(components, TextAlign::Center, 0.010f,
-        {0.72f, 0.86f, 0.92f, 1.0f}, {0.0f, 0.79f});
+
+    // 第一形態はHPバーの区切りと段階名を表示し、移行中は段階名を大きく出す
+    if (!ShooterStages::Stage5::IsTayamaBattlePhase(shooter.m_stage5.phase)) return;
+    shooter.DrawShape(renderer, -BarWidth / 3.0f, 0.735f, 0.008f, 0.035f, Divider);
+    shooter.DrawShape(renderer, BarWidth / 3.0f, 0.735f, 0.008f, 0.035f, Divider);
+    constexpr const char* StageLabels[] = {"FIRE CONTROL", "CLOSE COMBAT", "CORE EXPOSED"};
+    const char* stageLabel = StageLabels[static_cast<int>(shooter.m_stage5.phase) -
+        static_cast<int>(Stage5Phase::TayamaFireControl)];
+    renderer.DrawText(stageLabel, TextAlign::Center, 0.012f, {1.0f, 0.82f, 0.30f, 1.0f}, {0.0f, 0.79f});
+    if (ShooterStages::Stage5::IsTayamaStageShift(shooter.m_stage5.phase,
+        shooter.m_stage5.phaseTimer, shooter.m_stage5.tayamaStageShifted)) {
+        renderer.DrawText(stageLabel, TextAlign::Center, 0.036f, {1.0f, 0.24f, 0.16f, 1.0f}, {0.0f, 0.12f});
+    }
 }

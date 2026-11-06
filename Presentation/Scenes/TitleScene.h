@@ -37,6 +37,8 @@ public:
     void Render(Renderer& renderer) override;
 
 private:
+    float m_idleSeconds = 0.0f;
+    bool m_waitForRelease = true;
     std::unique_ptr<Button> m_startButton;
     std::unique_ptr<Button> m_galleryButton;
     std::unique_ptr<Button> m_rankingButton;

@@ -304,6 +304,7 @@ void SideScrollingShooter::Initialize(AudioService* audio, PlayerType playerType
     (void)SuspectVoice();
     (void)ArrestedVoice();
     m_audio = audio;
+    m_demoMode = false;
     m_networkGame = false;
     m_networkHostInput = {};
     m_activePlayer = 0;
@@ -327,6 +328,24 @@ void SideScrollingShooter::InitializeTutorial(
     Player().m_invincible = 999999;
     m_tutorialStep = 0;
     BeginTutorialStep();
+}
+
+void SideScrollingShooter::InitializeDemo(AudioService* audio) {
+    Initialize(audio, Homing, Easy);
+    m_demoMode = true;
+}
+
+bool SideScrollingShooter::TickDemo(int frame) {
+    // ponytail: ステージ1専用の短い定型操作、複数ステージを展示する場合は個別パターンへ拡張する
+    const float targetY = 0.6f * std::sin(static_cast<float>(frame) * 0.008f);
+    CooperativeInput input {};
+    input.held = CooperativeInput::Fire |
+        (Player().m_playerY < targetY - 0.025f ? CooperativeInput::Up : 0) |
+        (Player().m_playerY > targetY + 0.025f ? CooperativeInput::Down : 0);
+    if (frame == 600) input.pressed = CooperativeInput::Bomb;
+    ApplyPlayerInput(input);
+    Tick();
+    return Player().m_playerDestructionTimer > 0 || m_clear;
 }
 
 void SideScrollingShooter::Reset(bool resetRetryCounts) {
@@ -604,7 +623,7 @@ void SideScrollingShooter::Tick() {
     }
     if (m_clear) {
         // ボス撃破の時点で解放し、メモリ上の値で同じプレイ中の重複I/Oを防ぐ
-        if (!m_tutorialMode && StageDispatch::HasNextStage(*this) && m_stageNumber >= m_unlockedStage) {
+        if (!m_demoMode && !m_tutorialMode && StageDispatch::HasNextStage(*this) && m_stageNumber >= m_unlockedStage) {
             m_unlockedStage = m_stageNumber + 1;
             SettingsRepository {}.UnlockStage(m_unlockedStage);
         }
@@ -772,8 +791,7 @@ void SideScrollingShooter::TickChapterExitEnemies() {
     constexpr float RailExitSpeed = 1.4f;
     static_assert(SideExitSpeed > 0.0f && RailExitSpeed > 0.0f);
     const bool exitsDownward = m_stageNumber == 5 &&
-        (m_stage5.phase == ShooterStages::Stage5::Phase::WallClimbUpper ||
-            (!IsRailGameplayActive() && Stage5Module::IsPart2Route(*this)));
+        !IsRailGameplayActive() && Stage5Module::IsPart2Route(*this);
     const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
 
     // 敵AIと射撃を止めたまま画面外へ高速移動させる
@@ -781,14 +799,10 @@ void SideScrollingShooter::TickChapterExitEnemies() {
         if (!enemy.active || enemy.type == 2) continue;
         enemy.collisionEnabled = false;
         if (exitsDownward) {
-            // 第2部の2D視点と最終区間は壁から離れず画面下へ高速退避させる
-            enemy.y = ShooterStages::Stage5::Part2EnemyExitY(
-                enemy.y, IsRailGameplayActive());
+            // 第2部の2D視点は横へ流さず縦スクロールの進行方向へ高速退避させる
+            enemy.y -= ShooterStages::Stage5::Part2SideEnemyExitSpeed;
             enemy.baseY = enemy.y;
-            const float exitY = IsRailGameplayActive() ?
-                ShooterStages::Stage5::Part2RailEnemyExitY :
-                sideYRange.x - Side2DShotCullMargin;
-            if (enemy.y < exitY) enemy.active = false;
+            if (enemy.y < sideYRange.x - Side2DShotCullMargin) enemy.active = false;
             continue;
         }
         if (IsRailGameplayActive()) {
@@ -901,18 +915,6 @@ void SideScrollingShooter::InitializeRailObjects() {
         enemy.transitionSideX = enemy.x;
         enemy.transitionSideY = enemy.y;
         enemy.transitionRailZ = enemy.z;
-        if (m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase) &&
-            enemy.entersFromTop) {
-            // 視点切替前の降下率を3D壁面座標へ引き継ぐ
-            constexpr float SideExitY = Side2DPlayerMinY - Side2DShotCullMargin;
-            enemy.baseY = ShooterStages::Stage5::RemapPart2EnemyY(enemy.y,
-                ShooterStages::Stage5::Part2SideEnemyEntryY, SideExitY,
-                ShooterStages::Stage5::Part2RailEnemyEntryY,
-                ShooterStages::Stage5::Part2RailEnemyExitY);
-            enemy.y = enemy.baseY;
-            enemy.baseZ = ShooterStages::Stage5::Part2RailEnemyPlaneZ;
-            enemy.z = enemy.baseZ;
-        }
         if (enemy.z <= 0.0f) {
             enemy.z = ToRailZFromSideX(enemy.x);
         }
@@ -921,7 +923,7 @@ void SideScrollingShooter::InitializeRailObjects() {
             continue;
         }
         if (enemy.type == Stage::WallSecurityDroneEnemy) {
-            // 外壁警備ドローンは視点切り替え直後から壁面のZ座標を維持する
+            // 警備ドローンは視点切り替え直後からシャフト内の巡回高度を維持する
             enemy.entersWallFromTop = false;
             const float previousBaseY = enemy.baseY;
             enemy.baseY = ShooterStages::Stage5::RemapPart2DroneBaseY(enemy.baseY,
@@ -950,10 +952,19 @@ void SideScrollingShooter::InitializeRailObjects() {
         enemy.baseX = enemy.type == 2 ? 0.0f : (std::clamp)(enemy.baseX, -0.76f, 0.76f);
         enemy.x = enemy.baseX;
     }
+    const bool part2Route = m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase);
     for (auto& shot : m_shots) {
         if (!shot.active) continue;
         shot.transitionSideX = shot.x;
         shot.transitionSideY = shot.y;
+        if (part2Route) {
+            // 第2部は座標軸が視点で変わるため、敵弾を消し自機弾だけ奥方向へ向け直す
+            shot.active = !shot.enemy;
+            shot.z = PlayerRailDepth() + 2.0f;
+            shot.vx = shot.vy = 0.0f;
+            shot.vz = 1.45f;
+            continue;
+        }
         if (shot.enemy && shot.barrageCount < 0) {
             constexpr int GridSize = 5;
             constexpr float SpreadSpeed = 0.010f;
@@ -993,12 +1004,6 @@ void SideScrollingShooter::InitializeRailObjects() {
         if (shot.z <= 0.0f) {
             shot.z = ToRailZFromSideX(shot.x);
         }
-        if (!shot.enemy && UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase)) {
-            // 第2部の自機弾は3Dへ切り替えても壁面上方向の速度を維持する
-            shot.z = PlayerRailDepth() + 2.0f;
-            shot.vz = 0.0f;
-            continue;
-        }
         // 2D横移動をレール奥行きの移動量へ変換する
         if (shot.enemy) {
             shot.vz = sideVx * 18.0f;
@@ -1022,18 +1027,8 @@ void SideScrollingShooter::InitializeSideObjects() {
         enemy.transitionSideX = enemy.x;
         enemy.transitionSideY = enemy.y;
         enemy.transitionRailZ = enemy.z;
-        if (m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase) &&
-            enemy.entersFromTop) {
-            // 視点切替前の降下率を2D画面座標へ引き継ぐ
-            constexpr float SideExitY = Side2DPlayerMinY - Side2DShotCullMargin;
-            enemy.baseY = ShooterStages::Stage5::RemapPart2EnemyY(enemy.y,
-                ShooterStages::Stage5::Part2RailEnemyEntryY,
-                ShooterStages::Stage5::Part2RailEnemyExitY,
-                ShooterStages::Stage5::Part2SideEnemyEntryY, SideExitY);
-            enemy.y = enemy.baseY;
-        }
         if (enemy.type == Stage::WallSecurityDroneEnemy) {
-            // 3D壁面高度から2Dの巡回段へ戻す
+            // 3Dの巡回高度から2Dの巡回段へ戻し、左右位置は両視点で共有する
             enemy.entersWallFromTop = false;
             const float previousBaseY = enemy.baseY;
             enemy.baseY = ShooterStages::Stage5::RemapPart2DroneBaseY(enemy.baseY,
@@ -1042,6 +1037,8 @@ void SideScrollingShooter::InitializeSideObjects() {
                 ShooterStages::Stage5::Part2SideDroneBaseY,
                 ShooterStages::Stage5::Part2SideDroneBaseStep);
             enemy.y += enemy.baseY - previousBaseY;
+            enemy.z = ToRailZFromSideX(enemy.x);
+            continue;
         }
         if (enemy.type == 2) {
             m_stage->ConfigureBossSideAnchor(enemy);
@@ -1055,10 +1052,12 @@ void SideScrollingShooter::InitializeSideObjects() {
         if (!shot.active) continue;
         shot.transitionSideX = shot.x;
         shot.transitionSideY = shot.y;
-        if (!shot.enemy && UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase)) {
-            // 第2部の自機弾は3Dの奥行きを2D横位置へ変換せず上方向を維持する
+        if (m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase)) {
+            // 第2部は座標軸が視点で変わるため、敵弾を消し自機弾だけ画面上方向へ向け直す
+            shot.active = !shot.enemy;
             shot.z = ToRailZFromSideX(shot.x);
-            shot.vz = 0.0f;
+            shot.vx = shot.vz = 0.0f;
+            shot.vy = 0.045f * ShooterStages::Stage5::Part2PlayerShotSpeedScale;
             continue;
         }
         if (shot.enemy && shot.barrageCount < 0) {
@@ -1593,6 +1592,9 @@ float SideScrollingShooter::ToSideXFromRailZ(float z) {
  * @return ゲーム座標系のY座標下限
  */
 float SideScrollingShooter::PlayerRailMinY() const {
+    if (m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase)) {
+        return ShooterStages::Stage5::Part2RailPlayerMinY;
+    }
     constexpr float PlayerHalfHeight = 0.16f;
     const float groundTopY = StageDispatch::RailGroundY(*this);
     return FromWorldY(groundTopY + PlayerHalfHeight);
@@ -1671,8 +1673,7 @@ Vector3 SideScrollingShooter::PlayerWorldPosition() const {
 }
 
 float SideScrollingShooter::PlayerRailDepth() const {
-    return m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase) ?
-        ShooterStages::Stage5::Part2PlayerRailZ : PlayerRailZ;
+    return PlayerRailZ;
 }
 
 bool SideScrollingShooter::IsRailGameplayActive() const {

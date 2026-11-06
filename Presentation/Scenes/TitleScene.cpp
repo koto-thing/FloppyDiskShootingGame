@@ -21,6 +21,8 @@
  * @brief タイトルシーンの初期化処理
  */
 void TitleScene::Initialize() {
+    m_idleSeconds = 0.0f;
+    m_waitForRelease = true;
 #if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
     // エンディングへ先行した側も相手の最終フレーム受信まではロビーを維持する
     if (getData().onlineGame) getData().coop->Leave();
@@ -97,6 +99,19 @@ void TitleScene::Initialize() {
  */
 void TitleScene::ProcessInput() {
 
+    // 復帰に使った押下と解放をメニューへ渡さない
+    const bool activity = Input::HasActivity();
+    if (activity) m_idleSeconds = 0.0f;
+    if (m_waitForRelease) {
+        m_waitForRelease = Input::HasActivity(false);
+        return;
+    }
+    if (!activity) m_idleSeconds += Time::unscaledDeltaTime;
+    if (m_idleSeconds >= 30.0f) {
+        getData().startDemo = true;
+        changeScene(SceneType::TestStage);
+        return;
+    }
     UIInputState inputState = UIInput::Current();
 
     // ゲーム開始ボタンにマウス入力を渡す

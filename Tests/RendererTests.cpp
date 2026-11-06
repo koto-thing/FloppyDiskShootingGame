@@ -22,6 +22,9 @@ bool IsNearlyEqual(const Vector2& left, const Vector2& right) {
  */
 class FakeRenderBackend final : public IRenderBackend {
 public:
+    float aspectRatio = 1.0f;
+    /** @brief 検証用の画面比率を返す @return 横幅と高さの比率 */
+    float AspectRatio() const override { return aspectRatio; }
     std::vector<std::string> events;
     float lastCharacterSpacing = 0.0f;
     Vector2 lastTextPosition {};
@@ -140,6 +143,18 @@ void AlignsTextToScreenPositions() {
             "BottomCenter alignment must place the text at the bottom center");
 }
 
+/** @brief ワイド画面の複数行で文字の高さ以上の行送りを確保する @return なし */
+void SeparatesMultilineText() {
+    FakeRenderBackend backend;
+    backend.aspectRatio = 1920.0f / 1080.0f;
+    Renderer renderer(backend);
+    renderer.BeginFrame();
+    renderer.DrawText("LEFT/RIGHT\nMODEL", TextAlign::CenterLeft, 0.01f, ColorF::White());
+    const float lineAdvance = renderer.Command(0).position.y * 2.0f;
+    Require(lineAdvance > 0.01f * (1920.0f / 1080.0f) * 2.0f,
+        "Multiline spacing must exceed rendered glyph height on widescreen");
+}
+
 void AlignsRectToScreenPositions() {
     FakeRenderBackend backend;
     Renderer renderer(backend);
@@ -251,6 +266,7 @@ void RunRendererTests() {
     PreservesShotDepthTest();
     SendsCharacterSpacingToBackend();
     AlignsTextToScreenPositions();
+    SeparatesMultilineText();
     AlignsRectToScreenPositions();
     HandlesTextAndOverflow();
     ExecutesOnlyOnFlush();

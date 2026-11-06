@@ -180,6 +180,12 @@ public:
      */
     void StopAllSE();
 
+    /**
+     * @brief 最後に再生を開始した音声の進捗を取得する
+     * @return 0から1、停止時は0、自然終了時は1、ループ音声は現在の周回内の位置
+     */
+    float GetPlaybackProgress() const;
+
 private:
     /**
      * @brief 用途に対応する再生枠へPCMを登録する

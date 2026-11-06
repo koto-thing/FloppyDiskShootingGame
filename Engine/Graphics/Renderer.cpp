@@ -199,7 +199,9 @@ Vector2 Renderer::CalculateTextPosition(std::string_view text, TextAlign alignme
     const float characterAdvance = size * 1.5f + characterSpacing;
     const float lineWidth = longestLineLength == 0 ? 0.0f :
         (static_cast<float>(longestLineLength - 1) * characterAdvance) + glyphHalfWidth * 2.0f;
-    const float textHeight = static_cast<float>(lineCount) * size * 2.0f;
+    // 一行目の配置を保ち、改行分はバックエンドと同じ行送りで測る
+    const float textHeight = size * 2.0f +
+        static_cast<float>(lineCount - 1) * size * AspectRatio() * 2.4f;
 #endif
 
     float startX = -1.0f + glyphHalfWidth;

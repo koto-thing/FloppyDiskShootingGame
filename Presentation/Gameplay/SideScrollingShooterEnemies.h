@@ -897,7 +897,7 @@ private:
 };
 
 /**
- * @brief NEO AIZU外壁へ接近して左右を巡回する警備ドローンを制御する
+ * @brief PANDD会ビル内部のシャフトを巡回する警備ドローンを制御する
  */
 class SideScrollingShooter::WallSecurityDroneEnemyBehavior final
     : public SideScrollingShooter::EnemyBehavior {
@@ -911,32 +911,24 @@ public:
     }
 
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
+        const float patrolAge = static_cast<float>(enemy.age);
+        const float progress = ShooterStages::Stage5::Part2RailDroneEntryProgress(enemy.age);
+        const float patrolX = enemy.railAnchorX +
+            std::sin(enemy.phase + patrolAge * PatrolSpeed) * PatrolWidth;
+        const float patrolY = enemy.baseY +
+            std::cos(enemy.phase + patrolAge * PatrolSpeed * 1.35f) * PatrolHeight;
+        enemy.x = patrolX;
         if (!shooter.IsRailGameplayActive()) {
-            // 2DではPANDD会ビル側へ固定し、外壁上だけを上下巡回する
-            enemy.x = SideWallX;
-            enemy.y = enemy.baseY +
-                std::cos(enemy.phase + static_cast<float>(enemy.age) * PatrolSpeed) * PatrolHeight;
+            // 2Dでは画面上端から降下し、上部を左右に巡回する
+            enemy.y = Math::Lerp(ShooterStages::Stage5::ShaftTopSideY, patrolY, progress);
             enemy.z = ToRailZFromSideX(enemy.x);
         } else {
-            // 3Dではビル上空から壁面を伝って降下し、到着後に楕円巡回へ移る
-            enemy.z = WallPatrolZ;
-            const float patrolAge = static_cast<float>(enemy.age);
-            const float patrolX = enemy.baseX +
-                std::sin(enemy.phase + patrolAge * PatrolSpeed) * PatrolWidth;
-            const float patrolY = enemy.baseY +
-                std::cos(enemy.phase + patrolAge * PatrolSpeed * 1.35f) * PatrolHeight;
-            if (enemy.entersWallFromTop) {
-                const float progress =
-                    ShooterStages::Stage5::Part2RailDroneEntryProgress(enemy.age);
-                enemy.x = Math::Lerp(enemy.baseX, patrolX, progress);
-                enemy.y = Math::Lerp(
-                    ShooterStages::Stage5::Part2RailDroneEntryY, patrolY, progress);
-                if (progress < 1.0f) return;
-                enemy.entersWallFromTop = false;
-            } else {
-                enemy.x = patrolX;
-                enemy.y = patrolY;
-            }
+            // 3Dではシャフト上方から降下し、自機の前方を楕円に巡回する
+            enemy.y = patrolY;
+            enemy.z = enemy.entersWallFromTop ?
+                Math::Lerp(ShooterStages::Stage5::ShaftFarZ, WallPatrolZ, progress) : WallPatrolZ;
+            if (progress < 1.0f && enemy.entersWallFromTop) return;
+            enemy.entersWallFromTop = false;
         }
 
         // 接触時の照準を連射終了まで固定し、終了後は自機追尾へ戻す
@@ -972,8 +964,8 @@ public:
     }
 
     /**
-     * @brief 3D外壁表面の固定Z座標を取得する
-     * @return 外壁表面のレール座標Z
+     * @brief 3Dの巡回高度の固定Z座標を取得する
+     * @return 巡回高度のレール座標Z
      */
     static constexpr float WallSurfaceZ() {
         return WallPatrolZ;
@@ -1058,15 +1050,13 @@ private:
         shooter.PlayBossMachineGunSound();
     }
 
-    static constexpr float WallPatrolZ = 40.8f;
-    static constexpr float SideWallX = 1.55f;
+    static constexpr float WallPatrolZ = 34.0f;
     static constexpr float PatrolSpeed = 0.024f;
     static constexpr float PatrolWidth = 0.34f;
     static constexpr float PatrolHeight = 0.22f;
     static constexpr float SideShotSpeed = 0.022f;
     static constexpr float RailShotSpeed = 0.68f;
-    static_assert(WallPatrolZ > ShooterStages::Stage5::Part2PlayerRailZ);
-    static_assert(SideWallX > 0.0f);
+    static_assert(WallPatrolZ > PlayerRailZ);
     static_assert(PatrolWidth > 0.0f && PatrolHeight > 0.0f);
 };
 

@@ -36,6 +36,11 @@ public:
     }
 };
 
+/** @brief シーンの操作検証へ物理キーを渡す @param key 仮想キー @param pressed 押下状態 @return なし */
+void SetTestNativeKey(int key, bool pressed) {
+    InputTestAccess::SetKey(key, pressed);
+}
+
 class WindowsInputBackendTestAccess {
 public:
     /**
