@@ -164,6 +164,7 @@ bool SideScrollingShooter::StageDispatch::HitsHazard(const SideScrollingShooter&
     case 2: return Stage2Module::HitsHazard(shooter, x, y, z, radius, debugQuery);
     case 3: return Stage3Module::HitsHazard(shooter, x, y, z, radius, debugQuery);
     case 4: return Stage4Module::HitsHazard(shooter, x, y, z, radius, debugQuery);
+    case 5: return Stage5Module::HitsHazard(shooter, x, y, z, radius, debugQuery);
     default: return false;
     }
 }
@@ -647,6 +648,10 @@ float SideScrollingShooter::StageDispatch::RailPlayerMaxY(
     // ラスボス第2形態では上方向の回避範囲を広げる
     if (shooter.m_stageNumber == 5 &&
         ShooterStages::Stage5::IsTayamaDragonBattlePhase(shooter.m_stage5.phase)) return 3.5f;
+    if (shooter.m_stageNumber == 5 &&
+        ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) {
+        return ShooterStages::Stage5::Part2RailPlayerMaxY;
+    }
     return shooter.m_stageNumber == 3 ? Stage3Module::RailPlayerMaxY(shooter) : 0.9f;
 }
 
@@ -661,6 +666,11 @@ Vector2 SideScrollingShooter::StageDispatch::PlayerXRange(
     if (shooter.m_stageNumber == 5 && shooter.IsRailGameplayActive() &&
         ShooterStages::Stage5::IsTayamaDragonBattlePhase(shooter.m_stage5.phase)) return {-1.35f, 1.35f};
     if (shooter.m_stageNumber == 3) return Stage3Module::PlayerXRange(shooter);
+    // ビル内部は2Dと3Dで左右の位置を共有する
+    if (shooter.m_stageNumber == 5 &&
+        ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) {
+        return {Side2DPlayerMinX, Side2DPlayerMaxX};
+    }
     return shooter.IsRailGameplayActive() ? Vector2 {-1.2f, 1.2f} :
         Vector2 {Side2DPlayerMinX, Side2DPlayerMaxX};
 }

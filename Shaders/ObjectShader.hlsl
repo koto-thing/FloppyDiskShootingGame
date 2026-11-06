@@ -306,7 +306,17 @@ VS_OUTPUT VSMain(uint vID : SV_VertexID)
 
 float4 PSObject(VS_OUTPUT input) : SV_TARGET
 {
-    if (input.color.a < 0.01) discard;
+    // 負のアルファは不透明度として扱い、4x4 Bayer行列で画素を間引くディザにする
+    float alpha = input.color.a;
+    if (alpha < 0.0) {
+        int2 cell = int2(input.pos.xy);
+        int mixed = cell.x ^ cell.y;
+        float threshold = float((mixed & 1) * 8 + (cell.y & 1) * 4 +
+            ((mixed >> 1) & 1) * 2 + ((cell.y >> 1) & 1)) / 16.0;
+        if (-alpha <= threshold) discard;
+        alpha = 1.0;
+    }
+    if (alpha < 0.01) discard;
 
     // Sprite2Dはライティングせず、3Dプリミティブだけをピクセル単位で量子化する
     float brightness = 1.0;
@@ -317,7 +327,7 @@ float4 PSObject(VS_OUTPUT input) : SV_TARGET
         brightness = lerp(MIN_BRIGHTNESS, 1.0, quantizedDiffuse);
     }
 
-    return float4(input.color.rgb * brightness, input.color.a);
+    return float4(input.color.rgb * brightness, alpha);
 }
 
 #endif

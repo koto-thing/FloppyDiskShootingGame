@@ -18,6 +18,7 @@ struct SceneSharedData {
     int startStage = 1;
     PlayerType secondPlayerType = Homing;
     bool showRankingAfterCredits = false;
+    bool startDemo = false;
 #if defined(SPACEYAKUZA_EDITION_Steam)
     SteamCoopSession* coop = nullptr;
 #elif defined(SPACEYAKUZA_EDITION_Online)

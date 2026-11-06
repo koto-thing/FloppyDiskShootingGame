@@ -21,8 +21,9 @@
 #endif
 
 namespace {
-constexpr int LowWidth = 512;
-constexpr int LowHeight = 288;
+// 720p、1080p、1440p、4Kのいずれでも整数倍で拡大できる解像度
+constexpr int LowWidth = 640;
+constexpr int LowHeight = 360;
 enum Shader { Object, Background, Spell, Shot, Explosion, Railgun, Font, Upscale, ShaderCount };
 enum Blend { Alpha, Opaque, Additive, Smoke };
 constexpr const char* ShaderNames[] = {"object", "background", "spell", "shot", "explosion", "railgun", "font", "upscale"};
@@ -983,7 +984,7 @@ void PortableRenderingService::DrawTextCommand(std::string_view text, const Vect
     float x = position.x;
     float y = position.y;
     for (unsigned char c : text) {
-        if (c == '\n') { x = position.x; y -= size * 2; continue; }
+        if (c == '\n') { x = position.x; y -= size * AspectRatio() * 2.4f; continue; }
         if (c >= 128) c = '?';
         Draw draw;
         draw.shader = Font;

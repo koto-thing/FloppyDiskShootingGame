@@ -593,7 +593,7 @@ struct HomingShotTests {
         assert(!g.Player().m_aimSnapped);
         assert(g.m_players[0].m_aimSnapped);
 
-        // 壁面の上向き通常弾と周回戦の通常弾も、表示対象の命中位置へ向ける
+        // ビル内部の通常弾と周回戦の通常弾も、表示対象の命中位置へ向ける
         g.m_activePlayer = 0;
         g.m_playerCount = 1;
         g.m_enemies.fill({});
@@ -615,8 +615,7 @@ struct HomingShotTests {
             g.Player().m_shotCooldown = 0;
             g.TickPlayerWeapons();
             const auto& shot = g.m_shots[0];
-            Vector3 hitTarget = g.Player().m_aimSnapTarget;
-            if (phase == Game::Stage5Phase::WallClimbMiddle) hitTarget.z = shot.z;
+            const Vector3 hitTarget = g.Player().m_aimSnapTarget;
             const Vector3 desired = (hitTarget - Vector3 {Game::ToWorldX(shot.x), Game::ToWorldY(shot.y), shot.z}).Normalized();
             const Vector3 actual {Game::ToWorldX(shot.vx), Game::ToWorldY(shot.vy), shot.vz};
             assert(Vector3::Dot(desired, actual.Normalized()) > 0.9999f);
@@ -651,29 +650,15 @@ struct HomingShotTests {
             (1.0f - expected.y / 720.0f * 2.0f)) < 0.0001f);
         assert(std::abs(left.size.y * 720.0f - renderer.Command(9).rect.size.x * 1280.0f) < 0.0001f);
 
-        // Stage5の第2部道中では全3区間で照準を非表示にする
         renderer.BeginFrame();
-        g.m_stageNumber = 5;
-        g.m_stage5.phase = Game::Stage5Phase::WallClimbLower;
-        const Vector3 verticalTarget = g.PlayerAimPoint();
-        camera.LookAt(verticalTarget);
-        g.DrawReticle(renderer, camera);
-        assert(renderer.CommandCount() == 0);
-        g.m_stage5.phaseTimer = ShooterStages::Stage5::WallClimbFadeFrames;
-        for (auto phase : {Game::Stage5Phase::WallClimbLower,
-            Game::Stage5Phase::WallClimbMiddle, Game::Stage5Phase::WallClimbUpper}) {
-            g.m_stage5.phase = phase;
-            g.DrawReticle(renderer, camera);
-            assert(renderer.CommandCount() == 0);
-        }
-
-        // 他ステージ、第1部道中、ボス戦の3D視点では照準を表示する
+        // 他ステージ、第1部道中、ビル内部、ボス戦の3D視点では照準を表示する
         g.m_stageNumber = 1;
         g.DrawReticle(renderer, camera);
         assert(renderer.CommandCount() == 28);
         g.m_stageNumber = 5;
+        g.m_stage5.phaseTimer = ShooterStages::Stage5::WallClimbFadeFrames;
         for (auto phase : {Game::Stage5Phase::Approach, Game::Stage5Phase::EastsourceBattle,
-            Game::Stage5Phase::TayamaFireControl, Game::Stage5Phase::TayamaDragonBattle}) {
+            Game::Stage5Phase::WallClimbLower, Game::Stage5Phase::TayamaFireControl, Game::Stage5Phase::TayamaDragonBattle}) {
             renderer.BeginFrame();
             g.m_stage5.phase = phase;
             camera.SetPosition(g.PlayerAimPoint() - Vector3 {0.0f, 0.0f, 10.0f});
@@ -946,24 +931,10 @@ struct HomingShotTests {
         assert(shot.homingTarget == 0);
         assert(shot.vz < 0.0f && shot.vx > 0.0f);
 
-        // 縦スクロール3Dでは敵の奥行きではなく弾平面へ投影した位置に向かう
-        g.m_stageNumber = 5;
-        g.m_stage5.phase = Game::Stage5Phase::WallClimbLower;
-        farEnemy.active = false;
-        g.Player().m_playerY = ShooterStages::Stage5::Part2RailPlayerMinY;
-        nearEnemy.x = 0.2f;
-        nearEnemy.y = 4.0f;
-        nearEnemy.z = ShooterStages::Stage5::Part2RailEnemyPlaneZ;
-        shot = {};
-        shot.y = g.Player().m_playerY;
-        shot.z = g.PlayerRailDepth() + 2.0f;
-        shot.vy = Game::PlayerShotConfigs[Homing].speed;
-        g.UpdateHomingShot(shot);
-        assert(shot.homingTarget == 0 && shot.vz == 0.0f);
-        assert(shot.vy < 0.0f && shot.vx < 0.0f);
-
         // 周回でZ負方向へ撃つ場合も有効な弱点を狙い、破壊済み弱点を除外する
         nearEnemy.active = false;
+        farEnemy.active = false;
+        g.m_stageNumber = 5;
         g.m_stage5.phase = Game::Stage5Phase::TayamaFireControl;
         g.m_stage5.tayamaOrbitAngle = Math::Pi;
         g.m_frame = 1;

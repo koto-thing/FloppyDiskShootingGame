@@ -100,6 +100,9 @@ public:
      */
     static bool GetAnyKeyDown();
 
+    /** @brief 全入力元の操作を検出する @param includePointerMotion 移動とホイールも操作に含めるか @return 押下中または操作イベントがある場合true */
+    static bool HasActivity(bool includePointerMotion = true);
+
     /**
      * @brief 指定したキーがこのフレームで離されたかを取得する
      * @param key 確認するキー

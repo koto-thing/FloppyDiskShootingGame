@@ -184,10 +184,20 @@ bool Input::GetKeyDown(KeyCode key) {
     return index < m_keyDown.size() && m_keyDown[index];
 }
 
-/**
- * @brief いずれかのキーがこのフレームで押されたかを取得する
- * @return このフレームでいずれかのキーが押された場合はtrue
- */
+/** @brief 全入力元の操作を検出する @param includePointerMotion 移動とホイールも操作に含めるか @return 操作中の場合true */
+bool Input::HasActivity(bool includePointerMotion) {
+    // 短い押下と2Pの操作も取りこぼさず、パッドの既存デッドゾーンを利用する
+    for (std::size_t i = 0; i < m_currentKeys.size(); ++i) {
+        if (m_currentKeys[i] || m_currentGamepadKeys[i] || m_keyDown[i] || m_keyUp[i]) return true;
+        for (int slot = 0; slot < 2; ++slot)
+            if (m_playerGamepadKeys[slot][i] || m_playerGamepadDown[slot][i] || m_playerGamepadUp[slot][i]) return true;
+    }
+    for (std::size_t i = 0; i < m_currentMouseButtons.size(); ++i)
+        if (m_currentMouseButtons[i] || m_currentGamepadMouseButtons[i] || m_mouseButtonDown[i] || m_mouseButtonUp[i]) return true;
+    return includePointerMotion && (m_mouseDelta.x != 0.0f || m_mouseDelta.y != 0.0f || m_mouseWheelDelta != 0.0f);
+}
+
+/** @brief いずれかのキーの押下を取得する @return このフレームで押された場合true */
 bool Input::GetAnyKeyDown() {
     for (bool keyDown : m_keyDown) {
         if (keyDown) return true;

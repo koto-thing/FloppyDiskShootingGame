@@ -17,6 +17,7 @@
 #include "Models/ModelShotCollision.h"
 #include "SideScrollingShooterShared.h"
 #include "GameplayRandom.h"
+#include "GameplaySounds.h"
 #include "Stages/Common/StageDefinition.h"
 
 namespace {
@@ -79,17 +80,6 @@ float InterceptFrames(const Vector3& delta, const Vector3& velocity, float speed
 }
 
 /**
- * @brief 透視投影上で同じ位置になる奥行き平面への縮尺を取得する
- * @param cameraZ カメラのZ座標
- * @param sourceZ 投影元のZ座標
- * @param targetZ 投影先平面のZ座標
- * @return カメラを原点とした投影縮尺
- */
-constexpr float PerspectiveDepthScale(float cameraZ, float sourceZ, float targetZ) {
-    return (targetZ - cameraZ) / (sourceZ - cameraZ);
-}
-
-/**
  * @brief 2D縦スクロール用の敵弾を地面側へ向ける
  * @param vx X方向速度
  * @param vy Y方向速度
@@ -101,8 +91,6 @@ void AimShotGroundward(float& vx, float& vy) {
     vy = -std::sqrt((std::max)(0.0f, speedSquared - vx * vx));
 }
 
-static_assert(PerspectiveDepthScale(-13.5f, 35.0f, 10.0f) > 0.0f);
-static_assert(PerspectiveDepthScale(-13.5f, 35.0f, 10.0f) < 1.0f);
 static_assert(HomingTargetScore(1.0f, false) < HomingTargetScore(9.0f, false));
 static_assert(HomingTargetScore(1.1f, true) < HomingTargetScore(1.0f, false));
 static_assert(HomingTargetScore(4.0f, true) > HomingTargetScore(1.0f, false));
@@ -133,16 +121,10 @@ void SideScrollingShooter::TickPlayer() {
         return;
     }
 
-    // Stage 5第2部道中の3DだけはHUDを除くプレイ領域全体を移動可能にする
-    const bool fullScreenRailMovement = IsRailGameplayActive() &&
-        UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
-    const Vector2 xRange = fullScreenRailMovement ?
-        Vector2 {Side2DPlayerMinX, Side2DPlayerMaxX} : StageDispatch::PlayerXRange(*this);
+    const Vector2 xRange = StageDispatch::PlayerXRange(*this);
     const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
-    const float minY = fullScreenRailMovement ? ShooterStages::Stage5::Part2RailPlayerMinY :
-        (IsRailGameplayActive() ? PlayerRailMinY() : sideYRange.x);
-    const float maxY = fullScreenRailMovement ? ShooterStages::Stage5::Part2RailPlayerMaxY :
-        (IsRailGameplayActive() ? StageDispatch::RailPlayerMaxY(*this) : sideYRange.y);
+    const float minY = IsRailGameplayActive() ? PlayerRailMinY() : sideYRange.x;
+    const float maxY = IsRailGameplayActive() ? StageDispatch::RailPlayerMaxY(*this) : sideYRange.y;
     Player().m_playerX = (std::clamp)(Player().m_playerX + dx * 0.023f * speedScale, xRange.x, xRange.y);
     Player().m_playerY = (std::clamp)(Player().m_playerY + dy * 0.029f * speedScale, minY, maxY);
 }
@@ -157,7 +139,7 @@ void SideScrollingShooter::TickPlayerWeapons() {
     // 通常弾と選択機体の特殊弾をそれぞれのクールダウンで発射する
     bool firedPlayerShot = false;
     if (Player().m_fire && Player().m_shotCooldown == 0) {
-        const bool verticalRoute = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+        const bool verticalRoute = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase, IsRailGameplayActive());
         SpawnShot(Player().m_playerX + (IsRailGameplayActive() || verticalRoute ? 0.0f : 0.12f),
             Player().m_playerY + (verticalRoute ? 0.12f : 0.0f),
             IsRailGameplayActive() || verticalRoute ? 0.0f : 0.045f,
@@ -179,7 +161,7 @@ void SideScrollingShooter::TickPlayerWeapons() {
 void SideScrollingShooter::TickBomb() {
     auto& bomb = Player().m_bomb;
     const bool rail = IsRailGameplayActive();
-    const bool spatial = rail && !UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+    const bool spatial = rail;
     const Shot forwardShot = MakeNormalPlayerShot(false);
     const Vector3 forward = Vector3 {ToWorldX(forwardShot.vx), ToWorldY(forwardShot.vy), forwardShot.vz}.Normalized();
     const Vector3 player = PlayerWorldPosition();
@@ -229,7 +211,7 @@ void SideScrollingShooter::TickBomb() {
         flying = true;
         if (bomb.rail != rail && missile.age > 0) {
             // 発射し直さず、既に飛んでいる弾だけを新しい視点の前方軸へ移す
-            if (!UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase)) {
+            if (m_stageNumber != 5 || !ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase)) {
                 if (rail) { missile.z = ToRailZFromSideX(missile.x); missile.x = Player().m_playerX; }
                 else { missile.x = ToSideXFromRailZ(missile.z); missile.z = SidePlaneZ; }
             } else missile.z = rail ? player.z : SidePlaneZ;
@@ -356,7 +338,6 @@ void SideScrollingShooter::TickEnemies() {
         return;
     }
 
-    const Vector2 sideYRange = StageDispatch::SidePlayerYRange(*this);
     for (auto& enemy : m_enemies) {
         if (!enemy.active) continue;
         ++enemy.age;
@@ -376,21 +357,6 @@ void SideScrollingShooter::TickEnemies() {
             enemy.behavior->Tick(*this, enemy);
         }
 
-        // Stage 5第2部の従来敵は各視点の上端から画面下方へ通過する
-        if (enemy.type != Stage::BossEnemy && enemy.entersFromTop) {
-            if (IsRailGameplayActive()) {
-                enemy.baseY -= ShooterStages::Stage5::Part2RailEnemyFallSpeed;
-                enemy.x = enemy.railAnchorX;
-                enemy.y = enemy.baseY;
-                enemy.z = enemy.baseZ;
-            } else {
-                enemy.baseY -= 0.014f;
-                enemy.x = enemy.railAnchorX;
-                enemy.y = enemy.baseY;
-                enemy.z = ToRailZFromSideX(enemy.x);
-            }
-        }
-
         // 巨大障害物へ接触した通常敵はスコアやアイテムを発生させず、その場で破壊する
         // ボス(type 2)は対象外
         const float boneHitRadius = IsRailGameplayActive() ? enemy.behavior->CollisionRadius3D(enemy) / WorldXScale :
@@ -400,6 +366,8 @@ void SideScrollingShooter::TickEnemies() {
             SpawnExplosion(enemy.x, enemy.y, enemy.z, true);
             SpawnEnemyDebris(enemy);
             enemy.active = false;
+            // ビル内部の落下物に巻き込まれた機体は全滅率から減らさない
+            if (m_stageNumber == 5) ++m_chapterResult.enemyDefeatCount;
             continue;
         }
 
@@ -442,14 +410,6 @@ void SideScrollingShooter::TickEnemies() {
         }
 
         if (enemy.type != 2 && !IsRailGameplayActive() && enemy.x < -2.6f) enemy.active = false;
-        if (enemy.type != 2 && !IsRailGameplayActive() && enemy.entersFromTop &&
-            enemy.y < sideYRange.x - Side2DShotCullMargin) {
-            enemy.active = false;
-        }
-        if (enemy.type != 2 && IsRailGameplayActive() && enemy.entersFromTop &&
-            enemy.y < ShooterStages::Stage5::Part2RailEnemyExitY) {
-            enemy.active = false;
-        }
         if (enemy.type != 2 && IsRailGameplayActive() && enemy.z < 2.0f) enemy.active = false;
         if (enemy.type == 2 && !enemy.collisionEnabled) continue;
         ForEachPlayer([&] {
@@ -561,12 +521,8 @@ void SideScrollingShooter::TickShots() {
             continue;
         }
         // 端から出る円形弾幕が生成直後に欠けないよう、弾のY消滅範囲だけ少し広げる
-        const bool part2RailShot = IsRailGameplayActive() && m_stageNumber == 5 &&
-            ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase);
-        const float railShotMinY = part2RailShot ?
-            ShooterStages::Stage5::Part2RailShotMinY : PlayerRailMinY();
-        const float railShotMaxY = part2RailShot ?
-            ShooterStages::Stage5::Part2RailShotMaxY : StageDispatch::RailPlayerMaxY(*this);
+        const float railShotMinY = PlayerRailMinY();
+        const float railShotMaxY = StageDispatch::RailPlayerMaxY(*this);
         const float tayamaDx = ToWorldX(shot.x);
         const float tayamaDz = shot.z - ShooterStages::Stage5::TayamaArenaCenterZ;
         const bool outsideTayamaArena = IsTayamaBattle() &&
@@ -737,7 +693,7 @@ bool SideScrollingShooter::HitShotModelPrimitive(const Shot& shot, PrimitiveShap
     }
 #endif
     const bool rail = IsRailGameplayActive();
-    const bool flat = !rail || UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+    const bool flat = !rail;
     const Matrix4x4 projection = ShotModelProjection(shot);
     const Vector3 end {ToWorldX(shot.x), ToWorldY(shot.y), shot.z};
     const Vector3 start {ToWorldX(shot.x - shot.vx), ToWorldY(shot.y - shot.vy), shot.z - shot.vz};
@@ -746,15 +702,12 @@ bool SideScrollingShooter::HitShotModelPrimitive(const Shot& shot, PrimitiveShap
 }
 
 Matrix4x4 SideScrollingShooter::ShotModelProjection(const Shot& shot) const {
-    const bool rail = IsRailGameplayActive();
-    const bool vertical = rail && UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
     Matrix4x4 projection = Matrix4x4::Identity;
-    // 横画面と縦画面の特殊弾は描画頂点を弾の平面へ投影し、奥行きによる輪郭の縮小も反映する
-    if (!rail || (vertical && shot.special)) {
+    // 2D画面の特殊弾は描画頂点を弾の平面へ投影し、奥行きによる輪郭の縮小も反映する
+    if (!IsRailGameplayActive()) {
         const Vector2 shake = ScreenShakeOffset();
-        const Vector3 camera = rail ? ShotProjectionCameraPosition() :
-            Vector3 {shake.x, StageDispatch::SideCameraY(*this) + shake.y, SideScrollingShooterShared::SideCameraZ};
-        const float plane = rail ? shot.z : SidePlaneZ - (shot.bomb ? 0.5f : 0.4f);
+        const Vector3 camera {shake.x, StageDispatch::SideCameraY(*this) + shake.y, SideScrollingShooterShared::SideCameraZ};
+        const float plane = SidePlaneZ - (shot.bomb ? 0.5f : 0.4f);
         const float distance = plane - camera.z;
         projection = Matrix4x4 {distance, 0, camera.x, -camera.x * plane,
             0, distance, camera.y, -camera.y * plane,
@@ -765,7 +718,7 @@ Matrix4x4 SideScrollingShooter::ShotModelProjection(const Shot& shot) const {
 
 /** @brief 自機弾とボムに共通の敵・部位へのダメージを適用する @param shot 自機弾 @return なし */
 void SideScrollingShooter::HitPlayerShotTargets(Shot& shot) {
-    const bool verticalRouteShot = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+    const bool verticalRouteShot = m_stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(m_stage5.phase);
     if (StageDispatch::TryDamageStageTarget(*this, shot) && (!shot.bomb || !shot.active)) return;
 
     for (auto& enemy : m_enemies) {
@@ -872,7 +825,7 @@ void SideScrollingShooter::TickItems() {
         item.vy *= 0.88f;
         if (item.pickupDelay > 0) --item.pickupDelay;
 
-        // 第2部は両視点で地面側へ落とし、3Dだけ取得可能な手前方向の移動も維持する
+        // 第2部の2Dは縦スクロールの進行方向へ流す
         if (IsTayamaBattle()) {
             // 全周回で取得できるようボス中心のドロップを自機へ送る
             const Vector3 itemPosition {ToWorldX(item.x), ToWorldY(item.y), item.z};
@@ -883,8 +836,7 @@ void SideScrollingShooter::TickItems() {
             item.y += FromWorldY(velocity.y);
             item.z += velocity.z;
         } else if (IsRailGameplayActive()) {
-            item.z = part2Route ? (std::max)(item.z - 0.28f, PlayerRailDepth()) : item.z - 0.28f;
-            if (part2Route) item.y -= ShooterStages::Stage5::Part2RailItemFallSpeed;
+            item.z -= 0.28f;
         } else {
             if (part2Route) {
                 item.y -= ShooterStages::Stage5::Part2SideItemFallSpeed;
@@ -905,10 +857,10 @@ void SideScrollingShooter::TickItems() {
                 (item.x < Side2DPlayerMinX || item.x > Side2DPlayerMaxX ||
                     item.y < Side2DPlayerMinY || item.y > Side2DPlayerMaxY)) ||
             (IsRailGameplayActive() && !IsTayamaBattle() &&
-                (item.z < 0.0f || item.z > 72.0f || std::abs(item.x) > 1.2f ||
-                    (part2Route ?
-                        item.y < ShooterStages::Stage5::Part2RailEnemyExitY :
-                        std::abs(item.y) > 1.24f))) || outsideTayamaArena) {
+                (item.z < 0.0f || item.z > 72.0f ||
+                    std::abs(item.x) > (part2Route ? Side2DPlayerMaxX : 1.2f) ||
+                    std::abs(item.y) > (part2Route ? ShooterStages::Stage5::ShaftHalfHeight : 1.24f))) ||
+            outsideTayamaArena) {
             item.active = false;
             continue;
         }
@@ -987,7 +939,6 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
         auto ConfigureLinked = [&](Enemy& enemy, int role, float fixedY, float linkRailX) {
             enemy.active = true;
             m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
-            enemy.entersFromTop = false;
             enemy.entersWallFromTop = false;
             ApplyDifficultyToEnemyHp(enemy);
             enemy.railAnchorX = linkRailX;
@@ -1009,7 +960,6 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
         if (enemy.active) continue;
         enemy.active = true;
         m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
-        enemy.entersFromTop = false;
         enemy.entersWallFromTop = enemy.type == Stage::WallSecurityDroneEnemy &&
             IsRailGameplayActive();
         ApplyDifficultyToEnemyHp(enemy);
@@ -1057,7 +1007,7 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
  */
 void SideScrollingShooter::UnlockGallery(GalleryEntry entry) {
     const std::uint32_t bit = GalleryEntryBit(entry);
-    if ((m_galleryUnlocks & bit) != 0u) return;
+    if (m_demoMode || (m_galleryUnlocks & bit) != 0u) return;
 
     // メモリ上のビットを先に更新して同じプレイ中の重複I/Oを防ぐ
     m_galleryUnlocks |= bit;
@@ -1355,7 +1305,7 @@ void SideScrollingShooter::FireSpecialShots() {
             : 0.0f;
         const float angle = centeredIndex * angleStep * DegreesToRadians;
         const bool railGameplay = IsRailGameplayActive();
-        const bool verticalRoute = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+        const bool verticalRoute = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase, IsRailGameplayActive());
         const float spawnY = verticalRoute ? Player().m_playerY + config.spawnOffsetX :
             (railGameplay ? Player().m_playerY :
                 Player().m_playerY + centeredIndex * config.spawnOffsetY);
@@ -1442,8 +1392,8 @@ void SideScrollingShooter::FireSpecialShots() {
  * @return 標的ID、対象なしなら-1
  */
 int SideScrollingShooter::FindShotTarget(const Shot& shot, Vector3& target, const Camera3D* aimCamera) {
-    const bool verticalRoute = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
-    const bool spatial = (IsRailGameplayActive() && !verticalRoute) || IsTayamaBattle();
+    const bool verticalRoute = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase, IsRailGameplayActive());
+    const bool spatial = IsRailGameplayActive() || IsTayamaBattle();
     const Vector3 origin {ToWorldX(shot.x), ToWorldY(shot.y), spatial ? shot.z : 0.0f};
     Vector3 player = PlayerWorldPosition();
     if (!spatial) player = {ToWorldX(Player().m_playerX), ToWorldY(Player().m_playerY), 0.0f};
@@ -1515,11 +1465,6 @@ int SideScrollingShooter::FindShotTarget(const Shot& shot, Vector3& target, cons
             position.z = SidePlaneZ + (enemy.type == 2 ? 2.2f : 1.5f);
             position = ShotModelProjection(shot).TransformPoint(position);
         }
-        // 第2部の追尾弾は衝突判定と同じ自機弾平面へ透視投影する
-        if (verticalRoute && IsRailGameplayActive() && !aimCamera) {
-            const Vector3 camera = ShotProjectionCameraPosition();
-            position = camera + (position - camera) * PerspectiveDepthScale(camera.z, enemy.z, shot.z);
-        }
         consider(position, baseId);
     }
 
@@ -1549,17 +1494,6 @@ int SideScrollingShooter::FindShotTarget(const Shot& shot, Vector3& target, cons
     return selected;
 }
 
-/** @brief 自機弾の透視投影に使う共有カメラの位置を取得する @return 描画と同じワールド位置 */
-Vector3 SideScrollingShooter::ShotProjectionCameraPosition() const {
-    // 2Pの追尾更新中も描画と同じ1P基準でカメラを構成し、処理対象を復元する
-    const int owner = m_activePlayer;
-    m_activePlayer = 0;
-    Camera3D camera;
-    ConfigureRailCamera(camera, m_aimViewport);
-    m_activePlayer = owner;
-    return camera.Position();
-}
-
 /** @brief 通常の十字照準のワールド位置を取得する @return 照準位置 */
 Vector3 SideScrollingShooter::PlayerAimPoint() const {
     const Shot shot = MakeNormalPlayerShot(false);
@@ -1570,7 +1504,7 @@ Vector3 SideScrollingShooter::PlayerAimPoint() const {
 /** @brief 発射と照準予測に共通の通常弾を作る @param snap スナップ補正を適用する場合true @return 通常弾 */
 SideScrollingShooter::Shot SideScrollingShooter::MakeNormalPlayerShot(bool snap) const {
     const bool rail = IsRailGameplayActive();
-    const bool vertical = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
+    const bool vertical = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase, rail);
     Shot shot;
     shot.owner = m_activePlayer;
     shot.x = Player().m_playerX + (rail || vertical ? 0.0f : 0.12f);
@@ -1665,25 +1599,11 @@ void SideScrollingShooter::UpdateAimSnap(bool advance) {
 /** @brief 発射時の弾道を標的へ補正する @param shot 発射する自機弾 @return なし */
 void SideScrollingShooter::ApplyAimSnap(Shot& shot) const {
     if (Player().m_aimSnapBlend <= 0.0f || m_viewMode != ViewMode::Rail3D || m_viewTransitionTimer > 0) return;
-    const bool vertical = UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase);
     // 描画枠の追従遅れを射撃へ持ち込まず、捕捉中は最新の標的位置を使う
     Vector3 target = Player().m_aimSnapped ? Player().m_aimSnapTarget : PlayerAimPoint() + Player().m_aimSnapOffset;
     Vector3 targetVelocity = Player().m_aimSnapped ? Player().m_aimTargetVelocity : Vector3::Zero;
     const Vector3 origin {ToWorldX(shot.x), ToWorldY(shot.y), shot.z};
     Vector3 forward = (PlayerAimPoint() - PlayerWorldPosition()).Normalized();
-    if (vertical) {
-        // 壁面の通常弾と特殊弾で異なる命中平面を、それぞれの衝突判定へ合わせる
-        if (shot.special) {
-            const Vector3 camera = ShotProjectionCameraPosition();
-            const Vector3 nextTarget = target + targetVelocity;
-            const Vector3 projectedNext = camera + (nextTarget - camera) * PerspectiveDepthScale(camera.z, nextTarget.z, shot.z);
-            target = camera + (target - camera) * PerspectiveDepthScale(camera.z, target.z, shot.z);
-            targetVelocity = projectedNext - target;
-        }
-        target.z = shot.z;
-        targetVelocity.z = 0.0f;
-        forward = Vector3::Up;
-    }
     // ponytail: 現在速度で等速予測するため急旋回は予測外、必要なら敵の軌道式で置き換える
     const Vector3 shotVelocity {ToWorldX(shot.vx), ToWorldY(shot.vy), shot.vz};
     target += targetVelocity * InterceptFrames(target - origin, targetVelocity, shotVelocity.Length());
@@ -1702,7 +1622,7 @@ void SideScrollingShooter::ApplyAimSnap(Shot& shot) const {
 
 /** @brief 自機から放射状に開いて巻き返し、うねりを収めながら標的へ追尾する @param shot 更新する追尾弾 @return なし */
 void SideScrollingShooter::UpdateHomingShot(Shot& shot) {
-    const bool spatial = (IsRailGameplayActive() && !UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase)) || IsTayamaBattle();
+    const bool spatial = IsRailGameplayActive() || IsTayamaBattle();
     const int view = (spatial ? 2 : 0) + (IsRailGameplayActive() ? 1 : 0);
     const bool changedPlane = shot.homingView != view;
     if (changedPlane) shot.homingTrailCount = 0;
@@ -1725,7 +1645,7 @@ void SideScrollingShooter::UpdateHomingShot(Shot& shot) {
     Vector3 velocity = spatial ? Vector3 {ToWorldX(shot.vx), ToWorldY(shot.vy), shot.vz} :
         Vector3 {shot.vx, shot.vy, 0.0f};
     const auto& config = PlayerShotConfigs[static_cast<size_t>(Homing)];
-    const float sideSpeed = config.speed * (UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase) ?
+    const float sideSpeed = config.speed * (UsesVerticalPlayerShots(m_stageNumber, m_stage5.phase, IsRailGameplayActive()) ?
         ShooterStages::Stage5::Part2PlayerShotSpeedScale : 1.0f);
     const float speed = spatial ? 1.45f : sideSpeed;
     // 曲線の広がりを2Dの弾速と横方向のワールド倍率から決める
@@ -1837,120 +1757,29 @@ bool SideScrollingShooter::TryHitDefaultBossPart(
     return false;
 }
 
+/** @brief 自機ショット音を再生する @return なし */
 void SideScrollingShooter::PlayShotSound() {
-    // 自機ショットの音量調整 (0.0f ~ 1.0f)
-    constexpr float PlayerShotVolume = 0.2f;
-    if (m_audio) m_audio->PlayMMLSE("t240 o6 l32 v7 c>c", PlayerShotVolume);
+    GameplaySounds::PlayShotSound(m_audio);
 }
 
+/** @brief 被弾音を再生する @return なし */
 void SideScrollingShooter::PlayHitSound() {
-    if (m_audio) m_audio->PlayMMLSE("t180 o4 l32 v10 g e c");
+    GameplaySounds::PlayHitSound(m_audio);
 }
 
-/**
- * @brief 敵のエネルギー弾発射音を再生する
- */
+/** @brief 敵のエネルギー弾発射音を再生する @return なし */
 void SideScrollingShooter::PlayEnemyShotSound() {
-    if (!m_audio) return;
-
-    // 敵通常弾・大型弾の発砲音
-    static const std::vector<int16_t> pcm = [] {
-        // パルス成分の生成
-        Audio::SfxrParams pulse;
-        pulse.waveType = Audio::SfxrWaveType::Square;
-        pulse.squareDuty = 0.30f;
-        pulse.attackTime = 0.0f;
-        pulse.sustainTime = 0.025f;
-        pulse.decayTime = 0.075f;
-        pulse.startFrequency = 0.72f;
-        pulse.minFrequency = 0.18f;
-        pulse.slide = -0.65f;
-        pulse.masterVolume = 0.60f;
-        const std::vector<int16_t> pcmPulse = Audio::SfxrGenerator::GeneratePCM(pulse, 44100);
-
-        // 鋸波成分の生成
-        Audio::SfxrParams beam;
-        beam.waveType = Audio::SfxrWaveType::Sawtooth;
-        beam.attackTime = 0.002f;
-        beam.sustainTime = 0.060f;
-        beam.decayTime = 0.160f;
-        beam.startFrequency = 0.58f;
-        beam.minFrequency = 0.12f;
-        beam.slide = -0.50f;
-        beam.masterVolume = 0.72f;
-        const std::vector<int16_t> pcmBeam = Audio::SfxrGenerator::GeneratePCM(beam, 44100);
-
-        // 2つの波形を加算合成
-        const size_t totalSamples = (std::max)(pcmPulse.size(), pcmBeam.size());
-        std::vector<int16_t> mixed(totalSamples, 0);
-        for (size_t i = 0; i < totalSamples; ++i) {
-            int32_t sample = 0;
-            if (i < pcmPulse.size()) sample += pcmPulse[i];
-            if (i < pcmBeam.size()) sample += pcmBeam[i];
-            mixed[i] = static_cast<int16_t>(std::clamp(sample, -32760, 32760));
-        }
-        return mixed;
-    }();
-    m_audio->PlaySE(pcm, 1.20f);
+    GameplaySounds::PlayEnemyShotSound(m_audio);
 }
 
+/** @brief ミサイル発射音を再生する @return なし */
 void SideScrollingShooter::PlayMissileLaunchSound() {
-    if (!m_audio) return;
-
-    // 低域を含まない高周波サイン波を緩く下降させて鋭い噴射音を作る
-    Audio::SfxrParams sound;
-    sound.waveType = Audio::SfxrWaveType::Sine;
-    sound.attackTime = 0.015f;
-    sound.sustainTime = 0.34f;
-    sound.decayTime = 0.26f;
-    sound.startFrequency = 2.20f;
-    sound.minFrequency = 1.35f;
-    sound.slide = -0.08f;
-    sound.masterVolume = 0.46f;
-    m_audio->PlaySE(sound);
+    GameplaySounds::PlayMissileLaunchSound(m_audio);
 }
 
+/** @brief ボス機銃音を再生する @return なし */
 void SideScrollingShooter::PlayBossMachineGunSound() {
-    if (!m_audio) return;
-
-    // 通常敵の射撃音
-    static const std::vector<int16_t> pcm = [] {
-        // アタックパルスノイズ成分の生成
-        Audio::SfxrParams crack;
-        crack.waveType = Audio::SfxrWaveType::Noise;
-        crack.attackTime = 0.0f;
-        crack.sustainTime = 0.018f;
-        crack.decayTime = 0.045f;
-        crack.startFrequency = 0.75f;
-        crack.minFrequency = 0.25f;
-        crack.slide = -0.70f;
-        crack.masterVolume = 0.65f;
-        const std::vector<int16_t> pcmCrack = Audio::SfxrGenerator::GeneratePCM(crack, 44100);
-
-        // 鋸波成分の生成
-        Audio::SfxrParams core;
-        core.waveType = Audio::SfxrWaveType::Sawtooth;
-        core.attackTime = 0.0f;
-        core.sustainTime = 0.045f;
-        core.decayTime = 0.120f;
-        core.startFrequency = 0.54f;
-        core.minFrequency = 0.14f;
-        core.slide = -0.58f;
-        core.masterVolume = 0.75f;
-        const std::vector<int16_t> pcmCore = Audio::SfxrGenerator::GeneratePCM(core, 44100);
-
-        // 2つの波形を加算合成
-        const size_t totalSamples = (std::max)(pcmCrack.size(), pcmCore.size());
-        std::vector<int16_t> mixed(totalSamples, 0);
-        for (size_t i = 0; i < totalSamples; ++i) {
-            int32_t sample = 0;
-            if (i < pcmCrack.size()) sample += pcmCrack[i];
-            if (i < pcmCore.size()) sample += pcmCore[i];
-            mixed[i] = static_cast<int16_t>(std::clamp(sample, -32760, 32760));
-        }
-        return mixed;
-    }();
-    m_audio->PlaySE(pcm, 1.25f);
+    GameplaySounds::PlayBossMachineGunSound(m_audio);
 }
 
 /** @brief 生存中の爆発エフェクトを更新する @return なし */

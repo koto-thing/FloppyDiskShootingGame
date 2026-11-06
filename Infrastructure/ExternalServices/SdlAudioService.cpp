@@ -38,6 +38,8 @@ struct AudioService::Impl {
     std::size_t nextDialogue = 32;
     // ponytail: 120ms以内の曲切替は4曲まで重ね、超過時は最小音量を再利用する、必要なら動的プールへ拡張する
     std::array<Music, 4> music{};
+    Music* progressMusic = nullptr;
+    Effect* progressEffect = nullptr;
     std::map<std::string, std::vector<int16_t>> bgmCache;
     std::map<Audio::SfxrPreset, std::vector<int16_t>> presetCache;
     std::map<Audio::SfxrPreset, float> presetVolumes;
@@ -161,6 +163,8 @@ bool AudioService::Initialize() {
 void AudioService::Shutdown() {
     if (impl->device) SDL_CloseAudioDevice(impl->device);
     impl->device = 0;
+    impl->progressMusic = nullptr;
+    impl->progressEffect = nullptr;
     for (auto& voice : impl->music) voice.pcm = nullptr;
     impl->effects = {};
     impl->bgmCache.clear();
@@ -218,6 +222,8 @@ void AudioService::PlayMMLBGM(const std::string& mml, bool loop) {
         if (!voice.pcm || (target->pcm && voice.gain < target->gain)) target = &voice;
     }
     *target = std::move(prepared);
+    impl->progressMusic = target;
+    impl->progressEffect = nullptr;
     impl->Unlock();
 }
 
@@ -234,7 +240,7 @@ bool AudioService::PlayMMLBGMFromFile(const std::string& filePath, bool loop) {
     return false;
 }
 /** @brief 現在のBGMを短くフェードアウトする @return なし */
-void AudioService::StopBGM() { impl->Lock(); for (auto& voice : impl->music) voice.stopping = true; impl->Unlock(); }
+void AudioService::StopBGM() { impl->Lock(); impl->progressMusic = nullptr; for (auto& voice : impl->music) voice.stopping = true; impl->Unlock(); }
 /** @brief 合成パラメーターをSEとして再生する @param params 音色 @param volume 個別音量 @return なし */
 void AudioService::PlaySE(const Audio::SfxrParams& params, float volume) { PlaySE(Audio::SfxrGenerator::GeneratePCM(params, 44100), volume); }
 /** @brief プリセットをキャッシュして再生する @param preset 音色 @param volume 個別音量 @return なし */
@@ -260,10 +266,26 @@ void AudioService::PlayPCM(const std::vector<int16_t>& pcmBuffer, float volume, 
     voice.position = 0;
     voice.volume = std::isfinite(volume) ? std::clamp(volume, 0.0f, 1.0f) : 0.0f;
     voice.active = true;
+    impl->progressEffect = &voice;
+    impl->progressMusic = nullptr;
     impl->Unlock();
 }
 /** @brief 全SEとセリフを停止する @return なし */
-void AudioService::StopAllSE() { impl->Lock(); for (auto& voice : impl->effects) voice.active = false; impl->Unlock(); }
+void AudioService::StopAllSE() { impl->Lock(); impl->progressEffect = nullptr; for (auto& voice : impl->effects) voice.active = false; impl->Unlock(); }
+
+/** @brief 最後に再生を開始した音声の進捗を取得する @return 0から1、停止時は0 */
+float AudioService::GetPlaybackProgress() const {
+    // 音声コールバックと同じロックで位置とバッファ長を一緒に読む
+    impl->Lock();
+    float progress = 0.0f;
+    if (const auto* music = impl->progressMusic) {
+        progress = music->pcm ? static_cast<float>(music->position) / music->pcm->size() : 1.0f;
+    } else if (const auto* effect = impl->progressEffect; effect && !effect->pcm.empty()) {
+        progress = static_cast<float>(effect->position) / effect->pcm.size();
+    }
+    impl->Unlock();
+    return std::clamp(progress, 0.0f, 1.0f);
+}
 
 #ifdef FLOPPY_AUDIO_TESTS
 /** @brief オフライン合成でループ・終了・フェード・枠分離・ピークを検証する @return なし */
@@ -275,6 +297,13 @@ void RunAudioServiceTests() {
     song.pcm = &stereo;
     song.gain = 1.0f;
     std::array<float, 16> output{};
+    // コールバックの実サンプル位置、自然終了、停止を確認する
+    assert(service.GetPlaybackProgress() == 0.0f);
+    mixer.progressMusic = &song;
+    mixer.Mix(output.data(), 1);
+    assert(service.GetPlaybackProgress() == 0.5f);
+    mixer.Mix(output.data(), 2);
+    assert(service.GetPlaybackProgress() == 0.5f);
     mixer.Mix(output.data(), 8);
     assert(output[0] > 0.0f && output[1] < 0.0f && song.pcm != nullptr);
     song.loop = false;
@@ -282,6 +311,9 @@ void RunAudioServiceTests() {
     assert(song.pcm != nullptr);
     for (int i = 0; i < 2800; ++i) mixer.Mix(output.data(), 8);
     assert(song.pcm == nullptr);
+    assert(service.GetPlaybackProgress() == 1.0f);
+    service.StopBGM();
+    assert(service.GetPlaybackProgress() == 0.0f);
     song.pcm = &stereo;
     song.loop = true;
     song.stopping = true;
@@ -293,6 +325,10 @@ void RunAudioServiceTests() {
     mixer.Mix(output.data(), 8);
     for (float value : output) assert(std::isfinite(value) && std::abs(value) <= 0.981f);
     for (const auto& effect : mixer.effects) assert(!effect.active);
+    mixer.progressEffect = &mixer.effects[32];
+    assert(service.GetPlaybackProgress() == 1.0f);
+    service.StopAllSE();
+    assert(service.GetPlaybackProgress() == 0.0f);
     service.SetMasterVolume(0.0f);
     song = {};
     song.pcm = &stereo;

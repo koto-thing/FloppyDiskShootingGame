@@ -1,9 +1,8 @@
 Texture2D sceneTexture : register(t0);
 SamplerState pointSampler : register(s0);
 
-static const float COLOR_LEVELS = 6.0;
-static const float COLOR_GAMMA = 2.2;
-static const float DITHER_STRENGTH = 0.75;
+static const float COLOR_LEVELS = 16.0;
+static const float DITHER_STRENGTH = 0.5;
 static const float BAYER_4X4[16] =
 {
      0.0 / 16.0,  8.0 / 16.0,  2.0 / 16.0, 10.0 / 16.0,
@@ -19,17 +18,15 @@ struct VS_OUTPUT
 };
 
 /**
- * @brief 知覚色空間のRGBを指定段階数へ量子化して戻す
- * @param color 0～1の知覚色空間RGB
- * @param levels チャンネルごとの段階数
+ * @brief 表示値のRGBを指定段階数へ量子化する
+ * @param color 0～1の表示値RGB
  * @return 0～1へ収めた量子化後のRGB
  */
-float3 QuantizeColor(float3 color, float levels)
+float3 QuantizeColor(float3 color)
 {
-    // ディザと同じ知覚色空間で量子化し、黒潰れを抑える
-    float intervals = levels - 1.0;
-    float3 quantizedColor = floor(saturate(color) * intervals + 0.5) / intervals;
-    return saturate(pow(quantizedColor, COLOR_GAMMA));
+    // BackBufferはUNORMなので、表示値のまま等間隔に量子化する
+    float intervals = COLOR_LEVELS - 1.0;
+    return floor(saturate(color) * intervals + 0.5) / intervals;
 }
 
 /**
@@ -45,35 +42,39 @@ float GetBayer4x4(int2 pixelPosition)
 
 /**
  * @brief 量子化前のRGBへ中心化したBayer閾値を加える
- * @param color 知覚色空間の量子化前RGB
+ * @param color 表示値の量子化前RGB
  * @param pixelPosition 低解像度RenderTargetのtexel座標
- * @param strength 量子化の段階幅に対するディザ強度
  * @return 0～1へ収めたディザ適用後のRGB
  */
-float3 ApplyBayerDither(float3 color, int2 pixelPosition, float strength)
+float3 ApplyBayerDither(float3 color, int2 pixelPosition)
 {
     // 暗部と明部ではパターンを消し、階調補助が必要な中間輝度だけへ適用する
     float3 midtoneMask = smoothstep(0.03, 0.15, color) *
         (1.0 - smoothstep(0.85, 0.98, color));
     float3 dither = (GetBayer4x4(pixelPosition) + 0.5 / 16.0 - 0.5) *
-        (strength / (COLOR_LEVELS - 1.0)) * midtoneMask;
+        (DITHER_STRENGTH / (COLOR_LEVELS - 1.0)) * midtoneMask;
     return saturate(color + dither);
 }
 
 /**
- * @brief 拡大率に応じた走査線と緩やかな周辺減光を適用する
+ * @brief 拡大率と明るさに応じた走査線と緩やかな周辺減光を適用する
+ * @param color 量子化後のRGB
  * @param uv 画面内の正規化座標
  * @param textureHeight 低解像度Textureの高さ
  * @return RGBへ掛ける明度倍率
  */
-float ArcadeBrightness(float2 uv, float textureHeight)
+float ArcadeBrightness(float3 color, float2 uv, float textureHeight)
 {
     // 画素幅で正弦波を平均し、等倍以下では走査線を消して干渉縞を抑える
+    // 位相は2倍表示の画素が波のゼロ点に乗らない向きにする
     float row = uv.y * textureHeight;
     float footprint = max(fwidth(row), 0.0001);
     float phaseWidth = 3.14159265 * footprint;
-    float filteredWave = cos(6.2831853 * row) * sin(phaseWidth) / phaseWidth;
-    float scanline = 1.0 - 0.18 * smoothstep(1.0, 2.0, 1.0 / footprint) *
+    float filteredWave = sin(6.2831853 * row) * sin(phaseWidth) / phaseWidth;
+
+    // 明るい画素ほど走査線を弱め、敵弾や爆発の明度を保つ
+    float depth = 0.22 * (1.0 - 0.8 * max(color.r, max(color.g, color.b)));
+    float scanline = 1.0 - depth * smoothstep(1.0, 2.0, 1.0 / footprint) *
         (0.5 + 0.5 * filteredWave);
 
     // 画面端でも最大8%の減光に留め、端を通る敵弾の明度を保つ
@@ -112,8 +113,6 @@ float4 PSMain(VS_OUTPUT input) : SV_TARGET
 
     // Point Sampling後にディザ、量子化の順でRGBへ適用し、元のAlphaを維持する
     float4 sampled = sceneTexture.Sample(pointSampler, input.uv);
-    float3 perceptualColor = pow(saturate(sampled.rgb), 1.0 / COLOR_GAMMA);
-    float3 ditheredColor = ApplyBayerDither(perceptualColor, pixelPosition, DITHER_STRENGTH);
-    float3 color = QuantizeColor(ditheredColor, COLOR_LEVELS);
-    return float4(color * ArcadeBrightness(input.uv, textureHeight), sampled.a);
+    float3 color = QuantizeColor(ApplyBayerDither(saturate(sampled.rgb), pixelPosition));
+    return float4(color * ArcadeBrightness(color, input.uv, textureHeight), sampled.a);
 }
