@@ -1,10 +1,17 @@
 #include "EndingScene.h"
+#include "../../Infrastructure/ExternalServices/MMLData.h"
+#include "../../Infrastructure/ExternalServices/AudioService.h"
 
 /** @brief エンディングシーンを初期化する */
 void EndingScene::Initialize() {
     // クレジット終了後にランキングへ進むことを共有する
     getData().showRankingAfterCredits = true;
     StoryScene::Initialize();
+    // 直前のボス曲を止めて、エンディング曲を流す
+    if (getData().audio) {
+        getData().audio->StopBGM();
+        getData().audio->PlayMMLBGM(std::string(MMLData::GetEndingBgm()), true);
+    }
 }
 
 /**
