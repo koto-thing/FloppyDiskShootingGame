@@ -134,7 +134,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;d3dcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;d3dcompiler.lib;cabinet.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -155,7 +155,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;d3dcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;d3dcompiler.lib;cabinet.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -172,7 +172,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;d3dcompiler.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;d3dcompiler.lib;cabinet.lib;$(CoreLibraryDependencies);%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -195,7 +195,7 @@
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>false</GenerateDebugInformation>
-      <AdditionalDependencies>d3d12.lib;dxgi.lib;d3dcompiler.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>d3d12.lib;dxgi.lib;d3dcompiler.lib;cabinet.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
     <Manifest>
       <EnableSegmentHeap>true</EnableSegmentHeap>
@@ -208,6 +208,7 @@
     <ClCompile Include="Infrastructure\ExternalServices\PackedAudioSamples.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\MMLParser.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\SynthWaveGenerator.cpp" />
+    <ClCompile Include="Infrastructure\ExternalServices\EmbeddedSamples.cpp" />
     <ClCompile Include="Infrastructure\ExternalServices\SfxrGenerator.cpp" />
     <ClCompile Include="Infrastructure\Repositories\ScoreRepository.cpp" />
     <ClCompile Include="Infrastructure\Repositories\SettingsRepository.cpp" />
@@ -249,7 +250,7 @@
     <ClInclude Include="Domain\ValueObjects\SceneSharedData.h" />
     <ClInclude Include="Domain\ValueObjects\SceneType.h" />
     <ClInclude Include="Infrastructure\ExternalServices\AudioService.h" />
-    <ClInclude Include="Infrastructure\ExternalServices\WavSamples.h" />
+    <ClInclude Include="Infrastructure\ExternalServices\EmbeddedSamples.h" />
     <ClInclude Include="Infrastructure\ExternalServices\MMLData.h" />
     <ClInclude Include="Infrastructure\ExternalServices\MMLParser.h" />
     <ClInclude Include="Infrastructure\ExternalServices\SynthWaveGenerator.h" />
