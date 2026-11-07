@@ -186,8 +186,9 @@ private:
      */
     void DrawLowResolutionToBackBuffer();
 
-    static constexpr UINT LOW_RES_WIDTH = 512;
-    static constexpr UINT LOW_RES_HEIGHT = 288;
+    // 720p、1080p、1440p、4Kのいずれでも整数倍で拡大できる解像度
+    static constexpr UINT LOW_RES_WIDTH = 640;
+    static constexpr UINT LOW_RES_HEIGHT = 360;
 
     int m_width;
     int m_height;

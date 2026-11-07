@@ -9,6 +9,84 @@
 #include "../Presentation/Gameplay/Stages/Stage5/WallSecurityDroneModelView.h"
 
 /**
+ * @brief 指定地点が配置パターンのどれかへ接触するか判定する
+ * @param pieces 判定する部品
+ * @param count 部品数
+ * @param rail 3D視点の場合true
+ * @param x 判定中心X
+ * @param y 判定中心Y
+ * @return 接触する場合true
+ */
+static bool ShaftPatternHits(const std::array<ShooterStages::Stage5::ShaftObstacle,
+    ShooterStages::Stage5::ShaftPatternMaxPieces>& pieces, int count, bool rail, float x, float y) {
+    using namespace ShooterStages::Stage5;
+    constexpr float PlayerRadius = 0.055f;
+    for (int index = 0; index < count; ++index) {
+        ShaftObstacle obstacle = pieces[static_cast<std::size_t>(index)];
+        // 自機の高さまで落下した瞬間で判定する
+        obstacle.travel = rail ? (ShaftFarZ - 8.0f) / (ShaftFarZ - ShaftNearZ) :
+            (ShaftTopSideY - y) / (ShaftTopSideY - ShaftBottomSideY);
+        if (ShaftObstacleHits(obstacle, rail, x, y, 8.0f, PlayerRadius)) return true;
+    }
+    return false;
+}
+
+/**
+ * @brief ビル内部の障害物が視点ごとの通過条件を満たすことを検証する
+ * @return なし
+ */
+static void CheckShaftObstacles() {
+    using namespace ShooterStages::Stage5;
+    constexpr float SideY = -0.8f;
+    constexpr int XSteps = 80;
+    constexpr int YSteps = 60;
+    const auto PlayerX = [](int step) { return -2.0f + 4.0f * static_cast<float>(step) / XSteps; };
+    const auto PlayerY = [](int step) {
+        return Part2RailPlayerMinY + (Part2RailPlayerMaxY - Part2RailPlayerMinY) * static_cast<float>(step) / YSteps;
+    };
+    for (int seed = 0; seed < 512; ++seed) {
+        const std::uint32_t hash = WallWaveHash(seed, 3);
+        for (ShaftPattern pattern : {ShaftPattern::LeftJut, ShaftPattern::RightJut, ShaftPattern::CeilingJut,
+            ShaftPattern::FloorJut, ShaftPattern::Debris, ShaftPattern::Beam, ShaftPattern::Bulkhead}) {
+            std::array<ShaftObstacle, ShaftPatternMaxPieces> pieces {};
+            const int count = BuildShaftPattern(pattern, hash, pieces);
+            assert(count > 0);
+            for (int index = 0; index < count; ++index) {
+                assert((pieces[static_cast<std::size_t>(index)].hp > 0) == (pattern == ShaftPattern::Debris));
+            }
+            bool sideOpen = false;
+            for (int step = 0; step <= XSteps; ++step) {
+                sideOpen = sideOpen || !ShaftPatternHits(pieces, count, false, PlayerX(step), SideY);
+            }
+            bool railOpen = false;
+            for (int x = 0; x <= XSteps; ++x) {
+                for (int y = 0; y <= YSteps; ++y) {
+                    railOpen = railOpen || !ShaftPatternHits(pieces, count, true, PlayerX(x), PlayerY(y));
+                }
+            }
+            // 梁は3D専用、隔壁は2D専用、通常障害物はどちらの視点でも抜けられる
+            assert(sideOpen == (pattern != ShaftPattern::Beam));
+            assert(railOpen == (pattern != ShaftPattern::Bulkhead));
+        }
+    }
+
+    // 全ての関門が区画の生成停止前に出現し、2種類が交互に並ぶ
+    const int chapterFrames[] = {WallClimbLowerFrames, WallClimbMiddleFrames, WallClimbUpperFrames};
+    for (int tier = 0; tier < 3; ++tier) {
+        int gates = 0;
+        ShaftPattern previous = ShaftPattern::Count;
+        for (int frame = WallClimbFadeFrames; frame <= chapterFrames[tier] - ShaftSpawnStopFrames; ++frame) {
+            const ShaftPattern gate = ShaftGatePatternAt(tier, frame - WallClimbFadeFrames);
+            if (gate == ShaftPattern::Count) continue;
+            assert(gate != previous);
+            previous = gate;
+            ++gates;
+        }
+        assert(gates == tier + 2);
+    }
+}
+
+/**
  * @brief Stage 5の状態順序と共有モデルTransformを検証する
  * @return なし
  */
@@ -138,8 +216,10 @@ void RunStage5ModelViewTests() {
         Phase::TayamaFireControl, Phase::TayamaCommandCore));
     assert(SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
         Weakpoint::FireControlRadar, Phase::TayamaFireControl));
-    assert(SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
+    assert(!SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
         Weakpoint::CommandCore, Phase::TayamaFireControl));
+    assert(SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
+        Weakpoint::CommandCore, Phase::TayamaCommandCore));
 
     // 正面、右側、背面の周回座標が同じ半径でTAYAMAを囲むことを確認する
     const Vector2 front = SideScrollingShooter::TayamaOrbitXZ(0.0f, 0.0f);
@@ -262,17 +342,15 @@ void RunStage5ModelViewTests() {
         ShooterStages::Stage5::WallClimbFadeFrames) == 0.0f);
     assert(ShooterStages::Stage5::WallApproachProgress(
         ShooterStages::Stage5::WallClimbApproachFrames) == 1.0f);
-    assert(ShooterStages::Stage5::WallClimbProgress(
-        ShooterStages::Stage5::WallClimbApproachFrames) == 0.0f);
-    assert(ShooterStages::Stage5::WallClimbProgress(
+    assert(ShooterStages::Stage5::EntranceFlyInProgress(
+        ShooterStages::Stage5::EntranceFlyInFrame) == 0.0f);
+    assert(ShooterStages::Stage5::EntranceFlyInProgress(
         ShooterStages::Stage5::WallClimbTransitionFrames) == 1.0f);
     assert(ShooterStages::Stage5::EastsourceFlyAwayProgress(0) == 0.0f);
     assert(ShooterStages::Stage5::EastsourceFlyAwayProgress(
         ShooterStages::Stage5::EastsourceFallFrames) == 1.0f);
     assert(ShooterStages::Stage5::PandDBuildingWidth == 144.0f);
     assert(ShooterStages::Stage5::PandDBuildingWindowColumns == 6);
-    assert(ShooterStages::Stage5::WallClimbHeight <
-        ShooterStages::Stage5::PandDBuildingHeight * 0.5f);
     assert(ShooterStages::Stage5::IsRooftopPhase(Phase::RooftopArrival));
     assert(ShooterStages::Stage5::IsRooftopPhase(Phase::CarrierTransformation));
     assert(!ShooterStages::Stage5::IsRooftopPhase(Phase::WallClimbUpper));
@@ -299,18 +377,16 @@ void RunStage5ModelViewTests() {
         ShooterStages::Stage5::Phase::WallClimbUpper));
     assert(!ShooterStages::Stage5::IsPart2RoutePhase(
         ShooterStages::Stage5::Phase::WallClimbTransition));
-    assert(SideScrollingShooter::UsesVerticalPlayerShots(5, Phase::WallClimbMiddle));
-    assert(!SideScrollingShooter::UsesVerticalPlayerShots(4, Phase::WallClimbMiddle));
-    assert(!SideScrollingShooter::UsesVerticalPlayerShots(5, Phase::RooftopArrival));
+    assert(SideScrollingShooter::UsesVerticalPlayerShots(5, Phase::WallClimbMiddle, false));
+    assert(!SideScrollingShooter::UsesVerticalPlayerShots(5, Phase::WallClimbMiddle, true));
+    assert(!SideScrollingShooter::UsesVerticalPlayerShots(4, Phase::WallClimbMiddle, false));
+    assert(!SideScrollingShooter::UsesVerticalPlayerShots(5, Phase::RooftopArrival, false));
     assert(ShooterStages::Stage5::Part2ChapterNumber(
         ShooterStages::Stage5::Phase::WallClimbLower) == 1);
     assert(ShooterStages::Stage5::Part2ChapterNumber(
         ShooterStages::Stage5::Phase::WallClimbMiddle) == 2);
     assert(ShooterStages::Stage5::Part2ChapterNumber(
         ShooterStages::Stage5::Phase::WallClimbUpper) == 3);
-    assert(ShooterStages::Stage5::WallClimbLowerFrames == 900);
-    assert(ShooterStages::Stage5::WallClimbMiddleFrames == 900);
-    assert(ShooterStages::Stage5::WallClimbUpperFrames == 900);
     assert(ShooterStages::Stage5::Part2RouteElapsedFrames(
         ShooterStages::Stage5::Phase::WallClimbMiddle, 0) ==
         ShooterStages::Stage5::WallClimbLowerFrames);
@@ -318,24 +394,8 @@ void RunStage5ModelViewTests() {
         ShooterStages::Stage5::Phase::WallClimbUpper, 0) ==
         ShooterStages::Stage5::WallClimbLowerFrames +
         ShooterStages::Stage5::WallClimbMiddleFrames);
-    assert(ShooterStages::Stage5::Part2RailEnemyEntryY > 60.0f);
-    assert(ShooterStages::Stage5::Part2RailEnemyFallSpeed == 0.16f);
-    assert(ShooterStages::Stage5::Part2RailPlayerMinY == 0.80f);
-    assert(ShooterStages::Stage5::Part2RailPlayerMaxY == 16.0f);
-    assert(ShooterStages::Stage5::Part2RailShotMinY <
-        ShooterStages::Stage5::Part2RailPlayerMinY);
-    assert(ShooterStages::Stage5::Part2RailShotMaxY >
-        ShooterStages::Stage5::Part2RailPlayerMaxY);
     assert(ShooterStages::Stage5::Part2EnemyScaleMultiplier(0.0f) == 1.0f);
     assert(ShooterStages::Stage5::Part2EnemyScaleMultiplier(1.0f) == 2.0f);
-    assert(ShooterStages::Stage5::Part2RailDroneAimY(-1.0f) >
-        ShooterStages::Stage5::Part2RailPlayerMinY);
-    assert(ShooterStages::Stage5::Part2RailDroneAimY(1.0f) <
-        ShooterStages::Stage5::Part2RailPlayerMaxY);
-    assert(ShooterStages::Stage5::Part2RailDroneEntryY >
-        ShooterStages::Stage5::Part2RailDroneBaseY +
-        ShooterStages::Stage5::Part2RailDroneBaseStep *
-            (ShooterStages::Stage5::Part2DroneRowCount - 1));
     assert(ShooterStages::Stage5::Part2RailDroneEntryProgress(0) == 0.0f);
     assert(ShooterStages::Stage5::Part2RailDroneEntryProgress(
         ShooterStages::Stage5::Part2RailDroneEntryFrames / 2) == 0.5f);
@@ -351,20 +411,6 @@ void RunStage5ModelViewTests() {
         assert(!occupiedDronePlacements[placement]);
         occupiedDronePlacements[placement] = true;
     }
-    constexpr float SideEnemyExitY = -1.87f;
-    const float railHalfwayY = ShooterStages::Stage5::RemapPart2EnemyY(
-        (ShooterStages::Stage5::Part2SideEnemyEntryY + SideEnemyExitY) * 0.5f,
-        ShooterStages::Stage5::Part2SideEnemyEntryY, SideEnemyExitY,
-        ShooterStages::Stage5::Part2RailEnemyEntryY,
-        ShooterStages::Stage5::Part2RailEnemyExitY);
-    assert(std::abs(railHalfwayY -
-        (ShooterStages::Stage5::Part2RailEnemyEntryY +
-            ShooterStages::Stage5::Part2RailEnemyExitY) * 0.5f) < 0.0001f);
-    assert(std::abs(ShooterStages::Stage5::RemapPart2EnemyY(railHalfwayY,
-        ShooterStages::Stage5::Part2RailEnemyEntryY,
-        ShooterStages::Stage5::Part2RailEnemyExitY,
-        ShooterStages::Stage5::Part2SideEnemyEntryY, SideEnemyExitY) -
-        (ShooterStages::Stage5::Part2SideEnemyEntryY + SideEnemyExitY) * 0.5f) < 0.0001f);
     const float railDroneMiddleY = ShooterStages::Stage5::RemapPart2DroneBaseY(
         ShooterStages::Stage5::Part2SideDroneBaseY +
             ShooterStages::Stage5::Part2SideDroneBaseStep,
@@ -376,8 +422,6 @@ void RunStage5ModelViewTests() {
         ShooterStages::Stage5::Part2RailDroneBaseStep) < 0.0001f);
     assert(ShooterStages::Stage5::Part2RailDroneBaseY >
         ShooterStages::Stage5::Part2RailPlayerMinY);
-    assert(ShooterStages::Stage5::Part2RailEnemyPlaneZ > 0.0f);
-    assert(ShooterStages::Stage5::Part2RailEnemyExitY < 0.0f);
     assert(!ShooterStages::Stage5::IsPart2PlayerFlyingAway(
         ShooterStages::Stage5::Phase::WallClimbUpper,
         ShooterStages::Stage5::WallClimbUpperFrames -
@@ -388,19 +432,13 @@ void RunStage5ModelViewTests() {
         ShooterStages::Stage5::WallClimbUpperFrames -
             ShooterStages::Stage5::WallClimbExitFadeFrames -
             ShooterStages::Stage5::Part2PlayerFlyAwayFrames));
-    assert(ShooterStages::Stage5::Part2EnemyExitY(10.0f, true) <
-        ShooterStages::Stage5::Part2EnemyExitY(10.0f, false));
     assert(ShooterStages::Stage5::CinematicFadeAlpha(
         ShooterStages::Stage5::Phase::WallClimbUpper,
         ShooterStages::Stage5::WallClimbUpperFrames -
             ShooterStages::Stage5::WallClimbExitFadeFrames - 1) == 0.0f);
-    assert(ShooterStages::Stage5::Part2SideSceneryFallSpeed == 0.64f);
-    assert(ShooterStages::Stage5::Part2RailSceneryFallSpeed == 0.96f);
-    assert(ShooterStages::Stage5::Part2SideItemFallSpeed > 0.0f);
-    assert(ShooterStages::Stage5::Part2RailItemFallSpeed >
-        ShooterStages::Stage5::Part2SideItemFallSpeed);
+    CheckShaftObstacles();
 
-    // 壁面警備ドローンはポインター接触時だけ45フレーム中に9発連射する
+    // 警備ドローンはポインター接触時だけ45フレーム中に9発連射する
     assert(ShooterStages::Stage5::DroneSearchlightTouches(
         0.0f, 0.0f, 0.10f, 0.0f, 0.055f));
     assert(!ShooterStages::Stage5::DroneSearchlightTouches(
@@ -447,7 +485,7 @@ void RunStage5ModelViewTests() {
         });
     assert(tayamaParts == static_cast<int>(TayamaModelView::PrimitiveCount));
 
-    // 両腕は肩を通る水平X軸を中心に同じ時計回り方向へ回る
+    // 両腕は胴体の縦軸を中心に高さを変えず水平に旋回する
     Vector3 restingShoulder;
     Vector3 restingTip;
     Vector3 sweptShoulder;
@@ -464,12 +502,17 @@ void RunStage5ModelViewTests() {
         tayamaTransform, false, 0.0f, rightRestingShoulder, rightRestingTip);
     TayamaModelView::ArmWorldSegment(
         tayamaTransform, false, Math::HalfPi, rightSweptShoulder, rightSweptTip);
-    assert((sweptShoulder - restingShoulder).LengthSquared() < 0.0001f);
-    assert((rightSweptShoulder - rightRestingShoulder).LengthSquared() < 0.0001f);
-    assert(std::abs(sweptTip.x - restingTip.x) < 0.0001f);
-    assert(std::abs(rightSweptTip.x - rightRestingTip.x) < 0.0001f);
-    assert(sweptTip.z < restingTip.z);
-    assert(rightSweptTip.z < rightRestingTip.z);
+    const auto HorizontalRadius = [&](const Vector3& point) {
+        const float dx = point.x - tayamaTransform.position.x;
+        const float dz = point.z - tayamaTransform.position.z;
+        return std::sqrt(dx * dx + dz * dz);
+    };
+    assert(std::abs(sweptShoulder.y - restingShoulder.y) < 0.0001f);
+    assert(std::abs(sweptTip.y - restingTip.y) < 0.0001f);
+    assert(std::abs(HorizontalRadius(sweptTip) - HorizontalRadius(restingTip)) < 0.001f);
+    assert(std::abs(HorizontalRadius(rightSweptTip) - HorizontalRadius(rightRestingTip)) < 0.001f);
+    assert(std::abs(sweptTip.z - restingTip.z) > 1.0f);
+    assert((sweptTip.z - restingTip.z) * (rightSweptTip.z - rightRestingTip.z) < 0.0f);
 
     // 第一形態の眉毛は髪と同じ暗色、第二形態の髪と眉毛は発光金色へ切り替える
     constexpr ColorF Phase1Eyebrow = TayamaModelView::HeadPartColor(9);

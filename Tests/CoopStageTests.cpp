@@ -374,7 +374,7 @@ struct CoopStageTests {
         for (auto phase : {Phase::WallClimbLower, Phase::WallClimbMiddle, Phase::WallClimbUpper}) {
             g.m_stage5.phase = phase;
             g.m_stage5.phaseTimer = WallClimbFadeFrames;
-            // 上下左右の端へ離れても、カメラを外壁から遠ざけず両機を映す
+            // 上下左右の端へ離れても、カメラをシャフトの外へ出さず両機を映す
             for (int upper : {0, 1}) {
                 g.m_players[upper].m_playerX = Game::Side2DPlayerMinX;
                 g.m_players[upper].m_playerY = Part2RailPlayerMaxY;
@@ -389,8 +389,9 @@ struct CoopStageTests {
                         Camera3D camera;
                         g.ConfigureRailCamera(camera, viewport);
                         if (g.RailBlend() == 1.0f) {
-                            assert(std::abs(camera.Position().z - (Part2PlayerRailZ - 11.5f)) < 0.001f);
-                            assert(std::abs(camera.Position().y - (Game::ToWorldY(Part2RailPlayerMinY) - 8.2f)) < 0.001f);
+                            assert(std::abs(camera.Position().z - (Game::PlayerRailZ - 9.0f)) < 0.001f);
+                            assert(std::abs(camera.Position().x) < Game::ToWorldX(ShaftHalfWidth));
+                            assert(std::abs(camera.Position().y) < Game::ToWorldY(ShaftHalfHeight));
                         }
                         g.ForEachPlayer([&] {
                             Vector3 position = g.PlayerWorldPosition();
@@ -404,33 +405,27 @@ struct CoopStageTests {
                 }
             }
 
-            // 2Pの追尾と命中判定も、画面上の敵中心を通るレイと一致する
+            // 2Pの追尾と命中判定も、奥行きを保った敵の位置へ届く
             g.m_viewTransitionTimer = 0;
             g.m_viewMode = g.m_nextViewMode = Game::ViewMode::Rail3D;
             g.m_aimViewport = viewport;
-            Camera3D camera;
-            g.ConfigureRailCamera(camera, viewport);
             auto& enemy = g.m_enemies[0];
             enemy = {};
             enemy.active = enemy.collisionEnabled = true;
             enemy.hp = 10;
             enemy.x = 0.3f;
-            enemy.y = 20.0f;
-            enemy.z = Part2RailEnemyPlaneZ;
-            Vector2 screen;
-            assert(camera.TryWorldToScreen({Game::ToWorldX(enemy.x), Game::ToWorldY(enemy.y), enemy.z}, screen));
-            const Ray ray = camera.ScreenPointToRay(screen);
+            enemy.y = 0.2f;
+            enemy.z = 34.0f;
             Game::Shot shot {};
-            shot.z = Part2PlayerRailZ + 2.0f;
+            shot.z = g.PlayerRailDepth() + 2.0f;
             shot.special = shot.active = true;
-            const Vector3 expected = ray.PointAt((shot.z - ray.origin.z) / ray.direction.z);
             Vector3 target;
             g.m_activePlayer = 1;
             assert(g.FindShotTarget(shot, target) == 0);
-            // 遠方の逆投影で発生する単精度の誤差だけを許容する
-            assert(std::abs(target.x - expected.x) < 0.005f && std::abs(target.y - expected.y) < 0.005f);
-            shot.x = Game::FromWorldX(expected.x);
-            shot.y = Game::FromWorldY(expected.y);
+            assert(std::abs(target.z - enemy.z) < 0.001f);
+            shot.x = enemy.x;
+            shot.y = enemy.y;
+            shot.z = enemy.z;
             g.HitPlayerShotTargets(shot);
             assert(enemy.hp == 9 && g.m_activePlayer == 1);
             enemy.active = false;
@@ -449,7 +444,7 @@ struct CoopStageTests {
                         player.m_shotCooldown = player.m_specialShotCooldown = 0;
                         player.m_fire = true;
                     }
-                    assert(std::abs(g.MakeNormalPlayerShot(false).vy - 0.18f) < 0.00001f);
+                    assert(std::abs(g.MakeNormalPlayerShot(false).vy - (rail ? 0.0f : 0.18f)) < 0.00001f);
                     for (int frame = 0; frame < 1800; ++frame) {
                         g.m_frame = frame;
                         g.ForEachPlayer([&] {
@@ -684,7 +679,7 @@ struct CoopStageTests {
         assert(g.m_players[1].m_playerX == g.m_players[0].m_playerX);
         g.m_clear = false;
 
-        // 第2部の全Chapterで2D退場は壁面のX/Zを保ち、3Dの既存退場方向も維持する
+        // 第2部の全Chapterで2D退場は縦スクロール方向へ流し、3Dの既存退場方向も維持する
         for (int stage : {4, 5}) {
             g.m_stageNumber = stage;
             for (auto phase : {Game::Stage5Phase::WallClimbTransition,
@@ -700,10 +695,8 @@ struct CoopStageTests {
                     enemy.y = enemy.baseY = 0.5f;
                     enemy.z = 40.0f;
                     g.TickChapterExitEnemies();
-                    const bool downward = stage == 5 &&
-                        (phase == Game::Stage5Phase::WallClimbUpper ||
-                            (!rail && (phase == Game::Stage5Phase::WallClimbLower ||
-                                phase == Game::Stage5Phase::WallClimbMiddle)));
+                    const bool downward = stage == 5 && !rail &&
+                        ShooterStages::Stage5::IsPart2RoutePhase(phase);
                     assert(!enemy.collisionEnabled);
                     if (downward) {
                         assert(enemy.y < 0.5f && enemy.baseY == enemy.y);

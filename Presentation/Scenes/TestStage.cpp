@@ -10,13 +10,13 @@
 
 #include <cstdio>
 #include <utility>
+#include "../Gameplay/GameplayRandom.h"
 #if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
 #if defined(SPACEYAKUZA_EDITION_Steam)
 #include "../../Infrastructure/ExternalServices/SteamCoopSession.h"
 #else
 #include "../../Infrastructure/ExternalServices/OnlineCoopSession.h"
 #endif
-#include "../Gameplay/GameplayRandom.h"
 #endif
 
 namespace {
@@ -41,6 +41,16 @@ void TestStage::Initialize() {
     // 両PCの初期配置と敵出現に同じ乱数列を使う
     if (getData().onlineGame) GameplayRandom::State = getData().coop->Seed();
 #endif
+    // デモは選択済み設定を消費せず、終了時に乱数状態も元へ戻す
+    m_demoMode = std::exchange(getData().startDemo, false);
+    if (m_demoMode) {
+        m_rankedRun = false;
+        m_savedRandomState = GameplayRandom::State;
+        GameplayRandom::State = 0x9e3779b9U;
+        m_game->InitializeDemo(getData().audio);
+        m_retroEffectEnabled = SettingsRepository {}.Load().retroEffectEnabled;
+        return;
+    }
     m_game->Initialize(getData().audio, getData().playerType, getData().difficulty,
         getData().playerCount, getData().secondPlayerType);
     // 開始ステージの指定は一度だけ消費し、途中開始はランキングの対象外にする
@@ -63,6 +73,11 @@ void TestStage::Initialize() {
 }
 
 void TestStage::ProcessInput() {
+    // 実機操作はデモ終了だけに使い、ポーズや自機操作へ渡さない
+    if (m_demoMode) {
+        if (Input::HasActivity(false)) m_demoExitRequested = true;
+        return;
+    }
 #if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
     if (getData().onlineGame) {
         // 各PCのキーボードまたは1台目のパッドを自分の操作として送る
@@ -129,6 +144,14 @@ bool TestStage::ControllersConnected() const {
 }
 
 void TestStage::Tick() {
+    // 通常の終了処理とランキング保存へ入る前にデモを完結する
+    if (m_demoMode) {
+        if (m_demoExitRequested || m_demoFrame >= 3600 || m_game->TickDemo(m_demoFrame++)) {
+            m_demoExitRequested = true;
+            changeScene(SceneType::Title);
+        }
+        return;
+    }
 #if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
     if (getData().onlineGame) {
         // 入力不足時はシミュレーションを進めず、ポーズ中も通信は継続する
@@ -164,6 +187,8 @@ void TestStage::Tick() {
 }
 
 void TestStage::Dispose() {
+    // デモで消費した乱数を次の通常プレイへ持ち越さない
+    if (m_demoMode) GameplayRandom::State = m_savedRandomState;
     m_returnToTitleButton.reset();
     m_openOptionsButton.reset();
     m_closeMenuButton.reset();
@@ -185,6 +210,12 @@ void TestStage::Render(Renderer& renderer) {
     if (getData().onlineGame && !getData().coop->IsHost()) localPlayer = 1;
 #endif
     m_game->Render(renderer, localPlayer);
+    // デモ中であることとタイトルへ戻る操作を案内する
+    if (m_demoMode) {
+        if ((m_demoFrame / 30) % 2 == 0)
+            renderer.DrawText("DEMO PLAY", TextAlign::TopCenter, 0.035f, ColorF::White(), {0.0f, -0.27f});
+        renderer.DrawText("PRESS ANY BUTTON TO RETURN", TextAlign::BottomCenter, 0.02f, ColorF::White(), {0.0f, 0.22f});
+    }
 #if defined(SPACEYAKUZA_EDITION_Steam) || defined(SPACEYAKUZA_EDITION_Online)
     if (getData().onlineGame && !m_pauseMenuOpen && (m_waitingForPeer || m_peerPaused)) {
         // 相手待ちまたは相手ポーズの状態を表示する

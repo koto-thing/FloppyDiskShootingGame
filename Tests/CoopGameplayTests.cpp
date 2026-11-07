@@ -878,13 +878,11 @@ struct CoopGameplayTests {
             g.m_stage5.phase = scenario == 1 ? Game::Stage5Phase::WallClimbMiddle :
                 Game::Stage5Phase::TayamaFireControl;
             Camera3D views[2];
-            const Vector3 simulationCamera = g.ShotProjectionCameraPosition();
             for (int player = 0; player < 2; ++player) {
                 renderer.BeginFrame();
                 g.Render(renderer, player);
                 g.ConfigureRailCamera(views[player], renderer);
                 assert(g.m_activePlayer == 0);
-                assert((g.ShotProjectionCameraPosition() - simulationCamera).Length() < 0.00001f);
                 g.m_activePlayer = player;
                 Vector2 screen;
                 assert(views[player].TryWorldToScreen(g.PlayerWorldPosition(), screen));

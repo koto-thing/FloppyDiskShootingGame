@@ -82,12 +82,19 @@ public:
     void PlayCurrentBossBgm(bool force = false);
     /** @brief 実機入力を現在のプレイヤーへ反映する @return なし */
     void ProcessInput();
+    /** @brief 保存を行わないデモを初期化する @param audio 音声サービス @return なし */
+    void InitializeDemo(AudioService* audio);
+    /** @brief デモ操作を適用して固定更新する @param frame デモ開始からの固定フレーム番号 @return 撃破またはクリアで終了する場合true */
+    bool TickDemo(int frame);
     /** @brief 同期済みの2人分の操作を適用する @param inputs 固定更新1回分の操作 @return なし */
     void ApplyNetworkInput(const std::array<CooperativeInput, 2>& inputs);
     /** @brief ゲーム状態を固定更新する @return なし */
     void Tick();
     /** @brief ゲーム画面を描画する @param renderer 描画先 @param localPlayer 通信時の自機番号 @return なし */
     void Render(Renderer& renderer, int localPlayer = 0) const;
+    /** @brief 未初期化の鑑賞専用インスタンスで背景と飛行演出を描画する @param renderer 描画先 @param stage ステージ番号、1から5 @param frame 背景の経過フレーム @return なし */
+    void RenderBackgroundPreview(Renderer& renderer, int stage, int frame);
+
     /**
      * @brief ゲーム画面の揺れを開始する
      * @param intensity 揺れの最大振幅
@@ -115,6 +122,7 @@ public:
 private:
     /** @brief 現在のプレイヤーに操作を適用する @param input 操作状態 @return なし */
     void ApplyPlayerInput(const CooperativeInput& input);
+    bool m_demoMode = false;
     bool m_networkGame = false;
     CooperativeInput m_networkHostInput {};
     /** @brief チュートリアル専用進行を更新する */
@@ -304,7 +312,6 @@ private:
         std::array<int, BossPartCount> bossPartMaxHp {};
         std::array<int, BossPartCount> bossPartHitFlashFrames {};
         bool collisionEnabled = true;
-        bool entersFromTop = false;
         bool entersWallFromTop = false;
         const EnemyBehavior* behavior = nullptr;
         bool active = false;
@@ -436,6 +443,8 @@ private:
     static constexpr int ViewToggleCooldownFrames = 480;
     static_assert(ViewToggleInvincibleFrames == 3 * 60);
     static_assert(ViewToggleCooldownFrames == 8 * 60);
+    // ビル内部の関門の間に視点切替の再使用時間が必ず明ける
+    static_assert(ShooterStages::Stage5::ShaftGateIntervalFrames > ViewToggleCooldownFrames);
     static constexpr float WorldXScale = 7.0f;
     static constexpr float WorldYScale = 4.4f;
     /** @brief 2D画面のプレイ領域左端に対応する自機中心のX座標 */
@@ -500,10 +509,11 @@ public:
      * @brief Stage 5第2部の縦スクロール弾道を使用するか判定する
      * @param stageNumber 現在のステージ番号
      * @param phase 現在のStage 5状態
-     * @return 第2部道中の場合true
+     * @param rail 3D視点の場合true
+     * @return 第2部道中の2D視点の場合true
      */
-    static constexpr bool UsesVerticalPlayerShots(int stageNumber, Stage5Phase phase) {
-        return stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(phase);
+    static constexpr bool UsesVerticalPlayerShots(int stageNumber, Stage5Phase phase, bool rail) {
+        return !rail && stageNumber == 5 && ShooterStages::Stage5::IsPart2RoutePhase(phase);
     }
 
     /**
@@ -764,7 +774,6 @@ private:
     /** @brief 通常の十字照準のワールド位置を取得する @return 照準位置 */
     Vector3 PlayerAimPoint() const;
     /** @brief 自機弾の透視投影に使う共有カメラの位置を取得する @return 描画と同じワールド位置 */
-    Vector3 ShotProjectionCameraPosition() const;
     /** @brief 発射と照準予測に共通の通常弾を作る @param snap スナップ補正を適用する場合true @return 通常弾 */
     Shot MakeNormalPlayerShot(bool snap = true) const;
     /** @brief 3D照準の対象を更新する @param advance 枠と弾道の補間を1フレーム進める場合true @return なし */
@@ -962,6 +971,8 @@ private:
      * @param playerZ 描画中の自機のワールド座標Z
      * @return なし
      */
+    bool TryPlayerHudPosition(const Camera3D& camera, float playerZ,
+        float worldOffsetY, Vector2& position) const;
     void DrawViewToggleCooldownHud(
         Renderer& renderer, const Camera3D& camera, float playerZ) const;
     /**
@@ -1290,12 +1301,17 @@ static_assert(!SideScrollingShooter::IsValidStage5Transition(
     SideScrollingShooter::Stage5Phase::EastsourceBattle,
     SideScrollingShooter::Stage5Phase::EndingReady));
 static_assert(SideScrollingShooter::UsesVerticalPlayerShots(
-    5, SideScrollingShooter::Stage5Phase::WallClimbLower));
+    5, SideScrollingShooter::Stage5Phase::WallClimbLower, false));
 static_assert(!SideScrollingShooter::UsesVerticalPlayerShots(
-    4, SideScrollingShooter::Stage5Phase::WallClimbLower));
+    5, SideScrollingShooter::Stage5Phase::WallClimbLower, true));
+static_assert(!SideScrollingShooter::UsesVerticalPlayerShots(
+    4, SideScrollingShooter::Stage5Phase::WallClimbLower, false));
 static_assert(SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
     SideScrollingShooter::TayamaWeakpoint::FireControlRadar,
     SideScrollingShooter::Stage5Phase::TayamaFireControl));
-static_assert(SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
+static_assert(!SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
     SideScrollingShooter::TayamaWeakpoint::CommandCore,
     SideScrollingShooter::Stage5Phase::TayamaFireControl));
+static_assert(SideScrollingShooter::IsTayamaWeakpointActiveForPhase(
+    SideScrollingShooter::TayamaWeakpoint::CommandCore,
+    SideScrollingShooter::Stage5Phase::TayamaCommandCore));

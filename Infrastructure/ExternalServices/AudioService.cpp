@@ -65,10 +65,32 @@ static size_t SelectPlaybackSlot(const std::vector<SEVoiceInstance>& pool, size_
     return selected;
 }
 
+/**
+ * @brief 再生サンプル数を進捗へ変換する
+ * @param state 音声エンジンの再生状態
+ * @param start 再利用ボイスの再生開始時サンプル数
+ * @param frames 音声全体のサンプルフレーム数
+ * @param loop ループ再生の場合true
+ * @return 0から1の進捗
+ */
+static float PlaybackProgress(const XAUDIO2_VOICE_STATE& state, UINT64 start, UINT64 frames, bool loop) {
+    if (frames == 0) return 0.0f;
+    // END_OF_STREAMでSamplesPlayedが0へ戻るため、自然終了はキューの空きを先に判定する
+    if (state.BuffersQueued == 0) return 1.0f;
+    const UINT64 played = state.SamplesPlayed >= start ? state.SamplesPlayed - start : 0;
+    return static_cast<float>(loop ? played % frames : (std::min)(played, frames)) /
+        static_cast<float>(frames);
+}
+
 // AudioService内部実装構造体
 struct AudioService::Impl {
     IXAudio2* xAudio2 = nullptr;
     IXAudio2MasteringVoice* masteringVoice = nullptr;
+    IXAudio2SourceVoice* progressVoice = nullptr;
+    UINT64 progressStart = 0;
+    UINT64 progressFrames = 0;
+    bool progressLoop = false;
+    bool progressBgm = false;
 
     // サブミックスボイス (BGM / SE 用)
     IXAudio2SubmixVoice* bgmSubmixVoice = nullptr;
@@ -211,6 +233,7 @@ bool AudioService::Initialize() {
 }
 
 void AudioService::Shutdown() {
+    impl->progressVoice = nullptr;
     // 終了時だけ即座に破棄し、XAudio2が参照するPCMはボイス破棄後に解放する
     for (auto& instance : impl->bgmVoices) instance.voice->DestroyVoice();
     impl->bgmVoices.clear();
@@ -359,6 +382,7 @@ bool AudioService::IsLimiterEnabled() const {
 // --- BGM再生 ---
 
 void AudioService::StopBGM() {
+    if (impl->progressBgm) impl->progressVoice = nullptr;
     // 現在の音量を維持したままフェード方向だけを切り替える
     Update();
     for (auto& instance : impl->bgmVoices) instance.stopping = true;
@@ -438,6 +462,12 @@ void AudioService::PlayMMLBGM(const std::string& mml, bool loop) {
     }
     StopBGM();
     impl->bgmVoices.push_back({voice, 0.0f, false});
+    // BGMはステレオのサンプルフレーム数で周回位置を計算する
+    impl->progressVoice = voice;
+    impl->progressStart = 0;
+    impl->progressFrames = pcm.size() / 2;
+    impl->progressLoop = loop;
+    impl->progressBgm = true;
 }
 
 bool AudioService::PlayMMLBGMFromFile(const std::string& filePath, bool loop) {
@@ -523,6 +553,7 @@ void AudioService::PlayPCM(const std::vector<int16_t>& pcmBuffer, float volume, 
     if (begin >= end || end > impl->seVoicePool.size()) return;
     size_t& cursor = dialogue ? impl->nextDialogueIdx : impl->nextSeVoiceIdx;
     SEVoiceInstance* targetInstance = &impl->seVoicePool[SelectPlaybackSlot(impl->seVoicePool, begin, end, cursor)];
+    if (impl->progressVoice == targetInstance->voice) impl->progressVoice = nullptr;
 
     // 空きボイスがない場合はラウンドロビンで再利用
     if (targetInstance->inUse) {
@@ -549,8 +580,16 @@ void AudioService::PlayPCM(const std::vector<int16_t>& pcmBuffer, float volume, 
     buffer.pAudioData = reinterpret_cast<const BYTE*>(targetInstance->pcmBuffer.data());
     buffer.Flags = XAUDIO2_END_OF_STREAM;
 
+    XAUDIO2_VOICE_STATE startState {};
+    targetInstance->voice->GetState(&startState);
     if (SUCCEEDED(targetInstance->voice->SubmitSourceBuffer(&buffer)) && SUCCEEDED(targetInstance->voice->Start(0))) {
         targetInstance->inUse = true;
+        // 途中停止後に再利用したボイスの累積サンプル数を差し引く
+        impl->progressVoice = targetInstance->voice;
+        impl->progressStart = startState.SamplesPlayed;
+        impl->progressFrames = pcmBuffer.size();
+        impl->progressLoop = false;
+        impl->progressBgm = false;
     } else {
         // 登録・開始失敗時もPCMの参照を解除して再利用可能な状態へ戻す
         targetInstance->voice->Stop(0);
@@ -560,6 +599,7 @@ void AudioService::PlayPCM(const std::vector<int16_t>& pcmBuffer, float volume, 
 }
 
 void AudioService::StopAllSE() {
+    if (!impl->progressBgm) impl->progressVoice = nullptr;
     // 全SEボイスの再生停止とバッファ破棄
     for (auto& instance : impl->seVoicePool) {
         if (instance.inUse && instance.voice) {
@@ -569,6 +609,14 @@ void AudioService::StopAllSE() {
             instance.pcmBuffer.clear();
         }
     }
+}
+
+/** @brief 最後に再生を開始した音声の進捗を取得する @return 0から1、停止時は0 */
+float AudioService::GetPlaybackProgress() const {
+    if (!impl->progressVoice) return 0.0f;
+    XAUDIO2_VOICE_STATE state {};
+    impl->progressVoice->GetState(&state);
+    return PlaybackProgress(state, impl->progressStart, impl->progressFrames, impl->progressLoop);
 }
 
 void AudioService::PlayMMLSE(const std::string& mml, float volume) {
@@ -585,6 +633,18 @@ void AudioService::PlayMMLSE(const std::string& mml, float volume) {
  * @return なし
  */
 void RunAudioServiceTests() {
+    // 途中停止したボイスの再利用、周回、自然終了によるサンプル数リセットを検証する
+    XAUDIO2_VOICE_STATE progressState {};
+    progressState.BuffersQueued = 1;
+    progressState.SamplesPlayed = 150;
+    assert(PlaybackProgress(progressState, 100, 100, false) == 0.5f);
+    assert(PlaybackProgress(progressState, 0, 100, false) == 1.0f);
+    assert(PlaybackProgress(progressState, 0, 100, true) == 0.5f);
+    assert(PlaybackProgress(progressState, 200, 100, false) == 0.0f);
+    assert(PlaybackProgress(progressState, 0, 0, true) == 0.0f);
+    progressState.BuffersQueued = 0;
+    progressState.SamplesPlayed = 0;
+    assert(PlaybackProgress(progressState, 100, 100, false) == 1.0f);
     // 満杯でも用途の境界を越えて枠を奪わず、範囲内で循環する
     constexpr size_t effects = AudioService::Impl::MAX_SE_VOICES;
     constexpr size_t total = effects + AudioService::Impl::MAX_DIALOGUE_VOICES;
@@ -613,6 +673,7 @@ void RunAudioServiceTests() {
 
     // 先読みは音声デバイスなしでも動作し、同一曲のPCMは再生成しない
     AudioService audio;
+    assert(audio.GetPlaybackProgress() == 0.0f);
     audio.SetMasterVolume(0);
     assert(!audio.PreloadMMLBGM(""));
     assert(!audio.PreloadMMLBGM("MML@;"));
@@ -649,6 +710,7 @@ void RunAudioServiceTests() {
         assert(limiterState && audio.IsLimiterEnabled());
         const std::vector<int16_t> silence(44100);
         audio.PlayVoice(silence);
+        assert(audio.GetPlaybackProgress() == 0.0f);
         const auto* protectedPcm = audio.impl->seVoicePool[effects].pcmBuffer.data();
         for (int i = 0; i < 100; ++i) audio.PlaySE(silence);
         assert(audio.impl->seVoicePool[effects].inUse);
@@ -669,6 +731,7 @@ void RunAudioServiceTests() {
         audio.Update();
         assert(audio.impl->bgmVoices.size() == 1 && audio.impl->bgmVoices.front().gain == 1);
         audio.StopBGM();
+        assert(audio.GetPlaybackProgress() == 0.0f);
         audio.impl->lastBgmUpdate -= std::chrono::milliseconds(150);
         audio.Update();
         assert(audio.impl->bgmVoices.empty());
@@ -677,6 +740,7 @@ void RunAudioServiceTests() {
         std::puts("XAudio2 device unavailable; hardware playback checks skipped");
     }
     audio.Shutdown();
+    assert(audio.GetPlaybackProgress() == 0.0f);
     assert(audio.impl->bgmVoices.empty() && audio.impl->bgmCache.empty());
     assert(audio.impl->seVoicePool.empty());
 }

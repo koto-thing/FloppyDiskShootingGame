@@ -8,6 +8,7 @@
 #endif
 
 #include <chrono>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iomanip>
@@ -92,10 +93,13 @@ std::string BuildTimestamp() {
 #endif
 
     // 文字列ストリームを使用してフォーマットされたタイムスタンプを作成
-    std::ostringstream stream;
-    stream << std::put_time(&localTime, "%Y-%m-%d %H:%M:%S")
-           << '.' << std::setfill('0') << std::setw(3) << milliseconds.count();
-    return stream.str();
+    // std::put_timeはCRTの時刻書式一式を引き込むため整数書式で組み立てる
+    char buffer[32];
+    std::snprintf(buffer, sizeof(buffer), "%04d-%02d-%02d %02d:%02d:%02d.%03d",
+        localTime.tm_year + 1900, localTime.tm_mon + 1, localTime.tm_mday,
+        localTime.tm_hour, localTime.tm_min, localTime.tm_sec,
+        static_cast<int>(milliseconds.count()));
+    return buffer;
 }
 
 /**

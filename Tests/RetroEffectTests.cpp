@@ -13,6 +13,17 @@
 
 using Microsoft::WRL::ComPtr;
 struct Pixel { float r, g, b, a; };
+constexpr UINT LowWidth = 640, LowHeight = 360;
+
+/** @brief 画面中央の縦方向20画素で走査線の相対振幅を測る @param pixels 出力色 @param width 幅 @param height 高さ @return 最大値に対する明暗差の比 */
+float ScanlineContrast(const std::vector<Pixel>& pixels, UINT width, UINT height) {
+    float low = 1, high = 0;
+    for (UINT y = height / 2; y < height / 2 + 20; ++y) {
+        low = std::min(low, pixels[y * width + width / 2].r);
+        high = std::max(high, pixels[y * width + width / 2].r);
+    }
+    return (high - low) / high;
+}
 
 /** @brief 実ゲームのシェーダーをコンパイルする @param entry エントリー名 @param profile 対象ステージ @return バイトコード */
 ComPtr<ID3DBlob> Compile(const char* entry, const char* profile) {
@@ -37,21 +48,21 @@ std::vector<Pixel> Render(UINT width, UINT height, Pixel sample, bool preview = 
     assert(SUCCEEDED(device->CreateVertexShader(vs->GetBufferPointer(), vs->GetBufferSize(), nullptr, &vertex)));
     assert(SUCCEEDED(device->CreatePixelShader(ps->GetBufferPointer(), ps->GetBufferSize(), nullptr, &pixel)));
 
-    // グラデーションと原色を含む512x288の入力を用意する
-    std::vector<Pixel> source(512 * 288, sample);
+    // グラデーションと原色を含む低解像度の入力を用意する
+    std::vector<Pixel> source(LowWidth * LowHeight, sample);
     if (preview) {
-        for (UINT y = 0; y < 288; ++y) for (UINT x = 0; x < 512; ++x) {
-            const float value = static_cast<float>(x) / 511;
-            source[y * 512 + x] = y < 144 ? Pixel{value, value, value, 1} :
-                y < 192 ? Pixel{value, 0, 0, 1} : y < 240 ? Pixel{0, value, 0, 1} : Pixel{0, 0, value, 1};
+        for (UINT y = 0; y < LowHeight; ++y) for (UINT x = 0; x < LowWidth; ++x) {
+            const float value = static_cast<float>(x) / (LowWidth - 1);
+            source[y * LowWidth + x] = y < 180 ? Pixel{value, value, value, 1} :
+                y < 240 ? Pixel{value, 0, 0, 1} : y < 300 ? Pixel{0, value, 0, 1} : Pixel{0, 0, value, 1};
         }
     }
     D3D11_TEXTURE2D_DESC desc{};
-    desc.Width = 512; desc.Height = 288;
+    desc.Width = LowWidth; desc.Height = LowHeight;
     desc.MipLevels = desc.ArraySize = desc.SampleDesc.Count = 1;
     desc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
     desc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
-    D3D11_SUBRESOURCE_DATA data{source.data(), 512 * sizeof(Pixel), 0};
+    D3D11_SUBRESOURCE_DATA data{source.data(), LowWidth * sizeof(Pixel), 0};
     ComPtr<ID3D11Texture2D> input, target, readback;
     assert(SUCCEEDED(device->CreateTexture2D(&desc, &data, &input)));
     ComPtr<ID3D11ShaderResourceView> srv;
@@ -116,8 +127,8 @@ void SavePreview(const std::vector<Pixel>& pixels, UINT width, UINT height) {
 
 /** @brief 黒・白・原色・透明度・ディザ・走査線を実シェーダーで検査する @return 成功時0 */
 int main() {
-    // 等倍以下と非整数倍率を含む表示解像度で色と走査線の振幅を検査する
-    for (const UINT height : {144u, 288u, 720u, 1080u, 1440u}) {
+    // 等倍以下と整数倍率と非整数倍率の表示解像度で色と走査線の振幅を検査する
+    for (const UINT height : {144u, 360u, 720u, 900u, 1080u, 1440u}) {
         const UINT width = height * 16 / 9;
         for (const Pixel sample : {Pixel{0, 0, 0, 0.37f}, Pixel{1, 1, 1, 0.37f}, Pixel{1, 0, 0, 0.37f}}) {
             const auto pixels = Render(width, height, sample);
@@ -131,26 +142,32 @@ int main() {
             if (sample.g == 1) {
                 const float center = pixels[(height / 2) * width + width / 2].r;
                 assert(center > pixels[(height / 2) * width].r + 0.02f);
-                float low = 1, high = 0;
-                for (UINT y = height / 2; y < height / 2 + 20; ++y) {
-                    low = std::min(low, pixels[y * width + width / 2].r);
-                    high = std::max(high, pixels[y * width + width / 2].r);
-                }
-                assert(height <= 288 ? high - low < 0.01f : high - low > 0.04f);
+                // 白は走査線でほとんど暗くならない
+                assert(ScanlineContrast(pixels, width, height) < 0.05f);
             }
         }
+        // 暗い色には拡大時だけ走査線が現れ、2倍表示でも消えない
+        const float dark = ScanlineContrast(Render(width, height, {0.2f, 0.2f, 0.2f, 1}), width, height);
+        assert(height <= LowHeight ? dark < 0.01f : dark > 0.08f);
         SavePreview(Render(width, height, {}, true), width, height);
         std::printf("Retro effect: %ux%u passed\n", width, height);
     }
     // 一様な中間色から隣接する2階調が現れ、4x4の網目が繰り返されることを検査する
-    const float middle = std::pow(0.5f, 2.2f);
-    const auto pixels = Render(512, 288, {middle, middle, middle, 1});
+    const auto pixels = Render(LowWidth, LowHeight, {0.5f, 0.5f, 0.5f, 1});
     int dark = 0, light = 0;
-    for (UINT y = 140; y < 144; ++y) for (UINT x = 252; x < 256; ++x) {
-        const float value = pixels[y * 512 + x].r;
-        dark += value < 0.2f; light += value > 0.25f;
-        assert(std::abs(value - pixels[y * 512 + x + 4].r) < 0.001f);
+    for (UINT y = 176; y < 180; ++y) for (UINT x = 316; x < 320; ++x) {
+        const float value = pixels[y * LowWidth + x].r;
+        dark += value < 0.5f; light += value > 0.5f;
+        assert(std::abs(value - pixels[y * LowWidth + x + 4].r) < 0.001f);
     }
     assert(dark == 8 && light == 8);
+
+    // 減色とディザの後も平均の明るさが入力の表示値から外れないことを検査する
+    for (const float input : {0.1f, 0.25f, 0.5f, 0.75f, 0.9f}) {
+        const auto uniform = Render(LowWidth, LowHeight, {input, input, input, 1});
+        float sum = 0;
+        for (UINT y = 176; y < 180; ++y) for (UINT x = 316; x < 320; ++x) sum += uniform[y * LowWidth + x].r;
+        assert(std::abs(sum / 16 - input) < 0.04f);
+    }
     std::puts("Retro effect tests passed");
 }

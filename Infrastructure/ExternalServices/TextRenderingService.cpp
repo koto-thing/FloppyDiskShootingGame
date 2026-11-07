@@ -361,7 +361,8 @@ void TextRenderingService::RenderText(
         
         if (c == '\n') {
             currentX = startX;
-            currentY -= size * 2.0f;
+            // 文字の縦サイズと同じ画面比率を使い、行間を確保する
+            currentY -= size * static_cast<float>(screenWidth) / screenHeight * 2.4f;
             continue;
         }
         

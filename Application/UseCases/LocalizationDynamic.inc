@@ -17,7 +17,6 @@
 {"MISSION %d START", {JA_SHORT("MISSION %d START", "ミッション %d 開始"), "MISIÓN %d: INICIO", "미션 %d 시작", "任务 %d 开始", "MISSION %d : DÉBUT", "MISSÃO %d: INÍCIO"}},
 {"LESSON %d / %d", {"レッスン %d / %d", "LECCIÓN %d / %d", "훈련 %d / %d", "教程 %d / %d", "LEÇON %d / %d", "LIÇÃO %d / %d"}},
 {"GIANT MECHA TAYAMA  %03d%%", {"巨大メカ TAYAMA  %03d%%", "MECA GIGANTE TAYAMA  %03d%%", "거대 메카 TAYAMA  %03d%%", "巨型机甲 TAYAMA  %03d%%", "MÉCHA GÉANT TAYAMA  %03d%%", "MECHA GIGANTE TAYAMA  %03d%%"}},
-{"L-LIGHT[%c] R-LIGHT[%c] RADAR[%c] L-LEG[%c] R-LEG[%c] CORE[%c]", {"左灯[%c] 右灯[%c] レーダー[%c] 左脚[%c] 右脚[%c] コア[%c]", "LUZ I[%c] LUZ D[%c] RADAR[%c] PIERNA I[%c] PIERNA D[%c] NÚCLEO[%c]", "왼등[%c] 오른등[%c] 레이더[%c] 왼다리[%c] 오른다리[%c] 코어[%c]", "左灯[%c] 右灯[%c] 雷达[%c] 左腿[%c] 右腿[%c] 核心[%c]", "FEU G[%c] FEU D[%c] RADAR[%c] JAMBE G[%c] JAMBE D[%c] CŒUR[%c]", "LUZ E[%c] LUZ D[%c] RADAR[%c] PERNA E[%c] PERNA D[%c] NÚCLEO[%c]"}},
 {"SCORE ", {"スコア ", "PUNTOS ", "점수 ", "得分 ", "SCORE ", "PONTOS "}},
 {"DIFFICULTY: ", {"難易度: ", "DIFICULTAD: ", "난이도: ", "难度: ", "DIFFICULTÉ : ", "DIFICULDADE: "}},
 {"MY SHOT: ", {"自機ショット: ", "MI DISPARO: ", "내 무기: ", "我的武器: ", "MON TIR : ", "MEU TIRO: "}},
