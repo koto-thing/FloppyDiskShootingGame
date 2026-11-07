@@ -110,6 +110,9 @@
     <ClCompile Include="Infrastructure\ExternalServices\SynthWaveGenerator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Infrastructure\ExternalServices\EmbeddedSamples.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="Infrastructure\ExternalServices\SfxrGenerator.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -206,7 +209,7 @@
     <ClInclude Include="Infrastructure\ExternalServices\AudioService.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="Infrastructure\ExternalServices\WavSamples.h">
+    <ClInclude Include="Infrastructure\ExternalServices\EmbeddedSamples.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="Infrastructure\ExternalServices\MMLData.h">

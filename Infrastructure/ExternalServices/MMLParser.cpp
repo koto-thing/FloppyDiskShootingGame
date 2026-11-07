@@ -170,6 +170,9 @@ MMLSequence MMLParser::Parse(const std::string& mml) {
     for (const auto& segment : trackSegments) {
         double currentBeat = 0.0;
         double defaultLengthBeats = 0.25;
+        bool chordMode = false;
+        double chordAnchorBeat = 0.0;
+        double chordSpanBeats = 0.0;
         size_t i = 0;
         size_t len = segment.length();
 
@@ -179,10 +182,23 @@ MMLSequence MMLParser::Parse(const std::string& mml) {
                 i++;
                 continue;
             }
+            else if (ch == '\'') {
+                i++;
+                if (!chordMode) {
+                    chordMode = true;
+                    chordAnchorBeat = currentBeat;
+                    chordSpanBeats = 0.0;
+                } else {
+                    double step = parseLengthInBeats(segment, i, chordSpanBeats > 0.0 ? chordSpanBeats : defaultLengthBeats);
+                    chordMode = false;
+                    currentBeat = chordAnchorBeat + step;
+                }
+                continue;
+            }
             else if (ch == '&' || ch == '^') {
                 i++;
                 double tieBeats = parseLengthInBeats(segment, i, defaultLengthBeats);
-                currentBeat += tieBeats;
+                if (!chordMode) currentBeat += tieBeats;
                 continue;
             }
             char lowerCh = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
@@ -204,7 +220,11 @@ MMLSequence MMLParser::Parse(const std::string& mml) {
                 }
 
                 double durationInBeats = parseLengthInBeats(segment, i, defaultLengthBeats);
-                currentBeat += durationInBeats;
+                if (chordMode) {
+                    chordSpanBeats = std::max(chordSpanBeats, durationInBeats);
+                } else {
+                    currentBeat += durationInBeats;
+                }
             }
             else if (lowerCh == 't') {
                 i++;
@@ -310,7 +330,15 @@ MMLTrack MMLParser::ParseTrack(const std::string& rawTrackMml, const std::map<do
 
     uint8_t customWaveId = 0;
     double currentBeat = 0.0;
+    double maxEndBeat = 0.0;   // 保続音が currentBeat を超える場合に備える (和音の保続等)
     bool isTie = false;
+
+    bool chordMode = false;
+    double chordAnchorBeat = 0.0;
+    double chordSpanBeats = 0.0;
+    bool afterChord = false;
+    double lastNoteStartBeat = 0.0;
+    double lastNoteBeats = 0.0;
 
     size_t i = 0;
     size_t len = trackMml.length();
@@ -362,6 +390,20 @@ MMLTrack MMLParser::ParseTrack(const std::string& rawTrackMml, const std::map<do
 
         if (ch == '\'') {
             i++;
+            if (!chordMode) {
+                chordMode = true;
+                chordAnchorBeat = currentBeat;
+                chordSpanBeats = 0.0;
+                afterChord = false;
+            } else {
+                // 閉じ ' の直後に和音全体の進行長を指定可 ('ceg'8 の 8)
+                double step = parseLengthInBeats(i, chordSpanBeats > 0.0 ? chordSpanBeats : defaultLengthBeats);
+                chordMode = false;
+                currentBeat = chordAnchorBeat + step;
+                if (currentBeat > maxEndBeat) maxEndBeat = currentBeat;
+                afterChord = true;
+            }
+            isTie = false;
             continue;
         }
 
@@ -375,26 +417,49 @@ MMLTrack MMLParser::ParseTrack(const std::string& rawTrackMml, const std::map<do
             }
 
             double tieBeats = hasExplicitVal ? parseLengthInBeats(i, 0.0) : defaultLengthBeats;
-            double durationSec = ConvertBeatsToSeconds(currentBeat, tieBeats, tempoMap);
 
-            bool extendedNote = false;
-            if (!track.events.empty()) {
-                auto& lastEv = track.events.back();
-                double lastEndSec = lastEv.startTimeSec + lastEv.durationSec;
-                double curStartSec = ConvertBeatsToSeconds(0.0, currentBeat, tempoMap);
-                if (std::abs(lastEndSec - curStartSec) < 0.05) {
+            if (chordMode) {
+                if (!track.events.empty()) {
+                    auto& lastEv = track.events.back();
+                    double durationSec = ConvertBeatsToSeconds(lastNoteStartBeat + lastNoteBeats, tieBeats, tempoMap);
                     lastEv.durationSec += durationSec;
-                    extendedNote = true;
+                    lastNoteBeats += tieBeats;
+                    if (lastNoteStartBeat + lastNoteBeats > maxEndBeat) {
+                        maxEndBeat = lastNoteStartBeat + lastNoteBeats;
+                    }
+                    chordSpanBeats = std::max(chordSpanBeats, lastNoteBeats);
                 }
-            }
+                isTie = false;
+            } else if (afterChord) {
+                currentBeat += tieBeats;
+                if (currentBeat > maxEndBeat) {
+                    maxEndBeat = currentBeat;
+                }
+                isTie = false;
+            } else {
+                double durationSec = ConvertBeatsToSeconds(currentBeat, tieBeats, tempoMap);
 
-            if (!extendedNote && !hasExplicitVal) {
-                isTie = true;
-            }
+                bool extendedNote = false;
+                if (!track.events.empty()) {
+                    auto& lastEv = track.events.back();
+                    double lastEndSec = lastEv.startTimeSec + lastEv.durationSec;
+                    double curStartSec = ConvertBeatsToSeconds(0.0, currentBeat, tempoMap);
+                    if (std::abs(lastEndSec - curStartSec) < 0.05) {
+                        lastEv.durationSec += durationSec;
+                        extendedNote = true;
+                    }
+                }
 
-            currentBeat += tieBeats;
+                if (!extendedNote && !hasExplicitVal) {
+                    isTie = true;
+                }
+
+                currentBeat += tieBeats;
+            }
             continue;
         }
+
+        afterChord = false;
 
         if ((lowerCh >= 'a' && lowerCh <= 'g') || lowerCh == 'n') {
             i++;
@@ -437,10 +502,11 @@ MMLTrack MMLParser::ParseTrack(const std::string& rawTrackMml, const std::map<do
             }
 
             double durationInBeats = parseLengthInBeats(i, defaultLengthBeats);
-            double startTimeSec = ConvertBeatsToSeconds(0.0, currentBeat, tempoMap);
-            double durationSec = ConvertBeatsToSeconds(currentBeat, durationInBeats, tempoMap);
+            double noteBeat = chordMode ? chordAnchorBeat : currentBeat;
+            double startTimeSec = ConvertBeatsToSeconds(0.0, noteBeat, tempoMap);
+            double durationSec = ConvertBeatsToSeconds(noteBeat, durationInBeats, tempoMap);
 
-            if (isTie && !track.events.empty() && std::abs(track.events.back().frequency - freq) < 0.1f) {
+            if (!chordMode && isTie && !track.events.empty() && std::abs(track.events.back().frequency - freq) < 0.1f) {
                 track.events.back().durationSec += durationSec;
             } else {
                 float vBase = (volumeInt > 15) ? (static_cast<float>(volumeInt) / 127.0f) : (static_cast<float>(volumeInt) / 15.0f);
@@ -460,13 +526,26 @@ MMLTrack MMLParser::ParseTrack(const std::string& rawTrackMml, const std::map<do
                 track.events.push_back(note);
             }
 
-            currentBeat += durationInBeats;
+            lastNoteStartBeat = noteBeat;
+            lastNoteBeats = durationInBeats;
+
+            if (noteBeat + durationInBeats > maxEndBeat) maxEndBeat = noteBeat + durationInBeats;
+            if (chordMode) {
+                chordSpanBeats = std::max(chordSpanBeats, durationInBeats);
+            } else {
+                currentBeat += durationInBeats;
+            }
+
             isTie = false;
         }
         else if (lowerCh == 'r') {
             i++;
             double durationInBeats = parseLengthInBeats(i, defaultLengthBeats);
-            currentBeat += durationInBeats;
+            if (chordMode) {
+                chordSpanBeats = std::max(chordSpanBeats, durationInBeats);
+            } else {
+                currentBeat += durationInBeats;
+            }
             isTie = false;
         }
         else if (lowerCh == 't') {
@@ -569,7 +648,7 @@ MMLTrack MMLParser::ParseTrack(const std::string& rawTrackMml, const std::map<do
         }
     }
 
-    track.totalDurationSec = ConvertBeatsToSeconds(0.0, currentBeat, tempoMap);
+    track.totalDurationSec = ConvertBeatsToSeconds(0.0, std::max(currentBeat, maxEndBeat), tempoMap);
     return track;
 }
 

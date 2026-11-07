@@ -1,5 +1,11 @@
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <compressapi.h>
+#pragma comment(lib, "cabinet.lib")
 #include "SynthWaveGenerator.h"
-#include "WavSamples.h"
+#include "EmbeddedSamples.h"
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -56,23 +62,35 @@ static const char* GM_INSTRUMENT_NAMES[128] = {
     "TelephoneRing", "Helicopter", "Applause", "Gunshot"
 };
 
+/**
+ * @brief 未収録GM音色を近似音色のプログラム番号へ解決する
+ * @param prog GM音色プログラム番号 (0-127)
+ * @return 解決後のプログラム番号
+ */
 static int ResolveWavProgram(int prog) {
+    // 類似する収録済み音色へのフォールバック対応表
     static const std::map<int, int> FALLBACK = {
         {1, 0}, {2, 0}, {3, 0}, {5, 4}, {17, 16}, {20, 19}, {22, 21}, {23, 21},
         {25, 24}, {26, 28}, {27, 28}, {31, 24}, {37, 36}, {39, 38}, {41, 40},
         {42, 40}, {43, 32}, {46, 15}, {49, 48}, {51, 50}, {63, 62}, {66, 65},
         {67, 65}, {69, 68}, {71, 68}, {72, 73}, {74, 73}, {77, 75}, {85, 54},
-        {88, 94}, {89, 90}, {91, 52}, {92, 48}, {93, 90}, {95, 90}, {96, 119},
+        {88, 94}, {89, 90}, {91, 52}, {92, 48}, {93, 90}, {95, 90}, {96, 94},
         {97, 94}, {98, 8}, {99, 94}, {100, 90}, {101, 83}, {102, 90}, {103, 80},
         {104, 107}, {106, 107}, {108, 12}, {110, 40}, {111, 68}, {112, 10}, {114, 11},
-        {121, 120}, {122, 119}, {123, 78}, {124, 10}, {125, 116}, {126, 55}, {127, 55}
+        {121, 73}, {122, 94}, {123, 78}, {124, 10}, {125, 90}, {126, 55}, {127, 55}
     };
     if (prog < 0 || prog >= 128) prog = 0;
     auto it = FALLBACK.find(prog);
     return (it != FALLBACK.end()) ? it->second : prog;
 }
 
+/**
+ * @brief GM音色の基準MIDIノート番号を取得する
+ * @param name 音色名
+ * @return 基準MIDIノート番号
+ */
 static int GetGmRootMidi(const std::string& name) {
+    // 各音色の原音キー設定
     static const std::map<std::string, int> ROOT_MAP = {
         {"AcousticBass", 36}, {"FingerElectricBass", 36}, {"PickElectricBass", 36}, {"FretlessBass", 36},
         {"SlapBass1", 36}, {"SlapBass2", 36}, {"SynthBass1", 36}, {"SynthBass2", 36},
@@ -86,20 +104,30 @@ static int GetGmRootMidi(const std::string& name) {
     return (it != ROOT_MAP.end()) ? it->second : 60;
 }
 
+/**
+ * @brief MIDIノート番号から対応するドラム音色名を解決する
+ * @param midiNote MIDIノート番号
+ * @return ドラム音色名
+ */
 static const char* ResolveDrumName(int midiNote) {
+    // 各ノート番号を代表ドラム音色名へ分岐
     switch (midiNote) {
         case 35: case 36: return "Kick";
-        case 37: case 38: case 39: case 40: return "Snare";
+        case 38: case 39: case 40: return "Snare";
         case 41: case 43: return "TomLow";
         case 45: case 47: return "TomMid";
         case 48: case 50: return "TomHigh";
         case 42: case 44: return "HiHatClosed";
         case 46: return "HiHatOpen";
-        case 49: case 55: case 57: return "Crash";
+        case 49: case 52: case 55: case 57: return "Crash";
         case 51: case 53: case 59: return "Ride";
-        case 54: return "Tambourine";
-        case 56: case 58: return "Woodblock";
-        case 67: case 68: return "Agogo";
+        case 54: case 58: return "Tambourine";
+        case 37: case 75: return "Woodblock";
+        case 56: case 67: case 68: case 71: case 72: return "Agogo";
+        case 60: case 62: case 63: case 65: return "TomHigh";
+        case 61: case 64: case 66: return "TomMid";
+        case 69: case 70: case 73: case 74: return "HiHatClosed";
+        case 79: return "SynthDrum";
         case 76: case 77: return "Woodblock";
         case 78: return "SynthDrum";
         case 81: return "TaikoDrum";
@@ -118,7 +146,13 @@ static const char* ResolveDrumName(int midiNote) {
     }
 }
 
+/**
+ * @brief 音色名からワンショット再生すべき音色か判定する
+ * @param name 音色名
+ * @return ワンショット再生する場合true
+ */
 static bool IsOneShotSample(const std::string& name) {
+    // 打楽器・効果音系の名前一覧
     static const std::vector<std::string> ONESHOTS = {
         "kick", "snare", "hihat", "crash", "ride", "clap", "cowbell", "tambourine",
         "tom", "taiko", "timpani", "woodblock", "agogo", "synthdrum", "reversecymbal",
@@ -141,117 +175,275 @@ struct WavSample {
     int sampleRate = 8000;
     int rootMidi = 60;
     bool isOneShot = false;
-    int loopStart = 0;
-    int loopEnd = 0;
-    mutable std::map<std::pair<int, bool>, std::vector<float>> playbackCache;
+    int loopStart = -1;
+    int loopEnd = -1;
 
-    /**
-     * @brief ループを接続し、移調先のナイキスト周波数に合わせた波形を取得する
-     * @param step 出力1サンプルあたりに進む入力サンプル数
-     * @param loop ループ再生する場合true
-     * @return 元波形またはキャッシュされた再生用波形
-     */
-    const std::vector<float>& GetPlaybackData(double step, bool loop) const {
-        if (step <= 1.0 && !loop) return data;
-        // ponytail: フィルターは移調比1/16刻みで共有し、より厳密な帯域が必要なら刻みを細かくする
-        const int rateKey = static_cast<int>(std::ceil(std::max(1.0, step) * 16));
-        const auto key = std::make_pair(rateKey, loop);
-        if (const auto found = playbackCache.find(key); found != playbackCache.end()) return found->second;
-
-        // 入力は保持し、最大4msのクロスフェードをループ長を変えずに適用する
-        std::vector<float> prepared = data;
-        if (loop) {
-            const int fade = std::min({sampleRate / 250, (loopEnd - loopStart) / 4, loopStart});
-            for (int i = 0; i < fade; ++i) {
-                prepared[loopEnd - fade + i] = std::lerp(data[loopEnd - fade + i],
-                    data[loopStart - fade + i], static_cast<float>(i + 1) / fade);
-            }
-        }
-
-        // 高い移調だけ事前に63タップの窓付きsincで帯域制限し、発音中の計算を増やさない
-        if (rateKey > 16) {
-            constexpr int Radius = 31;
-            std::array<double, Radius * 2 + 1> kernel{};
-            const double cutoff = 0.9 * 16 / rateKey;
-            double sum = 0;
-            for (int tap = -Radius; tap <= Radius; ++tap) {
-                const double sinc = tap == 0 ? cutoff : std::sin(std::numbers::pi * cutoff * tap) / (std::numbers::pi * tap);
-                const double window = 0.42 + 0.5 * std::cos(std::numbers::pi * tap / Radius) +
-                    0.08 * std::cos(2 * std::numbers::pi * tap / Radius);
-                kernel[tap + Radius] = sinc * window;
-                sum += kernel[tap + Radius];
-            }
-            const auto input = prepared;
-            for (int i = 0; i < static_cast<int>(input.size()); ++i) {
-                double value = 0;
-                for (int tap = -Radius; tap <= Radius; ++tap) {
-                    int index = i + tap;
-                    // 持続部分は周期境界で畳み込み、アタックとワンショットは端点を延長する
-                    if (loop && i >= loopStart && i < loopEnd) {
-                        const int length = loopEnd - loopStart;
-                        index = loopStart + ((index - loopStart) % length + length) % length;
-                    }
-                    value += input[std::clamp(index, 0, static_cast<int>(input.size()) - 1)] * kernel[tap + Radius];
-                }
-                prepared[i] = static_cast<float>(value / sum);
-            }
-        }
-        return playbackCache.emplace(key, std::move(prepared)).first->second;
-    }
+    // SFC ドライバ相当のエンベロープ
+    float gain = 1.0f;
+    float attackSec = 0.0f;
+    float attackCurve = 1.0f;
+    float decayT60 = 0.0f;
+    float releaseSec = 0.003f;
+    float detuneCents = 0.0f;
+    bool ignoreNoteOff = false;
 };
 
-#ifdef FLOPPY_AUDIO_TESTS
 /**
- * @brief 既知の二音を使い、移調時の帯域制限と原波形の保持を検証する
+ * @brief SFC実機相当の整数演算でBRRブロック列を復号する
+ * @param brr BRRバイト列
+ * @param bytes BRRバイト数
+ * @param out 復号先floatバッファ
  * @return なし
  */
-void RunSamplePlaybackChecks() {
-    // 2倍速で折り返す高域だけを除去し、通過帯域の音量を維持する
-    WavSample sample;
-    for (int i = 0; i < 1200; ++i) {
-        sample.data.push_back(static_cast<float>(std::sin(2 * std::numbers::pi * 0.1 * i) +
-            std::sin(2 * std::numbers::pi * 0.4 * i)));
+static void DecodeBrr(const uint8_t* brr, size_t bytes, std::vector<float>& out) {
+    const size_t blocks = bytes / 9;
+    out.resize(blocks * 16);
+    int p1 = 0, p2 = 0;
+    for (size_t b = 0; b < blocks; ++b) {
+        const uint8_t* blk = brr + b * 9;
+        const int shift = blk[0] >> 4;
+        const int filter = (blk[0] >> 2) & 3;
+        for (int i = 0; i < 16; ++i) {
+            const uint8_t byteVal = blk[1 + i / 2];
+            int s = ((i & 1) ? (byteVal & 0x0F) : (byteVal >> 4));
+            s = (s ^ 8) - 8;
+            s = (shift <= 12) ? ((s << shift) >> 1) : (s < 0 ? -2048 : 0);
+            const int a = p1;
+            const int c = p2 >> 1;
+            switch (filter) {
+                case 1: s += (a >> 1) + ((-a) >> 5); break;
+                case 2: s += a - c + (c >> 4) + ((a * -3) >> 6); break;
+                case 3: s += a - c + ((a * -13) >> 7) + ((c * 3) >> 4); break;
+                default: break;
+            }
+            s = std::clamp(s, -32768, 32767);
+            const int16_t stored = static_cast<int16_t>(s << 1);
+            p2 = p1;
+            p1 = stored;
+            out[b * 16 + i] = static_cast<float>(stored) / 32768.0f;
+        }
     }
-    const auto original = sample.data;
-    const auto& filtered = sample.GetPlaybackData(2, false);
-    double lowAmplitude = 0;
-    double highAmplitude = 0;
-    for (int i = 100; i < 1100; ++i) {
-        lowAmplitude += filtered[i] * std::sin(2 * std::numbers::pi * 0.1 * i) / 500;
-        highAmplitude += filtered[i] * std::sin(2 * std::numbers::pi * 0.4 * i) / 500;
-    }
-    assert(std::abs(lowAmplitude - 1) < 0.01);
-    assert(std::abs(highAmplitude) < 0.01);
-    assert(sample.data == original);
-    assert(&filtered == &sample.GetPlaybackData(2, false));
-    assert(&sample.data == &sample.GetPlaybackData(1, false));
 }
-#endif
+
+/**
+ * @brief SBK2形式のBRR音源バンクを解析してキャッシュへ格納する
+ * @param data アーカイブ非圧縮データ
+ * @param size データ長
+ * @param cache 格納先キャッシュ
+ * @return 正常に解析された場合true
+ */
+static bool LoadBrrBank(const uint8_t* data, size_t size, std::map<std::string, WavSample>& cache) {
+    constexpr size_t HEADER = 80;
+    const uint8_t* ptr = data + 4;
+    const uint8_t* endPtr = data + size;
+    if (ptr + 4 > endPtr) return false;
+    uint32_t count = 0;
+    std::memcpy(&count, ptr, 4);
+    ptr += 4;
+
+    std::vector<std::string> names;
+    names.reserve(count);
+    for (uint32_t i = 0; i < count; ++i) {
+        if (ptr + HEADER > endPtr) return false;
+        char nameBuf[33] = {};
+        std::memcpy(nameBuf, ptr, 32);
+        uint32_t rate = 0, numSamples = 0, brrBytes = 0;
+        int32_t loopStart = -1, aliasIndex = -1;
+        int16_t root = 60;
+        uint16_t flags = 0;
+        float f[6] = {};
+        std::memcpy(&rate, ptr + 32, 4);
+        std::memcpy(&loopStart, ptr + 36, 4);
+        std::memcpy(&numSamples, ptr + 40, 4);
+        std::memcpy(&brrBytes, ptr + 44, 4);
+        std::memcpy(&root, ptr + 48, 2);
+        std::memcpy(&flags, ptr + 50, 2);
+        std::memcpy(f, ptr + 52, sizeof(f));
+        std::memcpy(&aliasIndex, ptr + 76, 4);
+        ptr += HEADER;
+        if (ptr + brrBytes > endPtr) return false;
+
+        WavSample sample;
+        // エイリアス指定時は復号済み波形データを共有
+        if (aliasIndex >= 0 && static_cast<size_t>(aliasIndex) < names.size()) {
+            sample.data = cache[names[aliasIndex]].data;
+        } else {
+            DecodeBrr(ptr, brrBytes, sample.data);
+        }
+        ptr += brrBytes;
+        sample.data.resize(numSamples, 0.0f);
+        sample.sampleRate = static_cast<int>(rate);
+        sample.rootMidi = root;
+        sample.gain = f[0];
+        sample.attackSec = f[1];
+        sample.attackCurve = f[2];
+        sample.decayT60 = f[3];
+        sample.releaseSec = f[4];
+        sample.detuneCents = f[5];
+        sample.ignoreNoteOff = (flags & 1) != 0;
+        // ループ範囲設定 (終端はデータ終端)
+        if (loopStart >= 0 && static_cast<uint32_t>(loopStart) < numSamples) {
+            sample.loopStart = loopStart;
+            sample.loopEnd = static_cast<int>(numSamples);
+            sample.isOneShot = false;
+        } else {
+            sample.loopStart = -1;
+            sample.loopEnd = -1;
+            sample.isOneShot = true;
+        }
+        names.emplace_back(nameBuf);
+        cache[names.back()] = std::move(sample);
+    }
+    return true;
+}
+
+/**
+ * @brief サンプル1声をミックスする
+ * @tparam AddFn サンプル加算関数の型
+ * @param w 再生するWAVサンプル情報
+ * @param step 読み進めるサンプル増分
+ * @param volume 音量
+ * @param start 開始サンプル位置
+ * @param noteOff ノートオフ位置
+ * @param ignoreNoteOff ノートオフを無視するか
+ * @param sampleRate 出力サンプルレート
+ * @param totalFrames 全フレーム数
+ * @param addSample 出力バッファへのサンプル加算関数
+ * @return なし
+ */
+template <typename AddFn>
+static void MixSampleVoice(const WavSample& w, double step, float volume, size_t start, size_t noteOff,
+                           bool ignoreNoteOff, int sampleRate, size_t totalFrames, const AddFn& addSample) {
+    const size_t len = w.data.size();
+    const bool looping = !w.isOneShot && w.loopStart >= 0 && w.loopEnd > w.loopStart;
+    const double lEnd = looping ? (std::min)(static_cast<double>(w.loopEnd), static_cast<double>(len))
+                                : static_cast<double>(len);
+    const double lStart = looping ? static_cast<double>(w.loopStart) : 0.0;
+    const double loopLen = lEnd - lStart;
+    const size_t lStartIdx = static_cast<size_t>(lStart);
+    const size_t lEndIdx = static_cast<size_t>(lEnd);
+    const float sr = static_cast<float>(sampleRate);
+    // 先頭のプチノイズを避けるため、立ち上がりに最低1msを確保する
+    const float attackN = (std::max)(w.attackSec, 0.001f) * sr;
+    const float decayMul = (w.decayT60 > 0.0f) ? std::pow(10.0f, -3.0f / (w.decayT60 * sr)) : 1.0f;
+    const size_t releaseN = (std::max)(static_cast<size_t>(w.releaseSec * sr), static_cast<size_t>(1));
+    // バッファ末尾で音が途切れないよう、リリースは遅くとも末尾の手前から始める
+    const size_t bufferEndFade = totalFrames > releaseN ? totalFrames - releaseN : 0;
+    const size_t releaseAt = (std::min)(ignoreNoteOff ? SIZE_MAX : noteOff, bufferEndFade);
+
+    double pos = 0.0;
+    float decayEnv = 1.0f;
+    bool inLoop = false;
+    // ループとエンベロープを適用しながら波形を合成
+    for (size_t i = start; i + 1 < totalFrames; ++i) {
+        if (pos >= lEnd) {
+            if (!looping || loopLen <= 0.0) break;
+            pos = lStart + std::fmod(pos - lStart, loopLen);
+        }
+        const size_t i0 = static_cast<size_t>(pos);
+        const size_t i1 = i0 + 1;
+        const float frac = static_cast<float>(pos - static_cast<double>(i0));
+        const float s0 = w.data[i0];
+        const float s1 = (looping && i1 >= lEndIdx) ? w.data[lStartIdx + (i1 - lEndIdx)]
+                                                    : ((i1 < len) ? w.data[i1] : 0.0f);
+
+        float env = 1.0f;
+        const float t = static_cast<float>(i - start);
+        const bool attacking = attackN > 0.0f && t < attackN;
+        if (attacking) env = std::pow(t / attackN, w.attackCurve);
+        if (looping && pos >= lStart) inLoop = true;
+        if (inLoop && !attacking) decayEnv *= decayMul;
+        if (decayEnv < 1e-4f) break;
+        env *= decayEnv;
+        if (i >= releaseAt) {
+            const size_t r = i - releaseAt;
+            if (r >= releaseN) break;
+            const float x = 1.0f - static_cast<float>(r) / static_cast<float>(releaseN);
+            env *= x * x;
+        }
+        addSample(i, (s0 + frac * (s1 - s0)) * volume * env);
+        pos += step;
+    }
+}
 
 class WavSampleManager {
 public:
+    /**
+     * @brief シングルトンインスタンスを取得する
+     * @return WavSampleManagerインスタンスへの参照
+     */
     static WavSampleManager& Get() {
         static WavSampleManager instance;
         return instance;
     }
 
+    /**
+     * @brief 埋め込みアーカイブを展開してロードする
+     * @return 展開に成功した場合true
+     */
+    bool EnsureEmbeddedLoaded() {
+        if (embeddedLoaded_) return true;
+
+        // LZMS展開器を生成
+        DECOMPRESSOR_HANDLE hDecomp = nullptr;
+        if (!CreateDecompressor(COMPRESS_ALGORITHM_LZMS, nullptr, &hDecomp)) {
+            return false;
+        }
+
+        std::vector<uint8_t> uncompressed(EMBEDDED_SAMPLE_UNCOMPRESSED_SIZE);
+        SIZE_T actualSize = 0;
+        BOOL ok = Decompress(
+            hDecomp,
+            EMBEDDED_SAMPLE_ARCHIVE,
+            EMBEDDED_SAMPLE_ARCHIVE_SIZE,
+            uncompressed.data(),
+            uncompressed.size(),
+            &actualSize
+        );
+        CloseDecompressor(hDecomp);
+
+        if (!ok || actualSize != EMBEDDED_SAMPLE_UNCOMPRESSED_SIZE) {
+            return false;
+        }
+
+        const uint8_t* ptr = uncompressed.data();
+        const uint8_t* endPtr = ptr + actualSize;
+        if (ptr + 4 > endPtr) return false;
+
+        // SBK2シグネチャの確認とバンク解析
+        if (std::memcmp(ptr, "SBK2", 4) == 0) {
+            embeddedLoaded_ = LoadBrrBank(ptr, actualSize, cache_);
+            return embeddedLoaded_;
+        }
+
+        return false;
+    }
+
+    /**
+     * @brief 埋め込みバンクにサンプルが存在するか確認する
+     * @param baseName サンプル名
+     * @return 存在する場合true
+     */
+    bool HasEmbeddedSample(const std::string& baseName) {
+        EnsureEmbeddedLoaded();
+        return cache_.find(baseName) != cache_.end();
+    }
+
+    /**
+     * @brief 指定名のサンプルを取得する
+     * @param baseName サンプル名
+     * @return サンプル情報へのポインタ、存在しない場合nullptr
+     */
     const WavSample* GetSample(const std::string& baseName) {
+        // 1. コード埋め込みBRRバンクから優先読み込み
+        EnsureEmbeddedLoaded();
         auto it = cache_.find(baseName);
         if (it != cache_.end()) {
             return &(it->second);
         }
 
-        WavSample sample;
-        // 1. コード埋め込み圧縮サンプルから優先読み込み
-        const auto* wav = WavSamples::Find(baseName);
-        if (wav && ReadPackedSample(*wav, sample)) {
-            sample.rootMidi = GetGmRootMidi(baseName);
-            sample.isOneShot = IsOneShotSample(baseName);
-            cache_[baseName] = std::move(sample);
-            return &(cache_[baseName]);
-        }
-
         // 2. 外部ファイルから読み込み (フォールバック)
+        WavSample sample;
         if (LoadSampleFile(baseName, sample)) {
             sample.rootMidi = GetGmRootMidi(baseName);
             sample.isOneShot = IsOneShotSample(baseName);
@@ -265,44 +457,21 @@ public:
 private:
     WavSampleManager() = default;
     std::map<std::string, WavSample> cache_;
+    bool embeddedLoaded_ = false;
 
     /**
-     * @brief 埋め込み差分圧縮PCMを再生用サンプルへ復号する
-     * @param packed 圧縮PCMサンプル
-     * @param outSample 復号先
-     * @return 復号に成功した場合true
+     * @brief 外部WAVファイルを検索して読み込む
+     * @param baseName サンプル名
+     * @param outSample 読み込み先サンプル情報
+     * @return 読み込みに成功した場合true
      */
-    bool ReadPackedSample(const WavSamples::WavData& packed, WavSample& outSample) {
-        std::vector<std::uint8_t> pcm;
-        if (!WavSamples::Decode(packed, pcm)) return false;
-
-        // 8bit符号なしPCMをミキサー用floatへ変換する
-        outSample.sampleRate = 8000;
-        outSample.data.resize(pcm.size());
-        std::transform(pcm.begin(), pcm.end(), outSample.data.begin(), [](std::uint8_t value) {
-            return (static_cast<float>(value) - 128.0f) / 128.0f;
-        });
-
-        // WAVに記録されていたループ範囲を復元する
-        if (packed.loopStart >= 0 && packed.loopEnd > packed.loopStart &&
-            packed.loopEnd <= static_cast<int>(outSample.data.size())) {
-            outSample.loopStart = packed.loopStart;
-            outSample.loopEnd = packed.loopEnd;
-        } else {
-            outSample.loopStart = static_cast<int>(0.06f * outSample.sampleRate);
-            outSample.loopEnd = static_cast<int>(std::min(
-                outSample.data.size(), static_cast<std::size_t>(0.45f * outSample.sampleRate)));
-        }
-        return true;
-    }
-
     bool LoadSampleFile(const std::string& baseName, WavSample& outSample) {
+        // 外部WAV検索ディレクトリ
         static const std::vector<std::string> SEARCH_DIRS = {
             "Sound/PCMSamples/",
             "x64/Debug/Sound/PCMSamples/",
             "PCMSamples/",
             "Sound/",
-            "../MakePCMSample/wav samples/",
         };
         static const std::vector<std::string> SUFFIXES = {
             "",
@@ -323,6 +492,12 @@ private:
         return false;
     }
 
+    /**
+     * @brief WAVファイルのバイナリを解析してPCMを展開する
+     * @param filePath ファイルパス
+     * @param outSample 展開先サンプル情報
+     * @return 解析に成功した場合true
+     */
     bool ReadWavFile(const std::string& filePath, WavSample& outSample) {
         std::ifstream file(filePath, std::ios::binary);
         if (!file.is_open()) return false;
@@ -424,6 +599,41 @@ private:
         return true;
     }
 };
+
+#ifdef FLOPPY_AUDIO_TESTS
+/**
+ * @brief BRR復号と埋め込みバンク読み込みおよび全音色解決を検証する
+ * @return なし
+ */
+void RunSamplePlaybackChecks() {
+    // 1. BRR 1ブロックが期待値どおり復号されることを検証
+    // ヘッダ: 0x10 (shift=1, filter=0), 各nibble=1 (0x11が8バイト) -> s=1, (1<<1)>>1=1, stored=2, 2.0f/32768.0f
+    const uint8_t testBrr[9] = { 0x10, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11 };
+    std::vector<float> decoded;
+    DecodeBrr(testBrr, sizeof(testBrr), decoded);
+    assert(decoded.size() == 16);
+    for (size_t i = 0; i < 16; ++i) {
+        assert(std::abs(decoded[i] - (2.0f / 32768.0f)) < 1e-6f);
+    }
+
+    // 2. バンクが正常に読み込めることを検証
+    auto& mgr = WavSampleManager::Get();
+    assert(mgr.EnsureEmbeddedLoaded());
+
+    // 3. ゲームが要求する名前がすべて埋め込みバンクから解決されることを検証 (外部WAV不要)
+    // ドラム全16種
+    for (int note = 35; note <= 83; ++note) {
+        const char* drumName = ResolveDrumName(note);
+        assert(mgr.HasEmbeddedSample(drumName));
+    }
+    // GM全128音色
+    for (int prog = 0; prog < 128; ++prog) {
+        int resolvedProg = ResolveWavProgram(prog);
+        const char* instName = GM_INSTRUMENT_NAMES[resolvedProg];
+        assert(mgr.HasEmbeddedSample(instName));
+    }
+}
+#endif
 
 // --------------------------------------------------------------------------
 // 従来の疑似合成音プロバイダー
@@ -661,70 +871,28 @@ std::vector<int16_t> SynthWaveGenerator::GeneratePCM(const MMLSequence& sequence
 
                 const WavSample* wav = sampleMgr.GetSample(sampleName);
                 if (wav && !wav->data.empty()) {
-                    bool oneShot = event.isDrum || wav->isOneShot;
                     float rootFreq = 440.0f * std::pow(2.0f, (wav->rootMidi - 69) / 12.0f);
                     float pitchRatio = event.isDrum ? 1.0f : (event.frequency / rootFreq);
-                    double step = pitchRatio * (static_cast<double>(wav->sampleRate) / sampleRate);
-                    if (step <= 0.0f) step = 1.0f;
+                    const double step = static_cast<double>(wav->sampleRate) / static_cast<double>(sampleRate) * pitchRatio;
+                    const float vol = event.volume * wav->gain;
+                    const bool ignoreOff = event.isDrum || wav->ignoreNoteOff;
+                    const size_t noteOffSample = startSample + durationSamples;
 
-                    size_t playSamples = durationSamples;
-                    if (oneShot) {
-                        playSamples = static_cast<size_t>(std::ceil(wav->data.size() / static_cast<double>(step)));
-                    }
-
-                    size_t endSample = std::min(totalSamples, startSample + playSamples);
-                    double pos = 0.0;
-                    bool looped = false;
-                    const bool hasLoop = !oneShot && wav->loopEnd > wav->loopStart;
-                    const auto& playbackData = wav->GetPlaybackData(step, hasLoop);
-                    int fadeAttack = std::min(fadeSamples, static_cast<int>(durationSamples / 4));
-                    int fadeRelease = std::min(static_cast<int>((oneShot ? 0.002f : 0.015f) * sampleRate),
-                        static_cast<int>((endSample - startSample) / 2));
-
-                    for (size_t s = startSample; s < endSample; ++s) {
-                        size_t sampleIndexInNote = s - startSample;
-                        float env = 1.0f;
-                        if (sampleIndexInNote < static_cast<size_t>(fadeAttack)) {
-                            env = static_cast<float>(sampleIndexInNote) / static_cast<float>(fadeAttack);
+                    if (wav->detuneCents > 0.0f) {
+                        // 合奏の厚み: 中央 + 上下にずらした 3 声 (非対称比率と位相遅延)
+                        const double up = std::pow(2.0, wav->detuneCents * 0.5 / 1200.0);
+                        const double down = std::pow(2.0, -wav->detuneCents * 0.31 / 1200.0);
+                        const size_t lag1 = static_cast<size_t>(0.0011 * sampleRate);
+                        const size_t lag2 = static_cast<size_t>(0.0023 * sampleRate);
+                        MixSampleVoice(*wav, step, vol * 0.58f, startSample, noteOffSample, ignoreOff, sampleRate, totalSamples, addSample);
+                        if (startSample + lag1 < totalSamples) {
+                            MixSampleVoice(*wav, step * up, vol * 0.46f, startSample + lag1, noteOffSample, ignoreOff, sampleRate, totalSamples, addSample);
                         }
-                        // 実際の再生末尾を0へ落とし、打楽器の終端や曲末の切断音も抑える
-                        const size_t remaining = endSample - 1 - s;
-                        if (remaining < static_cast<size_t>(fadeRelease)) {
-                            env *= static_cast<float>(remaining) / static_cast<float>(fadeRelease);
+                        if (startSample + lag2 < totalSamples) {
+                            MixSampleVoice(*wav, step * down, vol * 0.46f, startSample + lag2, noteOffSample, ignoreOff, sampleRate, totalSamples, addSample);
                         }
-
-                        // 補間の参照点もループ内へ折り返し、ループ外の波形の混入を防ぐ
-                        const auto readSample = [&](int index) {
-                            if (hasLoop && (index >= wav->loopEnd || (looped && index < wav->loopStart))) {
-                                const int length = wav->loopEnd - wav->loopStart;
-                                index = wav->loopStart + ((index - wav->loopStart) % length + length) % length;
-                            }
-                            return playbackData[std::clamp(index, 0, static_cast<int>(playbackData.size()) - 1)];
-                        };
-                        const int index = static_cast<int>(pos);
-                        const float frac = static_cast<float>(pos - index);
-                        const float p0 = readSample(index - 1);
-                        const float p1 = readSample(index);
-                        const float p2 = readSample(index + 1);
-                        const float p3 = readSample(index + 2);
-                        // 帯域制限済みの波形を4点補間する
-                        const float wavVal = p1 + 0.5f * frac * (p2 - p0 + frac *
-                            (2 * p0 - 5 * p1 + 4 * p2 - p3 + frac * (3 * (p1 - p2) + p3 - p0)));
-
-                        addSample(s, wavVal * event.volume * env * 0.7f);
-
-                        pos += step;
-                        if (hasLoop) {
-                            if (pos >= static_cast<float>(wav->loopEnd)) {
-                                float loopLen = static_cast<float>(wav->loopEnd - wav->loopStart);
-                                pos = wav->loopStart + std::fmod(pos - wav->loopStart, loopLen);
-                                looped = true;
-                            }
-                        } else {
-                            if (pos >= static_cast<float>(wav->data.size())) {
-                                break;
-                            }
-                        }
+                    } else {
+                        MixSampleVoice(*wav, step, vol, startSample, noteOffSample, ignoreOff, sampleRate, totalSamples, addSample);
                     }
                     continue;
                 }
