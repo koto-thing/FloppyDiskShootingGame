@@ -137,6 +137,19 @@ void RunWavSamplesTests() {
     const auto silence = generator.GeneratePCM(sequence, 16000, true, true);
     for (auto sample : silence) assert(sample == 0);
 
+    // 複製トラックで移調・音色・音量が反映されることを確認する
+    {
+        Audio::MMLParser parser;
+        const auto clonedSeq = parser.Parse("MML@ t120 l4 o4 cde, =1 _-12 @34 v8;");
+        assert(clonedSeq.tracks.size() == 2);
+        const auto& srcEv = clonedSeq.tracks[0].events[0];
+        const auto& dstEv = clonedSeq.tracks[1].events[0];
+        assert(std::abs(dstEv.frequency - srcEv.frequency * 0.5f) < 0.01f);
+        assert(dstEv.startTimeSec == srcEv.startTimeSec);
+        assert(dstEv.volume <= srcEv.volume * (8.0f / 15.0f));
+        assert(dstEv.waveType == Audio::WaveformType::Custom && dstEv.customWaveId == 34);
+    }
+
     // 必要時だけ全曲の生成時間を計測する: FLOPPY_AUDIO_BENCHMARK=1
     char* benchmark = nullptr;
     std::size_t benchmarkLength = 0;

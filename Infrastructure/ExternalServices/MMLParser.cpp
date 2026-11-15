@@ -80,6 +80,163 @@ static double ConvertBeatsToSeconds(double bStart, double numBeats, const std::m
     return totalSec;
 }
 
+/**
+ * @brief トラック文字列が複製トラック指定で始まるか判定する
+ * @param segment 判定対象のトラック文字列
+ * @return 先頭の空白を除いて '=' で始まる場合 true
+ */
+static bool IsCloneTrackSegment(const std::string& segment) {
+    for (char ch : segment) {
+        if (!std::isspace(static_cast<unsigned char>(ch))) {
+            return ch == '=';
+        }
+    }
+    return false;
+}
+
+/**
+ * @brief 複製トラック指定を解析し、元トラックを移調・変更して複製する
+ * @param segment 複製トラック指定の文字列
+ * @param parsedTracks これまでに解析済みのトラック配列
+ * @param currentIndex 現在のトラック番号（0始まり）
+ * @return 生成したMMLトラック（不正または空の場合は空トラック）
+ */
+static MMLTrack ParseCloneTrack(const std::string& segment, const std::vector<MMLTrack>& parsedTracks, size_t currentIndex) {
+    size_t i = 0;
+    size_t len = segment.length();
+
+    // 先頭の空白と '=' を読み飛ばす
+    while (i < len && std::isspace(static_cast<unsigned char>(segment[i]))) {
+        i++;
+    }
+    if (i >= len || segment[i] != '=') {
+        return {};
+    }
+    i++;
+
+    // コピー元のトラック番号（1始まり）を読む
+    while (i < len && std::isspace(static_cast<unsigned char>(segment[i]))) {
+        i++;
+    }
+    int srcTrackNum = 0;
+    bool hasSrcDigits = false;
+    while (i < len && std::isdigit(static_cast<unsigned char>(segment[i]))) {
+        srcTrackNum = srcTrackNum * 10 + (segment[i] - '0');
+        hasSrcDigits = true;
+        i++;
+    }
+    if (!hasSrcDigits || srcTrackNum <= 0) {
+        return {};
+    }
+
+    size_t srcIndex = static_cast<size_t>(srcTrackNum - 1);
+    if (srcIndex >= currentIndex || srcIndex >= parsedTracks.size()) {
+        return {};
+    }
+
+    // 移調・音色・音量倍率のオプションを順不同で読む
+    int semitones = 0;
+    bool hasCustomWave = false;
+    uint8_t customWaveId = 0;
+    bool hasVolumeScale = false;
+    float volumeScale = 1.0f;
+
+    auto readUnsignedInt = [&](int& outVal) -> bool {
+        while (i < len && std::isspace(static_cast<unsigned char>(segment[i]))) {
+            i++;
+        }
+        int val = 0;
+        bool hasDigits = false;
+        while (i < len && std::isdigit(static_cast<unsigned char>(segment[i]))) {
+            val = val * 10 + (segment[i] - '0');
+            hasDigits = true;
+            i++;
+        }
+        if (hasDigits) {
+            outVal = val;
+        }
+        return hasDigits;
+    };
+
+    while (i < len) {
+        char ch = segment[i];
+        if (std::isspace(static_cast<unsigned char>(ch))) {
+            i++;
+            continue;
+        }
+
+        char lowerCh = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        if (ch == '_') {
+            i++;
+            while (i < len && std::isspace(static_cast<unsigned char>(segment[i]))) {
+                i++;
+            }
+            int sign = 1;
+            if (i < len && (segment[i] == '-' || segment[i] == '+')) {
+                if (segment[i] == '-') {
+                    sign = -1;
+                }
+                i++;
+            }
+            int val = 0;
+            if (readUnsignedInt(val)) {
+                semitones = sign * val;
+            }
+        } else if (ch == '@') {
+            i++;
+            int val = 0;
+            if (readUnsignedInt(val)) {
+                customWaveId = static_cast<uint8_t>(std::clamp(val, 0, 255));
+                hasCustomWave = true;
+            }
+        } else if (lowerCh == 'v') {
+            i++;
+            int val = 0;
+            if (readUnsignedInt(val)) {
+                int clamped = std::clamp(val, 0, 15);
+                volumeScale = static_cast<float>(clamped) / 15.0f;
+                hasVolumeScale = true;
+            }
+        } else {
+            i++;
+        }
+    }
+
+    // 元トラックからドラム以外のイベントを複製して変換する
+    const MMLTrack& srcTrack = parsedTracks[srcIndex];
+    if (srcTrack.events.empty()) {
+        return {};
+    }
+
+    MMLTrack cloned;
+    double pitchFactor = (semitones != 0) ? std::pow(2.0, static_cast<double>(semitones) / 12.0) : 1.0;
+    cloned.events.reserve(srcTrack.events.size());
+
+    for (const auto& ev : srcTrack.events) {
+        if (ev.isDrum) {
+            continue;
+        }
+        MMLNoteEvent copied = ev;
+        if (semitones != 0) {
+            copied.frequency = static_cast<float>(static_cast<double>(copied.frequency) * pitchFactor);
+        }
+        if (hasCustomWave) {
+            copied.waveType = WaveformType::Custom;
+            copied.customWaveId = customWaveId;
+        }
+        if (hasVolumeScale) {
+            copied.volume = std::clamp(copied.volume * volumeScale, 0.0f, 1.0f);
+        }
+        cloned.events.push_back(copied);
+    }
+
+    if (!cloned.events.empty()) {
+        cloned.totalDurationSec = srcTrack.totalDurationSec;
+    }
+
+    return cloned;
+}
+
 MMLSequence MMLParser::Parse(const std::string& mml) {
     std::stringstream rawStream(mml);
     std::string line;
@@ -168,6 +325,9 @@ MMLSequence MMLParser::Parse(const std::string& mml) {
     };
 
     for (const auto& segment : trackSegments) {
+        if (IsCloneTrackSegment(segment)) {
+            continue;
+        }
         double currentBeat = 0.0;
         double defaultLengthBeats = 0.25;
         bool chordMode = false;
@@ -283,14 +443,22 @@ MMLSequence MMLParser::Parse(const std::string& mml) {
 
     // ノートパース
     MMLSequence sequence;
+    std::vector<MMLTrack> parsedBySegment(trackSegments.size());
     size_t trackIdx = 0;
 
-    for (const auto& segment : trackSegments) {
-        MMLTrack track = ParseTrack(segment, tempoMap, trackIdx++);
+    for (size_t segIdx = 0; segIdx < trackSegments.size(); ++segIdx) {
+        const auto& segment = trackSegments[segIdx];
+        MMLTrack track;
+        if (IsCloneTrackSegment(segment)) {
+            track = ParseCloneTrack(segment, parsedBySegment, segIdx);
+        } else {
+            track = ParseTrack(segment, tempoMap, trackIdx++);
+        }
+        parsedBySegment[segIdx] = track;
         if (!track.events.empty()) {
-            sequence.tracks.push_back(track);
-            if (track.totalDurationSec > sequence.maxDurationSec) {
-                sequence.maxDurationSec = track.totalDurationSec;
+            sequence.tracks.push_back(std::move(track));
+            if (sequence.tracks.back().totalDurationSec > sequence.maxDurationSec) {
+                sequence.maxDurationSec = sequence.tracks.back().totalDurationSec;
             }
         }
     }
