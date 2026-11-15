@@ -208,7 +208,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 30;
+        return 20;
     }
 
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
@@ -261,7 +261,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 50;
+        return 40;
     }
 
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
@@ -306,7 +306,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 15;
+        return 7;
     }
 
     void ConfigureSpawn(SideScrollingShooter& shooter, Enemy& enemy,
@@ -521,7 +521,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 30;
+        return 20;
     }
 
     void ConfigureSpawn(SideScrollingShooter& shooter, Enemy& enemy,
@@ -664,7 +664,7 @@ protected:
 };
 
 /**
- * @brief 停止後に正方形型の拡散弾幕を撃つStage2用砲台機を制御する
+ * @brief 停止後に正方形型の拡散弾幕を撃つ
  */
 class SideScrollingShooter::SquareShooterEnemyBehavior final : public SideScrollingShooter::CircleShooterEnemyBehavior {
 public:
@@ -726,7 +726,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 25;
+        return 15;
     }
 
     int Score(const Enemy&) const override {
@@ -829,7 +829,7 @@ public:
     }
 
     int MaxHp() const override {
-        return 100;
+        return 50;
     }
 
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {

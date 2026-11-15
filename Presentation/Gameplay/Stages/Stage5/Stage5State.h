@@ -329,10 +329,10 @@ inline constexpr int TayamaMaxHp = 3000;
 inline constexpr int TayamaPartBreakDamage = 500;
 static_assert(TayamaMaxHp == 3000);
 static_assert(TayamaPartBreakDamage * 10 >= TayamaMaxHp / 2);
-inline constexpr int EastsourceMaxHp = 1200;
-inline constexpr int EastsourceNoseHp = 180;
-inline constexpr int EastsourceWingHp = 240;
-inline constexpr int EastsourceEngineHp = 210;
+inline constexpr int EastsourceMaxHp = 2500;
+inline constexpr int EastsourceNoseHp = 500;
+inline constexpr int EastsourceWingHp = 300;
+inline constexpr int EastsourceEngineHp = 250;
 inline constexpr int EastsourceIntroFrames = 210;
 inline constexpr int EastsourceFallFrames = 180;
 inline constexpr int EastsourceNoseAttackCycleFrames = 60;
@@ -344,6 +344,7 @@ inline constexpr int EastsourceDamagedNoseShotCount = 3;
 inline constexpr int EastsourceNoseShotIntervalFrames = 3;
 inline constexpr int EastsourceWingBarrageCycleFrames = 42;
 inline constexpr int EastsourcePursuitCycleFrames = 120;
+inline constexpr float EastsourcePursuitSideX = 1.18f;
 inline constexpr int EastsourcePursuitRetreatFrames = 48;
 inline constexpr int EastsourcePursuitWarningEndFrame = 66;
 inline constexpr int EastsourcePursuitPoweredPassFrames = 24;
@@ -355,8 +356,10 @@ inline constexpr int EastsourceBombStartFrames = 180;
 inline constexpr int EastsourceBombIntervalFrames = 600;
 inline constexpr int EastsourceMissileHomingFrames = 12;
 inline constexpr float EastsourceMissileSpeed = 0.32f;
+inline constexpr int EastsourceLaserApproachFrames = 36;
 inline constexpr int EastsourceLaserWarningFrames = 180;
 inline constexpr int EastsourceLaserActiveFrames = 90;
+inline constexpr int EastsourceLaserRepeatCooldownFrames = 90;
 inline constexpr float EastsourceLaserRadius = 2.4f;
 inline constexpr int EastsourceShieldHp = 180;
 inline constexpr float EastsourceShieldRadius = 5.5f;
@@ -367,6 +370,9 @@ static_assert(EastsourcePursuitWarningEndFrame +
     EastsourcePursuitDamagedPassFrames < EastsourcePursuitCycleFrames);
 static_assert(EastsourcePursuitAimFrame < EastsourcePursuitShotStartFrame &&
     EastsourcePursuitShotStartFrame < EastsourcePursuitShotEndFrame);
+static_assert(0 < EastsourcePursuitRetreatFrames &&
+    EastsourcePursuitRetreatFrames < EastsourcePursuitWarningEndFrame);
+static_assert(EastsourceLaserApproachFrames > 0);
 inline constexpr int WallClimbTransitionFrames = 510;
 inline constexpr int WallClimbFadeFrames = 60;
 inline constexpr int WallClimbApproachFrames = 210;
@@ -1432,6 +1438,11 @@ enum Cue {
 struct State {
     int eastsourceShieldHp = 0;
     int eastsourceLaserTimer = -1;
+    int eastsourceLaserRepeatReadyAge = 0;
+    Vector3 eastsourceMoveOrigin {};
+    bool eastsourcePursuitActive = false;
+    float eastsourcePursuitY = 0.0f;
+    int eastsourcePursuitPassFrames = EastsourcePursuitPoweredPassFrames;
     Vector3 eastsourceLaserDirection {};
     bool eastsourceLaserRail = false;
     std::array<SearchlightState, SearchlightCount> searchlights {};

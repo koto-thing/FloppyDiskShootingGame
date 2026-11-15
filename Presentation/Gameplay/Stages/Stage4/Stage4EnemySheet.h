@@ -200,7 +200,7 @@ public:
      * @return 本体へ与えるダメージ
      */
     int BossPartBreakDamage(BossPart part) const override {
-        return part == BossNose || part == BossLeftWing || part == BossRightWing ? 300 : 100;
+        return part == BossNose || part == BossLeftWing || part == BossRightWing ? 150 : 50;
     }
 
     /**
@@ -348,10 +348,10 @@ public:
     }
 
 private:
-    static constexpr int Phase1MainCannonHp = 500;
-    static constexpr int SiegeMortarHp = 500;
-    static constexpr int RomanceCannonHp = 600;
-    static constexpr int SecondaryGunHp = 200;
+    static constexpr int Phase1MainCannonHp = 100;
+    static constexpr int SiegeMortarHp = 200;
+    static constexpr int RomanceCannonHp = 300;
+    static constexpr int SecondaryGunHp = 100;
     inline static constexpr int RushIntervalFrames = 1000;
     inline static constexpr int RushWindupFrames = 42;
     inline static constexpr int RushChargeFrames = 61;

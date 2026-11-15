@@ -150,8 +150,8 @@ public:
      * @return 本体へ与えるダメージ
      */
     int BossPartBreakDamage(BossPart part) const override {
-        return part == BossNose ? 75 :
-            (part == BossLeftWing || part == BossRightWing ? 90 : 65);
+        return part == BossNose ? 300 :
+            (part == BossLeftWing || part == BossRightWing ? 200 : 65);
     }
 
     /**
@@ -722,14 +722,14 @@ bool SideScrollingShooter::Stage5Module::TryHitBossPart(
  */
 void SideScrollingShooter::Stage5Module::SpawnEnemyShotAt(SideScrollingShooter& shooter,
     float sourceX, float sourceY, float sourceZ,
-    float targetX, float targetY, float targetZ, float speed) {
+    float targetX, float targetY, float targetZ, float speed, bool eastsourcePursuit) {
     const float dx = ToWorldX(targetX - sourceX);
     const float dy = ToWorldY(targetY - sourceY);
     const float dz = targetZ - sourceZ;
     const float length = (std::max)(0.001f, std::sqrt(dx * dx + dy * dy + dz * dz));
     shooter.SpawnShotDirect(sourceX, sourceY, sourceZ,
         FromWorldX(dx / length * speed), FromWorldY(dy / length * speed),
-        dz / length * speed, true, -1, 0, true);
+        dz / length * speed, true, -1, 0, true, eastsourcePursuit);
 }
 
 /**
@@ -740,6 +740,8 @@ void SideScrollingShooter::Stage5Module::SpawnEnemyShotAt(SideScrollingShooter& 
 void SideScrollingShooter::Stage5Module::Reset(SideScrollingShooter& shooter) {
     shooter.m_stage5.eastsourceShieldHp = 0;
     shooter.m_stage5.eastsourceLaserTimer = -1;
+    shooter.m_stage5.eastsourceLaserRepeatReadyAge = 0;
+    shooter.m_stage5.eastsourcePursuitActive = false;
     shooter.m_stage5.phase = Stage5Phase::Approach;
     shooter.m_stage5.checkpoint = Stage5Checkpoint::Chapter1;
     shooter.m_stage5.phaseTimer = 0;
@@ -1027,6 +1029,8 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
 void SideScrollingShooter::Stage5Module::StartEastsourceBattle(SideScrollingShooter& shooter) {
     shooter.m_stage5.eastsourceShieldHp = 0;
     shooter.m_stage5.eastsourceLaserTimer = -1;
+    shooter.m_stage5.eastsourceLaserRepeatReadyAge = 0;
+    shooter.m_stage5.eastsourcePursuitActive = false;
     shooter.m_bossBattle = true;
     Enemy& eastsource = shooter.m_enemies[0];
     if (!eastsource.active || eastsource.type != Stage::BossEnemy) {
@@ -1083,65 +1087,69 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
     const float engineRate = (static_cast<float>(leftEngine) + static_cast<float>(rightEngine)) * 0.5f;
     const float moveAmplitude = 0.20f + engineRate * 0.38f;
     const float moveSpeed = 0.009f + engineRate * 0.009f;
-    // 2DではKOTOと共通の右側アンカーを保ち、上下だけ移動する
-    eastsource.y = std::sin(static_cast<float>(eastsource.age) * 0.021f) * 0.42f;
-    if (shooter.IsRailGameplayActive()) {
-        eastsource.x = std::sin(static_cast<float>(eastsource.age) * moveSpeed) * moveAmplitude;
-        eastsource.z = 43.0f + std::sin(static_cast<float>(eastsource.age) * 0.013f) * 3.0f;
-    } else {
-        eastsource.x = eastsource.baseX;
-        eastsource.z = ToRailZFromSideX(eastsource.x);
-    }
+    using namespace ShooterStages::Stage5;
+    auto& state = shooter.m_stage5;
+    const bool rail = shooter.IsRailGameplayActive();
+    const Vector3 position {eastsource.x, eastsource.y, eastsource.z};
+    const Vector3 normal {
+        rail ? std::sin(static_cast<float>(eastsource.age) * moveSpeed) * moveAmplitude : eastsource.baseX,
+        std::sin(static_cast<float>(eastsource.age) * 0.021f) * 0.42f,
+        rail ? 43.0f + std::sin(static_cast<float>(eastsource.age) * 0.013f) * 3.0f :
+            ToRailZFromSideX(eastsource.baseX)
+    };
+    Vector3 next = Vector3::Lerp(position, normal, 0.08f);
+    eastsource.collisionEnabled = true;
 
+    // 突進は周期の先頭から始め、準備地点・横切り・復帰の座標をつなぐ
     const bool nose = eastsource.bossPartHp[BossNose] > 0;
     const int phase = eastsource.bossPhase;
-    if (shooter.IsRailGameplayActive() &&
-        (phase == BossNormalPhase2 || phase == BossSpecialPhase2)) {
-        const int pursuitCycle = eastsource.age %
-            ShooterStages::Stage5::EastsourcePursuitCycleFrames;
-        const bool fromLeft = (eastsource.age /
-            ShooterStages::Stage5::EastsourcePursuitCycleFrames) % 2 == 0;
-        const BossPart wingPart = fromLeft ? BossLeftWing : BossRightWing;
-        const BossPart enginePart = fromLeft ? BossLeftEngine : BossRightEngine;
-        const bool wing = eastsource.bossPartHp[wingPart] > 0;
-        const bool engine = eastsource.bossPartHp[enginePart] > 0;
-        const float side = fromLeft ? -1.0f : 1.0f;
-        const int passEnd = ShooterStages::Stage5::EastsourcePursuitWarningEndFrame +
-            (engine ? ShooterStages::Stage5::EastsourcePursuitPoweredPassFrames :
-                ShooterStages::Stage5::EastsourcePursuitDamagedPassFrames);
-
-        // 索敵中は遠ざかり、予告後だけ画面外から固定方向へ高速再進入する
-        if (!wing) {
-            eastsource.collisionEnabled = true;
-        } else if (pursuitCycle < ShooterStages::Stage5::EastsourcePursuitRetreatFrames) {
-            eastsource.z = Math::Lerp(43.0f, 59.0f,
-                SmoothStep(static_cast<float>(pursuitCycle) /
-                    ShooterStages::Stage5::EastsourcePursuitRetreatFrames));
-        } else if (pursuitCycle < ShooterStages::Stage5::EastsourcePursuitWarningEndFrame) {
-            eastsource.x = side * 1.48f;
-            eastsource.z = 59.0f;
+    const bool pursuitPhase = phase == BossNormalPhase2 || phase == BossSpecialPhase2;
+    const int pursuitCycle = eastsource.age % EastsourcePursuitCycleFrames;
+    const bool fromLeft = (eastsource.age / EastsourcePursuitCycleFrames) % 2 == 0;
+    const bool wing = eastsource.bossPartHp[fromLeft ? BossLeftWing : BossRightWing] > 0;
+    const bool engine = eastsource.bossPartHp[fromLeft ? BossLeftEngine : BossRightEngine] > 0;
+    if (!rail || !pursuitPhase || !wing) {
+        state.eastsourcePursuitActive = false;
+    } else if (pursuitCycle == 0) {
+        state.eastsourcePursuitActive = true;
+        state.eastsourceMoveOrigin = position;
+        state.eastsourcePursuitY = shooter.Player().m_playerY;
+        state.eastsourcePursuitPassFrames = engine ?
+            EastsourcePursuitPoweredPassFrames : EastsourcePursuitDamagedPassFrames;
+    }
+    if (state.eastsourcePursuitActive) {
+        const float entryX = fromLeft ? -EastsourcePursuitSideX : EastsourcePursuitSideX;
+        const Vector3 retreat {entryX, state.eastsourcePursuitY, 59.0f};
+        const Vector3 entry {entryX, state.eastsourcePursuitY, 31.0f};
+        const Vector3 exit {-entryX, state.eastsourcePursuitY, entry.z};
+        const int passFrames = state.eastsourcePursuitPassFrames;
+        const int passEnd = EastsourcePursuitWarningEndFrame + passFrames;
+        if (pursuitCycle < EastsourcePursuitRetreatFrames) {
+            const float progress = SmoothStep(static_cast<float>(pursuitCycle) / EastsourcePursuitRetreatFrames);
+            next = Vector3::Lerp(state.eastsourceMoveOrigin, retreat, progress);
+        } else if (pursuitCycle < EastsourcePursuitWarningEndFrame) {
+            const float progress = SmoothStep(static_cast<float>(pursuitCycle - EastsourcePursuitRetreatFrames) /
+                (EastsourcePursuitWarningEndFrame - EastsourcePursuitRetreatFrames));
+            next = Vector3::Lerp(retreat, entry, progress);
             eastsource.collisionEnabled = false;
         } else if (pursuitCycle < passEnd) {
-            const float pass = SmoothStep(static_cast<float>(pursuitCycle -
-                ShooterStages::Stage5::EastsourcePursuitWarningEndFrame) /
-                static_cast<float>(engine ?
-                    ShooterStages::Stage5::EastsourcePursuitPoweredPassFrames :
-                    ShooterStages::Stage5::EastsourcePursuitDamagedPassFrames));
-            eastsource.x = Math::Lerp(side * 1.48f, -side * 1.48f, pass);
-            eastsource.y = eastsource.attackWarningTargetY;
-            eastsource.z = Math::Lerp(31.0f, 19.0f, std::sin(pass * Math::Pi));
+            const float progress = SmoothStep(static_cast<float>(pursuitCycle - EastsourcePursuitWarningEndFrame) / passFrames);
+            next = Vector3::Lerp(entry, exit, progress);
+            next.z = Math::Lerp(entry.z, 19.0f, std::sin(progress * Math::Pi));
             eastsource.collisionEnabled = false;
         } else {
-            const float settle = SmoothStep(static_cast<float>(pursuitCycle - passEnd) /
-                static_cast<float>(ShooterStages::Stage5::EastsourcePursuitCycleFrames - passEnd));
-            eastsource.x = Math::Lerp(-side * 1.48f, 0.0f, settle);
-            eastsource.z = Math::Lerp(28.0f, 43.0f, settle);
-            eastsource.collisionEnabled = settle > 0.55f;
+            const float progress = SmoothStep(static_cast<float>(pursuitCycle - passEnd + 1) /
+                (EastsourcePursuitCycleFrames - passEnd));
+            next = Vector3::Lerp(exit, normal, progress);
+            eastsource.collisionEnabled = progress > 0.55f;
         }
-    } else {
-        eastsource.collisionEnabled = true;
     }
-    if (phase == BossNormalPhase1 || phase == BossSpecialPhase2) {
+    eastsource.x = next.x;
+    eastsource.y = next.y;
+    eastsource.z = next.z;
+    const bool hasGunParts = nose || eastsource.bossPartHp[BossLeftWing] > 0 ||
+        eastsource.bossPartHp[BossRightWing] > 0;
+    if (hasGunParts && (phase == BossNormalPhase1 || phase == BossSpecialPhase2)) {
         const int cycleLength = nose ?
             ShooterStages::Stage5::EastsourceNoseAttackCycleFrames :
             ShooterStages::Stage5::EastsourceDamagedNoseAttackCycleFrames;
@@ -1193,9 +1201,8 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
         }
     }
 
-    if (phase == BossNormalPhase2 || phase == BossSpecialPhase2) {
-        const int cycle = eastsource.age %
-            ShooterStages::Stage5::EastsourcePursuitCycleFrames;
+    if (pursuitPhase && (!rail || state.eastsourcePursuitActive)) {
+        const int cycle = pursuitCycle;
         if (cycle == ShooterStages::Stage5::EastsourcePursuitAimFrame) {
             eastsource.attackWarningTargetX = shooter.Player().m_playerX;
             eastsource.attackWarningTargetY = shooter.Player().m_playerY;
@@ -1203,17 +1210,14 @@ void SideScrollingShooter::Stage5Module::TickEastsource(SideScrollingShooter& sh
         }
         if (cycle >= ShooterStages::Stage5::EastsourcePursuitShotStartFrame &&
             cycle < ShooterStages::Stage5::EastsourcePursuitShotEndFrame) {
-            const bool fromLeft = (eastsource.age /
-                ShooterStages::Stage5::EastsourcePursuitCycleFrames) % 2 == 0;
-            const bool wing = eastsource.bossPartHp[fromLeft ? BossLeftWing : BossRightWing] > 0;
-            const bool engine = eastsource.bossPartHp[fromLeft ? BossLeftEngine : BossRightEngine] > 0;
             if (wing && cycle % (engine ? 2 : 5) == 0) {
-                const float sourceX = fromLeft ? -1.25f : 1.25f;
+                const Vector3 source = EastsourceTransform(shooter, eastsource).position;
+                const float targetZ = shooter.IsRailGameplayActive() ? PlayerRailZ : source.z;
                 // 追撃も上下へ広げ、エンジン破壊後は発射間隔を維持して弱体化する
                 for (int lane = -1; lane <= 1; ++lane) {
-                    SpawnEnemyShotAt(shooter, sourceX, eastsource.attackWarningTargetY, 18.0f,
+                    SpawnEnemyShotAt(shooter, FromWorldX(source.x), FromWorldY(source.y), source.z,
                         eastsource.attackWarningTargetX, eastsource.attackWarningTargetY + lane * 0.18f,
-                        PlayerRailZ, engine ? 0.82f : 0.58f);
+                        targetZ, engine ? 0.82f : 0.58f, true);
                 }
                 shooter.PlayEnemyShotSound();
             }
@@ -1264,22 +1268,42 @@ bool SideScrollingShooter::Stage5Module::TickEastsourceBomb(SideScrollingShooter
     }
 
     // 視点変更時は予告を最初からやり直し、座標変換直後の不意打ちを防ぐ
-    if ((type == 1 && frame == 0) ||
-        (state.eastsourceLaserTimer >= 0 && state.eastsourceLaserRail != rail)) {
-        state.eastsourceLaserTimer = 0;
+    const bool repeatLaser = boss.bossPartHp[BossNose] <= 0 &&
+        boss.bossPartHp[BossLeftWing] <= 0 && boss.bossPartHp[BossRightWing] <= 0;
+    // 三部位の破壊後は通常のレーザー周期を短い再発射待ちに置き換える
+    const bool startLaser = state.eastsourceLaserTimer == -1 &&
+        (repeatLaser ? boss.age >= state.eastsourceLaserRepeatReadyAge : type == 1 && frame == 0);
+    if (startLaser ||
+        (state.eastsourceLaserTimer != -1 && state.eastsourceLaserRail != rail)) {
+        state.eastsourceLaserTimer = -EastsourceLaserApproachFrames - 1;
         state.eastsourceLaserRail = rail;
-        // 追撃の画面外待機からでも機首が見える基準位置でチャージする
-        if (rail) shooter.m_stage->ConfigureBossRailAnchor(boss);
-        else shooter.m_stage->ConfigureBossSideAnchor(boss);
+        state.eastsourcePursuitActive = false;
+        state.eastsourceMoveOrigin = {boss.x, boss.y, boss.z};
+    }
+    // 発射地点へ到着してから照準を固定し、レーザー予告を開始する
+    if (state.eastsourceLaserTimer < -1) {
+        Enemy anchor {};
+        if (rail) shooter.m_stage->ConfigureBossRailAnchor(anchor);
+        else shooter.m_stage->ConfigureBossSideAnchor(anchor);
+        const int elapsed = ++state.eastsourceLaserTimer + EastsourceLaserApproachFrames + 1;
+        const float progress = SmoothStep(static_cast<float>(elapsed) / EastsourceLaserApproachFrames);
+        const Vector3 next = Vector3::Lerp(state.eastsourceMoveOrigin, {anchor.x, anchor.y, anchor.z}, progress);
+        boss.x = next.x;
+        boss.y = next.y;
+        boss.z = next.z;
         boss.collisionEnabled = true;
+        if (elapsed < EastsourceLaserApproachFrames) return true;
+        state.eastsourceLaserTimer = 0;
         const Vector3 source = EastsourceLaserSource(shooter, boss);
         Vector3 target = shooter.SelectEnemyShotTarget();
         if (!rail) target.z = source.z;
         state.eastsourceLaserDirection = (target - source).Normalized();
         PlayCue(shooter, BarrageWarning);
     }
-    if (state.eastsourceLaserTimer >= EastsourceLaserWarningFrames + EastsourceLaserActiveFrames)
+    if (state.eastsourceLaserTimer >= EastsourceLaserWarningFrames + EastsourceLaserActiveFrames) {
         state.eastsourceLaserTimer = -1;
+        if (repeatLaser) state.eastsourceLaserRepeatReadyAge = boss.age + EastsourceLaserRepeatCooldownFrames;
+    }
     if (state.eastsourceLaserTimer < 0) return false;
 
     // 3秒間は無害な予告線だけを出し、発射後も予告した方向を固定する
@@ -1307,6 +1331,8 @@ void SideScrollingShooter::Stage5Module::DefeatEastsource(SideScrollingShooter& 
     if (shooter.m_stage5.phase != Stage5Phase::EastsourceBattle) return;
     shooter.m_stage5.eastsourceShieldHp = 0;
     shooter.m_stage5.eastsourceLaserTimer = -1;
+    shooter.m_stage5.eastsourceLaserRepeatReadyAge = 0;
+    shooter.m_stage5.eastsourcePursuitActive = false;
     static const auto eastsourceDeathVoice =
         VoiceCodec::DecodeForAudioService(VoiceSamples::eastsourceDeath);
     if (shooter.m_audio) shooter.m_audio->PlayVoice(eastsourceDeathVoice);

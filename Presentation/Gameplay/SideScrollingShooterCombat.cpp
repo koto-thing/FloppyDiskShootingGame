@@ -539,9 +539,11 @@ void SideScrollingShooter::TickShots() {
             Vector3::Distance(playerPosition,
                 {ToWorldX(shot.x), ToWorldY(shot.y), shot.z}) >
                 ShooterStages::Stage5::TayamaDragonOrbitRadius + 1.0f;
+        const float railShotMaxX = (std::max)(shot.eastsourcePursuit ?
+            ShooterStages::Stage5::EastsourcePursuitSideX : 1.2f, StageDispatch::PlayerXRange(*this).y);
         const bool outsideRail = !IsTayamaBattle() && (shot.tayamaDragonOrbit ? outsideOrbit :
             (shot.z < 0.0f || shot.z > railShotFarZ ||
-                std::abs(shot.x) > (std::max)(1.2f, StageDispatch::PlayerXRange(*this).y) ||
+                std::abs(shot.x) > railShotMaxX ||
                 shot.y < railShotMinY - Side2DShotCullMargin ||
                 shot.y > railShotMaxY + Side2DShotCullMargin));
         if (!cullProtected && IsRailGameplayActive() &&
@@ -982,8 +984,8 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
         enemy.x = enemy.baseX;
         enemy.baseY = y;
         enemy.y = y;
-        if (enemy.type == 7) {
-            enemy.baseY = DiveRusherEnemyBehavior::HighY();
+        if (enemy.type == Stage::DiveRusherEnemy) {
+            enemy.baseY = m_stageNumber == 5 ? 0.0f : DiveRusherEnemyBehavior::HighY();
             enemy.y = enemy.baseY;
         }
         if (enemy.type == 8) {
@@ -1239,12 +1241,12 @@ void SideScrollingShooter::SpawnScoreItem(float x, float y, float z, int value,
  * @return なし
  */
 void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy,
-    int barrageIndex, int barrageCount, bool firedByBoss) {
+    int barrageIndex, int barrageCount, bool firedByBoss, bool eastsourcePursuit) {
     // 第2形態の包囲射撃だけ自機に近い円周からの発射を許可する
     const bool tayamaDragonOrbit = enemy && firedByBoss && m_stageNumber == 5 &&
         m_stage5.phase == Stage5Phase::TayamaDragonBattle &&
         m_stage5.tayamaDragonAttack == ShooterStages::Stage5::TayamaDragonAttack::Orbit;
-    if (enemy && !tayamaDragonOrbit && !CanSpawnEnemyProjectile(x, y, z)) return;
+    if (enemy && !tayamaDragonOrbit && !eastsourcePursuit && !CanSpawnEnemyProjectile(x, y, z)) return;
 
     Shot* available = nullptr;
     for (int shotIndex = 0; shotIndex < ActiveShotCapacity(); ++shotIndex) {
@@ -1283,6 +1285,7 @@ void SideScrollingShooter::SpawnShotDirect(float x, float y, float z, float vx, 
     shot.enemy = enemy;
     shot.firedByBoss = firedByBoss;
     shot.tayamaDragonOrbit = tayamaDragonOrbit;
+    shot.eastsourcePursuit = eastsourcePursuit;
     shot.active = true;
 }
 

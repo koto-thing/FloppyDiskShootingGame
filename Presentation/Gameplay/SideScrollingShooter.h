@@ -54,7 +54,7 @@ public:
         // HOMING
         { 10, 2, 0.038f, 5.0f, 0.08f, 0.05f, 0.025f, 1, 0.150f, false },
         // PIERCING
-        { 18, 2, 0.052f, 0.0f, 0.12f, 0.09f, 0.032f, 1, 0.000f, true },
+        { 18, 2, 0.052f, 0.0f, 0.12f, 0.11f, 0.032f, 1, 0.000f, true },
         // SPREAD
         { 12, 7, 0.043f, 65.0f, 0.17f, 0.00f, 0.022f, 3, 0.000f, false },
     }};
@@ -212,6 +212,7 @@ private:
         bool grazed = false;
         bool firedByBoss = false;
         bool tayamaDragonOrbit = false;
+        bool eastsourcePursuit = false;
         bool bossCollisionInitialized = false;
         bool active = false;
 
@@ -742,7 +743,8 @@ private:
      * @return なし
      */
     void SpawnShotDirect(float x, float y, float z, float vx, float vy, float vz, bool enemy,
-        int barrageIndex = -1, int barrageCount = 0, bool firedByBoss = false);
+        int barrageIndex = -1, int barrageCount = 0, bool firedByBoss = false,
+        bool eastsourcePursuit = false);
     /**
      * @brief 命中または敵撃破位置へ爆発エフェクトを生成する
      * @param x 2D座標系のX座標

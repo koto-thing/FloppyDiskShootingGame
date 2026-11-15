@@ -31,7 +31,6 @@ public:
             {BasicEnemy, 35, 150, 2.6f, -0.72f, -0.54f, 60.0f},
             {StraightShooterEnemy, 200, 400, 2.6f, -0.18f, 0.86f, 48.0f},
             {StraightShooterEnemy, 400, 400, 2.6f, -0.18f, -0.86f, 48.0f},
-            {SquareShooterEnemy, 500, 1200, 2.6f, 0.0f, 0.0f, 54.0f}
         };
         // チャプター2
         static constexpr EnemySpawnRule Chapter2[] = {
@@ -43,9 +42,7 @@ public:
         // チャプター3
         static constexpr EnemySpawnRule Chapter3[] = {
             {BasicEnemy, 25, 120, 2.6f, 0.42f, -0.12f, 60.0f},
-            {SquareShooterEnemy, 300, 1000, 2.6f, -0.9f, 0.5f, 54.0f},
-            {SquareShooterEnemy, 300, 1000, 2.6f, 0.9f, -0.5f, 54.0f},
-            {CircleShooterEnemy, 600, 1000, 2.6f, 0.0f, 0.0f, 36.0f},
+            {SquareShooterEnemy, 400, 1000, 2.6f, 0.0f, 0.0f, 54.0f},
             {SquareShooterEnemy, 900, 1000, 2.6f, 0.9f, 0.5f, 54.0f},
             {SquareShooterEnemy, 900, 1000, 2.6f, -0.9f, -0.5f, 54.0f}
         };

@@ -23,7 +23,7 @@ public:
      * @return 各フェーズの耐久フレーム数
      */
     static constexpr int SurvivalFrames(DifficultyType difficulty) {
-        return (difficulty == Hard ? 60 : difficulty == Normal ? 30 : 20) * 60;
+        return (difficulty == Hard ? 45 : difficulty == Normal ? 27 : 18) * 60;
     }
 
     /**

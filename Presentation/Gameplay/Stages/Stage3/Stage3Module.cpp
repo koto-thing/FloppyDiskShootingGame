@@ -795,9 +795,9 @@ const SideScrollingShooter::Stage& SideScrollingShooter::Stage3Module::Definitio
         Stage3BarrierCageView::BarrierHalfLength * BossModelScale < PlayerRailZ - 15.5f);
     static_assert(BossPhase2WorldZ +
         Stage3BarrierCageView::BarrierHalfLength * BossModelScale > PlayerRailZ + 22.0f);
-    static_assert(SurvivalFrames(Easy) == 20 * 60);
-    static_assert(SurvivalFrames(Normal) == 30 * 60);
-    static_assert(SurvivalFrames(Hard) == 60 * 60);
+    static_assert(SurvivalFrames(Easy) == 18 * 60);
+    static_assert(SurvivalFrames(Normal) == 27 * 60);
+    static_assert(SurvivalFrames(Hard) == 45 * 60);
     static_assert(Phase3StartHp(600) == 300);
     static_assert(Phase3StartHp(601) == 301);
     static_assert([] {
@@ -1407,8 +1407,11 @@ void SideScrollingShooter::Stage3Module::FireBossPartBarrage(
         const int elapsed = SurvivalFrames(shooter.m_difficulty) - boss.motionAge;
         const int cycle = elapsed % BossLaserCycleFrames;
         const bool machineGunFrame =
-            cycle == 0 || cycle == 16 || cycle == 32 || cycle == 48 || cycle == 64;
-        const bool missileFrame = cycle == 220;
+            cycle == 0 || cycle == 16 || cycle == 32 || cycle == 48 || cycle == 64 ||
+            cycle == 150 || cycle == 166 || cycle == 182 || cycle == 198 || cycle == 214 ||
+            cycle == 300 || cycle == 316 || cycle == 332 || cycle == 348 || cycle == 364 ||
+            cycle == 450 || cycle == 466 || cycle == 482 || cycle == 498 || cycle == 514;
+        const bool missileFrame = cycle == 220 || cycle == 440;
 
         const BossModelTransform transform = BossTransform(shooter, boss);
         const Vector3 target {

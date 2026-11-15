@@ -1,6 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="Steamworks.local.props" Condition="Exists('Steamworks.local.props')" />
+  <PropertyGroup Condition="'$(MSBuildProjectName)'=='FloppyDiskShootingGame' or '$(MSBuildProjectName)'=='FloppyEngine.Tests'">
+    <AudioPythonExe Condition="'$(AudioPythonExe)'=='' and Exists('$(UserProfile)\AppData\Local\Programs\Python\Python313\python.exe')">$(UserProfile)\AppData\Local\Programs\Python\Python313\python.exe</AudioPythonExe>
+    <AudioPythonExe Condition="'$(AudioPythonExe)'==''">python.exe</AudioPythonExe>
+  </PropertyGroup>
   <!-- 配布版ごとに生成物を分離し、未指定時はFloppy版を選ぶ -->
   <PropertyGroup>
     <Distribution Condition="'$(Distribution)'==''">Floppy</Distribution>

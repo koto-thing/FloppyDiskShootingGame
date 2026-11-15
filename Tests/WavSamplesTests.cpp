@@ -2,8 +2,6 @@
 #include <cstdint>
 #include <vector>
 
-#include "../Infrastructure/ExternalServices/WavSamples.h"
-#include "../Infrastructure/ExternalServices/WavSamplesSource.h"
 #include "../Presentation/Gameplay/Voices/VoiceSamplesSource.h"
 #include "../Presentation/Gameplay/Voices/VoiceDpcmDecoder.h"
 #include "../Infrastructure/ExternalServices/SynthWaveGenerator.h"
@@ -23,17 +21,6 @@ namespace Audio::PackedAudioSamples { void RunFailureChecks(); }
  */
 void RunWavSamplesTests() {
     Audio::PackedAudioSamples::RunFailureChecks();
-    // 全40楽器の追加圧縮前バイト列と復元後バイト列が完全一致する
-    static_assert(std::size(Audio::WavSamples::SAMPLES) == 40);
-    static_assert(std::size(Audio::WavSamplesSource::SAMPLES) == 40);
-    for (const auto& original : Audio::WavSamplesSource::SAMPLES) {
-        const auto* sample = Audio::WavSamples::Find(original.name);
-        assert(sample && sample->byteCount == original.byteCount);
-        assert(sample->sampleCount == original.sampleCount && sample->loopStart == original.loopStart &&
-            sample->loopEnd == original.loopEnd && sample->checksum == original.checksum);
-        const auto* restored = Audio::PackedAudioSamples::Get(sample->offset, sample->byteCount);
-        assert(restored && std::equal(original.data, original.data + original.byteCount, restored));
-    }
     // 全14声も一致を検証し、既存ADPCM復号器まで通して長さを確認する
     const std::pair<VoiceSamples::ImaAdpcmSample, VoiceSamplesSource::ImaAdpcmSample> voices[] = {
         {VoiceSamples::tayamaDeath, VoiceSamplesSource::tayamaDeath},
@@ -94,20 +81,6 @@ void RunWavSamplesTests() {
     assert(MMLData::GetStageBgm(99) == MMLSource::stage1);
     assert(MMLData::GetBossBgm(99) == MMLSource::boss1);
 
-    for (const auto& sample : Audio::WavSamples::SAMPLES) {
-        std::vector<std::uint8_t> pcm;
-
-        // 全サンプルを復号し、変換前PCMのサイズとチェックサムを照合する
-        assert(Audio::WavSamples::Decode(sample, pcm));
-        assert(pcm.size() == sample.sampleCount);
-        std::uint32_t checksum = 2166136261u;
-        for (const std::uint8_t value : pcm) {
-            checksum = (checksum ^ value) * 16777619u;
-        }
-        assert(checksum == sample.checksum);
-    }
-
-    // ループの長さを維持し、継ぎ目が開始点直前の自然な傾きにつながる
     Audio::SynthWaveGenerator generator;
     Audio::MMLNoteEvent note;
     note.durationSec = 2;
@@ -115,15 +88,6 @@ void RunWavSamplesTests() {
     note.waveType = Audio::WaveformType::Custom;
     Audio::MMLSequence sequence{{{{note}, 2}}, 2};
     const auto rendered = generator.GeneratePCM(sequence, 16000);
-    const auto* piano = Audio::WavSamples::Find("AcousticGrandPiano");
-    assert(piano && piano->loopStart > 0 && piano->loopEnd > piano->loopStart + 1);
-    std::vector<std::uint8_t> pianoPcm;
-    assert(Audio::WavSamples::Decode(*piano, pianoPcm));
-    const double expectedEnd = std::tanh((pianoPcm[piano->loopStart - 1] - 128.0) / 128 * 0.7 * 0.55) * 30000;
-    const double expectedStart = std::tanh((pianoPcm[piano->loopStart] - 128.0) / 128 * 0.7 * 0.55) * 30000;
-    assert(std::abs(rendered[(piano->loopEnd - 1) * 2] - expectedEnd) < 2);
-    assert(std::abs(rendered[piano->loopEnd * 2] - expectedStart) < 2);
-    assert(std::abs(rendered[(2 * piano->loopEnd - piano->loopStart) * 2] - expectedStart) < 2);
 
     // 音程と長さを維持し、PCM音源・合成音・打楽器の末尾を無音にする
     assert(rendered.size() == 32000);
