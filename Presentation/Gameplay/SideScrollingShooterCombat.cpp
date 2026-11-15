@@ -113,9 +113,9 @@ void SideScrollingShooter::TickPlayer() {
                 Math::TwoPi);
             Player().m_playerX = 0.0f;
         } else {
-            Player().m_playerX = (std::clamp)(Player().m_playerX + dx * 0.033f * speedScale, -1.2f, 1.2f);
+            Player().m_playerX = (std::clamp)(Player().m_playerX + dx * 0.043f * speedScale, -1.2f, 1.2f);
         }
-        Player().m_playerY = (std::clamp)(Player().m_playerY + dy * 0.068f * speedScale,
+        Player().m_playerY = (std::clamp)(Player().m_playerY + dy * 0.078f * speedScale,
             ShooterStages::Stage5::TayamaPlayerMinY,
             ShooterStages::Stage5::TayamaPlayerMaxY);
         return;
