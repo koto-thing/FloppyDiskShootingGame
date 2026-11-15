@@ -493,6 +493,39 @@ struct HomingShotTests {
         assert(renderer.CommandCount() == 28);
         assert(std::abs((renderer.Command(20).rect.position.x + renderer.Command(26).rect.position.x) * 0.5f - restingX) < 0.0001f);
     }
+    /** @brief 残存するボス部位ごとに枠4本とTGT表記を描画することを検証する @return なし */
+    static void CheckBossPartTargets() {
+        using Game = SideScrollingShooter;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.Initialize(nullptr, Spread, Easy);
+        g.m_viewMode = g.m_nextViewMode = Game::ViewMode::Rail3D;
+        const Vector3 aim = g.PlayerAimPoint();
+        auto& boss = g.m_enemies[0];
+        boss.active = true;
+        boss.type = 2;
+        boss.hp = 100;
+        boss.x = Game::FromWorldX(aim.x);
+        boss.y = Game::FromWorldY(aim.y);
+        boss.z = aim.z;
+        boss.bossPartHp.fill(0);
+        for (int i = 0; i <= Game::BossRightEngine; ++i) boss.bossPartHp[i] = 10;
+        Camera3D camera;
+        g.ConfigureRailCamera(camera, g.m_aimViewport);
+        Renderer renderer;
+        g.DrawBossPartTargets(renderer, camera);
+        assert(renderer.CommandCount() == 5 * 5);
+
+        // 破壊済み部位とクリア後は表示しない
+        boss.bossPartHp[Game::BossNose] = 0;
+        renderer.BeginFrame();
+        g.DrawBossPartTargets(renderer, camera);
+        assert(renderer.CommandCount() == 4 * 5);
+        g.m_clear = true;
+        renderer.BeginFrame();
+        g.DrawBossPartTargets(renderer, camera);
+        assert(renderer.CommandCount() == 0);
+    }
     /** @brief スナップ対象の選択、弾道補正、解除と表示を検証する @return なし */
     static void CheckAimSnap() {
         using Game = SideScrollingShooter;
@@ -1078,6 +1111,7 @@ int main() {
     HomingShotTests::CheckSmoothAimSnap();
     HomingShotTests::CheckAimSnap();
     HomingShotTests::CheckReticle();
+    HomingShotTests::CheckBossPartTargets();
     HomingShotTests::CheckStage4Easy();
     HomingShotTests::CheckSpreadFalloff();
     HomingShotTests::Run();

@@ -195,7 +195,7 @@ public:
      * @param position ワールド中心の出力先
      * @return 攻撃可能な標的がある場合true
      */
-    static bool GetHomingTarget(SideScrollingShooter& shooter, int index, Vector3& position);
+    static bool GetHomingTarget(const SideScrollingShooter& shooter, int index, Vector3& position);
 
     /**
      * @brief 自機弾とEASTSOURCE部位の衝突または追尾座標を判定する
@@ -441,6 +441,9 @@ private:
     static void TickEntranceBlast(SideScrollingShooter& shooter);
     /** @brief ビル内部の落下物を描画する @param shooter 描画対象 @param renderer 描画先 @param camera 現在の3Dカメラ @param weight 3D視点の補間率 @return なし */
     static void DrawShaftObstacles(const SideScrollingShooter& shooter, Renderer& renderer,
+        const Camera3D& camera, float weight);
+    /** @brief Chapter 3のトンネルを描画する @param shooter 描画対象 @param renderer 描画先 @param camera 現在の3Dカメラ @param weight 3D視点の補間率 @return なし */
+    static void DrawShaftTunnel(const SideScrollingShooter& shooter, Renderer& renderer,
         const Camera3D& camera, float weight);
     /** @brief 入口の扉と爆破後の穴を描画する @param shooter 描画対象 @param renderer 描画先 @param camera 現在の3Dカメラ @return なし */
     static void DrawEntranceDoor(const SideScrollingShooter& shooter, Renderer& renderer,

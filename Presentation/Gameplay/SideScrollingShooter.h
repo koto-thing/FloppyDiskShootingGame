@@ -985,6 +985,13 @@ private:
      * @return なし
      */
     void DrawReticle(Renderer& renderer, const Camera3D& camera) const;
+    /**
+     * @brief ボスの攻撃可能な部位へ半透明のターゲット枠を描画する
+     * @param renderer 描画先レンダラー
+     * @param camera 部位座標の投影に使うカメラ
+     * @return なし
+     */
+    void DrawBossPartTargets(Renderer& renderer, const Camera3D& camera) const;
     /** @brief ボス戦前会話を画面へ描画する */
     void DrawBossStory(Renderer& renderer) const;
     /** @brief 墨の筆跡を模したボス名演出を画面へ描画する */

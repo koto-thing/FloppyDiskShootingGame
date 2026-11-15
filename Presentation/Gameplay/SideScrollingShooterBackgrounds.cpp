@@ -362,6 +362,7 @@ void SideScrollingShooter::Render2D(Renderer& renderer) const {
     renderer.ResetCamera();
     DrawHudBackground(renderer);
     StageDispatch::DrawOverlay2D(*this, renderer);
+    DrawBossPartTargets(renderer, camera);
     ForEachPlayer([&] { DrawPowerUp(renderer, camera, SidePlaneZ); });
     DrawTutorialControlHint(renderer, camera, SidePlaneZ);
     DrawViewToggleCooldownHud(renderer, camera, SidePlaneZ);
@@ -510,6 +511,7 @@ void SideScrollingShooter::Render3D(Renderer& renderer) const {
     DrawHudBackground(renderer);
     StageDispatch::DrawOverlay3D(*this, renderer, camera);
     if (StageDispatch::IsCinematic(*this)) return;
+    DrawBossPartTargets(renderer, camera);
     ForEachPlayer([&] {
         if (!m_networkGame || m_activePlayer == m_renderPlayer) DrawReticle(renderer, camera);
     });

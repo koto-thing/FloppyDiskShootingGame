@@ -341,6 +341,25 @@ void SideScrollingShooter::Stage5Module::ApplyCameraCorrection(
         }
         railPosition = {center.x * FollowRate, center.y * FollowRate + 0.6f, center.z - 9.0f};
         railTarget = {center.x * FollowRate, center.y * FollowRate + 0.2f, center.z + 20.0f};
+
+        // トンネル付近はカメラと注視点を各奥行きの通路中心へ寄せ、壁へめり込まずに先のカーブを見せる
+        const auto& tunnel = shooter.m_stage5.shaftTunnel;
+        if (tunnel.active) {
+            constexpr float BlendTravel = 0.35f;
+            const auto pull = [&tunnel](Vector3& point) {
+                const float distance = tunnel.entranceTravel -
+                    ShooterStages::Stage5::ShaftTravelFromZ(point.z);
+                const float outside = distance < 0.0f ? -distance :
+                    (std::max)(0.0f, distance - ShooterStages::Stage5::ShaftTunnelLength);
+                const float blend = SmoothStep(Math::Clamp01(1.0f - outside / BlendTravel));
+                point.x = Math::Lerp(point.x,
+                    ToWorldX(ShooterStages::Stage5::ShaftTunnelSample(tunnel.centerX, distance)), blend);
+                point.y = Math::Lerp(point.y,
+                    ToWorldY(ShooterStages::Stage5::ShaftTunnelSample(tunnel.centerY, distance)), blend);
+            };
+            pull(railPosition);
+            pull(railTarget);
+        }
         return;
     }
 
@@ -1001,6 +1020,7 @@ void SideScrollingShooter::Stage5Module::DrawPart2Background(
     }
 
     DrawShaftObstacles(shooter, renderer, camera, weight);
+    DrawShaftTunnel(shooter, renderer, camera, weight);
 }
 
 /**
@@ -1061,6 +1081,119 @@ void SideScrollingShooter::Stage5Module::DrawShaftObstacles(const SideScrollingS
         const float sign = obstacle.y > 0.0f ? -1.0f : 1.0f;
         shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
             center + Vector3 {0.0f, sign * size.y * 0.5f, -size.z * 0.5f}, {width, 0.2f, 0.2f}, {}, edge);
+    }
+}
+
+/**
+ * @brief Chapter 3のトンネルを2Dと3Dの補間込みで描画する
+ * @param shooter 描画対象
+ * @param renderer 描画先
+ * @param camera 現在の3Dカメラ
+ * @param weight 3D視点の補間率
+ * @return なし
+ */
+void SideScrollingShooter::Stage5Module::DrawShaftTunnel(const SideScrollingShooter& shooter,
+    Renderer& renderer, const Camera3D& camera, float weight) {
+    using namespace ShooterStages::Stage5;
+    const ShaftTunnel& tunnel = shooter.m_stage5.shaftTunnel;
+    if (!tunnel.active) return;
+    constexpr float SegmentLength = 0.035f;
+    constexpr int SegmentCount = static_cast<int>(ShaftTunnelLength / SegmentLength) + 1;
+    constexpr float PanelThickness = 0.6f;
+    constexpr float WallX = ShaftHalfWidth * WorldXScale + 1.0f;
+    constexpr float WallY = ShaftHalfHeight * WorldYScale + 1.0f;
+    constexpr float RockColor[] = {0.15f, 0.14f, 0.16f, 1.0f};
+    constexpr float RibColor[] = {0.46f, 0.33f, 0.10f, 1.0f};
+    const float a = tunnel.apothem;
+    const float sideLength = a * 2.0f * (ShaftTunnelSqrt2 - 1.0f);
+    const float pulse = 0.70f + std::sin(static_cast<float>(shooter.m_frame) * 0.2f) * 0.30f;
+    const float rimColor[] = {
+        WallUpperLightColor[0] * pulse, WallUpperLightColor[1] * pulse, WallUpperLightColor[2] * pulse, 1.0f
+    };
+    const auto Draw = [&](const Vector3& position, const Vector3& size, float roll, const float* color) {
+        shooter.DrawModelPrimitive(renderer, camera, static_cast<int>(PrimitiveShape::Box),
+            position, size, {0.0f, 0.0f, roll}, color);
+    };
+
+    // 中心線に沿って八角形の壁板を並べ、2Dでは左右の壁板を断面の外側を埋める岩盤へ変形させる
+    for (int segment = 0; segment < SegmentCount; ++segment) {
+        const float nearDistance = static_cast<float>(segment) * SegmentLength;
+        const float farDistance = (std::min)(nearDistance + SegmentLength, ShaftTunnelLength);
+        const float nearTravel = tunnel.entranceTravel - nearDistance;
+        const float farTravel = tunnel.entranceTravel - farDistance;
+        if (nearTravel < -0.05f || farTravel > 1.05f) continue;
+        const float middle = (nearDistance + farDistance) * 0.5f;
+        const float cx = ToWorldX(ShaftTunnelSample(tunnel.centerX, middle));
+        const float cy = ToWorldY(ShaftTunnelSample(tunnel.centerY, middle));
+        const float nearZ = ShaftObstacleZ(nearTravel);
+        const float farZ = ShaftObstacleZ(farTravel);
+        const float sideNearY = ToWorldY(ShaftObstacleSideY(nearTravel));
+        const float sideFarY = ToWorldY(ShaftObstacleSideY(farTravel));
+        const float sideCenterY = (sideNearY + sideFarY) * 0.5f;
+        const float sideHeight = (sideFarY - sideNearY) * 1.15f;
+
+        // 自機より後方の壁板はディザで透かし、カメラとの間で自機を隠さない
+        const bool rib = segment % 4 == 0 || segment == SegmentCount - 1;
+        const float* baseColor = rib ? RibColor : RockColor;
+        const float alpha = weight > 0.5f && farZ < PlayerRailZ ? -0.45f : 1.0f;
+        const float color[] = {baseColor[0], baseColor[1], baseColor[2], alpha};
+        for (int face = 0; face < 8; ++face) {
+            const float angle = static_cast<float>(face) * Math::Pi * 0.25f;
+            const float nx = std::cos(angle);
+            const float ny = std::sin(angle);
+            const Vector3 rail {cx + nx * (a + PanelThickness * 0.5f),
+                cy + ny * (a + PanelThickness * 0.5f), (nearZ + farZ) * 0.5f};
+            const Vector3 railSize {PanelThickness, sideLength * 1.05f, (farZ - nearZ) * 1.15f};
+            Vector3 side {cx + nx * a, sideCenterY, SidePlaneZ + 0.4f};
+            Vector3 sideSize {};
+            if (face == 0) {
+                side.x = (cx + a + WallX) * 0.5f;
+                sideSize = {WallX - cx - a, sideHeight, 0.8f};
+            } else if (face == 4) {
+                side.x = (cx - a - WallX) * 0.5f;
+                sideSize = {WallX + cx - a, sideHeight, 0.8f};
+            }
+            Draw(Vector3::Lerp(side, rail, weight), Vector3::Lerp(sideSize, railSize, weight),
+                angle * weight, color);
+        }
+
+        // 2Dは通路の縁へ傾きを合わせた発光線を引き、階段状の岩盤でも抜ける線を読ませる
+        if (weight >= 0.999f) continue;
+        const float dx = ToWorldX(ShaftTunnelSample(tunnel.centerX, farDistance) -
+            ShaftTunnelSample(tunnel.centerX, nearDistance));
+        const float dy = sideFarY - sideNearY;
+        const float roll = -std::atan2(dx, dy);
+        const float edgeLength = std::sqrt(dx * dx + dy * dy) * 1.1f * (1.0f - weight);
+        for (int edge = -1; edge <= 1; edge += 2) {
+            Draw({cx + static_cast<float>(edge) * a, sideCenterY, SidePlaneZ},
+                {0.14f * (1.0f - weight), edgeLength, 0.3f}, roll, rimColor);
+        }
+    }
+
+    // 3Dの入口は八角形の穴を残してシャフト断面を塞ぎ、縁を発光させて進入位置を示す
+    if (weight <= 0.001f || tunnel.entranceTravel < -0.05f || tunnel.entranceTravel > 1.05f) return;
+    const float cx = ToWorldX(ShaftTunnelSample(tunnel.centerX, 0.0f));
+    const float cy = ToWorldY(ShaftTunnelSample(tunnel.centerY, 0.0f));
+    const float z = ShaftObstacleZ(tunnel.entranceTravel) - 0.5f;
+    constexpr float depth = 1.0f;
+    const float faceColor[] = {RockColor[0], RockColor[1], RockColor[2],
+        z < PlayerRailZ ? -0.45f : 1.0f};
+    Draw({(cx - a - WallX) * 0.5f, 0.0f, z}, Vector3 {WallX + cx - a, WallY * 2.0f, depth} * weight, 0.0f, faceColor);
+    Draw({(cx + a + WallX) * 0.5f, 0.0f, z}, Vector3 {WallX - cx - a, WallY * 2.0f, depth} * weight, 0.0f, faceColor);
+    Draw({cx, (cy + a + WallY) * 0.5f, z}, Vector3 {a * 2.0f, WallY - cy - a, depth} * weight, 0.0f, faceColor);
+    Draw({cx, (cy - a - WallY) * 0.5f, z}, Vector3 {a * 2.0f, WallY + cy - a, depth} * weight, 0.0f, faceColor);
+    for (int face = 0; face < 8; ++face) {
+        const float angle = static_cast<float>(face) * Math::Pi * 0.25f;
+        const float nx = std::cos(angle);
+        const float ny = std::sin(angle);
+
+        // 斜めの4面は四隅の三角形を埋め、全8面へ縁の発光を付ける
+        if (face % 2 == 1) {
+            Draw({cx + nx * a * 1.3f, cy + ny * a * 1.3f, z},
+                Vector3 {a * 0.6f, sideLength, depth} * weight, angle, faceColor);
+        }
+        Draw({cx + nx * (a + 0.1f), cy + ny * (a + 0.1f), z - 0.55f},
+            Vector3 {0.2f, sideLength * 1.05f, 0.2f} * weight, angle, rimColor);
     }
 }
 
