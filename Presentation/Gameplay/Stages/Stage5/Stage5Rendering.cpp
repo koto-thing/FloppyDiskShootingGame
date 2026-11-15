@@ -660,7 +660,7 @@ bool SideScrollingShooter::Stage5Module::DrawBossModel(
         WallSecurityDroneModelView::DrawAll(transform, pose,
             [&](PrimitiveShape shape, const Matrix4x4& world,
                 const ColorF& color, WallSecurityDronePartGroup) {
-                const float partColor[] = {color.r, color.g, color.b, color.a};
+                const float partColor[] = {color.r, color.g, color.b, color.a * enemy.droneWallOpacity};
                 shooter.DrawModelPrimitive(renderer, camera,
                     static_cast<int>(shape), world, partColor);
             });

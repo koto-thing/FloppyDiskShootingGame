@@ -3156,7 +3156,7 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
                 });
             }
         } else {
-            TickWallEnemyWave(shooter, 108 - tier * 18);
+            TickWallEnemyWave(shooter, 168 - tier * 38);
         }
         if (shooter.m_stage5.phaseTimer >= chapterFrames) {
             shooter.m_stage5.shaftObstacles = {};

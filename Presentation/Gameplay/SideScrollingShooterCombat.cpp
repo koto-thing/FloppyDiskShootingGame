@@ -104,7 +104,7 @@ void SideScrollingShooter::TickPlayer() {
         dx *= 0.7071f;
         dy *= 0.7071f;
     }
-    const float speedScale = Player().m_slowMove ? 0.5f : 1.0f;
+    const float speedScale = Player().m_slowMove ? 0.6f : 1.0f;
     if (IsTayamaBattle()) {
         // 3Dはボス中心の周回、2Dは切替時に固定したカメラ面内の横移動として扱う
         if (IsTayamaOrbitViewActive() && m_activePlayer == 0) {
@@ -113,9 +113,9 @@ void SideScrollingShooter::TickPlayer() {
                 Math::TwoPi);
             Player().m_playerX = 0.0f;
         } else {
-            Player().m_playerX = (std::clamp)(Player().m_playerX + dx * 0.023f * speedScale, -1.2f, 1.2f);
+            Player().m_playerX = (std::clamp)(Player().m_playerX + dx * 0.033f * speedScale, -1.2f, 1.2f);
         }
-        Player().m_playerY = (std::clamp)(Player().m_playerY + dy * 0.058f * speedScale,
+        Player().m_playerY = (std::clamp)(Player().m_playerY + dy * 0.068f * speedScale,
             ShooterStages::Stage5::TayamaPlayerMinY,
             ShooterStages::Stage5::TayamaPlayerMaxY);
         return;
@@ -358,11 +358,16 @@ void SideScrollingShooter::TickEnemies() {
         }
 
         // 巨大障害物へ接触した通常敵はスコアやアイテムを発生させず、その場で破壊する
-        // ボス(type 2)は対象外
+        // 壁面警備ドローンは破壊せず、接触中の不透明度だけを変える
         const float boneHitRadius = IsRailGameplayActive() ? enemy.behavior->CollisionRadius3D(enemy) / WorldXScale :
             enemy.behavior->CollisionRadius(enemy);
-        if (enemy.type != 2 &&
-            StageDispatch::HitsHazard(*this, enemy.x, enemy.y, enemy.z, boneHitRadius)) {
+        const bool touchesHazard = enemy.type != Stage::BossEnemy &&
+            StageDispatch::HitsHazard(*this, enemy.x, enemy.y, enemy.z, boneHitRadius);
+        if (enemy.type == Stage::WallSecurityDroneEnemy) {
+            constexpr float FadeStep = 0.5f / 8.0f;
+            const float delta = touchesHazard ? -FadeStep : FadeStep;
+            enemy.droneWallOpacity = (std::clamp)(enemy.droneWallOpacity + delta, 0.5f, 1.0f);
+        } else if (touchesHazard) {
             SpawnExplosion(enemy.x, enemy.y, enemy.z, true);
             SpawnEnemyDebris(enemy);
             enemy.active = false;
@@ -632,6 +637,8 @@ bool SideScrollingShooter::HitEnemyModel(const Shot& shot, const Enemy& enemy) c
         Matrix4x4 inverse;
         if (!(camera.ProjectionMatrix() * camera.ViewMatrix()).TryInverse(inverse)) return false;
         Enemy visible = enemy;
+        // 描画色のフェードで衝突判定用の機体部品を除外しない
+        visible.droneWallOpacity = 1.0f;
         const float blend = IsRailRenderActive() ? RailBlend() : 0.0f;
         if (IsRailRenderActive()) {
             const bool entering = m_viewTransitionTimer > 0 && m_nextViewMode == ViewMode::Rail3D;
@@ -964,6 +971,7 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
         m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
         enemy.entersWallFromTop = enemy.type == Stage::WallSecurityDroneEnemy &&
             IsRailGameplayActive();
+        enemy.droneWallOpacity = 1.0f;
         ApplyDifficultyToEnemyHp(enemy);
 
         // 初めて画面へ出現した通常敵を永続ギャラリーへ登録する

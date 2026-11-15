@@ -314,6 +314,7 @@ private:
         std::array<int, BossPartCount> bossPartHitFlashFrames {};
         bool collisionEnabled = true;
         bool entersWallFromTop = false;
+        float droneWallOpacity = 1.0f;
         const EnemyBehavior* behavior = nullptr;
         bool active = false;
     };
