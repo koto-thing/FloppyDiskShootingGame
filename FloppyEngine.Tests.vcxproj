@@ -121,6 +121,6 @@
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)Scripts\PackMml.ps1&quot;" />
   </Target>
   <Target Name="PackAudioSamples" BeforeTargets="ClCompile">
-    <Exec Command="python &quot;$(ProjectDir)Scripts\PackAudioSamples.py&quot;" />
+    <Exec Command="&quot;$(AudioPythonExe)&quot; -B &quot;$(ProjectDir)Scripts\PackAudioSamples.py&quot;" />
   </Target>
 </Project>

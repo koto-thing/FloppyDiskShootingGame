@@ -447,7 +447,7 @@ private:
         const Camera3D& camera);
     static void SpawnEnemyShotAt(SideScrollingShooter& shooter,
         float sourceX, float sourceY, float sourceZ,
-        float targetX, float targetY, float targetZ, float speed);
+        float targetX, float targetY, float targetZ, float speed, bool eastsourcePursuit = false);
     static Stage5ModelTransform EastsourceTransform(
         const SideScrollingShooter& shooter, const Enemy& eastsource);
     static EastsourceModelState EastsourceState(const Enemy& eastsource);

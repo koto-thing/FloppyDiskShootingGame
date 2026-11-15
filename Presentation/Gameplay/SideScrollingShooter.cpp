@@ -1456,6 +1456,8 @@ void SideScrollingShooter::RestartCurrentChapter() {
     // ボス戦中は警報を再生せずBキーと同じ戦闘開始状態へ戻す
     const bool restartBossBattle = m_bossBattle;
     if (restartBossBattle) {
+		// ボス戦のやり直しでは被弾時点のPowerから0.25回復する
+        Player().m_power = (std::min)(MaxPower, Player().m_power + 0.25f);
         // ボス戦のやり直しでは消費したボムを初期数へ戻す
         Player().m_bombCount = InitialBombCount;
         if (!StageDispatch::HandleDebugBossInput(*this)) {

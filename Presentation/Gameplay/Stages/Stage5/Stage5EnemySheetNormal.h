@@ -36,7 +36,7 @@ public:
             {MissileShooterEnemy,  50, 200, 1.6f, 0.80f, -1.60f, 60.0f},
         };
         static constexpr EnemySpawnRule Chapter2[] = {
-            {DiveRusherEnemy, 50, 50, 1.6f, 0.00f, 0.0f, 40.0f},
+            {DiveRusherEnemy, 50, 50, 1.6f, 0.00f, -1.00f, 40.0f},
             {StraightShooterEnemy, 25, 100, 1.6f, 1.00f, 1.00f, 40.0f},
             {StraightShooterEnemy, 25, 100, 1.6f, -1.00f, -1.00f, 40.0f},
         };
