@@ -4,12 +4,41 @@
 #include <memory>
 #include "../Engine/Graphics/Renderer.h"
 #include "../Presentation/Gameplay/SideScrollingShooter.h"
+#include "../Presentation/Gameplay/Stages/Common/StageDefinition.h"
 #include "../Presentation/Gameplay/Stages/Stage5/Stage5Module.h"
 #include "../Presentation/Gameplay/Stages/Stage2/Stage2Module.h"
 #include "../Presentation/Gameplay/Stages/Stage4/Stage4Module.h"
 #include "../Presentation/Gameplay/Stages/Stage3/Stage3Module.h"
 
 struct HomingShotTests {
+    /** @brief 第2部の難易度別出現間隔とトンネル前後の出現停止を検証する @return なし */
+    static void CheckStage5DroneSpawn() {
+        using Game = SideScrollingShooter;
+        using namespace ShooterStages::Stage5;
+        // 下層の通常出現と上層の入口直前・通過中を各難易度で確認する
+        for (auto difficulty : {Easy, Normal, Hard}) {
+            for (int scenario = 0; scenario < 3; ++scenario) {
+                auto game = std::make_unique<Game>();
+                auto& g = *game;
+                g.m_stageNumber = 5;
+                g.m_difficulty = difficulty;
+                g.m_stage = &Game::Stage5Module::Definition(difficulty);
+                g.m_stage5.phase = scenario == 0 ? Game::Stage5Phase::WallClimbLower :
+                    Game::Stage5Phase::WallClimbUpper;
+                g.m_stage5.phaseTimer = WallClimbFadeFrames + (scenario == 2 ? 500 : 60);
+                if (scenario == 2) g.m_stage5.shaftTunnel = BuildShaftTunnel(1, difficulty);
+                Game::Stage5Module::TickBeforeFrame(g);
+                int drones = 0;
+                for (const auto& enemy : g.m_enemies) {
+                    if (enemy.active && enemy.type == Game::Stage::WallSecurityDroneEnemy) ++drones;
+                }
+                const bool shouldSpawn = scenario == 0 && difficulty != Hard;
+                assert(drones == (shouldSpawn ? 1 : 0));
+                assert(g.m_stage5.guardSpawnCooldown ==
+                    (shouldSpawn ? 168 * (difficulty == Easy ? 150 : 100) / 100 : 0));
+            }
+        }
+    }
     /** @brief Stage3の低い艦尾機銃へ移動可能範囲から通常弾が届くことを検証する @return なし */
     static void CheckStage3SternGun() {
         using Game = SideScrollingShooter;
@@ -1102,6 +1131,7 @@ struct HomingShotTests {
 
 /** @brief 追尾回帰チェックを実行する @return 成功時0 */
 int main() {
+    HomingShotTests::CheckStage5DroneSpawn();
     HomingShotTests::CheckStage3SternGun();
     HomingShotTests::CheckLaunchVolley();
     HomingShotTests::CheckSpiral();

@@ -474,14 +474,23 @@ void SideScrollingShooter::CityBackgroundModule::DrawTruck(
     // 車体後面を囲う発光フレームで暗い市街地でも外形を見失わないようにする
     const float frameZ = z - depth * 0.505f;
     const float frameThickness = Math::Lerp(0.12f, 0.18f, railWeight);
-    DrawModelPrimitive(renderer, camera, 1,
-        x, y + height * 0.47f, frameZ,
-        width, frameThickness, Math::Lerp(0.08f, 0.14f, railWeight), accentColor);
+    const float frameDepth = Math::Lerp(0.08f, 0.14f, railWeight);
+    const float hazardColor[4] = {1.0f, 0.08f, 0.08f, alpha};
+    const float* frameColor = shooter.m_bossBattle ? accentColor : hazardColor;
     for (int side = -1; side <= 1; side += 2) {
+        const float edgeX = x + static_cast<float>(side) * width * 0.5f;
+        const float edgeY = y + static_cast<float>(side) * height * 0.5f;
         DrawModelPrimitive(renderer, camera, 1,
-            x + static_cast<float>(side) * width * 0.47f, y, frameZ,
-            frameThickness, height, Math::Lerp(0.08f, 0.14f, railWeight),
-            accentColor);
+            x, edgeY, frameZ, width + frameThickness, frameThickness, frameDepth, frameColor);
+        DrawModelPrimitive(renderer, camera, 1,
+            edgeX, y, frameZ, frameThickness, height, frameDepth, frameColor);
+        if (railWeight > 0.0f) {
+            // 斜めからも車体の外形が分かるように奥行き方向の角をつなぐ
+            DrawModelPrimitive(renderer, camera, 1,
+                edgeX, y - height * 0.5f, z, frameThickness, frameThickness, depth, frameColor);
+            DrawModelPrimitive(renderer, camera, 1,
+                edgeX, y + height * 0.5f, z, frameThickness, frameThickness, depth, frameColor);
+        }
     }
 
     // 発光帯を荷台正面から離し、同一深度面によるちらつきを防ぐ

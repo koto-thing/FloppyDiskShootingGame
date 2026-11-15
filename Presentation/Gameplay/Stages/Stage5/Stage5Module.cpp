@@ -3222,7 +3222,13 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
                     shooter.m_stage5.phaseTimer - ShooterStages::Stage5::WallClimbFadeFrames,
                     static_cast<int>(shooter.m_difficulty)) <
                     ShooterStages::Stage5::ShaftTunnelDroneHoldFrames);
-            if (!tunnelWindow) TickWallEnemyWave(shooter, 168 - tier * 38);
+            const int normalInterval = 168 - tier * 38;
+            const int intervalPercent =
+                shooter.m_difficulty == Easy ? 150 : 100;
+
+            if (!tunnelWindow && shooter.m_difficulty != Hard) {
+                TickWallEnemyWave(shooter, (std::max)(1, normalInterval * intervalPercent / 100));
+            }
         }
         if (shooter.m_stage5.phaseTimer >= chapterFrames) {
             shooter.m_stage5.shaftObstacles = {};
