@@ -4,12 +4,41 @@
 #include <memory>
 #include "../Engine/Graphics/Renderer.h"
 #include "../Presentation/Gameplay/SideScrollingShooter.h"
+#include "../Presentation/Gameplay/Stages/Common/StageDefinition.h"
 #include "../Presentation/Gameplay/Stages/Stage5/Stage5Module.h"
 #include "../Presentation/Gameplay/Stages/Stage2/Stage2Module.h"
 #include "../Presentation/Gameplay/Stages/Stage4/Stage4Module.h"
 #include "../Presentation/Gameplay/Stages/Stage3/Stage3Module.h"
 
 struct HomingShotTests {
+    /** @brief 第2部の難易度別出現間隔とトンネル前後の出現停止を検証する @return なし */
+    static void CheckStage5DroneSpawn() {
+        using Game = SideScrollingShooter;
+        using namespace ShooterStages::Stage5;
+        // 下層の通常出現と上層の入口直前・通過中を各難易度で確認する
+        for (auto difficulty : {Easy, Normal, Hard}) {
+            for (int scenario = 0; scenario < 3; ++scenario) {
+                auto game = std::make_unique<Game>();
+                auto& g = *game;
+                g.m_stageNumber = 5;
+                g.m_difficulty = difficulty;
+                g.m_stage = &Game::Stage5Module::Definition(difficulty);
+                g.m_stage5.phase = scenario == 0 ? Game::Stage5Phase::WallClimbLower :
+                    Game::Stage5Phase::WallClimbUpper;
+                g.m_stage5.phaseTimer = WallClimbFadeFrames + (scenario == 2 ? 500 : 60);
+                if (scenario == 2) g.m_stage5.shaftTunnel = BuildShaftTunnel(1, difficulty);
+                Game::Stage5Module::TickBeforeFrame(g);
+                int drones = 0;
+                for (const auto& enemy : g.m_enemies) {
+                    if (enemy.active && enemy.type == Game::Stage::WallSecurityDroneEnemy) ++drones;
+                }
+                const bool shouldSpawn = scenario == 0 && difficulty != Hard;
+                assert(drones == (shouldSpawn ? 1 : 0));
+                assert(g.m_stage5.guardSpawnCooldown ==
+                    (shouldSpawn ? 168 * (difficulty == Easy ? 150 : 100) / 100 : 0));
+            }
+        }
+    }
     /** @brief Stage3の低い艦尾機銃へ移動可能範囲から通常弾が届くことを検証する @return なし */
     static void CheckStage3SternGun() {
         using Game = SideScrollingShooter;
@@ -492,6 +521,39 @@ struct HomingShotTests {
         g.DrawReticle(renderer, camera);
         assert(renderer.CommandCount() == 28);
         assert(std::abs((renderer.Command(20).rect.position.x + renderer.Command(26).rect.position.x) * 0.5f - restingX) < 0.0001f);
+    }
+    /** @brief 残存するボス部位ごとに枠4本とTGT表記を描画することを検証する @return なし */
+    static void CheckBossPartTargets() {
+        using Game = SideScrollingShooter;
+        auto game = std::make_unique<Game>();
+        auto& g = *game;
+        g.Initialize(nullptr, Spread, Easy);
+        g.m_viewMode = g.m_nextViewMode = Game::ViewMode::Rail3D;
+        const Vector3 aim = g.PlayerAimPoint();
+        auto& boss = g.m_enemies[0];
+        boss.active = true;
+        boss.type = 2;
+        boss.hp = 100;
+        boss.x = Game::FromWorldX(aim.x);
+        boss.y = Game::FromWorldY(aim.y);
+        boss.z = aim.z;
+        boss.bossPartHp.fill(0);
+        for (int i = 0; i <= Game::BossRightEngine; ++i) boss.bossPartHp[i] = 10;
+        Camera3D camera;
+        g.ConfigureRailCamera(camera, g.m_aimViewport);
+        Renderer renderer;
+        g.DrawBossPartTargets(renderer, camera);
+        assert(renderer.CommandCount() == 5 * 5);
+
+        // 破壊済み部位とクリア後は表示しない
+        boss.bossPartHp[Game::BossNose] = 0;
+        renderer.BeginFrame();
+        g.DrawBossPartTargets(renderer, camera);
+        assert(renderer.CommandCount() == 4 * 5);
+        g.m_clear = true;
+        renderer.BeginFrame();
+        g.DrawBossPartTargets(renderer, camera);
+        assert(renderer.CommandCount() == 0);
     }
     /** @brief スナップ対象の選択、弾道補正、解除と表示を検証する @return なし */
     static void CheckAimSnap() {
@@ -1069,6 +1131,7 @@ struct HomingShotTests {
 
 /** @brief 追尾回帰チェックを実行する @return 成功時0 */
 int main() {
+    HomingShotTests::CheckStage5DroneSpawn();
     HomingShotTests::CheckStage3SternGun();
     HomingShotTests::CheckLaunchVolley();
     HomingShotTests::CheckSpiral();
@@ -1078,6 +1141,7 @@ int main() {
     HomingShotTests::CheckSmoothAimSnap();
     HomingShotTests::CheckAimSnap();
     HomingShotTests::CheckReticle();
+    HomingShotTests::CheckBossPartTargets();
     HomingShotTests::CheckStage4Easy();
     HomingShotTests::CheckSpreadFalloff();
     HomingShotTests::Run();

@@ -607,7 +607,7 @@ bool SideScrollingShooter::Stage5Module::HitsHazard(const SideScrollingShooter& 
     for (const auto& obstacle : shooter.m_stage5.shaftObstacles) {
         if (ShooterStages::Stage5::ShaftObstacleHits(obstacle, rail, x, y, z, radius)) return true;
     }
-    return false;
+    return ShooterStages::Stage5::ShaftTunnelHits(shooter.m_stage5.shaftTunnel, rail, x, y, z, radius);
 }
 
 /**
@@ -620,6 +620,13 @@ bool SideScrollingShooter::Stage5Module::TryDamageShaftObstacle(
     SideScrollingShooter& shooter, Shot& shot) {
     if (shot.enemy || !ShooterStages::Stage5::IsPart2RoutePhase(shooter.m_stage5.phase)) return false;
     const bool rail = shooter.IsRailGameplayActive();
+
+    // トンネルの岩盤は通常弾を止め、ボムだけを貫通させる
+    if (ShooterStages::Stage5::ShaftTunnelHits(shooter.m_stage5.shaftTunnel, rail,
+        shot.x, shot.y, shot.z, shot.hitRadius)) {
+        if (!shot.bomb) shot.active = false;
+        return true;
+    }
     for (auto& obstacle : shooter.m_stage5.shaftObstacles) {
         if (!ShooterStages::Stage5::ShaftObstacleHits(obstacle, rail,
             shot.x, shot.y, shot.z, shot.hitRadius)) continue;
@@ -845,6 +852,7 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
     shooter.m_stage5.coreTargetZ = PlayerRailZ;
     shooter.m_stage5.guardSpawnCooldown = 0;
     shooter.m_stage5.shaftObstacles = {};
+    shooter.m_stage5.shaftTunnel = {};
 
     if (phase != Stage5Phase::Approach &&
         !ShooterStages::Stage5::IsPart2RoutePhase(phase)) {
@@ -912,6 +920,12 @@ void SideScrollingShooter::Stage5Module::StartPhase(SideScrollingShooter& shoote
         } else if (phase == Stage5Phase::WallClimbUpper) {
             wallCheckpoint = true;
             checkpoint = Stage5Checkpoint::WallClimbUpper;
+
+            // 初回突入時だけ共有乱数からトンネル形状の種を決め、復帰とコンティニューでは同じ形を再現する
+            if (saveCheckpoint) {
+                shooter.m_stage5.shaftTunnelSeed = ShooterStages::Stage5::WallWaveHash(
+                    static_cast<int>(GameplayRandom::Range(0.0f, 65535.0f)), 53);
+            }
             shooter.m_stage5.tayamaTransformation = 0.0f;
         } else if (phase == Stage5Phase::RooftopArrival) {
             shooter.m_stage5.tayamaTransformation = 0.0f;
@@ -3026,23 +3040,58 @@ void SideScrollingShooter::Stage5Module::TickShaftObstacles(
         if (obstacle.travel >= 1.0f) obstacle.active = false;
     }
 
+    // トンネルを進め、入口が警備ドローンの巡回域へ届いたら岩盤で押し潰す
+    static_assert(ShaftWorldXScale == WorldXScale && ShaftWorldYScale == WorldYScale);
+    ShaftTunnel& tunnel = shooter.m_stage5.shaftTunnel;
+    if (tunnel.active) {
+        const float previous = tunnel.entranceTravel;
+        tunnel.entranceTravel += ShaftTravelPerFrame(tier);
+        if (previous < ShaftTunnelDroneCrushTravel && tunnel.entranceTravel >= ShaftTunnelDroneCrushTravel) {
+            for (auto& enemy : shooter.m_enemies) {
+                if (!enemy.active || enemy.type != Stage::WallSecurityDroneEnemy) continue;
+                shooter.SpawnExplosion(enemy.x, enemy.y, enemy.z, true);
+                enemy.active = false;
+                // 岩盤に巻き込まれた機体は全滅率から減らさない
+                ++shooter.m_chapterResult.enemyDefeatCount;
+            }
+        }
+        if (tunnel.entranceTravel - ShaftTunnelLength >= 1.0f) tunnel.active = false;
+    }
+
     // 区画の終端では新規生成を止め、結果表示までに通路を空ける
     const int elapsed = shooter.m_stage5.phaseTimer - WallClimbFadeFrames;
     if (elapsed < 0 || shooter.m_stage5.phaseTimer > chapterFrames - ShaftSpawnStopFrames) return;
-    const ShaftPattern gate = ShaftGatePatternAt(tier, elapsed);
-    if (gate != ShaftPattern::Count) {
-        SpawnShaftPattern(shooter, gate, WallWaveHash(elapsed, tier + 37));
-        PlayCue(shooter, BarrageWarning);
-        return;
-    }
+    const int difficulty = static_cast<int>(shooter.m_difficulty);
+    if (tier == 2) {
+        // 上層は関門の代わりに、難易度ごとの回数だけ毎回異なる形のトンネルを通過させる
+        const int framesUntilTunnel = FramesUntilShaftTunnel(elapsed, difficulty);
+        if (framesUntilTunnel == 0) {
+            const int index = (elapsed - ShaftTunnelFirstFrame) / ShaftTunnelSpacingFrames(difficulty);
+            tunnel = BuildShaftTunnel(WallWaveHash(index,
+                static_cast<int>(shooter.m_stage5.shaftTunnelSeed)), difficulty);
+            PlayCue(shooter, BarrageWarning);
+            return;
+        }
 
-    // 関門の前後は通常障害物を置かず、視点切替と通過に集中できる間を作る
-    const int gateOffset = (elapsed - ShaftGateFirstFrame) % ShaftGateIntervalFrames;
-    const bool nearGate = elapsed > ShaftGateFirstFrame - ShaftGateClearFrames &&
-        (gateOffset < ShaftGateClearFrames ||
-            gateOffset > ShaftGateIntervalFrames - ShaftGateClearFrames);
-    const int interval = ShaftObstacleInterval(tier, static_cast<int>(shooter.m_difficulty));
-    if (elapsed % interval != 0 || nearGate) return;
+        // 通過中と入口の直前は通常障害物を置かず、トンネルの前後に間を作る
+        if (tunnel.active || framesUntilTunnel < ShaftTunnelClearFrames) return;
+    } else {
+        const ShaftPattern gate = ShaftGatePatternAt(tier, elapsed);
+        if (gate != ShaftPattern::Count) {
+            SpawnShaftPattern(shooter, gate, WallWaveHash(elapsed, tier + 37));
+            PlayCue(shooter, BarrageWarning);
+            return;
+        }
+
+        // 関門の前後は通常障害物を置かず、視点切替と通過に集中できる間を作る
+        const int gateOffset = (elapsed - ShaftGateFirstFrame) % ShaftGateIntervalFrames;
+        const bool nearGate = elapsed > ShaftGateFirstFrame - ShaftGateClearFrames &&
+            (gateOffset < ShaftGateClearFrames ||
+                gateOffset > ShaftGateIntervalFrames - ShaftGateClearFrames);
+        if (nearGate) return;
+    }
+    const int interval = ShaftObstacleInterval(tier, difficulty);
+    if (elapsed % interval != 0) return;
     const std::uint32_t hash = WallWaveHash(elapsed / interval, tier);
     SpawnShaftPattern(shooter, static_cast<ShaftPattern>(
         (hash >> 24) % static_cast<std::uint32_t>(ShaftPattern::Count)), hash);
@@ -3143,6 +3192,17 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
         const int chapterFrames = tier == 0 ? WallClimbLowerFrames :
             (tier == 1 ? WallClimbMiddleFrames : WallClimbUpperFrames);
         TickShaftObstacles(shooter, chapterFrames);
+
+        // 視点切替や復帰の無敵中に岩盤へ埋まった自機は、無敵が切れる前に通路内へ押し戻す
+        if (shooter.m_stage5.shaftTunnel.active) {
+            const bool rail = shooter.IsRailGameplayActive();
+            shooter.ForEachPlayer([&] {
+                if (shooter.Player().m_invincible <= 0) return;
+                ShooterStages::Stage5::ClampToShaftTunnel(shooter.m_stage5.shaftTunnel, rail,
+                    shooter.Player().m_playerX, shooter.Player().m_playerY,
+                    shooter.PlayerRailDepth(), ShooterStages::Stage5::ShaftTunnelPlayerRadius);
+            });
+        }
         // 道中クリア後は暗転より先に自機をシャフト上方へ高速退避させる
         if (ShooterStages::Stage5::IsPart2PlayerFlyingAway(
             shooter.m_stage5.phase, shooter.m_stage5.phaseTimer)) {
@@ -3156,16 +3216,23 @@ void SideScrollingShooter::Stage5Module::TickStateMachine(SideScrollingShooter& 
                 });
             }
         } else {
+            // トンネルの通過中と入口の直前は警備ドローンを出さない
+            const bool tunnelWindow = tier == 2 && (shooter.m_stage5.shaftTunnel.active ||
+                ShooterStages::Stage5::FramesUntilShaftTunnel(
+                    shooter.m_stage5.phaseTimer - ShooterStages::Stage5::WallClimbFadeFrames,
+                    static_cast<int>(shooter.m_difficulty)) <
+                    ShooterStages::Stage5::ShaftTunnelDroneHoldFrames);
             const int normalInterval = 168 - tier * 38;
             const int intervalPercent =
                 shooter.m_difficulty == Easy ? 150 : 100;
 
-            if(shooter.m_difficulty != Hard) {
+            if (!tunnelWindow && shooter.m_difficulty != Hard) {
                 TickWallEnemyWave(shooter, (std::max)(1, normalInterval * intervalPercent / 100));
             }
         }
         if (shooter.m_stage5.phaseTimer >= chapterFrames) {
             shooter.m_stage5.shaftObstacles = {};
+            shooter.m_stage5.shaftTunnel = {};
             shooter.FinishChapter();
         }
         return;
@@ -3436,7 +3503,7 @@ void SideScrollingShooter::Stage5Module::PlayCue(SideScrollingShooter& shooter, 
  * @return 攻撃可能な標的がある場合true
  */
 bool SideScrollingShooter::Stage5Module::GetHomingTarget(
-    SideScrollingShooter& shooter, int index, Vector3& position) {
+    const SideScrollingShooter& shooter, int index, Vector3& position) {
     // 龍は本体基準点ではなく実際に移動している各節を狙う
     if (shooter.m_stage5.phase == Stage5Phase::TayamaDragonBattle) {
         if (index < 0 || index >= ShooterStages::Stage5::TayamaDragonSegmentCount) return false;

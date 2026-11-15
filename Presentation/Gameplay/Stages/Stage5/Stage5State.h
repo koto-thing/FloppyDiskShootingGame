@@ -426,6 +426,335 @@ inline constexpr int WallClimbMiddleFrames = 1980;
 inline constexpr int WallClimbUpperFrames = 2640;
 inline constexpr int Part2PlayerFlyAwayFrames = 30;
 inline constexpr float Part2PlayerFlyAwaySpeed = 0.12f;
+
+// Chapter 3のトンネルは上層の落下速度で約7秒かけて自機を通過する長さとする
+inline constexpr int ShaftTunnelPointCount = 13;
+inline constexpr float ShaftTunnelLength = 3.0f;
+inline constexpr float ShaftTunnelPointSpacing =
+    ShaftTunnelLength / static_cast<float>(ShaftTunnelPointCount - 1);
+inline constexpr int ShaftTunnelFirstFrame = 120;
+inline constexpr int ShaftTunnelLastFrame = 1920;
+inline constexpr int ShaftTunnelClearFrames = 150;
+inline constexpr int ShaftTunnelDroneHoldFrames = 240;
+inline constexpr float ShaftTunnelDroneCrushTravel = 0.3f;
+inline constexpr float ShaftTunnelMaxStepX = 0.45f;
+inline constexpr float ShaftTunnelMaxStepY = 0.40f;
+inline constexpr float ShaftTunnelPlayerRadius = 0.055f;
+// SideScrollingShooter::WorldXScaleとWorldYScaleに一致させる
+inline constexpr float ShaftWorldXScale = 7.0f;
+inline constexpr float ShaftWorldYScale = 4.4f;
+inline constexpr float ShaftTunnelSqrt2 = 1.41421356f;
+
+/** @brief Chapter 3で通過する八角形断面のトンネル */
+struct ShaftTunnel {
+    std::array<float, ShaftTunnelPointCount> centerX {};
+    std::array<float, ShaftTunnelPointCount> centerY {};
+    float entranceTravel = 0.0f;
+    float apothem = 0.0f;
+    bool active = false;
+};
+
+/**
+ * @brief 難易度ごとのトンネル通過回数を取得する
+ * @param difficulty 難易度番号、0がEasyで2がHard
+ * @return Easyは2、Normalは3、Hardは4
+ */
+constexpr int ShaftTunnelCount(int difficulty) {
+    return difficulty <= 0 ? 2 : (difficulty >= 2 ? 4 : 3);
+}
+
+/**
+ * @brief トンネル同士の生成間隔を取得する
+ * @param difficulty 難易度番号、0がEasyで2がHard
+ * @return 生成間隔のフレーム数
+ */
+constexpr int ShaftTunnelSpacingFrames(int difficulty) {
+    return (ShaftTunnelLastFrame - ShaftTunnelFirstFrame) / (ShaftTunnelCount(difficulty) - 1);
+}
+
+/**
+ * @brief 次のトンネル生成までの残りフレーム数を取得する
+ * @param elapsed 暗転解除後の経過フレーム数
+ * @param difficulty 難易度番号、0がEasyで2がHard
+ * @return 生成時刻なら0、残りのトンネルがなければ十分大きな値
+ */
+constexpr int FramesUntilShaftTunnel(int elapsed, int difficulty) {
+    for (int index = 0; index < ShaftTunnelCount(difficulty); ++index) {
+        const int frame = ShaftTunnelFirstFrame + index * ShaftTunnelSpacingFrames(difficulty);
+        if (frame >= elapsed) return frame - elapsed;
+    }
+    return 1 << 20;
+}
+
+/**
+ * @brief 難易度ごとの八角形断面の内接円半径を取得する
+ * @param difficulty 難易度番号、0がEasyで2がHard
+ * @return ワールド座標での内接円半径
+ */
+constexpr float ShaftTunnelApothem(int difficulty) {
+    return difficulty <= 0 ? 4.4f : (difficulty >= 2 ? 2.7f : 3.5f);
+}
+
+/**
+ * @brief 3D視点のワールドZから落下進行率を取得する
+ * @param z ワールドZ座標
+ * @return 出現を0、通過完了を1とする進行率
+ */
+constexpr float ShaftTravelFromZ(float z) {
+    return (ShaftFarZ - z) / (ShaftFarZ - ShaftNearZ);
+}
+
+/**
+ * @brief 2D視点の画面Yから落下進行率を取得する
+ * @param y ゲーム座標のY
+ * @return 出現を0、通過完了を1とする進行率
+ */
+constexpr float ShaftTravelFromSideY(float y) {
+    return (ShaftTopSideY - y) / (ShaftTopSideY - ShaftBottomSideY);
+}
+
+/**
+ * @brief トンネル中心線の制御点をCatmull-Rom補間する
+ * @param points 制御点の座標
+ * @param distance 入口からの距離、進行率単位
+ * @return 補間した座標
+ */
+constexpr float ShaftTunnelSample(
+    const std::array<float, ShaftTunnelPointCount>& points, float distance) {
+    const float clamped = distance < 0.0f ? 0.0f :
+        (distance > ShaftTunnelLength ? ShaftTunnelLength : distance);
+    const float position = clamped / ShaftTunnelPointSpacing;
+    int index = static_cast<int>(position);
+    if (index > ShaftTunnelPointCount - 2) index = ShaftTunnelPointCount - 2;
+    const float t = position - static_cast<float>(index);
+    const auto at = [&points](int i) {
+        return points[static_cast<std::size_t>(i < 0 ? 0 :
+            (i >= ShaftTunnelPointCount ? ShaftTunnelPointCount - 1 : i))];
+    };
+    const float p0 = at(index - 1);
+    const float p1 = at(index);
+    const float p2 = at(index + 1);
+    const float p3 = at(index + 2);
+    return 0.5f * (2.0f * p1 + (p2 - p0) * t +
+        (2.0f * p0 - 5.0f * p1 + 4.0f * p2 - p3) * t * t +
+        (3.0f * p1 - p0 - 3.0f * p2 + p3) * t * t * t);
+}
+
+/**
+ * @brief 左右のうねりで中心線が取れる最大の横位置を取得する
+ * @param apothem ワールド座標での内接円半径
+ * @return 補間の膨らみを含めて通路の左右端が自機可動範囲に収まる中心Xの絶対値
+ */
+constexpr float ShaftTunnelMaxCenterX(float apothem) {
+    return 2.0f - (apothem - ShaftTunnelPlayerRadius * ShaftWorldXScale) / ShaftWorldXScale - 0.15f;
+}
+
+/**
+ * @brief 上下のうねりで中心線が取れる最大の高さを取得する
+ * @param apothem ワールド座標での内接円半径
+ * @return 通路の上下端が3Dの自機可動範囲に収まる中心Yの絶対値
+ */
+constexpr float ShaftTunnelMaxCenterY(float apothem) {
+    return Part2RailPlayerMaxY -
+        (apothem - ShaftTunnelPlayerRadius * ShaftWorldXScale) / ShaftWorldYScale - 0.08f;
+}
+
+/**
+ * @brief 種からランダムに曲がるトンネルを生成する
+ * @param seed 形状を決める種
+ * @param difficulty 難易度番号、0がEasyで2がHard
+ * @return 画面奥の出現位置に置いたトンネル
+ */
+constexpr ShaftTunnel BuildShaftTunnel(std::uint32_t seed, int difficulty) {
+    ShaftTunnel tunnel {};
+    tunnel.active = true;
+    tunnel.apothem = ShaftTunnelApothem(difficulty);
+
+    // 上下のうねりは3Dの自機が届く高さの範囲へ通路全体を収める
+    // 難易度が上がるほど穴が小さくなるぶん、うねりの振れ幅と1区間の曲がり量を大きくする
+    const float maxCenterX = ShaftTunnelMaxCenterX(tunnel.apothem);
+    const float maxCenterY = ShaftTunnelMaxCenterY(tunnel.apothem);
+    const float stepScale = difficulty <= 0 ? 0.6f : (difficulty >= 2 ? 1.0f : 0.8f);
+    std::uint32_t state = seed | 1u;
+    const auto unit = [&state]() {
+        state ^= state << 13;
+        state ^= state >> 17;
+        state ^= state << 5;
+        return static_cast<float>(state >> 8) / 16777216.0f;
+    };
+
+    // 入口は上下左右どこからでも始め、制御点ごとに左右と上下それぞれの曲がる向きを揺らす
+    float x = (unit() * 2.0f - 1.0f) * maxCenterX;
+    float y = (unit() * 2.0f - 1.0f) * maxCenterY;
+    float directionX = x > 0.0f ? -1.0f : 1.0f;
+    float directionY = y > 0.0f ? -1.0f : 1.0f;
+    for (std::size_t point = 0; point < tunnel.centerX.size(); ++point) {
+        tunnel.centerX[point] = x;
+        tunnel.centerY[point] = y;
+        if (unit() < 0.35f) directionX = -directionX;
+        if (unit() < 0.35f) directionY = -directionY;
+        const float stepX = (0.15f + unit() * 0.30f) * stepScale;
+        const float stepY = (0.12f + unit() * 0.28f) * stepScale;
+
+        // 壁際では内側へ折り返し、自機の可動範囲から通路を外さない
+        const float nextX = x + directionX * stepX;
+        if (nextX > maxCenterX || nextX < -maxCenterX) directionX = -directionX;
+        x += directionX * stepX;
+        const float nextY = y + directionY * stepY;
+        if (nextY > maxCenterY || nextY < -maxCenterY) directionY = -directionY;
+        y += directionY * stepY;
+    }
+    return tunnel;
+}
+
+/**
+ * @brief 円形の判定がトンネル外の岩盤へ接触するか判定する
+ * @param tunnel 判定するトンネル
+ * @param rail 3D視点の場合true
+ * @param x 判定中心のゲーム座標X
+ * @param y 判定中心のゲーム座標Y
+ * @param z 判定中心のワールドZ、2D視点では使用しない
+ * @param radius 判定半径
+ * @return 接触する場合true
+ */
+constexpr bool ShaftTunnelHits(const ShaftTunnel& tunnel, bool rail,
+    float x, float y, float z, float radius) {
+    const auto absolute = [](float value) { return value < 0.0f ? -value : value; };
+    if (!tunnel.active) return false;
+
+    // 判定位置の奥行きをトンネル入口からの距離へ変換し、岩盤の外なら接触しない
+    const float travel = rail ? ShaftTravelFromZ(z) : ShaftTravelFromSideY(y);
+    const float margin = rail ? 0.0f : radius / (ShaftTopSideY - ShaftBottomSideY);
+    const float distance = tunnel.entranceTravel - travel;
+    if (distance < -margin || distance > ShaftTunnelLength + margin) return false;
+
+    // 2Dはトンネル中心を通る断面の幅、3Dは八角形の内側だけを通路とする
+    const float inset = tunnel.apothem - radius * ShaftWorldXScale;
+    const float dx = absolute(x - ShaftTunnelSample(tunnel.centerX, distance)) * ShaftWorldXScale;
+    if (!rail) return dx > inset;
+    const float dy = absolute(y - ShaftTunnelSample(tunnel.centerY, distance)) * ShaftWorldYScale;
+    return dx > inset || dy > inset || dx + dy > inset * ShaftTunnelSqrt2;
+}
+
+/**
+ * @brief 岩盤へ埋まった判定をトンネルの通路内へ押し戻す
+ * @param tunnel 判定するトンネル
+ * @param rail 3D視点の場合true
+ * @param x 補正するゲーム座標X
+ * @param y 補正するゲーム座標Y、2D視点では奥行きとして使用し補正しない
+ * @param z 判定中心のワールドZ、2D視点では使用しない
+ * @param radius 判定半径
+ * @return なし
+ */
+constexpr void ClampToShaftTunnel(const ShaftTunnel& tunnel, bool rail,
+    float& x, float& y, float z, float radius) {
+    if (!ShaftTunnelHits(tunnel, rail, x, y, z, radius)) return;
+    const auto clamp = [](float value, float limit) {
+        return value < -limit ? -limit : (value > limit ? limit : value);
+    };
+    const float travel = rail ? ShaftTravelFromZ(z) : ShaftTravelFromSideY(y);
+    const float distance = tunnel.entranceTravel - travel;
+    const float inset = (tunnel.apothem - radius * ShaftWorldXScale) * 0.98f;
+    const float centerX = ShaftTunnelSample(tunnel.centerX, distance);
+    float dx = clamp((x - centerX) * ShaftWorldXScale, inset);
+    if (!rail) {
+        x = centerX + dx / ShaftWorldXScale;
+        return;
+    }
+
+    // 斜辺の外側は中心方向へ縮め、八角形の内側へ収める
+    const float centerY = ShaftTunnelSample(tunnel.centerY, distance);
+    float dy = clamp((y - centerY) * ShaftWorldYScale, inset);
+    const float diagonal = (dx < 0.0f ? -dx : dx) + (dy < 0.0f ? -dy : dy);
+    if (diagonal > inset * ShaftTunnelSqrt2) {
+        const float scale = inset * ShaftTunnelSqrt2 / diagonal;
+        dx *= scale;
+        dy *= scale;
+    }
+    x = centerX + dx / ShaftWorldXScale;
+    y = centerY + dy / ShaftWorldYScale;
+}
+
+/**
+ * @brief トンネルの生成、通過可能性、判定、押し戻しを検証する
+ * @return すべて成立する場合true
+ */
+constexpr bool ShaftTunnelSelfCheck() {
+    const auto absolute = [](float value) { return value < 0.0f ? -value : value; };
+    for (int difficulty = 0; difficulty <= 2; ++difficulty) {
+        // 難易度ごとの回数だけ生成時刻が来る
+        int spawns = 0;
+        for (int elapsed = 0; elapsed <= ShaftTunnelLastFrame; elapsed += 60) {
+            if (FramesUntilShaftTunnel(elapsed, difficulty) == 0) ++spawns;
+        }
+        if (spawns != ShaftTunnelCount(difficulty)) return false;
+
+        // MSVCの定数評価ステップ上限に収まる件数だけ検証する
+        for (std::uint32_t seed = 1; seed <= 4; ++seed) {
+            const ShaftTunnel tunnel = BuildShaftTunnel(seed * 2654435761u, difficulty);
+            const float inset = tunnel.apothem - ShaftTunnelPlayerRadius * ShaftWorldXScale;
+
+            // 制御点は可動範囲内で左右と上下の曲がり幅に上限を持つ
+            for (int point = 0; point < ShaftTunnelPointCount; ++point) {
+                const std::size_t current = static_cast<std::size_t>(point);
+                const float x = tunnel.centerX[current];
+                if (absolute(x) > ShaftTunnelMaxCenterX(tunnel.apothem)) return false;
+                if (absolute(tunnel.centerY[current]) > ShaftTunnelMaxCenterY(tunnel.apothem)) return false;
+                if (point > 0 && (absolute(x - tunnel.centerX[current - 1]) > ShaftTunnelMaxStepX + 0.0001f ||
+                    absolute(tunnel.centerY[current] - tunnel.centerY[current - 1]) >
+                        ShaftTunnelMaxStepY + 0.0001f)) return false;
+                if (absolute(ShaftTunnelSample(tunnel.centerX,
+                    static_cast<float>(point) * ShaftTunnelPointSpacing) - x) > 0.0001f) return false;
+            }
+
+            // 補間の膨らみを含めても通路全体が自機の上下左右の可動範囲へ収まる
+            for (float distance = 0.0f; distance <= ShaftTunnelLength; distance += 0.125f) {
+                if (absolute(ShaftTunnelSample(tunnel.centerX, distance)) +
+                    inset / ShaftWorldXScale > 2.0f) return false;
+                if (absolute(ShaftTunnelSample(tunnel.centerY, distance)) +
+                    inset / ShaftWorldYScale > Part2RailPlayerMaxY) return false;
+            }
+
+            // 入口から1.0奥の断面で、中心は安全、壁と斜辺の外側は接触する
+            ShaftTunnel probe = tunnel;
+            probe.entranceTravel = 1.5f;
+            const float x = ShaftTunnelSample(tunnel.centerX, 1.0f);
+            const float y = ShaftTunnelSample(tunnel.centerY, 1.0f);
+            const float z = ShaftObstacleZ(0.5f);
+            const float sideY = ShaftObstacleSideY(0.5f);
+            const float r = ShaftTunnelPlayerRadius;
+            const float a = tunnel.apothem;
+            if (ShaftTunnelHits(probe, true, x, y, z, r)) return false;
+            if (!ShaftTunnelHits(probe, true, x + a / ShaftWorldXScale, y, z, r)) return false;
+            if (!ShaftTunnelHits(probe, true, x + a * 0.8f / ShaftWorldXScale,
+                y + a * 0.8f / ShaftWorldYScale, z, r)) return false;
+            if (ShaftTunnelHits(probe, false, x, sideY, 0.0f, r)) return false;
+            if (!ShaftTunnelHits(probe, false, x - a / ShaftWorldXScale, sideY, 0.0f, r)) return false;
+            if (ShaftTunnelHits(probe, true, x + a, y, ShaftObstacleZ(1.6f), r)) return false;
+
+            // 押し戻した位置は通路内になる
+            float clampedX = x + a * 2.0f / ShaftWorldXScale;
+            float clampedY = y - a * 2.0f / ShaftWorldYScale;
+            ClampToShaftTunnel(probe, true, clampedX, clampedY, z, r);
+            if (ShaftTunnelHits(probe, true, clampedX, clampedY, z, r)) return false;
+            float sideX = x - a * 2.0f / ShaftWorldXScale;
+            float sideYCopy = sideY;
+            ClampToShaftTunnel(probe, false, sideX, sideYCopy, 0.0f, r);
+            if (ShaftTunnelHits(probe, false, sideX, sideYCopy, 0.0f, r)) return false;
+        }
+    }
+    return true;
+}
+
+static_assert(ShaftTunnelSelfCheck());
+// 前のトンネルが画面から抜けてから次のトンネルを出す
+static_assert((ShaftTunnelLength + 1.0f) / ShaftTravelPerFrame(2) <
+    static_cast<float>(ShaftTunnelSpacingFrames(2)));
+// 最後のトンネルは生成停止前に出し、最下端の自機を退避演出前に通過し終える
+static_assert(WallClimbFadeFrames + ShaftTunnelLastFrame < WallClimbUpperFrames - ShaftSpawnStopFrames);
+static_assert(static_cast<float>(WallClimbFadeFrames + ShaftTunnelLastFrame) +
+    (ShaftTunnelLength + 0.9f) / ShaftTravelPerFrame(2) <
+    static_cast<float>(WallClimbUpperFrames - WallClimbExitFadeFrames - Part2PlayerFlyAwayFrames));
 inline constexpr int RooftopArrivalFrames = 240;
 inline constexpr int CarrierTransformationFrames = 180;
 inline constexpr int CarrierCameraMoveFrames = 45;
@@ -1450,6 +1779,8 @@ struct State {
     std::array<TayamaWeakpointState, TayamaWeakpointCount> checkpointWeakpoints {};
     std::array<TayamaReflectFunnel, TayamaReflectFunnelCount> tayamaReflectFunnels {};
     std::array<ShaftObstacle, ShaftObstacleCount> shaftObstacles {};
+    ShaftTunnel shaftTunnel {};
+    std::uint32_t shaftTunnelSeed = 0;
     float tayamaTransformation = 0.0f;
     float tayamaOrbitAngle = 0.0f;
     float tayamaSideViewAngle = 0.0f;
@@ -1480,8 +1811,8 @@ struct State {
     bool headLaserArmed = false;
     bool tayamaStageShifted = false;
     bool tayamaStompLeftFoot = true;
-    int tayamaCollisionBoundsFrame = -1;
-    std::array<Stage5GroupBounds, TayamaCollisionGroupCount> tayamaCollisionBounds {};
+    mutable int tayamaCollisionBoundsFrame = -1;
+    mutable std::array<Stage5GroupBounds, TayamaCollisionGroupCount> tayamaCollisionBounds {};
     Phase phase = Phase::Approach;
     Checkpoint checkpoint = Checkpoint::Chapter1;
 };

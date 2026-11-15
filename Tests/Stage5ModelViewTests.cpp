@@ -70,9 +70,9 @@ static void CheckShaftObstacles() {
         }
     }
 
-    // 全ての関門が区画の生成停止前に出現し、2種類が交互に並ぶ
-    const int chapterFrames[] = {WallClimbLowerFrames, WallClimbMiddleFrames, WallClimbUpperFrames};
-    for (int tier = 0; tier < 3; ++tier) {
+    // 下層と中層の関門が区画の生成停止前に出現し、2種類が交互に並ぶ、上層は関門の代わりにトンネルを使う
+    const int chapterFrames[] = {WallClimbLowerFrames, WallClimbMiddleFrames};
+    for (int tier = 0; tier < 2; ++tier) {
         int gates = 0;
         ShaftPattern previous = ShaftPattern::Count;
         for (int frame = WallClimbFadeFrames; frame <= chapterFrames[tier] - ShaftSpawnStopFrames; ++frame) {

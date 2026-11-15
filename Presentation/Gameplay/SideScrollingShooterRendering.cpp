@@ -1333,6 +1333,68 @@ void SideScrollingShooter::DrawReticle(Renderer& renderer, const Camera3D& camer
     }
 }
 
+/**
+ * @brief ボスの攻撃可能な部位へ半透明のターゲット枠を描画する
+ * @param renderer 描画先レンダラー
+ * @param camera 部位座標の投影に使うカメラ
+ * @return なし
+ */
+void SideScrollingShooter::DrawBossPartTargets(Renderer& renderer, const Camera3D& camera) const {
+    // 視点切替中は部位座標と描画視点がずれるため表示しない
+    if (m_clear || m_viewTransitionTimer > 0) return;
+    const Viewport& viewport = camera.GetViewport();
+    if (viewport.width <= 0 || viewport.height <= 0) return;
+    const float aspect = static_cast<float>(viewport.height) / viewport.width;
+
+    /** @brief 部位中心へ枠と右上のTGT表記を描画する @param position ワールド中心 @return なし */
+    const auto drawTarget = [&](const Vector3& position) {
+        Vector2 screen;
+        Vector2 edge;
+        float depth;
+        if (!camera.TryWorldToScreen(position, screen, &depth) || depth < 0.0f || depth > 1.0f ||
+            !camera.TryWorldToScreen(position + Vector3 {0.0f, 0.6f, 0.0f}, edge)) return;
+        const Vector2 center {(screen.x - viewport.x) / viewport.width * 2.0f - 1.0f,
+            1.0f - (screen.y - viewport.y) / viewport.height * 2.0f};
+        // 遠近に合わせて枠を縮め、極端な大きさにはしない
+        const float half = (std::clamp)(std::abs(edge.y - screen.y) / viewport.height * 2.0f, 0.04f, 0.16f);
+        const float w = half * aspect;
+        constexpr float T = 0.003f;
+        constexpr ColorF Frame {0.20f, 0.85f, 0.30f, 0.35f};
+
+        // 右上の角は文字のために空けた枠を描画する
+        renderer.Draw(Rect {{center.x - w * 0.25f, center.y + half}, {w * 1.5f, T}}, Frame);
+        renderer.Draw(Rect {{center.x, center.y - half}, {w * 2.0f, T}}, Frame);
+        renderer.Draw(Rect {{center.x - w, center.y}, {T * aspect, half * 2.0f}}, Frame);
+        renderer.Draw(Rect {{center.x + w, center.y - half * 0.25f}, {T * aspect, half * 1.5f}}, Frame);
+        renderer.DrawText("TGT", TextAlign::Center, 0.010f, {0.85f, 0.10f, 0.15f, 0.55f},
+            {center.x + w, center.y + half});
+    };
+
+    // 通常ボスは衝突判定と同じ部位中心を使う
+    if (m_bossIntroductionPhase == BossIntroductionPhase::None) {
+        const Shot shot = MakeNormalPlayerShot(false);
+        for (const auto& enemy : m_enemies) {
+            if (!enemy.active || enemy.hp <= 0 || enemy.type != 2) continue;
+            for (int i = 0; i < BossPartCount; ++i) {
+                BossPart part = static_cast<BossPart>(i);
+                Vector3 position;
+                if (!TryHitBossPart(shot, enemy, part, &position)) continue;
+                // 2Dの部位判定は自機弾の平面で行うため、枠も同じ奥行きへ置く
+                if (!IsRailGameplayActive()) position.z = SidePlaneZ - 0.4f;
+                drawTarget(position);
+            }
+        }
+    }
+
+    // TAYAMAは弱点と龍の各節を対象にする
+    if (m_stageNumber == 5) {
+        for (int i = 0; i < (std::max)(TayamaWeakpointCount, ShooterStages::Stage5::TayamaDragonSegmentCount); ++i) {
+            Vector3 position;
+            if (Stage5Module::GetHomingTarget(*this, i, position)) drawTarget(position);
+        }
+    }
+}
+
 void SideScrollingShooter::DrawBossHud(Renderer& renderer) const {
     if (StageDispatch::DrawHud(*this, renderer)) return;
     if (!m_bossBattle || m_clear || m_bossIntroductionPhase != BossIntroductionPhase::None) {
