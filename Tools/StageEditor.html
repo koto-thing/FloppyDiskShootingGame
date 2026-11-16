@@ -85,6 +85,7 @@
     .desc { color: #8fb3ff; font-size: 12px; }
     .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
     .actions { white-space: nowrap; }
+    .views { display: grid; grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); gap: 12px; }
 </style>
 </head>
 <body>
@@ -156,7 +157,7 @@ const PlaceView = { minX: -1.3, maxX: 1.3, minY: -1.7, maxY: 1.6, scale: 90 };
 // 行動プレビューの範囲（ゲームの2D座標、敵の消滅位置と出現位置を含む）
 const View = { minX: -2.6, maxX: 3.0, minY: -1.7, maxY: 1.6, scale: 110 };
 // 行動プレビューの再生状態（保存しない）
-const preview = { frame: 0, playing: false, speed: 1, mode: "2d", startY: 0, playerX: -0.72, playerY: 0, draw: null };
+const preview = { frame: 0, playing: false, speed: 1, mode: "both", startY: 0, playerX: -0.72, playerY: 0, draw: null };
 
 let stagesDir = null;
 let scriptsEntry = null;   // { name, dir, data, saved }
@@ -165,6 +166,7 @@ let tab = "sheets";
 let current = null;
 let scriptIndex = 0;
 let selectedRule = null;   // { chapter, rule }
+let chapterIndex = 0;      // 敵の出現タブで編集中のチャプター
 let selectedCommand = -1;
 let showDetail = false;
 
@@ -230,9 +232,10 @@ function NumberInput(obj, key, step, title) {
  * @param canvas 対象のcanvas
  * @param handles ドラッグできる点 { x, y, move(px, py), select() } の一覧を返す関数（座標はピクセル）
  * @param redraw ドラッグ中に呼ぶ再描画関数
+ * @param onEmpty 点のない所を押した時に呼ぶ関数(px, py)（省略可）
  * @return なし
  */
-function MakeDraggable(canvas, handles, redraw) {
+function MakeDraggable(canvas, handles, redraw, onEmpty) {
     let active = null;
     let moved = false;
     const pos = (e) => {
@@ -247,7 +250,10 @@ function MakeDraggable(canvas, handles, redraw) {
             const d = (h.x - px) ** 2 + (h.y - py) ** 2;
             if (d <= best) { best = d; active = h; }
         }
-        if (!active) return;
+        if (!active) {
+            if (onEmpty) onEmpty(px, py);
+            return;
+        }
         moved = false;
         canvas.setPointerCapture(e.pointerId);
     };
@@ -324,9 +330,10 @@ function PlacementView(chapter, ci) {
  * @param chapter 対象のチャプター
  * @param ci チャプター番号
  * @param length チャプターのフレーム数
- * @return 要素
+ * @param start チャプター開始のステージフレーム（再生位置の表示と移動に使う）
+ * @return { element, draw }
  */
-function TimelineView(chapter, ci, length) {
+function TimelineView(chapter, ci, length, start) {
     const rowH = 18, left = 26, width = 640, top = 4;
     const canvas = El("canvas", { width: width + left + 10, height: Math.max(1, chapter.rules.length) * rowH + top + 18 });
     const g = canvas.getContext("2d");
@@ -350,6 +357,9 @@ function TimelineView(chapter, ci, length) {
             for (let f = r.firstFrame + r.interval; r.interval > 0 && f < length; f += r.interval) g.fillRect(fx(f) - 1, y + 5, 3, rowH - 10);
             g.beginPath(); g.arc(fx(r.firstFrame), y + rowH / 2, selected ? 7 : 6, 0, Math.PI * 2); g.fill();
         });
+        // 再生位置を描く
+        const t = preview.frame - start;
+        if (t >= 0 && t <= length) { g.fillStyle = "#f0883e"; g.fillRect(fx(t) - 1, 0, 2, canvas.height - 14); }
     };
     MakeDraggable(canvas, () => chapter.rules.map((r, ri) => ({
         x: fx(r.firstFrame), y: top + ri * rowH + rowH / 2,
@@ -358,9 +368,15 @@ function TimelineView(chapter, ci, length) {
             selectedRule = { chapter: ci, rule: ri };
         },
         select: () => { selectedRule = { chapter: ci, rule: ri }; Render(); }
-    })), draw);
+    })), draw, (px) => {
+        // 点のない所を押したら再生位置をそこへ移す
+        preview.frame = start + Math.max(0, Math.min(length, Math.round((px - left) / width * length)));
+        preview.playing = false;
+        preview.draw();
+    });
     draw();
-    return El("div", {}, Caption("出現タイミング", "●をドラッグで最初に出るフレーム（5F単位）、細い線は「間隔」ごとの再出現"), canvas);
+    return { draw, element: El("div", { style: "flex: 1; min-width: 0" },
+        Caption("出現タイミング", "●をドラッグで最初に出る時点、細い線は「間隔」ごとの再出現、橙の線 = 再生位置（空いた所をクリックで移動）"), canvas) };
 }
 
 /**
@@ -376,7 +392,20 @@ function RenderSheet(root) {
         El("label", {}, El("input", { type: "checkbox", checked: showDetail, onchange: (e) => { showDetail = e.target.checked; Render(); } }),
             " 詳細な値も表示（2DのX・3Dの奥行き）")));
 
-    sheet.chapters.forEach((chapter, ci) => {
+    // 編集するチャプターを選ぶ
+    chapterIndex = Math.max(0, Math.min(chapterIndex, sheet.chapters.length - 1));
+    const length = sheet.chapterLength;
+    root.append(El("div", { className: "toolbar" }, ...sheet.chapters.map((c, i) => El("button", {
+        className: i === chapterIndex ? "on" : "", title: c.comment || "",
+        onclick: () => { chapterIndex = i; selectedRule = null; preview.frame = i * length; preview.playing = false; Render(); }
+    }, `チャプター${i + 1}`)), El("button", { className: "ghost", onclick: () => {
+        sheet.chapters.push({ comment: "", rules: [] });
+        chapterIndex = sheet.chapters.length - 1;
+        Changed();
+    } }, "＋ チャプターを追加")));
+
+    [sheet.chapters[chapterIndex]].forEach((chapter) => {
+        const ci = chapterIndex;
         // 規則の表を作る
         const detail = showDetail ? [["sideX", "2DのX", 0.01, "2Dの出現X。2.8未満は2.8になる"], ["railZ", "3Dの奥行き", 1, "3Dの出現奥行き。60未満は60になる"]] : [];
         const table = El("table");
@@ -424,21 +453,49 @@ function RenderSheet(root) {
                     El("button", { className: "ghost danger", onclick: () => { chapter.rules.splice(ri, 1); selectedRule = null; Changed(); } }, "削除"))));
         });
 
-        // チャプター単位の操作を作る
-        const newRule = { type: "BasicEnemy", firstFrame: 25, interval: 100, sideX: 2.6, railX: 0, y: 0, railZ: 60, randomPosition: false };
+        // 再生しながら出現の時点を決める操作を作る
+        const start = ci * length;
+        const now = () => Math.max(0, Math.min(length - 1, Math.round(preview.frame) - start));
+        const newRule = { type: "BasicEnemy", firstFrame: 25, interval: 0, sideX: 2.6, railX: 0, y: 0, railZ: 60, randomPosition: false };
+        const selectedIndex = selectedRule && selectedRule.chapter === ci ? selectedRule.rule : -1;
+        const controls = [
+            El("button", { disabled: selectedIndex < 0, title: "表や印で敵を選んでから押す", onclick: () => {
+                chapter.rules[selectedIndex].firstFrame = now();
+                Changed();
+            } }, selectedIndex < 0 ? "▼ 選択中の敵をこの時点で出す" : `▼ #${selectedIndex + 1} をこの時点で出す`),
+            El("button", { onclick: () => {
+                chapter.rules.push({ ...newRule, firstFrame: now() });
+                selectedRule = { chapter: ci, rule: chapter.rules.length - 1 };
+                Changed();
+            } }, "＋ この時点に敵を追加"),
+            El("span", { className: "help", style: "margin: 0" }, "再生やシークバーで出したい時点に合わせてから押す")];
+        const timeline = TimelineView(chapter, ci, length, start);
+        const player = StagePlayer(sheet, ListSpawns(sheet), length * sheet.chapters.length,
+            { start, end: start + length, chapter: ci, controls, title: "プレビュー" });
+        preview.draw = () => {
+            if (preview.frame >= start + length) { preview.frame = start + length; preview.playing = false; }
+            player.draw();
+            timeline.draw();
+        };
+        preview.draw();
         root.append(El("section", { className: "card", id: `chapter-${ci}` },
             El("div", { className: "card-head" }, El("h2", {}, `チャプター ${ci + 1}`),
                 El("input", { value: chapter.comment || "", placeholder: "メモ（例: 通常機と狙撃機）", style: "flex: 1",
                     onchange: (e) => { chapter.comment = e.target.value; Changed(); } }),
                 El("button", { className: "ghost danger", onclick: () => {
-                    if (sheet.chapters.length > 1 && confirm(`チャプター${ci + 1}を削除する?`)) { sheet.chapters.splice(ci, 1); selectedRule = null; Changed(); }
+                    if (sheet.chapters.length > 1 && confirm(`チャプター${ci + 1}を削除する?`)) {
+                        sheet.chapters.splice(ci, 1);
+                        chapterIndex = Math.max(0, ci - 1);
+                        selectedRule = null;
+                        Changed();
+                    }
                 } }, "チャプターを削除")),
             El("div", { className: "card-body" },
-                El("div", { className: "canvases" }, PlacementView(chapter, ci), TimelineView(chapter, ci, sheet.chapterLength)),
+                player.element,
+                El("div", { className: "canvases" }, PlacementView(chapter, ci), timeline.element),
                 table,
                 El("button", { onclick: () => { chapter.rules.push({ ...newRule }); selectedRule = { chapter: ci, rule: chapter.rules.length - 1 }; Changed(); } }, "＋ 敵を追加"))));
     });
-    root.append(El("button", { onclick: () => { sheet.chapters.push({ comment: "", rules: [] }); Changed(); } }, "＋ チャプターを追加"));
 }
 
 /**
@@ -483,9 +540,9 @@ function ListSpawns(sheet) {
  * @return なし
  */
 function JumpToChapter(ci) {
+    chapterIndex = ci;
     SwitchTab("sheets");
-    const card = document.getElementById(`chapter-${ci}`);
-    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+    window.scrollTo(0, 0);
 }
 
 /**
@@ -610,8 +667,8 @@ function BuiltinPosition3D(type, age, x0, y0, phase) {
  * @param g 描画先
  * @param w 幅
  * @param h 高さ
- * @param scene { enemies: {x, y, z, color, ring}[], shots: {x, y, z, color}[], trail: {x, y, z, hl}[], playerX, playerY }
- * @return なし
+ * @param scene { enemies: {x, y, z, color, ring, selected}[], shots: {x, y, z, color}[], trail: {x, y, z, hl}[], playerX, playerY }
+ * @return ゲーム座標(x, y, z)を画面座標{x, y, s}へ変換する関数
  */
 function Draw3D(g, w, h, scene) {
     // カメラは自機から(0, 2.8, -7.5)の位置で、自機の14先を見る
@@ -673,7 +730,9 @@ function Draw3D(g, w, h, scene) {
         g.fillStyle = item.color;
         g.beginPath(); g.arc(p.x, p.y, Math.max(1.5, item.r * p.s), 0, Math.PI * 2); g.fill();
         if (item.ring) { g.strokeStyle = "#fd6"; g.lineWidth = 2; g.stroke(); g.lineWidth = 1; }
+        if (item.selected) { g.strokeStyle = "#fff"; g.lineWidth = 3; g.stroke(); g.lineWidth = 1; }
     }
+    return at;
 }
 
 /**
@@ -683,7 +742,21 @@ function Draw3D(g, w, h, scene) {
 function ModeSwitch() {
     const make = (mode, text) => El("button", { className: preview.mode === mode ? "on" : "",
         onclick: () => { preview.mode = mode; Render(); } }, text);
-    return El("span", { style: "display: inline-flex; gap: 4px" }, make("2d", "2D（横から）"), make("3d", "3D（自機の後ろから）"));
+    return El("span", { style: "display: inline-flex; gap: 4px" },
+        make("2d", "2D（横から）"), make("3d", "3D（自機の後ろから）"), make("both", "並べて表示"));
+}
+
+/**
+ * @brief 表示モードに応じて2Dと3Dの画面を並べる
+ * @param view2D 2Dのcanvas
+ * @param view3D 3Dのcanvas
+ * @return 要素
+ */
+function ViewPair(view2D, view3D) {
+    const titled = (title, canvas) => El("div", {}, El("div", { className: "caption" }, El("b", {}, title)), canvas);
+    if (preview.mode === "2d") return view2D;
+    if (preview.mode === "3d") return view3D;
+    return El("div", { className: "views" }, titled("2D（横から）", view2D), titled("3D（自機の後ろから）", view3D));
 }
 
 /**
@@ -691,93 +764,67 @@ function ModeSwitch() {
  * @param sheet 対象のシート
  * @param spawns ListSpawnsの結果
  * @param total ステージ全体のフレーム数
+ * @param opts { start, end: 再生範囲, chapter: 出現位置の印を出すチャプター番号, controls: 追加の操作要素, title }（省略可）
  * @return { element, draw }
  */
-function StagePlayer(sheet, spawns, total) {
+function StagePlayer(sheet, spawns, total, opts = {}) {
+    const start = opts.start || 0, end = opts.end === undefined ? total : opts.end;
+    const chapter = opts.chapter === undefined ? null : sheet.chapters[opts.chapter];
     const width = (View.maxX - View.minX) * View.scale, height = (View.maxY - View.minY) * View.scale;
-    const canvas = El("canvas", { width, height, style: "width: 100%; max-width: 900px" });
-    const g = canvas.getContext("2d");
+    const canvasStyle = preview.mode === "both" ? "width: 100%" : "width: 100%; max-width: 900px";
+    const canvas2D = El("canvas", { width, height, style: canvasStyle });
+    const canvas3D = El("canvas", { width, height, style: canvasStyle });
+    const g2 = canvas2D.getContext("2d"), g3 = canvas3D.getContext("2d");
     const sx = (x) => (x - View.minX) * View.scale, sy = (y) => (View.maxY - y) * View.scale;
-    const slider = El("input", { type: "range", min: 0, max: total, value: preview.frame, style: "flex: 1",
+    const fy = (py) => View.maxY - py / View.scale;
+    preview.frame = Math.max(start, Math.min(end, preview.frame));
+    const slider = El("input", { type: "range", min: start, max: end, value: preview.frame, style: "flex: 1; min-width: 160px",
         oninput: (e) => { preview.frame = Number(e.target.value); preview.draw(); } });
     const label = El("span", { style: "min-width: 230px; color: var(--muted)" });
     const playButton = El("button", { className: "primary", style: "min-width: 84px", onclick: () => {
-        if (preview.frame >= total) preview.frame = 0;
+        if (preview.frame >= end) preview.frame = start;
         preview.playing = !preview.playing;
         playButton.textContent = preview.playing ? "■ 停止" : "▶ 再生";
     } }, preview.playing ? "■ 停止" : "▶ 再生");
     const speedSelect = El("select", { onchange: (e) => { preview.speed = Number(e.target.value); } },
         ...[1, 2, 4, 8].map((v) => El("option", { value: v, selected: v === preview.speed }, `×${v}`)));
+    const show2D = preview.mode !== "3d", show3D = preview.mode !== "2d";
+    const selected = selectedRule && chapter && chapter.rules[selectedRule.rule];
 
-    // 出現ごとの初期値を決め、自作の動きは実行結果をまとめて求めておく
+    // 出現ごとの初期値を決め、自作の動きは表示する視点の実行結果をまとめて求めておく
     const scripts = new Map(scriptsEntry.data.scripts.map((s) => [s.name, s]));
     const random = (n) => ((Math.sin(n * 12.9898) * 43758.5453) % 1 + 1) % 1;
     const actors = spawns.map((s, i) => {
-        // ponytail: 位置ランダムはゲームの乱数と別の固定乱数で決める。ゲームとは高さが一致しない
+        // ponytail: 位置ランダムはゲームの乱数と別の固定乱数で決める。ゲームとは位置が一致しない
         const y0 = s.rule.randomPosition ? -0.86 + 1.72 * random(i + 1) : s.rule.y;
         const x0 = s.rule.randomPosition ? -1 + 2 * random(i + 101) : s.rule.railX;
         const phase = ((s.frame + (sheet.stage - 1) * 17) % 47) * 0.17;
         const script = s.rule.type === "ScriptedEnemy" ? scripts.get(s.rule.script) : null;
-        let result = null;
-        if (script) {
-            try {
-                result = preview.mode === "3d" ? SimulateScript3D(script, x0, y0, 0, 0) : SimulateScript(script, 2.8, y0, -0.72, 0, 3600);
-            } catch (e) { result = null; }
-        }
-        return { spawn: s, x0, y0, phase, result };
+        const run = (simulate) => { try { return script ? simulate() : null; } catch (e) { return null; } };
+        return { spawn: s, x0, y0, phase,
+            result2D: show2D ? run(() => SimulateScript(script, 2.8, y0, -0.72, 0, 3600)) : null,
+            result3D: show3D ? run(() => SimulateScript3D(script, x0, y0, 0, 0)) : null };
     });
 
-    // 3Dでは画面内の敵と弾を集めて自機の後ろから見た図を描く
-    const draw3D = (t) => {
-        const enemies = [], shots = [];
-        for (const a of actors) {
-            const age = t - a.spawn.frame;
-            if (age < 0) continue;
-            let pos;
-            if (a.spawn.rule.type === "ScriptedEnemy") {
-                if (!a.result || age > a.result.path.length) continue;
-                pos = age === 0 ? { x: a.x0, y: a.y0, z: 60 } : a.result.path[age - 1];
-                for (const s of a.result.shots) {
-                    if (s.frame >= age) continue;
-                    const dt = age - s.frame;
-                    const z = s.z + s.vz * dt;
-                    if (z < 0 || z > 70) continue;
-                    shots.push({ x: s.x + s.vx * dt, y: s.y + s.vy * dt, z, color: "#fd6" });
-                }
-            } else {
-                pos = BuiltinPosition3D(a.spawn.rule.type, age, a.x0, a.y0, a.phase);
-            }
-            if (pos.z < 2) continue;
-            enemies.push({ ...pos, color: TypeColor(a.spawn.rule.type), ring: a.spawn.rule.type === "ScriptedEnemy" });
-        }
-        Draw3D(g, width, height, { enemies, shots });
-        return [enemies.length, shots.length];
-    };
-
-    const draw = () => {
-        const t = Math.round(preview.frame);
-        if (preview.mode === "3d") {
-            const [alive, bullets] = draw3D(t);
-            drawLabels(t, alive, bullets);
-            return;
-        }
+    // 2Dは横から見た画面に敵と自作の動きの敵の弾を描く
+    const draw2D = (t) => {
+        const g = g2;
         g.clearRect(0, 0, width, height);
-        // 自機の移動範囲と自機の基準位置を描く
         g.strokeStyle = "#2a2e35";
         g.strokeRect(sx(-2.0), sy(1.53), 4.0 * View.scale, 3.15 * View.scale);
         g.fillStyle = "#6cf";
         g.beginPath(); g.moveTo(sx(-0.72) + 10, sy(0)); g.lineTo(sx(-0.72) - 8, sy(0) - 7); g.lineTo(sx(-0.72) - 8, sy(0) + 7); g.fill();
-        // 出現済みで画面内にいる敵と、自作の動きの敵の弾を描く
         let alive = 0, bullets = 0;
         for (const a of actors) {
             const age = t - a.spawn.frame;
             if (age < 0) continue;
             let pos;
             if (a.spawn.rule.type === "ScriptedEnemy") {
-                if (!a.result || age > a.result.path.length) continue;
-                pos = age === 0 ? { x: 2.8, y: a.y0 } : a.result.path[age - 1];
+                const r = a.result2D;
+                if (!r || age > r.path.length) continue;
+                pos = age === 0 ? { x: 2.8, y: a.y0 } : r.path[age - 1];
                 g.fillStyle = "#fd6";
-                for (const s of a.result.shots) {
+                for (const s of r.shots) {
                     if (s.frame >= age) continue;
                     const x = s.x + s.vx * (age - s.frame), y = s.y + s.vy * (age - s.frame);
                     if (x < View.minX || x > View.maxX || y < View.minY || y > View.maxY) continue;
@@ -792,30 +839,97 @@ function StagePlayer(sheet, spawns, total) {
             g.fillStyle = TypeColor(a.spawn.rule.type);
             g.beginPath(); g.arc(sx(pos.x), sy(pos.y), 7, 0, Math.PI * 2); g.fill();
             if (a.spawn.rule.type === "ScriptedEnemy") { g.strokeStyle = "#fd6"; g.lineWidth = 2; g.stroke(); g.lineWidth = 1; }
+            if (a.spawn.rule === selected) { g.strokeStyle = "#fff"; g.lineWidth = 3; g.stroke(); g.lineWidth = 1; }
         }
-        drawLabels(t, alive, bullets);
+        return [alive, bullets];
     };
 
-    // 現在の時刻と画面内の数を表示する
-    const drawLabels = (t, alive, bullets) => {
-        const ci = Math.min(sheet.chapters.length - 1, Math.floor(t / sheet.chapterLength));
+    // 3Dは画面内の敵と弾を集めて自機の後ろから見た図を描く
+    let at3D = null;
+    const draw3D = (t) => {
+        const enemies = [], shots = [];
+        for (const a of actors) {
+            const age = t - a.spawn.frame;
+            if (age < 0) continue;
+            let pos;
+            if (a.spawn.rule.type === "ScriptedEnemy") {
+                const r = a.result3D;
+                if (!r || age > r.path.length) continue;
+                pos = age === 0 ? { x: a.x0, y: a.y0, z: 60 } : r.path[age - 1];
+                for (const s of r.shots) {
+                    if (s.frame >= age) continue;
+                    const dt = age - s.frame, z = s.z + s.vz * dt;
+                    if (z < 0 || z > 70) continue;
+                    shots.push({ x: s.x + s.vx * dt, y: s.y + s.vy * dt, z, color: "#fd6" });
+                }
+            } else {
+                pos = BuiltinPosition3D(a.spawn.rule.type, age, a.x0, a.y0, a.phase);
+            }
+            if (pos.z < 2) continue;
+            enemies.push({ ...pos, color: TypeColor(a.spawn.rule.type), ring: a.spawn.rule.type === "ScriptedEnemy",
+                selected: a.spawn.rule === selected });
+        }
+        at3D = Draw3D(g3, width, height, { enemies, shots });
+        return [enemies.length, shots.length];
+    };
+
+    // チャプターの出現位置の印（番号付きの円）を描く
+    const drawMarkers = (g, point, radius) => {
+        if (!chapter) return;
+        g.font = "bold 10px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+        chapter.rules.forEach((r, ri) => {
+            if (r.randomPosition) return;
+            const p = point(r);
+            if (!p) return;
+            g.strokeStyle = TypeColor(r.type); g.lineWidth = r === selected ? 3 : 1.5;
+            g.setLineDash([3, 2]);
+            g.beginPath(); g.arc(p.x, p.y, radius, 0, Math.PI * 2); g.stroke();
+            g.setLineDash([]); g.lineWidth = 1;
+            g.fillStyle = TypeColor(r.type); g.fillText(String(ri + 1), p.x, p.y + 0.5);
+        });
+    };
+    const marker2D = (r) => ({ x: sx(2.8), y: sy(r.y) });
+    const marker3D = (r) => at3D && at3D({ x: r.railX, y: r.y, z: 60 });
+
+    // チャプター番号とメモを画面の左上に重ねる
+    const overlay = (g, ci) => {
         g.fillStyle = "#e4e6eb"; g.font = "600 13px sans-serif"; g.textAlign = "left"; g.textBaseline = "top";
         g.fillText(`チャプター${ci + 1}`, 10, 8);
         g.fillStyle = "#8b919c"; g.font = "12px sans-serif";
         g.fillText(sheet.chapters[ci].comment || "", 10, 28);
+    };
+
+    const draw = () => {
+        const t = Math.round(preview.frame);
+        const ci = Math.min(sheet.chapters.length - 1, Math.floor(t / sheet.chapterLength));
+        const counts = [];
+        if (show2D) { const [alive, bullets] = draw2D(t); overlay(g2, ci); drawMarkers(g2, marker2D, 9); counts.push(["2D", alive, bullets]); }
+        if (show3D) { const [alive, bullets] = draw3D(t); overlay(g3, ci); drawMarkers(g3, marker3D, 7); counts.push(["3D", alive, bullets]); }
+        // 現在の時刻と画面内の数を表示する
         slider.value = t;
-        label.textContent = `${t} / ${total}F　画面内の敵 ${alive}体` + (bullets ? `・弾 ${bullets}発` : "");
+        const time = chapter ? `チャプター内 ${t - start} / ${end - start}F` : `${t} / ${total}F`;
+        label.textContent = `${time}　画面内の敵 ` + counts.map(([name, alive, bullets]) =>
+            (counts.length > 1 ? `${name} ` : "") + `${alive}体` + (bullets ? `・弾 ${bullets}発` : "")).join("　");
         playButton.textContent = preview.playing ? "■ 停止" : "▶ 再生";
     };
+
+    // 2Dの右端の印は上下にドラッグして出現の高さを決める
+    if (chapter) {
+        MakeDraggable(canvas2D, () => chapter.rules.flatMap((r, ri) => r.randomPosition ? [] : [{ ...marker2D(r),
+            move: (px, py) => { r.y = Round(Math.max(-1.6, Math.min(1.5, fy(py)))); selectedRule = { chapter: opts.chapter, rule: ri }; },
+            select: () => { selectedRule = { chapter: opts.chapter, rule: ri }; Render(); } }]), () => preview.draw());
+    }
 
     const legend = [...new Set(spawns.map((s) => s.rule.type))].map((type) =>
         El("span", {}, El("span", { className: "dot", style: `background: ${TypeColor(type)}` }), EnemyLabels[type] || type));
     const element = El("section", { className: "card" },
-        El("div", { className: "card-head" }, El("h2", {}, "再生"), ModeSwitch(),
-            El("span", { className: "help", style: "margin: 0" }, "ステージの最初から敵の出現と動きを再生する")),
+        El("div", { className: "card-head" }, El("h2", {}, opts.title || "再生"), ModeSwitch(),
+            El("span", { className: "help", style: "margin: 0" }, chapter ?
+                "点線の番号 = 各敵の出現位置（2Dの右端は上下にドラッグ）、白い縁 = 選択中の敵" : "ステージの最初から敵の出現と動きを再生する")),
         El("div", { className: "card-body" },
             El("div", { className: "toolbar" }, playButton, "速さ", speedSelect, slider, label),
-            canvas,
+            opts.controls ? El("div", { className: "toolbar" }, ...opts.controls) : "",
+            ViewPair(canvas2D, canvas3D),
             El("div", { className: "toolbar", style: "margin: 8px 0 0" }, ...legend),
             El("div", { className: "help" }, "自作の動き（黄色の縁）はゲームと同じ計算で弾も表示する。既存の敵は主な動きの近似で弾は表示しない。3Dでは奥の「出現」の線から手前へ来る。",
                 "自機は動かないものとし、撃破や画面内の数の上限は再現しない")));
@@ -946,51 +1060,44 @@ function RenderOverview(root) {
  */
 function Preview(script) {
     const width = (View.maxX - View.minX) * View.scale, height = (View.maxY - View.minY) * View.scale;
-    const canvas = El("canvas", { width, height });
-    const g = canvas.getContext("2d");
+    const canvas2D = El("canvas", { width, height }), canvas3D = El("canvas", { width, height });
+    const g = canvas2D.getContext("2d"), g3 = canvas3D.getContext("2d");
     const sx = (x) => (x - View.minX) * View.scale, sy = (y) => (View.maxY - y) * View.scale;
     const fx = (px) => px / View.scale + View.minX, fy = (py) => View.maxY - py / View.scale;
     const slider = El("input", { type: "range", min: 0, value: preview.frame, style: "width: 360px",
         oninput: (e) => { preview.frame = Number(e.target.value); preview.playing = false; preview.draw(); } });
     const label = El("span");
-    let result = null;
+    const show2D = preview.mode !== "3d", show3D = preview.mode !== "2d";
+    let result = null, result3D = null;
     let last = 0;
 
-    // スクリプトを実行し直す（ドラッグ中も呼ぶ）
+    // スクリプトを表示する視点で実行し直す（ドラッグ中も呼ぶ）
     const simulate = () => {
-        try {
-            result = preview.mode === "3d" ? SimulateScript3D(script, 0, preview.startY, 0, preview.playerY) :
-                SimulateScript(script, 2.8, preview.startY, preview.playerX, preview.playerY, 3600);
-        } catch (e) {
-            result = { path: [], shots: [] };
-        }
-        last = Math.max(0, result.path.length - 1);
+        const run = (f) => { try { return f(); } catch (e) { return { path: [], shots: [] }; } };
+        result = show2D ? run(() => SimulateScript(script, 2.8, preview.startY, preview.playerX, preview.playerY, 3600)) : null;
+        result3D = show3D ? run(() => SimulateScript3D(script, 0, preview.startY, 0, preview.playerY)) : null;
+        last = Math.max(0, (result || result3D).path.length - 1, result3D ? result3D.path.length - 1 : 0);
         slider.max = last;
     };
 
-    preview.draw = () => {
-        simulate();
-        // 最後のフレームで再生を止める
-        if (preview.frame > last) { preview.frame = last; preview.playing = false; }
-        const t = preview.frame;
-        if (preview.mode === "3d") {
-            // 3Dは自機の後ろから軌跡・敵・弾を描く
-            const shots = [];
-            for (const s of result.shots) {
-                if (s.frame > t) continue;
-                const dt = t - s.frame, z = s.z + s.vz * dt;
-                if (z >= 0 && z <= 70) shots.push({ x: s.x + s.vx * dt, y: s.y + s.vy * dt, z, color: s.pc === selectedCommand ? "#fff" : "#fd6" });
-            }
-            Draw3D(g, width, height, {
-                trail: result.path.map((p) => ({ ...p, hl: p.pc === selectedCommand })),
-                enemies: [{ ...(result.path[t] || { x: 0, y: preview.startY, z: 60 }), color: "#f96" }],
-                shots, playerX: 0, playerY: preview.playerY
-            });
-            slider.value = t;
-            label.textContent = ` ${t} / ${last}F　表示中の弾 ${shots.length}発（全${result.shots.length}発）` +
-                (result.path.length && result.path[last].z < 2 ? `　${last}Fで自機の後ろへ抜ける` : "");
-            return;
+    // 3Dは自機の後ろから軌跡・敵・弾を描く
+    const draw3D = (t) => {
+        const shots = [];
+        for (const s of result3D.shots) {
+            if (s.frame > t) continue;
+            const dt = t - s.frame, z = s.z + s.vz * dt;
+            if (z >= 0 && z <= 70) shots.push({ x: s.x + s.vx * dt, y: s.y + s.vy * dt, z, color: s.pc === selectedCommand ? "#fff" : "#fd6" });
         }
+        Draw3D(g3, width, height, {
+            trail: result3D.path.map((p) => ({ ...p, hl: p.pc === selectedCommand })),
+            enemies: t < result3D.path.length ? [{ ...result3D.path[t], color: "#f96" }] : [],
+            shots, playerX: 0, playerY: preview.playerY
+        });
+        return shots.length;
+    };
+
+    // 2Dは横から軌跡・ドラッグできる点・敵・弾を描く
+    const draw2D = (t) => {
         g.clearRect(0, 0, width, height);
         // 自機の移動範囲と自機を描く
         g.strokeStyle = "#333";
@@ -1019,9 +1126,11 @@ function Preview(script) {
             g.fillStyle = "#000"; g.fillText(String(ci), sx(c.x), sy(c.y) + 0.5);
         });
         // 現在フレームの敵を描く
-        const enemy = result.path[t] || { x: 2.8, y: preview.startY };
-        g.fillStyle = "#f96";
-        g.beginPath(); g.arc(sx(enemy.x), sy(enemy.y), 6, 0, Math.PI * 2); g.fill();
+        if (t < result.path.length) {
+            const enemy = result.path[t];
+            g.fillStyle = "#f96";
+            g.beginPath(); g.arc(sx(enemy.x), sy(enemy.y), 6, 0, Math.PI * 2); g.fill();
+        }
         // 発射済みの弾を等速直線で進めて描く
         // ponytail: 弾は等速直線のみ。ゲーム側の画面外消去や自機との衝突は再現しない
         let visible = 0;
@@ -1033,13 +1142,26 @@ function Preview(script) {
             g.fillRect(sx(x) - 2, sy(y) - 2, 4, 4);
             ++visible;
         }
-        slider.value = t;
-        label.textContent = ` ${t} / ${last}F　表示中の弾 ${visible}発（全${result.shots.length}発）` +
-            (result.path.length && result.path[last].x < -2.6 ? `　${last}Fで画面外へ消える` : "");
+        return visible;
     };
 
-    // 出現位置・自機・移動先の点をドラッグで動かす
-    MakeDraggable(canvas, () => preview.mode === "3d" ? [] : [
+    preview.draw = () => {
+        simulate();
+        // 最後のフレームで再生を止める
+        if (preview.frame > last) { preview.frame = last; preview.playing = false; }
+        const t = preview.frame;
+        const counts = [];
+        if (show2D) counts.push(["2D", draw2D(t), result]);
+        if (show3D) counts.push(["3D", draw3D(t), result3D]);
+        slider.value = t;
+        label.textContent = ` ${t} / ${last}F　表示中の弾 ` + counts.map(([name, visible, r]) =>
+            (counts.length > 1 ? `${name} ` : "") + `${visible}発（全${r.shots.length}発）`).join("　") +
+            (result && result.path.length && result.path[result.path.length - 1].x < -2.6 ? `　${result.path.length - 1}Fで画面外へ消える` : "") +
+            (!result && result3D.path.length && result3D.path[last].z < 2 ? `　${last}Fで自機の後ろへ抜ける` : "");
+    };
+
+    // 2Dの画面で出現位置・自機・移動先の点をドラッグで動かす
+    MakeDraggable(canvas2D, () => [
         { x: sx(2.8), y: sy(preview.startY), move: (px, py) => { preview.startY = Round(fy(py)); } },
         { x: sx(preview.playerX), y: sy(preview.playerY), move: (px, py) => { preview.playerX = Round(fx(px)); preview.playerY = Round(fy(py)); } },
         ...script.commands.flatMap((c, ci) => c.op !== "MoveTo" ? [] : [{
@@ -1051,12 +1173,12 @@ function Preview(script) {
     preview.draw();
 
     return El("section", { className: "card" }, El("div", { className: "card-head" }, El("h2", {}, "プレビュー"), ModeSwitch()),
-        El("div", { className: "card-body" }, El("div", { className: "help" }, preview.mode === "3d" ?
-            "3Dは2Dの横の動きを奥行きに読み替えたもの（ゲームと同じ計算）。左右位置は出現規則の「3Dの左右X」で、ここでは中央。点のドラッグは2D表示で行う" :
-            "「出」= 出現位置（上下にドラッグ）、▶ = 自機（ドラッグで移動、狙う弾の向きが変わる）、紫の番号 = 移動先（ドラッグで変更）。黄色 = 選択中のコマンドの区間"),
+        El("div", { className: "card-body" }, El("div", { className: "help" },
+            show2D ? "2D: 「出」= 出現位置（上下にドラッグ）、▶ = 自機（ドラッグで移動、狙う弾の向きが変わる）、紫の番号 = 移動先（ドラッグで変更）。黄色 = 選択中のコマンドの区間。" : "",
+            show3D ? "3D: 2Dの横の動きを奥行きに読み替えたもの（ゲームと同じ計算）。左右位置は出現規則の「3Dの左右X」で、ここでは中央。点のドラッグは2Dの画面で行う" : ""),
         El("div", {}, El("button", { onclick: () => { if (preview.frame >= last) preview.frame = 0; preview.playing = !preview.playing; } }, "▶ 再生 / ■ 停止"),
             " ", slider, label),
-        canvas));
+        ViewPair(canvas2D, canvas3D)));
 }
 
 /**
