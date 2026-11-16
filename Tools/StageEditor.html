@@ -4,51 +4,111 @@
 <meta charset="utf-8">
 <title>Stage Editor</title>
 <style>
-    body { font: 13px sans-serif; margin: 0; background: #1e1f22; color: #ddd; }
-    button, select, input { font: inherit; background: #2b2d31; color: #ddd; border: 1px solid #555; border-radius: 3px; }
-    button { cursor: pointer; padding: 2px 8px; }
-    button:hover { background: #3a3d44; }
-    button.on { background: #3d6db5; border-color: #6c9be0; color: #fff; }
-    button.primary { background: #2f7d4a; border-color: #4fb070; color: #fff; }
-    input[type=number] { width: 64px; }
-    header { position: sticky; top: 0; z-index: 1; background: #26282c; border-bottom: 1px solid #444; padding: 8px 12px; }
-    header .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    header .tabs { margin-top: 8px; }
-    header .tabs button { font-size: 14px; padding: 4px 16px; }
-    main { padding: 8px 12px; }
-    table { border-collapse: collapse; margin: 6px 0; }
-    td, th { padding: 2px 4px; border-bottom: 1px solid #333; vertical-align: middle; }
-    th { text-align: left; color: #999; font-weight: normal; }
-    tr.selected td { background: #2d3a4f; }
-    fieldset { border: 1px solid #444; margin: 10px 0; border-radius: 4px; }
-    legend { color: #bbb; }
-    canvas { display: block; background: #111; border: 1px solid #333; touch-action: none; max-width: 100%; height: auto; }
-    .help { color: #999; font-size: 12px; margin: 2px 0 6px; }
-    .canvases { display: flex; gap: 12px; align-items: flex-start; flex-wrap: wrap; }
-    .caption { color: #aaa; font-size: 12px; margin: 2px 0; }
-    .side { display: flex; gap: 16px; align-items: flex-start; }
-    .side > div:last-child { flex: 1; min-width: 0; }
-    .list { display: flex; flex-direction: column; gap: 4px; min-width: 180px; }
-    .list button { text-align: left; }
-    .palette button { margin: 2px; }
-    .desc { color: #9cf; font-size: 12px; }
-    #status { margin-left: 8px; }
-    .error { color: #f77; } .ok { color: #7f7; } .dirty { color: #fc6; }
+    :root {
+        --bg: #131418; --panel: #1b1d22; --panel2: #23262c; --hover: #2b2f36; --border: #2f333a;
+        --text: #e4e6eb; --muted: #8b919c; --accent: #5b8cff; --accent-soft: rgba(91, 140, 255, 0.16);
+        --ok: #3fb950; --warn: #e3b341; --err: #f85149; --radius: 8px;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--bg); color: var(--text);
+        font: 13px/1.5 "Segoe UI", "Yu Gothic UI", "Hiragino Sans", "Meiryo", sans-serif; }
+    button, select, input { font: inherit; color: var(--text); }
+    button { cursor: pointer; background: var(--panel2); border: 1px solid var(--border); border-radius: 6px;
+        padding: 4px 10px; transition: background 0.12s, border-color 0.12s; }
+    button:hover { background: var(--hover); border-color: #3c414a; }
+    button:disabled { opacity: 0.45; cursor: default; }
+    button.on { background: var(--accent-soft); border-color: var(--accent); color: #cfdcff; }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+    button.primary:hover { background: #6f9aff; }
+    button.ghost { background: transparent; border-color: transparent; color: var(--muted); padding: 2px 6px; }
+    button.ghost:hover { background: var(--hover); color: var(--text); }
+    button.danger:hover { color: var(--err); }
+    select, input { background: #111216; border: 1px solid var(--border); border-radius: 6px; padding: 3px 6px; }
+    select:focus, input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+    input[type=number] { width: 72px; }
+    input[type=checkbox] { accent-color: var(--accent); width: 15px; height: 15px; vertical-align: middle; }
+    input[type=range] { accent-color: var(--accent); padding: 0; border: none; background: none; vertical-align: middle; }
+
+    .app { display: grid; grid-template-columns: 236px 1fr; min-height: 100vh; }
+    aside { position: sticky; top: 0; height: 100vh; overflow-y: auto; background: var(--panel);
+        border-right: 1px solid var(--border); padding: 14px 10px; }
+    .brand { font-size: 15px; font-weight: 700; padding: 2px 8px 14px; letter-spacing: 0.02em; }
+    .brand span { color: var(--accent); }
+    .nav { display: flex; flex-direction: column; gap: 2px; margin-bottom: 16px; }
+    .nav button { text-align: left; background: transparent; border-color: transparent; padding: 7px 10px; }
+    .nav button:hover { background: var(--hover); }
+    .nav button.on { background: var(--accent-soft); border-color: transparent; color: #cfdcff; }
+    .nav small { display: block; color: var(--muted); font-size: 11px; }
+    .side-title { color: var(--muted); font-size: 11px; font-weight: 600; letter-spacing: 0.08em; padding: 4px 8px; margin-top: 4px; }
+    .stage-row { display: flex; align-items: center; gap: 4px; padding: 3px 8px; }
+    .stage-row b { width: 64px; font-weight: 500; color: var(--muted); font-size: 12px; }
+    .stage-row button { flex: 1; padding: 2px 0; font-size: 11px; }
+    .side-list { display: flex; flex-direction: column; gap: 2px; }
+    .side-list button { text-align: left; background: transparent; border-color: transparent; }
+    .side-list button.on { background: var(--accent-soft); color: #cfdcff; }
+
+    .content { min-width: 0; }
+    .topbar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 10px;
+        padding: 10px 20px; background: rgba(19, 20, 24, 0.88); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
+    .topbar h1 { font-size: 16px; margin: 0; font-weight: 600; white-space: nowrap; }
+    .topbar .spacer { flex: 1; }
+    .pill { font-size: 12px; padding: 3px 10px; border-radius: 999px; background: var(--panel2); color: var(--muted);
+        max-width: 560px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pill.ok { color: var(--ok); background: rgba(63, 185, 80, 0.12); }
+    .pill.dirty { color: var(--warn); background: rgba(227, 179, 65, 0.12); }
+    .pill.error { color: var(--err); background: rgba(248, 81, 73, 0.12); white-space: normal; }
+    main { padding: 16px 20px 40px; }
+
+    .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 16px; scroll-margin-top: 64px; }
+    .card-head { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+    .card-head h2 { font-size: 14px; margin: 0; font-weight: 600; white-space: nowrap; }
+    .card-body { padding: 12px 14px; }
+    .toolbar { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; color: var(--muted); }
+    .empty { color: var(--muted); padding: 60px 0; text-align: center; }
+    .stats { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+    .stat { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 10px 16px; min-width: 140px; }
+    .stat b { display: block; font-size: 20px; font-weight: 600; }
+    .stat span { color: var(--muted); font-size: 12px; }
+
+    table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+    th { text-align: left; color: var(--muted); font-weight: 500; font-size: 11px; padding: 6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    td { padding: 5px 6px; border-bottom: 1px solid #25282e; vertical-align: middle; }
+    tr:hover td { background: rgba(255, 255, 255, 0.02); }
+    tr.selected td { background: var(--accent-soft); }
+    tr.link { cursor: pointer; }
+    canvas { display: block; background: #0e0f12; border: 1px solid var(--border); border-radius: 6px; touch-action: none; max-width: 100%; height: auto; }
+    .help { color: var(--muted); font-size: 12px; margin: 4px 0 8px; }
+    .canvases { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+    .caption { color: var(--muted); font-size: 12px; margin: 0 0 4px; }
+    .caption b { color: var(--text); font-weight: 600; }
+    .palette { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0; }
+    .desc { color: #8fb3ff; font-size: 12px; }
+    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+    .actions { white-space: nowrap; }
 </style>
 </head>
 <body>
-<header>
-    <div class="row">
-        <button id="open" class="primary">① Stagesフォルダを開く</button>
-        <button id="save" disabled>② 保存</button>
-        <span id="status">Presentation/Gameplay/Stages フォルダを選ぶ（Chrome/Edge）</span>
+<div class="app">
+    <aside>
+        <div class="brand">Stage <span>Editor</span></div>
+        <div class="nav">
+            <button id="tabSheets" class="on">敵の出現<small>いつ・どこに出すか</small></button>
+            <button id="tabOverview">ステージ全体<small>全チャプターを俯瞰する</small></button>
+            <button id="tabScripts">敵の行動<small>自作の動きと弾</small></button>
+        </div>
+        <div id="sideDynamic"></div>
+    </aside>
+    <div class="content">
+        <div class="topbar">
+            <h1 id="title">Stage Editor</h1>
+            <span id="status" class="pill">Presentation/Gameplay/Stages フォルダを開く（Chrome/Edge）</span>
+            <span class="spacer"></span>
+            <button id="open">フォルダを開く</button>
+            <button id="save" disabled>保存</button>
+        </div>
+        <main id="editor"><div class="empty">右上の「フォルダを開く」で Presentation/Gameplay/Stages を選ぶ</div></main>
     </div>
-    <div class="row tabs">
-        <button id="tabSheets" class="on">敵の出現（いつ・どこに出すか）</button>
-        <button id="tabScripts">敵の行動（自作の動きと弾）</button>
-    </div>
-</header>
-<main id="editor"></main>
+</div>
 
 <script src="StageSheetGenerator.js"></script>
 <script>
@@ -94,9 +154,9 @@ const IntegerArgs = ["frames", "count", "target"];
 // 出現位置図の範囲（3Dを正面から見た横X・高さY、2DではYだけ使う）
 const PlaceView = { minX: -1.3, maxX: 1.3, minY: -1.7, maxY: 1.6, scale: 90 };
 // 行動プレビューの範囲（ゲームの2D座標、敵の消滅位置と出現位置を含む）
-const View = { minX: -2.6, maxX: 2.8, minY: -1.7, maxY: 1.6, scale: 110 };
+const View = { minX: -2.6, maxX: 3.0, minY: -1.7, maxY: 1.6, scale: 110 };
 // 行動プレビューの再生状態（保存しない）
-const preview = { frame: 0, playing: false, startY: 0, playerX: -0.72, playerY: 0, draw: null };
+const preview = { frame: 0, playing: false, speed: 1, mode: "2d", startY: 0, playerX: -0.72, playerY: 0, draw: null };
 
 let stagesDir = null;
 let scriptsEntry = null;   // { name, dir, data, saved }
@@ -121,7 +181,8 @@ const Round = (v) => Math.round(v * 100) / 100;
  */
 function SetStatus(text, cls) {
     $("status").textContent = text;
-    $("status").className = cls || "";
+    $("status").className = "pill " + (cls || "");
+    $("status").title = text;
 }
 
 /**
@@ -308,21 +369,10 @@ function TimelineView(chapter, ci, length) {
  * @return なし
  */
 function RenderSheet(root) {
-    // ステージと難易度を選ぶボタンを並べる
-    const stages = [...new Set(sheets.map((s) => s.data.stage))].sort((a, b) => a - b);
-    const picker = El("table", {}, ...stages.map((stage) => El("tr", {}, El("th", {}, `ステージ${stage}`),
-        ...Difficulties.map((d) => {
-            const entry = sheets.find((s) => s.data.stage === stage && s.data.difficulty === d);
-            return El("td", {}, !entry ? "" : El("button", {
-                className: entry === current ? "on" : "",
-                onclick: () => { current = entry; selectedRule = null; Render(); }
-            }, d + (IsDirty(entry) ? " *" : "")));
-        }))));
-    root.append(picker);
     if (!current) return;
     const sheet = current.data;
 
-    root.append(El("p", {}, "1チャプターの長さ ", NumberInput(sheet, "chapterLength", 1), " F　",
+    root.append(El("div", { className: "toolbar" }, "1チャプターの長さ", NumberInput(sheet, "chapterLength", 1), "F",
         El("label", {}, El("input", { type: "checkbox", checked: showDetail, onchange: (e) => { showDetail = e.target.checked; Render(); } }),
             " 詳細な値も表示（2DのX・3Dの奥行き）")));
 
@@ -367,27 +417,526 @@ function RenderSheet(root) {
                 ...detail.map(([key, , step, title]) => El("td", {}, NumberInput(rule, key, step, title))),
                 El("td", {}, El("input", { type: "checkbox", checked: !!rule.randomPosition, title: "出るたびに高さと3Dの左右をランダムにする",
                     onchange: (e) => { rule.randomPosition = e.target.checked; Changed(); } })),
-                El("td", {},
-                    El("button", { title: "上へ", onclick: () => move(-1) }, "↑"),
-                    El("button", { title: "下へ", onclick: () => move(1) }, "↓"),
-                    El("button", { onclick: () => { chapter.rules.splice(ri + 1, 0, { ...rule }); Changed(); } }, "複製"),
-                    El("button", { onclick: () => { chapter.rules.splice(ri, 1); selectedRule = null; Changed(); } }, "削除"))));
+                El("td", { className: "actions" },
+                    El("button", { className: "ghost", title: "上へ", onclick: () => move(-1) }, "↑"),
+                    El("button", { className: "ghost", title: "下へ", onclick: () => move(1) }, "↓"),
+                    El("button", { className: "ghost", onclick: () => { chapter.rules.splice(ri + 1, 0, { ...rule }); Changed(); } }, "複製"),
+                    El("button", { className: "ghost danger", onclick: () => { chapter.rules.splice(ri, 1); selectedRule = null; Changed(); } }, "削除"))));
         });
 
         // チャプター単位の操作を作る
         const newRule = { type: "BasicEnemy", firstFrame: 25, interval: 100, sideX: 2.6, railX: 0, y: 0, railZ: 60, randomPosition: false };
-        root.append(El("fieldset", {},
-            El("legend", {}, `チャプター${ci + 1}　`,
-                El("input", { value: chapter.comment || "", placeholder: "メモ（例: 通常機と狙撃機）", style: "width: 420px",
-                    onchange: (e) => { chapter.comment = e.target.value; Changed(); } })),
-            El("div", { className: "canvases" }, PlacementView(chapter, ci), TimelineView(chapter, ci, sheet.chapterLength)),
-            table,
-            El("button", { onclick: () => { chapter.rules.push({ ...newRule }); selectedRule = { chapter: ci, rule: chapter.rules.length - 1 }; Changed(); } }, "＋ 敵を追加"), " ",
-            El("button", { onclick: () => {
-                if (sheet.chapters.length > 1 && confirm(`チャプター${ci + 1}を削除する?`)) { sheet.chapters.splice(ci, 1); selectedRule = null; Changed(); }
-            } }, "チャプターを削除")));
+        root.append(El("section", { className: "card", id: `chapter-${ci}` },
+            El("div", { className: "card-head" }, El("h2", {}, `チャプター ${ci + 1}`),
+                El("input", { value: chapter.comment || "", placeholder: "メモ（例: 通常機と狙撃機）", style: "flex: 1",
+                    onchange: (e) => { chapter.comment = e.target.value; Changed(); } }),
+                El("button", { className: "ghost danger", onclick: () => {
+                    if (sheet.chapters.length > 1 && confirm(`チャプター${ci + 1}を削除する?`)) { sheet.chapters.splice(ci, 1); selectedRule = null; Changed(); }
+                } }, "チャプターを削除")),
+            El("div", { className: "card-body" },
+                El("div", { className: "canvases" }, PlacementView(chapter, ci), TimelineView(chapter, ci, sheet.chapterLength)),
+                table,
+                El("button", { onclick: () => { chapter.rules.push({ ...newRule }); selectedRule = { chapter: ci, rule: chapter.rules.length - 1 }; Changed(); } }, "＋ 敵を追加"))));
     });
     root.append(El("button", { onclick: () => { sheet.chapters.push({ comment: "", rules: [] }); Changed(); } }, "＋ チャプターを追加"));
+}
+
+/**
+ * @brief サイドバーのステージと難易度の選択ボタンを作る
+ * @return 要素
+ */
+function StagePicker() {
+    const stages = [...new Set(sheets.map((s) => s.data.stage))].sort((a, b) => a - b);
+    return El("div", {}, El("div", { className: "side-title" }, "ステージ"),
+        ...stages.map((stage) => El("div", { className: "stage-row" }, El("b", {}, `ステージ${stage}`),
+            ...Difficulties.map((d) => {
+                const entry = sheets.find((s) => s.data.stage === stage && s.data.difficulty === d);
+                return !entry ? El("span", { style: "flex: 1" }) : El("button", {
+                    className: entry === current ? "on" : "", title: d,
+                    onclick: () => { current = entry; selectedRule = null; Render(); }
+                }, d[0] + (IsDirty(entry) ? "*" : ""));
+            }))),
+        El("div", { className: "help", style: "padding: 0 8px" }, "E = Easy、N = Normal、H = Hard、* = 未保存"));
+}
+
+/**
+ * @brief 出現シートの全チャプターで、敵が出るフレームを列挙する
+ * @param sheet 対象のシート
+ * @return { frame, chapter, rule, key } の配列（frameはステージ開始からのフレーム、keyは表示上の敵の種類）
+ */
+function ListSpawns(sheet) {
+    const spawns = [];
+    const length = sheet.chapterLength;
+    sheet.chapters.forEach((chapter, ci) => chapter.rules.forEach((rule) => {
+        const key = rule.type === "ScriptedEnemy" ? `★ ${rule.script || "(未選択)"}` : EnemyLabels[rule.type] || rule.type;
+        // ゲームと同じく、最初のフレームと間隔ごとにチャプターの終わりまで出す
+        for (let f = rule.firstFrame; f < length; f += rule.interval > 0 ? rule.interval : length) {
+            spawns.push({ frame: ci * length + f, chapter: ci, rule, key });
+        }
+    }));
+    return spawns;
+}
+
+/**
+ * @brief 指定チャプターの編集画面へ移る
+ * @param ci チャプター番号
+ * @return なし
+ */
+function JumpToChapter(ci) {
+    SwitchTab("sheets");
+    const card = document.getElementById(`chapter-${ci}`);
+    if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+/**
+ * @brief 既存の敵が2Dで出現してからageフレーム後にいる位置を求める
+ *
+ * ponytail: C++の各敵の主な動きだけを写した近似。弾・撃破・画面内の数の上限・自機の移動は再現しない
+ * 動きを変えた場合は SideScrollingShooterEnemies.h の各Tickと合わせる
+ * @param type 敵の種類（Stage::EnemyTypeの名前）
+ * @param age 出現してからのフレーム数
+ * @param y0 出現時の高さ
+ * @param phase 上下の揺れの位相
+ * @return { x, y }
+ */
+function BuiltinPosition(type, age, y0, phase) {
+    const x0 = 2.8;
+    const wave = (speed, rate, amplitude) => ({ x: x0 - speed * age, y: y0 + Math.sin(phase + age * rate) * amplitude });
+    switch (type) {
+    case "BasicEnemy": return wave(0.010, 0.055, 0.10);
+    case "HeavyEnemy": return wave(0.007, 0.055, 0.18);
+    case "ArmoredEnemy": return wave(0.006, 0.050, 0.16);
+    case "StraightShooterEnemy": return wave(0.020, 0, 0);
+    case "LinkedLaserEnemy": return wave(0.012, 0, 0);
+    case "CircleShooterEnemy":
+    case "SquareShooterEnemy":
+        // X=0.75で止まって撃ち、288F後に左へ離脱する
+        return { x: age < 288 ? Math.max(x0 - 0.012 * age, 0.75) : 0.75 - 0.012 * (age - 288), y: y0 };
+    case "MissileShooterEnemy":
+        // 下側のX=1.75で止まり、撃破されるまで撃ち続ける
+        return { x: Math.max(x0 - 0.012 * age, 1.75), y: -0.92 };
+    case "DiveRusherEnemy": {
+        // 高所を進んで自機の手前で24F止まり、42Fの曲線で自機へ降下してから突撃する
+        const playerX = -0.72, playerY = 0, highY = 0.96;
+        const stopAge = Math.ceil((x0 - (playerX + 1.52)) / 0.020);
+        if (age <= stopAge) return { x: x0 - 0.020 * age, y: highY };
+        const stopX = x0 - 0.020 * stopAge;
+        const t = age - stopAge - 24;
+        if (t <= 0) return { x: stopX, y: highY };
+        if (t < 42) {
+            const p = t / 42 * Math.PI / 2;
+            return { x: stopX + (playerX - stopX) * (1 - Math.cos(p)), y: highY + (playerY - highY) * Math.sin(p) };
+        }
+        return { x: playerX - 0.034 * (t - 42), y: playerY };
+    }
+    default: return wave(0.010, 0, 0);
+    }
+}
+
+// 3Dの座標の対応（SideScrollingShooter.h の WorldXScale・WorldYScale・PlayerRailZ と ScriptedEnemyBehavior に合わせる）
+const Rail = { playerZ: 8, worldX: 7, worldY: 4.4, depthPerScriptX: (60 - 2) / (2.8 + 2.6) };
+const RailZFromScriptX = (x) => 2 + (x + 2.6) * Rail.depthPerScriptX;
+const ScriptXFromRailZ = (z) => (z - 2) / Rail.depthPerScriptX - 2.6;
+
+/**
+ * @brief 自作の動きを3Dで実行した結果を求める（ScriptedEnemyBehaviorの3D変換と同じ）
+ * @param script 行動スクリプト
+ * @param railX 3Dの左右位置
+ * @param y0 出現時の高さ
+ * @param playerX 自機の左右位置
+ * @param playerY 自機の高さ
+ * @return { path: {x, y, z, pc}[], shots: {frame, pc, x, y, z, vx, vy, vz}[] }
+ */
+function SimulateScript3D(script, railX, y0, playerX, playerY) {
+    // 2Dの横位置を奥行きへ読み替え、自機の奥行きを2Dの横位置にして狙う
+    const r = SimulateScript(script, 2.8, y0, ScriptXFromRailZ(Rail.playerZ), playerY, 3600);
+    return {
+        path: r.path.map((p) => ({ x: railX, y: p.y, z: RailZFromScriptX(p.x), pc: p.pc })),
+        shots: r.shots.map((s) => {
+            // 弾幕の面を自機の左右位置へ傾ける
+            const z = RailZFromScriptX(s.x), vz = s.vx * Rail.depthPerScriptX, depth = Rail.playerZ - z;
+            return { frame: s.frame, pc: s.pc, x: railX, y: s.y, z,
+                vx: Math.abs(depth) > 0.001 ? vz * (playerX - railX) / depth : 0, vy: s.vy, vz };
+        })
+    };
+}
+
+/**
+ * @brief 既存の敵が3Dで出現してからageフレーム後にいる位置を求める
+ *
+ * ponytail: BuiltinPositionと同じく各敵の3D側Tickの主な動きだけを写した近似
+ * @param type 敵の種類
+ * @param age 出現してからのフレーム数
+ * @param x0 出現時の左右位置
+ * @param y0 出現時の高さ
+ * @param phase 揺れの位相
+ * @return { x, y, z }（x, yはゲーム座標、zは奥行き）
+ */
+function BuiltinPosition3D(type, age, x0, y0, phase) {
+    const z0 = 60;
+    const wave = (speed, xRate, xAmp, yRate, yAmp) => ({ x: x0 + Math.sin(phase + age * xRate) * xAmp,
+        y: y0 + Math.sin(phase + age * yRate) * yAmp, z: z0 - speed * age });
+    switch (type) {
+    case "BasicEnemy": return wave(0.42, 0.045, 0.16, 0.055, 0.10);
+    case "HeavyEnemy": return wave(0.30, 0.045, 0.24, 0.055, 0.18);
+    case "ArmoredEnemy": return wave(0.25, 0.038, 0.30, 0.050, 0.16);
+    case "StraightShooterEnemy": return wave(0.36, 0, 0, 0, 0);
+    case "LinkedLaserEnemy": return wave(0.24, 0, 0, 0, 0);
+    case "CircleShooterEnemy":
+    case "SquareShooterEnemy":
+        // 自機の24先で止まって撃ち続ける
+        return { x: x0, y: y0, z: Math.max(z0 - 0.30 * age, Rail.playerZ + 24) };
+    case "MissileShooterEnemy": return { x: x0, y: -0.92, z: Math.max(z0 - 0.30 * age, Rail.playerZ + 24) };
+    case "DiveRusherEnemy": {
+        // 自機の25先で24F止まり、42Fの曲線で自機へ降下してから突撃する
+        const highY = 0.96, stopZ = Rail.playerZ + 25;
+        const stopAge = Math.ceil((z0 - stopZ) / 0.36);
+        if (age <= stopAge) return { x: x0, y: highY, z: z0 - 0.36 * age };
+        const z1 = z0 - 0.36 * stopAge;
+        const t = age - stopAge - 24;
+        if (t <= 0) return { x: x0, y: highY, z: z1 };
+        if (t < 42) {
+            const p = t / 42 * Math.PI / 2, h = 1 - Math.cos(p);
+            return { x: x0 + (0 - x0) * h, y: highY + (0 - highY) * Math.sin(p), z: z1 + (Rail.playerZ - z1) * h };
+        }
+        return { x: 0, y: 0, z: Rail.playerZ - 0.72 * (t - 42) };
+    }
+    default: return wave(0.42, 0, 0, 0, 0);
+    }
+}
+
+/**
+ * @brief 自機の後ろ上方から見た3D画面を描く（ゲームのレール視点のカメラに合わせる）
+ * @param g 描画先
+ * @param w 幅
+ * @param h 高さ
+ * @param scene { enemies: {x, y, z, color, ring}[], shots: {x, y, z, color}[], trail: {x, y, z, hl}[], playerX, playerY }
+ * @return なし
+ */
+function Draw3D(g, w, h, scene) {
+    // カメラは自機から(0, 2.8, -7.5)の位置で、自機の14先を見る
+    const player = { x: (scene.playerX || 0) * Rail.worldX, y: (scene.playerY || 0) * Rail.worldY, z: Rail.playerZ };
+    const eye = { x: player.x, y: player.y + 2.8, z: player.z - 7.5 };
+    const look = { x: 0, y: 0.5 - 2.8, z: 14 + 7.5 };
+    const len = Math.hypot(look.y, look.z);
+    const fwd = { y: look.y / len, z: look.z / len }, up = { y: fwd.z, z: -fwd.y };
+    const focal = (h / 2) / Math.tan(Math.PI / 6);
+    const project = (x, y, z) => {
+        const rx = x - eye.x, ry = y - eye.y, rz = z - eye.z;
+        const depth = ry * fwd.y + rz * fwd.z;
+        if (depth < 0.5) return null;
+        return { x: w / 2 + rx * focal / depth, y: h / 2 - (ry * up.y + rz * up.z) * focal / depth, s: focal / depth };
+    };
+    const at = (p) => project(p.x * Rail.worldX, p.y * Rail.worldY, p.z);
+    g.clearRect(0, 0, w, h);
+
+    // 奥行きがわかるように床の格子を描く
+    const floorY = -1.7 * Rail.worldY;
+    g.strokeStyle = "#1f2329"; g.lineWidth = 1;
+    for (let x = -21; x <= 21; x += 3.5) {
+        const a = project(x, floorY, 2), b = project(x, floorY, 64);
+        if (a && b) { g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke(); }
+    }
+    g.fillStyle = "#4a505a"; g.font = "10px sans-serif"; g.textAlign = "left"; g.textBaseline = "middle";
+    for (let z = 10; z <= 60; z += 10) {
+        const a = project(-21, floorY, z), b = project(21, floorY, z);
+        if (!a || !b) continue;
+        g.strokeStyle = z === 60 ? "#3a3f48" : "#1f2329";
+        g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+        if (z === 60) g.fillText("出現", b.x + 4, b.y);
+    }
+
+    // 軌跡を描く
+    (scene.trail || []).forEach((p, i, list) => {
+        if (i === 0) return;
+        const a = at(list[i - 1]), b = at(p);
+        if (!a || !b) return;
+        g.strokeStyle = p.hl ? "#fc6" : "#555"; g.lineWidth = p.hl ? 3 : 1;
+        g.beginPath(); g.moveTo(a.x, a.y); g.lineTo(b.x, b.y); g.stroke();
+    });
+    g.lineWidth = 1;
+
+    // 奥の物から順に敵・弾・自機を描く
+    const items = [
+        ...(scene.enemies || []).map((e) => ({ ...e, r: 0.7 })),
+        ...(scene.shots || []).map((s) => ({ ...s, r: 0.22 })),
+        { x: scene.playerX || 0, y: scene.playerY || 0, z: Rail.playerZ, player: true }
+    ].sort((a, b) => b.z - a.z);
+    for (const item of items) {
+        const p = at(item);
+        if (!p) continue;
+        if (item.player) {
+            g.fillStyle = "#6cf";
+            g.beginPath(); g.moveTo(p.x, p.y - 0.35 * p.s); g.lineTo(p.x - 0.6 * p.s, p.y + 0.3 * p.s); g.lineTo(p.x + 0.6 * p.s, p.y + 0.3 * p.s); g.fill();
+            continue;
+        }
+        g.fillStyle = item.color;
+        g.beginPath(); g.arc(p.x, p.y, Math.max(1.5, item.r * p.s), 0, Math.PI * 2); g.fill();
+        if (item.ring) { g.strokeStyle = "#fd6"; g.lineWidth = 2; g.stroke(); g.lineWidth = 1; }
+    }
+}
+
+/**
+ * @brief 2Dと3Dの表示を切り替えるボタンを作る
+ * @return 要素
+ */
+function ModeSwitch() {
+    const make = (mode, text) => El("button", { className: preview.mode === mode ? "on" : "",
+        onclick: () => { preview.mode = mode; Render(); } }, text);
+    return El("span", { style: "display: inline-flex; gap: 4px" }, make("2d", "2D（横から）"), make("3d", "3D（自機の後ろから）"));
+}
+
+/**
+ * @brief ステージの敵の出現と動きを動画のように再生する画面を作る
+ * @param sheet 対象のシート
+ * @param spawns ListSpawnsの結果
+ * @param total ステージ全体のフレーム数
+ * @return { element, draw }
+ */
+function StagePlayer(sheet, spawns, total) {
+    const width = (View.maxX - View.minX) * View.scale, height = (View.maxY - View.minY) * View.scale;
+    const canvas = El("canvas", { width, height, style: "width: 100%; max-width: 900px" });
+    const g = canvas.getContext("2d");
+    const sx = (x) => (x - View.minX) * View.scale, sy = (y) => (View.maxY - y) * View.scale;
+    const slider = El("input", { type: "range", min: 0, max: total, value: preview.frame, style: "flex: 1",
+        oninput: (e) => { preview.frame = Number(e.target.value); preview.draw(); } });
+    const label = El("span", { style: "min-width: 230px; color: var(--muted)" });
+    const playButton = El("button", { className: "primary", style: "min-width: 84px", onclick: () => {
+        if (preview.frame >= total) preview.frame = 0;
+        preview.playing = !preview.playing;
+        playButton.textContent = preview.playing ? "■ 停止" : "▶ 再生";
+    } }, preview.playing ? "■ 停止" : "▶ 再生");
+    const speedSelect = El("select", { onchange: (e) => { preview.speed = Number(e.target.value); } },
+        ...[1, 2, 4, 8].map((v) => El("option", { value: v, selected: v === preview.speed }, `×${v}`)));
+
+    // 出現ごとの初期値を決め、自作の動きは実行結果をまとめて求めておく
+    const scripts = new Map(scriptsEntry.data.scripts.map((s) => [s.name, s]));
+    const random = (n) => ((Math.sin(n * 12.9898) * 43758.5453) % 1 + 1) % 1;
+    const actors = spawns.map((s, i) => {
+        // ponytail: 位置ランダムはゲームの乱数と別の固定乱数で決める。ゲームとは高さが一致しない
+        const y0 = s.rule.randomPosition ? -0.86 + 1.72 * random(i + 1) : s.rule.y;
+        const x0 = s.rule.randomPosition ? -1 + 2 * random(i + 101) : s.rule.railX;
+        const phase = ((s.frame + (sheet.stage - 1) * 17) % 47) * 0.17;
+        const script = s.rule.type === "ScriptedEnemy" ? scripts.get(s.rule.script) : null;
+        let result = null;
+        if (script) {
+            try {
+                result = preview.mode === "3d" ? SimulateScript3D(script, x0, y0, 0, 0) : SimulateScript(script, 2.8, y0, -0.72, 0, 3600);
+            } catch (e) { result = null; }
+        }
+        return { spawn: s, x0, y0, phase, result };
+    });
+
+    // 3Dでは画面内の敵と弾を集めて自機の後ろから見た図を描く
+    const draw3D = (t) => {
+        const enemies = [], shots = [];
+        for (const a of actors) {
+            const age = t - a.spawn.frame;
+            if (age < 0) continue;
+            let pos;
+            if (a.spawn.rule.type === "ScriptedEnemy") {
+                if (!a.result || age > a.result.path.length) continue;
+                pos = age === 0 ? { x: a.x0, y: a.y0, z: 60 } : a.result.path[age - 1];
+                for (const s of a.result.shots) {
+                    if (s.frame >= age) continue;
+                    const dt = age - s.frame;
+                    const z = s.z + s.vz * dt;
+                    if (z < 0 || z > 70) continue;
+                    shots.push({ x: s.x + s.vx * dt, y: s.y + s.vy * dt, z, color: "#fd6" });
+                }
+            } else {
+                pos = BuiltinPosition3D(a.spawn.rule.type, age, a.x0, a.y0, a.phase);
+            }
+            if (pos.z < 2) continue;
+            enemies.push({ ...pos, color: TypeColor(a.spawn.rule.type), ring: a.spawn.rule.type === "ScriptedEnemy" });
+        }
+        Draw3D(g, width, height, { enemies, shots });
+        return [enemies.length, shots.length];
+    };
+
+    const draw = () => {
+        const t = Math.round(preview.frame);
+        if (preview.mode === "3d") {
+            const [alive, bullets] = draw3D(t);
+            drawLabels(t, alive, bullets);
+            return;
+        }
+        g.clearRect(0, 0, width, height);
+        // 自機の移動範囲と自機の基準位置を描く
+        g.strokeStyle = "#2a2e35";
+        g.strokeRect(sx(-2.0), sy(1.53), 4.0 * View.scale, 3.15 * View.scale);
+        g.fillStyle = "#6cf";
+        g.beginPath(); g.moveTo(sx(-0.72) + 10, sy(0)); g.lineTo(sx(-0.72) - 8, sy(0) - 7); g.lineTo(sx(-0.72) - 8, sy(0) + 7); g.fill();
+        // 出現済みで画面内にいる敵と、自作の動きの敵の弾を描く
+        let alive = 0, bullets = 0;
+        for (const a of actors) {
+            const age = t - a.spawn.frame;
+            if (age < 0) continue;
+            let pos;
+            if (a.spawn.rule.type === "ScriptedEnemy") {
+                if (!a.result || age > a.result.path.length) continue;
+                pos = age === 0 ? { x: 2.8, y: a.y0 } : a.result.path[age - 1];
+                g.fillStyle = "#fd6";
+                for (const s of a.result.shots) {
+                    if (s.frame >= age) continue;
+                    const x = s.x + s.vx * (age - s.frame), y = s.y + s.vy * (age - s.frame);
+                    if (x < View.minX || x > View.maxX || y < View.minY || y > View.maxY) continue;
+                    g.fillRect(sx(x) - 2, sy(y) - 2, 4, 4);
+                    ++bullets;
+                }
+            } else {
+                pos = BuiltinPosition(a.spawn.rule.type, age, a.y0, a.phase);
+            }
+            if (pos.x < -2.6) continue;
+            ++alive;
+            g.fillStyle = TypeColor(a.spawn.rule.type);
+            g.beginPath(); g.arc(sx(pos.x), sy(pos.y), 7, 0, Math.PI * 2); g.fill();
+            if (a.spawn.rule.type === "ScriptedEnemy") { g.strokeStyle = "#fd6"; g.lineWidth = 2; g.stroke(); g.lineWidth = 1; }
+        }
+        drawLabels(t, alive, bullets);
+    };
+
+    // 現在の時刻と画面内の数を表示する
+    const drawLabels = (t, alive, bullets) => {
+        const ci = Math.min(sheet.chapters.length - 1, Math.floor(t / sheet.chapterLength));
+        g.fillStyle = "#e4e6eb"; g.font = "600 13px sans-serif"; g.textAlign = "left"; g.textBaseline = "top";
+        g.fillText(`チャプター${ci + 1}`, 10, 8);
+        g.fillStyle = "#8b919c"; g.font = "12px sans-serif";
+        g.fillText(sheet.chapters[ci].comment || "", 10, 28);
+        slider.value = t;
+        label.textContent = `${t} / ${total}F　画面内の敵 ${alive}体` + (bullets ? `・弾 ${bullets}発` : "");
+        playButton.textContent = preview.playing ? "■ 停止" : "▶ 再生";
+    };
+
+    const legend = [...new Set(spawns.map((s) => s.rule.type))].map((type) =>
+        El("span", {}, El("span", { className: "dot", style: `background: ${TypeColor(type)}` }), EnemyLabels[type] || type));
+    const element = El("section", { className: "card" },
+        El("div", { className: "card-head" }, El("h2", {}, "再生"), ModeSwitch(),
+            El("span", { className: "help", style: "margin: 0" }, "ステージの最初から敵の出現と動きを再生する")),
+        El("div", { className: "card-body" },
+            El("div", { className: "toolbar" }, playButton, "速さ", speedSelect, slider, label),
+            canvas,
+            El("div", { className: "toolbar", style: "margin: 8px 0 0" }, ...legend),
+            El("div", { className: "help" }, "自作の動き（黄色の縁）はゲームと同じ計算で弾も表示する。既存の敵は主な動きの近似で弾は表示しない。3Dでは奥の「出現」の線から手前へ来る。",
+                "自機は動かないものとし、撃破や画面内の数の上限は再現しない")));
+    return { element, draw };
+}
+
+/**
+ * @brief ステージ全体を1本の時間軸で俯瞰する画面を描画する
+ * @param root 描画先の要素
+ * @return なし
+ */
+function RenderOverview(root) {
+    if (!current) return;
+    const sheet = current.data;
+    const length = sheet.chapterLength;
+    const total = length * sheet.chapters.length;
+    const spawns = ListSpawns(sheet);
+    const keys = [...new Set(spawns.map((s) => s.key))];
+    const colorOf = (key) => TypeColor(spawns.find((s) => s.key === key).rule.type);
+
+    // 数値のまとめを表示する
+    const bucket = 60;
+    const counts = new Array(Math.ceil(total / bucket)).fill(0);
+    for (const s of spawns) ++counts[Math.floor(s.frame / bucket)];
+    const peak = Math.max(1, ...counts);
+    root.append(El("div", { className: "stats" },
+        ...[[`${total}F`, "ステージの長さ（ボス前まで）"], [String(sheet.chapters.length), "チャプター数"],
+            [String(spawns.length), "出現する敵の数"], [`${peak}体`, `一番混む${bucket}F間`]]
+            .map(([value, label]) => El("div", { className: "stat" }, El("b", {}, value), El("span", {}, label)))));
+
+    // 混み具合のグラフ、チャプターの帯、種類ごとの出現を1枚に描く
+    const left = 132, width = 1000, graphH = 70, laneH = 22, top = 22;
+    const canvas = El("canvas", { width: left + width + 16, height: top + graphH + 10 + keys.length * laneH + 24 });
+    const g = canvas.getContext("2d");
+    const fx = (f) => left + f / total * width;
+    let hover = -1;
+    const draw = () => {
+        g.clearRect(0, 0, canvas.width, canvas.height);
+        // チャプターの帯と番号・メモを描く
+        sheet.chapters.forEach((chapter, ci) => {
+            g.fillStyle = ci % 2 ? "#15171b" : "#111316";
+            g.fillRect(fx(ci * length), 0, fx(length) - left, canvas.height);
+            g.fillStyle = "#8b919c"; g.font = "600 11px sans-serif"; g.textAlign = "left"; g.textBaseline = "middle";
+            const label = `${ci + 1}` + (chapter.comment ? ` ${chapter.comment}` : "");
+            g.save(); g.beginPath(); g.rect(fx(ci * length) + 4, 0, fx(length) - left - 8, top); g.clip();
+            g.fillText(label, fx(ci * length) + 6, top / 2); g.restore();
+        });
+        // 混み具合（60Fごとの出現数）を棒グラフで描く
+        const graphBottom = top + graphH;
+        counts.forEach((c, i) => {
+            const h = c / peak * (graphH - 8);
+            g.fillStyle = c === peak ? "#f0883e" : "#5b8cff";
+            g.fillRect(fx(i * bucket) + 0.5, graphBottom - h, Math.max(1, fx(bucket) - left - 1), h);
+        });
+        g.fillStyle = "#8b919c"; g.textAlign = "right"; g.font = "11px sans-serif";
+        g.fillText("混み具合", left - 10, top + graphH / 2);
+        // 敵の種類ごとの行に出現の印を描く
+        keys.forEach((key, k) => {
+            const y = graphBottom + 10 + k * laneH;
+            g.fillStyle = "#c9ccd2"; g.textAlign = "right";
+            g.fillText(key.length > 14 ? key.slice(0, 13) + "…" : key, left - 10, y + laneH / 2);
+            g.fillStyle = "#1f2228"; g.fillRect(left, y + laneH - 1, width, 1);
+            g.fillStyle = colorOf(key);
+            for (const s of spawns) if (s.key === key) g.fillRect(fx(s.frame) - 1, y + 4, 3, laneH - 8);
+        });
+        // 時間の目盛りを描く
+        g.fillStyle = "#6b717c"; g.textAlign = "center";
+        for (let f = 0; f <= total; f += 500) g.fillText(`${f}F`, fx(f), canvas.height - 9);
+        // 再生位置を描く
+        g.fillStyle = "#f0883e"; g.fillRect(fx(preview.frame) - 1, top, 2, canvas.height - top - 20);
+        // マウス位置のフレームとチャプターを表示する
+        if (hover >= 0) {
+            const ci = Math.min(sheet.chapters.length - 1, Math.floor(hover / length));
+            g.fillStyle = "rgba(255, 255, 255, 0.5)"; g.fillRect(fx(hover), top, 1, canvas.height - top - 20);
+            g.fillStyle = "#e4e6eb"; g.textAlign = fx(hover) > left + width - 160 ? "right" : "left";
+            g.fillText(`${hover}F（チャプター${ci + 1}の${hover - ci * length}F）クリックでここから再生`, fx(hover) + (g.textAlign === "left" ? 6 : -6), top + 8);
+        }
+    };
+    const frameAt = (e) => {
+        const r = canvas.getBoundingClientRect();
+        const px = (e.clientX - r.left) * canvas.width / r.width;
+        return px < left || px > left + width ? -1 : Math.round((px - left) / width * total);
+    };
+    canvas.onpointermove = (e) => { hover = frameAt(e); canvas.style.cursor = hover >= 0 ? "pointer" : "default"; draw(); };
+    canvas.onpointerleave = () => { hover = -1; draw(); };
+    canvas.onclick = (e) => {
+        const f = frameAt(e);
+        if (f < 0) return;
+        preview.frame = f;
+        preview.draw();
+    };
+
+    // 再生画面を作り、タイムラインと一緒に描き直す
+    const player = StagePlayer(sheet, spawns, total);
+    preview.speed = preview.speed || 1;
+    preview.frame = Math.min(preview.frame, total);
+    preview.draw = () => {
+        if (preview.frame >= total) { preview.frame = total; preview.playing = false; }
+        player.draw();
+        draw();
+    };
+    preview.draw();
+    root.append(player.element);
+    root.append(El("section", { className: "card" },
+        El("div", { className: "card-head" }, El("h2", {}, "タイムライン"),
+            El("span", { className: "help", style: "margin: 0" }, "上の棒 = 60Fごとの出現数（橙が最大）、下の行 = 敵の種類ごとの出現、橙の縦線 = 再生位置。クリックでその時点へ移動")),
+        El("div", { className: "card-body" }, canvas)));
+
+    // チャプターごと・種類ごとの出現数の表を作る
+    const table = El("table", {}, El("tr", {}, El("th", {}, "チャプター"), El("th", {}, "メモ"),
+        ...keys.map((key) => El("th", {}, El("span", { className: "dot", style: `background: ${colorOf(key)}` }), key)), El("th", {}, "合計")));
+    sheet.chapters.forEach((chapter, ci) => {
+        const inChapter = spawns.filter((s) => s.chapter === ci);
+        table.append(El("tr", { className: "link", title: "クリックで編集", onclick: () => JumpToChapter(ci) },
+            El("td", {}, String(ci + 1)), El("td", { style: "color: var(--muted)" }, chapter.comment || ""),
+            ...keys.map((key) => El("td", {}, String(inChapter.filter((s) => s.key === key).length || ""))),
+            El("td", {}, El("b", {}, String(inChapter.length)))));
+    });
+    root.append(El("section", { className: "card" }, El("div", { className: "card-head" }, El("h2", {}, "チャプター別の出現数")),
+        El("div", { className: "card-body" }, table,
+            El("div", { className: "help" }, "行をクリックでそのチャプターを編集する。画面内の敵数の上限などで、ゲームでは出現が間引かれることがある"))));
 }
 
 /**
@@ -410,7 +959,8 @@ function Preview(script) {
     // スクリプトを実行し直す（ドラッグ中も呼ぶ）
     const simulate = () => {
         try {
-            result = SimulateScript(script, 2.8, preview.startY, preview.playerX, preview.playerY, 3600);
+            result = preview.mode === "3d" ? SimulateScript3D(script, 0, preview.startY, 0, preview.playerY) :
+                SimulateScript(script, 2.8, preview.startY, preview.playerX, preview.playerY, 3600);
         } catch (e) {
             result = { path: [], shots: [] };
         }
@@ -423,6 +973,24 @@ function Preview(script) {
         // 最後のフレームで再生を止める
         if (preview.frame > last) { preview.frame = last; preview.playing = false; }
         const t = preview.frame;
+        if (preview.mode === "3d") {
+            // 3Dは自機の後ろから軌跡・敵・弾を描く
+            const shots = [];
+            for (const s of result.shots) {
+                if (s.frame > t) continue;
+                const dt = t - s.frame, z = s.z + s.vz * dt;
+                if (z >= 0 && z <= 70) shots.push({ x: s.x + s.vx * dt, y: s.y + s.vy * dt, z, color: s.pc === selectedCommand ? "#fff" : "#fd6" });
+            }
+            Draw3D(g, width, height, {
+                trail: result.path.map((p) => ({ ...p, hl: p.pc === selectedCommand })),
+                enemies: [{ ...(result.path[t] || { x: 0, y: preview.startY, z: 60 }), color: "#f96" }],
+                shots, playerX: 0, playerY: preview.playerY
+            });
+            slider.value = t;
+            label.textContent = ` ${t} / ${last}F　表示中の弾 ${shots.length}発（全${result.shots.length}発）` +
+                (result.path.length && result.path[last].z < 2 ? `　${last}Fで自機の後ろへ抜ける` : "");
+            return;
+        }
         g.clearRect(0, 0, width, height);
         // 自機の移動範囲と自機を描く
         g.strokeStyle = "#333";
@@ -471,7 +1039,7 @@ function Preview(script) {
     };
 
     // 出現位置・自機・移動先の点をドラッグで動かす
-    MakeDraggable(canvas, () => [
+    MakeDraggable(canvas, () => preview.mode === "3d" ? [] : [
         { x: sx(2.8), y: sy(preview.startY), move: (px, py) => { preview.startY = Round(fy(py)); } },
         { x: sx(preview.playerX), y: sy(preview.playerY), move: (px, py) => { preview.playerX = Round(fx(px)); preview.playerY = Round(fy(py)); } },
         ...script.commands.flatMap((c, ci) => c.op !== "MoveTo" ? [] : [{
@@ -482,26 +1050,28 @@ function Preview(script) {
     ], () => preview.draw());
     preview.draw();
 
-    return El("fieldset", {}, El("legend", {}, "プレビュー（2D）"),
-        El("div", { className: "help" }, "「出」= 出現位置（上下にドラッグ）、▶ = 自機（ドラッグで移動、狙う弾の向きが変わる）、紫の番号 = 移動先（ドラッグで変更）。",
-            "黄色 = 選択中のコマンドの区間。3Dでは横の動きが奥行きになる"),
+    return El("section", { className: "card" }, El("div", { className: "card-head" }, El("h2", {}, "プレビュー"), ModeSwitch()),
+        El("div", { className: "card-body" }, El("div", { className: "help" }, preview.mode === "3d" ?
+            "3Dは2Dの横の動きを奥行きに読み替えたもの（ゲームと同じ計算）。左右位置は出現規則の「3Dの左右X」で、ここでは中央。点のドラッグは2D表示で行う" :
+            "「出」= 出現位置（上下にドラッグ）、▶ = 自機（ドラッグで移動、狙う弾の向きが変わる）、紫の番号 = 移動先（ドラッグで変更）。黄色 = 選択中のコマンドの区間"),
         El("div", {}, El("button", { onclick: () => { if (preview.frame >= last) preview.frame = 0; preview.playing = !preview.playing; } }, "▶ 再生 / ■ 停止"),
             " ", slider, label),
-        canvas);
+        canvas));
 }
 
 /**
  * @brief 行動スクリプトの編集画面を描画する
  * @param root 描画先の要素
+ * @param side サイドバーの描画先
  * @return なし
  */
-function RenderScripts(root) {
+function RenderScripts(root, side) {
     const scripts = scriptsEntry.data.scripts;
     scriptIndex = Math.max(0, Math.min(scriptIndex, scripts.length - 1));
     const script = scripts[scriptIndex];
     if (selectedCommand >= script.commands.length) selectedCommand = -1;
 
-    // 左側にスクリプトの一覧と追加・削除を置く
+    // サイドバーにスクリプトの一覧と追加・削除を置く
     const add = (copy) => {
         scripts.push(copy ? JSON.parse(JSON.stringify({ ...script, name: script.name + "Copy" })) :
             { name: "NewMove" + scripts.length, hp: 10, score: 100, commands: [
@@ -510,19 +1080,22 @@ function RenderScripts(root) {
         selectedCommand = -1;
         Changed();
     };
-    const list = El("div", { className: "list" }, Caption("動きの一覧", ""),
-        ...scripts.map((s, i) => El("button", { className: i === scriptIndex ? "on" : "",
-            onclick: () => { scriptIndex = i; selectedCommand = -1; preview.frame = 0; Render(); } }, s.name)),
-        El("button", { onclick: () => add(false) }, "＋ 新しい動き"),
-        El("button", { onclick: () => add(true) }, "複製"),
-        El("button", { onclick: () => {
-            if (scripts.length > 1 && confirm(`${script.name}を削除する?`)) { scripts.splice(scriptIndex, 1); selectedCommand = -1; Changed(); }
-        } }, "削除"),
-        El("div", { className: "help" }, "名前はステージの「★ 自作の動き」で選ぶ時に使う"));
+    side.append(El("div", { className: "side-title" }, "動きの一覧"),
+        El("div", { className: "side-list" },
+            ...scripts.map((s, i) => El("button", { className: i === scriptIndex ? "on" : "",
+                onclick: () => { scriptIndex = i; selectedCommand = -1; preview.frame = 0; Render(); } }, s.name)),
+            El("button", { className: "ghost", onclick: () => add(false) }, "＋ 新しい動き")),
+        El("div", { className: "help", style: "padding: 0 8px" }, "名前はステージの「★ 自作の動き」で選ぶ時に使う"));
 
-    // 右側に名前・コマンド・プレビューを置く
-    const body = El("div");
-    body.append(El("p", {}, "名前 ",
+    // 本文に名前・コマンド・プレビューを置く
+    const body = El("div", { className: "card-body" });
+    root.append(El("section", { className: "card" }, El("div", { className: "card-head" }, El("h2", {}, script.name),
+        El("span", { className: "spacer", style: "flex: 1" }),
+        El("button", { className: "ghost", onclick: () => add(true) }, "複製"),
+        El("button", { className: "ghost danger", onclick: () => {
+            if (scripts.length > 1 && confirm(`${script.name}を削除する?`)) { scripts.splice(scriptIndex, 1); selectedCommand = -1; Changed(); }
+        } }, "削除")), body));
+    body.append(El("div", { className: "toolbar" }, "名前",
         El("input", { value: script.name, title: "英数字と_のみ", onchange: (e) => {
             // この動きを使っているステージの敵も新しい名前へ付け替える
             for (const s of sheets) {
@@ -531,7 +1104,7 @@ function RenderScripts(root) {
             script.name = e.target.value;
             Changed();
         } }),
-        "　耐久力 ", NumberInput(script, "hp", 1, "倒すのに必要なダメージ"), "　スコア ", NumberInput(script, "score", 1, "倒した時の得点")));
+        "耐久力", NumberInput(script, "hp", 1, "倒すのに必要なダメージ"), "スコア", NumberInput(script, "score", 1, "倒した時の得点")));
     body.append(Caption("やること（上から順に実行）", "行をクリックするとプレビューでその区間が黄色になる。移動しないコマンドの間も直前の速度で進み続ける"));
     const table = El("table");
     script.commands.forEach((command, ci) => {
@@ -560,11 +1133,11 @@ function RenderScripts(root) {
             El("td", {}, ...keys.flatMap((key) => [` ${key === "count" && command.op === "Repeat" ? "回数(0=無限)" : ArgLabels[key]} `,
                 NumberInput(command, key, IntegerArgs.includes(key) ? 1 : "any")]),
                 El("div", { className: "desc" }, text)),
-            El("td", {},
-                El("button", { title: "上へ", onclick: () => move(-1) }, "↑"),
-                El("button", { title: "下へ", onclick: () => move(1) }, "↓"),
-                El("button", { onclick: () => { script.commands.splice(ci + 1, 0, { ...command }); Changed(); } }, "複製"),
-                El("button", { onclick: () => { script.commands.splice(ci, 1); selectedCommand = -1; Changed(); } }, "削除"))));
+            El("td", { className: "actions" },
+                El("button", { className: "ghost", title: "上へ", onclick: () => move(-1) }, "↑"),
+                El("button", { className: "ghost", title: "下へ", onclick: () => move(1) }, "↓"),
+                El("button", { className: "ghost", onclick: () => { script.commands.splice(ci + 1, 0, { ...command }); Changed(); } }, "複製"),
+                El("button", { className: "ghost danger", onclick: () => { script.commands.splice(ci, 1); selectedCommand = -1; Changed(); } }, "削除"))));
     });
     body.append(table);
 
@@ -578,8 +1151,7 @@ function RenderScripts(root) {
         Changed();
     } }, "＋ " + Commands[op].label))));
     body.append(El("div", { className: "help" }, "座標の目安: 横は右端2.8〜左端-2.6、縦は上1.5〜下-1.6。速度は1フレームの移動量で、横速度-0.01なら約9秒で画面を横切る。角度は0°が右、90°が上"));
-    body.append(Preview(script));
-    root.append(El("div", { className: "side" }, list, body));
+    root.append(Preview(script));
 }
 
 /**
@@ -587,13 +1159,22 @@ function RenderScripts(root) {
  * @return なし
  */
 function Render() {
-    const root = $("editor");
+    const root = $("editor"), side = $("sideDynamic");
     root.replaceChildren();
+    side.replaceChildren();
     preview.draw = null;
     if (!scriptsEntry) return;
     $("tabSheets").className = tab === "sheets" ? "on" : "";
+    $("tabOverview").className = tab === "overview" ? "on" : "";
     $("tabScripts").className = tab === "scripts" ? "on" : "";
-    if (tab === "scripts") RenderScripts(root); else RenderSheet(root);
+    const sheetTitle = current ? `ステージ${current.data.stage}　${current.data.difficulty}` : "";
+    $("title").textContent = tab === "scripts" ? "敵の行動" : `${tab === "overview" ? "ステージ全体" : "敵の出現"}　${sheetTitle}`;
+    if (tab === "scripts") {
+        RenderScripts(root, side);
+    } else {
+        side.append(StagePicker());
+        if (tab === "overview") RenderOverview(root); else RenderSheet(root);
+    }
 
     // 全体を検証し、未保存の項目を表示する
     const dirty = [scriptsEntry, ...sheets].filter(IsDirty);
@@ -611,19 +1192,22 @@ function Render() {
 
 /**
  * @brief タブを切り替える
- * @param name "sheets" または "scripts"
+ * @param name "sheets"、"overview"、"scripts" のいずれか
  * @return なし
  */
 function SwitchTab(name) {
     tab = name;
+    // 再生位置と速さは画面ごとに最初から始める
     preview.playing = false;
+    preview.frame = 0;
+    preview.speed = 1;
     Render();
 }
 
 // 再生中はプレビューのフレームを進めて描き直す
 (function Animate() {
     if (preview.playing && preview.draw) {
-        ++preview.frame;
+        preview.frame += preview.speed;
         preview.draw();
     }
     requestAnimationFrame(Animate);
@@ -701,6 +1285,7 @@ $("open").onclick = () => OpenStages().catch((e) => SetStatus(e.message, "error"
 $("save").onclick = () => Save().catch((e) => SetStatus(e.message, "error"));
 $("tabSheets").onclick = () => SwitchTab("sheets");
 $("tabScripts").onclick = () => SwitchTab("scripts");
+$("tabOverview").onclick = () => SwitchTab("overview");
 window.onbeforeunload = () => (scriptsEntry && [scriptsEntry, ...sheets].some(IsDirty) ? true : undefined);
 </script>
 </body>
