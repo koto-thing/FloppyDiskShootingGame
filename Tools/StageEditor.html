@@ -662,6 +662,63 @@ function BuiltinPosition3D(type, age, x0, y0, phase) {
     }
 }
 
+// 自機狙い弾の { 間隔F, ステージ2以降の間隔F, 2Dの速さ, 3Dの速さ }（SideScrollingShooterEnemies.h の各敵に合わせる）
+const AimedShotSpecs = {
+    BasicEnemy: [105, 92, 0.018, 0.22], HeavyEnemy: [72, 64, 0.017, 0.28],
+    ArmoredEnemy: [64, 64, 0.016, 0.24], StraightShooterEnemy: [32, 28, 0.020, 0.38]
+};
+
+/**
+ * @brief 既存の敵が撃つ弾を列挙する
+ *
+ * ponytail: 自機狙い弾と円形・正方形弾幕だけを写した近似。ミサイル・レーザーと撃破による中断は再現しない
+ * @param type 敵の種類
+ * @param stage ステージ番号（狙い弾の間隔に使う）
+ * @param rail trueなら3D、falseなら2D
+ * @param position 出現からのフレーム数を受け取り位置{x, y, z}を返す関数
+ * @param lifetime 弾を撃つか調べる最大のフレーム数
+ * @return { frame, x, y, z, vx, vy, vz }の配列（frameは出現からのフレーム数）
+ */
+function BuiltinShots(type, stage, rail, position, lifetime) {
+    const shots = [];
+    const aimed = AimedShotSpecs[type];
+    const barrage = type === "CircleShooterEnemy" || type === "SquareShooterEnemy";
+    if (!aimed && !barrage) return shots;
+    const interval = aimed ? aimed[stage >= 2 ? 1 : 0] : 0;
+    for (let frame = 1; frame <= lifetime; ++frame) {
+        const fireAimed = aimed && frame % interval === 0;
+        const fireBarrage = barrage && frame >= 36 && frame % 72 === 0;
+        if (!fireAimed && !fireBarrage) continue;
+        const p = position(frame);
+        if (rail ? p.z < 2 : p.x < -2.6) break;
+        // 3Dでは自機に近すぎる敵は撃たない
+        if (rail && Math.hypot(p.x * Rail.worldX, p.y * Rail.worldY, p.z - Rail.playerZ) < 16) continue;
+        const add = (x, y, z, vx, vy, vz) => shots.push({ frame, x, y, z, vx, vy, vz });
+        if (fireAimed && rail) {
+            // 3Dは自機のワールド座標へ向けて撃つ
+            const x = p.x - 0.06, dx = -x * Rail.worldX, dy = -p.y * Rail.worldY, dz = Rail.playerZ - p.z;
+            const k = aimed[3] / Math.max(0.001, Math.hypot(dx, dy, dz));
+            add(x, p.y, p.z, dx * k / Rail.worldX, dy * k / Rail.worldY, dz * k);
+        } else if (fireAimed) {
+            // 2Dは自機の基準位置へ向けて撃つ
+            const dx = -0.72 - p.x, dy = -p.y, k = aimed[2] / Math.max(0.001, Math.hypot(dx, dy));
+            add(p.x - 0.06, p.y, 0, dx * k, dy * k, 0);
+        } else if (type === "CircleShooterEnemy" && rail) {
+            for (let i = 0; i < 8; ++i) {
+                const a = i * Math.PI * 2 / 8;
+                add(p.x + Math.cos(a) * 0.22, p.y + Math.sin(a) * 0.22, p.z, Math.cos(a) * 0.010, Math.sin(a) * 0.014, -0.58);
+            }
+        } else if (type === "CircleShooterEnemy") {
+            for (let i = 0; i < 8; ++i) add(p.x - 0.06, p.y + (i - 3.5) * 0.075, 0, -0.018, 0, 0);
+        } else if (rail) {
+            for (let i = 0; i < 25; ++i) add(p.x, p.y, p.z, (i % 5 - 2) * 0.010, (Math.floor(i / 5) - 2) * 0.014, -0.58);
+        } else {
+            for (let i = 0; i < 5; ++i) add(p.x - 0.06, p.y, 0, -0.018, (i - 2) * 0.010, 0);
+        }
+    }
+    return shots;
+}
+
 /**
  * @brief 自機の後ろ上方から見た3D画面を描く（ゲームのレール視点のカメラに合わせる）
  * @param g 描画先
@@ -801,9 +858,16 @@ function StagePlayer(sheet, spawns, total, opts = {}) {
         const phase = ((s.frame + (sheet.stage - 1) * 17) % 47) * 0.17;
         const script = s.rule.type === "ScriptedEnemy" ? scripts.get(s.rule.script) : null;
         const run = (simulate) => { try { return script ? simulate() : null; } catch (e) { return null; } };
-        return { spawn: s, x0, y0, phase,
-            result2D: show2D ? run(() => SimulateScript(script, 2.8, y0, -0.72, 0, 3600)) : null,
-            result3D: show3D ? run(() => SimulateScript3D(script, x0, y0, 0, 0)) : null };
+        const result2D = show2D ? run(() => SimulateScript(script, 2.8, y0, -0.72, 0, 3600)) : null;
+        const result3D = show3D ? run(() => SimulateScript3D(script, x0, y0, 0, 0)) : null;
+        // 既存の敵の弾はステージの終わりまでに撃つ分を求めておく
+        const type = s.rule.type, lifetime = Math.min(3600, total - s.frame);
+        const builtin = type !== "ScriptedEnemy";
+        return { spawn: s, x0, y0, phase, result2D, result3D,
+            shots2D: builtin ? (show2D ? BuiltinShots(type, sheet.stage, false, (f) => BuiltinPosition(type, f, y0, phase), lifetime) : []) :
+                (result2D ? result2D.shots : []),
+            shots3D: builtin ? (show3D ? BuiltinShots(type, sheet.stage, true, (f) => BuiltinPosition3D(type, f, x0, y0, phase), lifetime) : []) :
+                (result3D ? result3D.shots : []) };
     });
 
     // 2Dは横から見た画面に敵と自作の動きの敵の弾を描く
@@ -818,19 +882,20 @@ function StagePlayer(sheet, spawns, total, opts = {}) {
         for (const a of actors) {
             const age = t - a.spawn.frame;
             if (age < 0) continue;
+            // 弾は撃った敵が画面外へ出た後も飛び続ける
+            g.fillStyle = a.spawn.rule.type === "ScriptedEnemy" ? "#fd6" : TypeColor(a.spawn.rule.type);
+            for (const s of a.shots2D) {
+                if (s.frame >= age) continue;
+                const x = s.x + s.vx * (age - s.frame), y = s.y + s.vy * (age - s.frame);
+                if (x < View.minX || x > View.maxX || y < View.minY || y > View.maxY) continue;
+                g.beginPath(); g.arc(sx(x), sy(y), 2.5, 0, Math.PI * 2); g.fill();
+                ++bullets;
+            }
             let pos;
             if (a.spawn.rule.type === "ScriptedEnemy") {
                 const r = a.result2D;
                 if (!r || age > r.path.length) continue;
                 pos = age === 0 ? { x: 2.8, y: a.y0 } : r.path[age - 1];
-                g.fillStyle = "#fd6";
-                for (const s of r.shots) {
-                    if (s.frame >= age) continue;
-                    const x = s.x + s.vx * (age - s.frame), y = s.y + s.vy * (age - s.frame);
-                    if (x < View.minX || x > View.maxX || y < View.minY || y > View.maxY) continue;
-                    g.fillRect(sx(x) - 2, sy(y) - 2, 4, 4);
-                    ++bullets;
-                }
             } else {
                 pos = BuiltinPosition(a.spawn.rule.type, age, a.y0, a.phase);
             }
@@ -851,17 +916,19 @@ function StagePlayer(sheet, spawns, total, opts = {}) {
         for (const a of actors) {
             const age = t - a.spawn.frame;
             if (age < 0) continue;
+            // 弾は撃った敵が消えた後も飛び続ける
+            const color = a.spawn.rule.type === "ScriptedEnemy" ? "#fd6" : TypeColor(a.spawn.rule.type);
+            for (const s of a.shots3D) {
+                if (s.frame >= age) continue;
+                const dt = age - s.frame, z = s.z + s.vz * dt;
+                if (z < 0 || z > 70) continue;
+                shots.push({ x: s.x + s.vx * dt, y: s.y + s.vy * dt, z, color });
+            }
             let pos;
             if (a.spawn.rule.type === "ScriptedEnemy") {
                 const r = a.result3D;
                 if (!r || age > r.path.length) continue;
                 pos = age === 0 ? { x: a.x0, y: a.y0, z: 60 } : r.path[age - 1];
-                for (const s of r.shots) {
-                    if (s.frame >= age) continue;
-                    const dt = age - s.frame, z = s.z + s.vz * dt;
-                    if (z < 0 || z > 70) continue;
-                    shots.push({ x: s.x + s.vx * dt, y: s.y + s.vy * dt, z, color: "#fd6" });
-                }
             } else {
                 pos = BuiltinPosition3D(a.spawn.rule.type, age, a.x0, a.y0, a.phase);
             }
@@ -931,7 +998,7 @@ function StagePlayer(sheet, spawns, total, opts = {}) {
             opts.controls ? El("div", { className: "toolbar" }, ...opts.controls) : "",
             ViewPair(canvas2D, canvas3D),
             El("div", { className: "toolbar", style: "margin: 8px 0 0" }, ...legend),
-            El("div", { className: "help" }, "自作の動き（黄色の縁）はゲームと同じ計算で弾も表示する。既存の敵は主な動きの近似で弾は表示しない。3Dでは奥の「出現」の線から手前へ来る。",
+            El("div", { className: "help" }, "自作の動き（黄色の縁）はゲームと同じ計算。既存の敵は主な動きと弾（自機狙い弾・円形/正方形弾幕）の近似で、ミサイルとレーザーは表示しない。弾の色は撃った敵の色。3Dでは奥の「出現」の線から手前へ来る。",
                 "自機は動かないものとし、撃破や画面内の数の上限は再現しない")));
     return { element, draw };
 }
