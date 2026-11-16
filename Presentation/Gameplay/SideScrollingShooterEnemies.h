@@ -1060,6 +1060,270 @@ private:
     static_assert(PatrolWidth > 0.0f && PatrolHeight > 0.0f);
 };
 
+/** @brief Tools/StageEditor.html で編集する敵の行動スクリプト */
+namespace EnemyScript {
+    /** @brief コマンド種別。角度は度で、0度が右、90度が上 */
+    enum Op : std::uint8_t {
+        Move = 0,       // frames間、速度(a, b)で移動する。framesが0なら速度だけ設定して次へ進む
+        MoveTo = 1,     // frames間で座標(a, b)へ等速移動する
+        Aim = 2,        // frames間、開始時の自機方向へ速さaで移動する
+        Sine = 3,       // frames間、X速度aで進みながら振幅b・周期cフレームで上下する
+        FireRing = 4,   // a発を速さbで全周へ撃つ。cは1発目の角度
+        FireFan = 5,    // 自機方向を中心に、a発を合計角度bの範囲へ速さcで撃つ
+        Repeat = 6      // コマンド番号aへ戻る。bは戻る回数で、0なら無限
+    };
+
+    /** @brief 1コマンド分のデータ */
+    struct Command {
+        Op op = Move;
+        std::uint16_t frames = 0;
+        float a = 0.0f;
+        float b = 0.0f;
+        float c = 0.0f;
+    };
+
+    /** @brief 1種類の敵の行動スクリプト */
+    struct Definition {
+        const Command* commands = nullptr;
+        int commandCount = 0;
+        int hp = 10;
+        int score = 100;
+    };
+}
+
+#include "Stages/Common/EnemyScripts.h"
+
+/**
+ * @brief 行動スクリプトに従って移動と発射を行う敵を制御する
+ */
+class SideScrollingShooter::ScriptedEnemyBehavior final : public SideScrollingShooter::EnemyBehavior {
+public:
+    int Type() const override {
+        return 11;
+    }
+
+    int MaxHp() const override {
+        return 10;
+    }
+
+    int AimedShotInterval() const override {
+        // 発射はスクリプトのコマンドだけで行う
+        return 0;
+    }
+
+    /**
+     * @brief スクリプトのHPと実行状態を初期化する
+     * @param shooter ゲーム本体
+     * @param enemy 初期化する敵（scriptIdは設定済み）
+     * @param frame 現在のステージフレーム
+     * @param kills 撃破数
+     * @param railMode レール表示中か
+     * @param stageIndex ステージ番号
+     * @return なし
+     */
+    void ConfigureSpawn(SideScrollingShooter& shooter, Enemy& enemy,
+        int frame, int kills, bool railMode, int stageIndex) const override {
+        EnemyBehavior::ConfigureSpawn(shooter, enemy, frame, kills, railMode, stageIndex);
+        const EnemyScript::Definition& script = ScriptFor(enemy);
+        enemy.hp = script.hp;
+        enemy.maxHp = script.hp;
+        enemy.scriptPc = 0;
+        enemy.scriptCommandAge = 0;
+        enemy.scriptLoop = 0;
+        enemy.scriptVX = 0.0f;
+        enemy.scriptVY = 0.0f;
+    }
+
+    /**
+     * @brief スクリプトを1フレーム進める
+     * @param shooter ゲーム本体
+     * @param enemy 更新する敵
+     * @return なし
+     */
+    void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
+        Step(shooter, enemy, ScriptFor(enemy));
+    }
+
+    /** @brief 3Dで2Dの横位置1あたりに進む奥行き。2Dの出現X=2.8を奥行き60、消滅X=-2.6を消滅奥行き2へ対応させる */
+    static constexpr float RailDepthPerSideX = (EnemyRailFarZ - 2.0f) / (2.8f + 2.6f);
+
+    /**
+     * @brief スクリプト上の2D横位置を3Dの奥行きへ変換する
+     * @param x 2Dの横位置
+     * @return 3Dの奥行き
+     */
+    static float RailZFromScriptX(float x) {
+        return 2.0f + (x + 2.6f) * RailDepthPerSideX;
+    }
+
+    /**
+     * @brief 3Dの奥行きをスクリプト上の2D横位置へ変換する
+     * @param z 3Dの奥行き
+     * @return 2Dの横位置
+     */
+    static float ScriptXFromRailZ(float z) {
+        return (z - 2.0f) / RailDepthPerSideX - 2.6f;
+    }
+
+    int Score(const Enemy& enemy) const override {
+        return ScriptFor(enemy).score;
+    }
+
+    /**
+     * @brief 指定スクリプトで敵を1フレーム進める
+     *
+     * 3Dでは2Dの横移動を奥行きへ読み替える（2Dは同じ空間を横から見た画面のため）
+     * 横位置は出現時のレールXのまま動かさない
+     * @param shooter ゲーム本体
+     * @param enemy 更新する敵
+     * @param script 実行するスクリプト
+     * @return なし
+     */
+    static void Step(SideScrollingShooter& shooter, Enemy& enemy, const EnemyScript::Definition& script) {
+        using namespace EnemyScript;
+        // 3Dでは奥行きから2Dの横位置を復元してスクリプトを進める
+        const bool rail = shooter.IsRailGameplayActive();
+        if (rail) enemy.x = ScriptXFromRailZ(enemy.z);
+
+        // 発射や分岐など時間を使わないコマンドは同じフレームで続けて実行する
+        // 無限ループで止まらないよう1フレームの実行数に上限を設ける
+        for (int executed = 0; enemy.scriptPc < script.commandCount && executed < 16; ++executed) {
+            const Command& command = script.commands[enemy.scriptPc];
+            if (enemy.scriptCommandAge == 0 && Begin(shooter, enemy, command)) continue;
+            if (enemy.scriptCommandAge < command.frames) {
+                ++enemy.scriptCommandAge;
+                break;
+            }
+            ++enemy.scriptPc;
+            enemy.scriptCommandAge = 0;
+        }
+
+        // 実行中のコマンドに従って移動する
+        const bool running = enemy.scriptPc < script.commandCount && enemy.scriptCommandAge > 0;
+        const Command* current = running ? &script.commands[enemy.scriptPc] : nullptr;
+        enemy.x += enemy.scriptVX;
+        if (current != nullptr && current->op == Sine) {
+            enemy.y = enemy.scriptBaseY + std::sin(static_cast<float>(enemy.scriptCommandAge) *
+                Math::TwoPi / current->c) * current->b;
+        } else {
+            enemy.y += enemy.scriptVY;
+        }
+
+        // スクリプト終了後に停止したままだと画面に残り続けるため左へ離脱させる
+        if (enemy.scriptPc >= script.commandCount && enemy.scriptVX == 0.0f && enemy.scriptVY == 0.0f) {
+            enemy.scriptVX = -0.010f;
+        }
+        enemy.z = rail ? RailZFromScriptX(enemy.x) : ToRailZFromSideX(enemy.x);
+        if (rail) enemy.x = enemy.baseX;
+    }
+
+private:
+    /**
+     * @brief 敵のスクリプト番号から定義を取得する
+     * @param enemy 対象の敵
+     * @return 行動スクリプト（範囲外の番号は0番）
+     */
+    static const EnemyScript::Definition& ScriptFor(const Enemy& enemy) {
+        const bool valid = enemy.scriptId >= 0 && enemy.scriptId < EnemyScript::ScriptCount;
+        return EnemyScript::Scripts[valid ? enemy.scriptId : 0];
+    }
+
+    /**
+     * @brief コマンド開始時の処理を行う
+     * @param shooter ゲーム本体
+     * @param enemy 実行する敵
+     * @param command 開始するコマンド
+     * @return 時間を使わずに次のコマンドへ進んだ場合true
+     */
+    static bool Begin(SideScrollingShooter& shooter, Enemy& enemy, const EnemyScript::Command& command) {
+        using namespace EnemyScript;
+        const float frames = static_cast<float>((std::max)(1, static_cast<int>(command.frames)));
+        // 標的は狙うコマンドと3Dの発射だけで選ぶ（標的の選択順を進めるため不要な呼び出しはしない）
+        const bool rail = shooter.IsRailGameplayActive();
+        const bool targeted = command.op == Aim || command.op == FireFan || (rail && command.op == FireRing);
+        const Vector3 target = targeted ? shooter.SelectEnemyShotTarget() : Vector3 {};
+        // 3Dでは自機の奥行きを2Dの横位置へ読み替えて狙う
+        const float aim = std::atan2(FromWorldY(target.y) - enemy.y,
+            (rail ? ScriptXFromRailZ(target.z) : FromWorldX(target.x)) - enemy.x) / Math::DegreesToRadians;
+        switch (command.op) {
+        case Move:
+            enemy.scriptVX = command.a;
+            enemy.scriptVY = command.b;
+            return false;
+        case MoveTo:
+            enemy.scriptVX = (command.a - enemy.x) / frames;
+            enemy.scriptVY = (command.b - enemy.y) / frames;
+            return false;
+        case Aim:
+            enemy.scriptVX = std::cos(Math::ToRadians(aim)) * command.a;
+            enemy.scriptVY = std::sin(Math::ToRadians(aim)) * command.a;
+            return false;
+        case Sine:
+            enemy.scriptVX = command.a;
+            enemy.scriptVY = 0.0f;
+            enemy.scriptBaseY = enemy.y;
+            return false;
+        case FireRing: {
+            const int count = static_cast<int>(command.a);
+            Fire(shooter, enemy, target, count, command.c, 360.0f / static_cast<float>((std::max)(1, count)), command.b);
+            break;
+        }
+        case FireFan: {
+            const int count = static_cast<int>(command.a);
+            const float step = count > 1 ? command.b / static_cast<float>(count - 1) : 0.0f;
+            Fire(shooter, enemy, target, count, aim - command.b * 0.5f, step, command.c);
+            break;
+        }
+        case Repeat:
+            // ponytail: ループ回数は敵ごとに1つだけ持つため、Repeatの入れ子はエディタ側で禁止している
+            if (command.b <= 0.0f || enemy.scriptLoop < static_cast<int>(command.b)) {
+                ++enemy.scriptLoop;
+                enemy.scriptPc = static_cast<int>(command.a);
+            } else {
+                enemy.scriptLoop = 0;
+                ++enemy.scriptPc;
+            }
+            enemy.scriptCommandAge = 0;
+            return true;
+        }
+        ++enemy.scriptPc;
+        enemy.scriptCommandAge = 0;
+        return true;
+    }
+
+    /**
+     * @brief 等間隔の角度で弾を撃つ
+     * @param shooter ゲーム本体
+     * @param enemy 発射元の敵（3Dではxがスクリプト上の2D横位置）
+     * @param target 3Dで弾の面を向ける標的のワールド座標
+     * @param count 弾数
+     * @param startDegrees 1発目の角度（度）
+     * @param stepDegrees 弾ごとの角度差（度）
+     * @param speed 弾の速さ
+     * @return なし
+     */
+    static void Fire(SideScrollingShooter& shooter, const Enemy& enemy, const Vector3& target,
+        int count, float startDegrees, float stepDegrees, float speed) {
+        // 3Dでは横位置をレールX、2Dの横方向を奥行きにして発射する
+        const bool rail = shooter.IsRailGameplayActive();
+        const float x = rail ? enemy.baseX : enemy.x;
+        const float z = rail ? RailZFromScriptX(enemy.x) : ToRailZFromSideX(enemy.x);
+        if (count <= 0 || !shooter.CanSpawnEnemyProjectile(x, enemy.y, z)) return;
+        // 弾幕の面を自機の横位置へ傾け、自機の奥行きに着いた弾が自機の横位置を通るようにする
+        const float depthToTarget = target.z - z;
+        const float lateralPerDepth = rail && std::abs(depthToTarget) > 0.001f ?
+            (FromWorldX(target.x) - x) / depthToTarget : 0.0f;
+        for (int i = 0; i < count; ++i) {
+            const float radians = Math::ToRadians(startDegrees + stepDegrees * static_cast<float>(i));
+            const float vx = std::cos(radians) * speed;
+            const float vz = rail ? vx * RailDepthPerSideX : 0.0f;
+            shooter.SpawnShotDirect(x, enemy.y, z, rail ? vz * lateralPerDepth : vx,
+                std::sin(radians) * speed, vz, true, i, count);
+        }
+        shooter.PlayBossMachineGunSound();
+    }
+};
+
 /**
  * @brief ボスの移動と通常狙い弾間隔を制御する
  */

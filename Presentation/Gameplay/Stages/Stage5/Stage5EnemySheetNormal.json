@@ -1,0 +1,162 @@
+{
+  "stage": 5,
+  "difficulty": "Normal",
+  "chapterLength": 1800,
+  "chapters": [
+    {
+      "comment": "",
+      "rules": [
+        {
+          "type": "LinkedLaserEnemy",
+          "firstFrame": 150,
+          "interval": 400,
+          "sideX": 1.12,
+          "railX": -0.45,
+          "y": 0.0,
+          "railZ": 60.0,
+          "randomPosition": false
+        },
+        {
+          "type": "CircleShooterEnemy",
+          "firstFrame": 50,
+          "interval": 600,
+          "sideX": 1.6,
+          "railX": 0.6,
+          "y": 0.6,
+          "railZ": 54.0,
+          "randomPosition": false
+        },
+        {
+          "type": "CircleShooterEnemy",
+          "firstFrame": 50,
+          "interval": 600,
+          "sideX": 1.6,
+          "railX": -0.6,
+          "y": -0.6,
+          "railZ": 54.0,
+          "randomPosition": false
+        },
+        {
+          "type": "SquareShooterEnemy",
+          "firstFrame": 100,
+          "interval": 200,
+          "sideX": 2.6,
+          "railX": 0.0,
+          "y": 0.0,
+          "railZ": 54.0,
+          "randomPosition": false
+        },
+        {
+          "type": "MissileShooterEnemy",
+          "firstFrame": 50,
+          "interval": 200,
+          "sideX": 1.6,
+          "railX": -0.8,
+          "y": -1.6,
+          "railZ": 60.0,
+          "randomPosition": false
+        },
+        {
+          "type": "MissileShooterEnemy",
+          "firstFrame": 50,
+          "interval": 200,
+          "sideX": 1.6,
+          "railX": 0.8,
+          "y": -1.6,
+          "railZ": 60.0,
+          "randomPosition": false
+        }
+      ]
+    },
+    {
+      "comment": "",
+      "rules": [
+        {
+          "type": "DiveRusherEnemy",
+          "firstFrame": 50,
+          "interval": 50,
+          "sideX": 1.6,
+          "railX": 0.0,
+          "y": -1.0,
+          "railZ": 40.0,
+          "randomPosition": false
+        },
+        {
+          "type": "StraightShooterEnemy",
+          "firstFrame": 25,
+          "interval": 100,
+          "sideX": 1.6,
+          "railX": 1.0,
+          "y": 1.0,
+          "railZ": 40.0,
+          "randomPosition": false
+        },
+        {
+          "type": "StraightShooterEnemy",
+          "firstFrame": 25,
+          "interval": 100,
+          "sideX": 1.6,
+          "railX": -1.0,
+          "y": -1.0,
+          "railZ": 40.0,
+          "randomPosition": false
+        }
+      ]
+    },
+    {
+      "comment": "",
+      "rules": [
+        {
+          "type": "BasicEnemy",
+          "firstFrame": 25,
+          "interval": 50,
+          "sideX": 2.6,
+          "railX": 0.42,
+          "y": -0.8,
+          "railZ": 60.0,
+          "randomPosition": false
+        },
+        {
+          "type": "BasicEnemy",
+          "firstFrame": 25,
+          "interval": 50,
+          "sideX": 2.6,
+          "railX": 0.42,
+          "y": 0.8,
+          "railZ": 60.0,
+          "randomPosition": false
+        },
+        {
+          "type": "HeavyEnemy",
+          "firstFrame": 50,
+          "interval": 50,
+          "sideX": 1.6,
+          "railX": 0.7,
+          "y": 0.0,
+          "railZ": 60.0,
+          "randomPosition": false
+        },
+        {
+          "type": "HeavyEnemy",
+          "firstFrame": 50,
+          "interval": 50,
+          "sideX": 1.6,
+          "railX": -0.7,
+          "y": 1.6,
+          "railZ": 60.0,
+          "randomPosition": false
+        },
+        {
+          "type": "ArmoredEnemy",
+          "firstFrame": 50,
+          "interval": 100,
+          "sideX": 1.6,
+          "railX": 0.0,
+          "y": -1.6,
+          "railZ": 60.0,
+          "randomPosition": false
+        }
+      ]
+    }
+  ]
+}
