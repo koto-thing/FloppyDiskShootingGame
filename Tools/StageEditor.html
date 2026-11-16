@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>Stage Editor</title>
+<style>
+    body { font: 13px sans-serif; margin: 12px; background: #1e1f22; color: #ddd; }
+    button, select, input { font: inherit; background: #2b2d31; color: #ddd; border: 1px solid #555; }
+    input[type=number] { width: 72px; }
+    input.comment { width: 480px; }
+    table { border-collapse: collapse; margin: 4px 0 8px; }
+    td, th { padding: 2px 4px; border-bottom: 1px solid #333; }
+    th { text-align: left; color: #999; font-weight: normal; }
+    fieldset { border: 1px solid #444; margin: 10px 0; }
+    canvas { display: block; background: #111; margin: 4px 0; }
+    #status { margin-left: 12px; }
+    .error { color: #f77; } .ok { color: #7f7; } .dirty { color: #fc6; }
+</style>
+</head>
+<body>
+<div>
+    <button id="open">Stagesフォルダを開く</button>
+    <select id="sheet" disabled></select>
+    <button id="save" disabled>保存 (JSON + .h)</button>
+    <span id="status">Presentation/Gameplay/Stages を選択する（Chrome/Edge）</span>
+</div>
+<div id="editor"></div>
+
+<script src="StageSheetGenerator.js"></script>
+<script>
+"use strict";
+const { EnemyTypes, Generate } = window.StageSheetGenerator;
+// 種別ごとのタイムライン色
+const TypeColors = ["#8cf", "#f96", "#fd6", "#c9f", "#6f9", "#9ff", "#f6c", "#fa6", "#6cf", "#cf6"];
+const Fields = [["firstFrame", "開始F", 1], ["interval", "間隔F", 1], ["sideX", "2D X", 0.01],
+    ["railX", "3D X", 0.01], ["y", "Y", 0.01], ["railZ", "3D Z", 1]];
+
+let stagesDir = null;
+let sheets = [];      // { name, dir, data }
+let current = null;
+let dirty = false;
+
+const $ = (id) => document.getElementById(id);
+
+/**
+ * @brief ステータス表示を更新する
+ * @param text 表示する文字列
+ * @param cls 表示スタイルのクラス名
+ * @return なし
+ */
+function SetStatus(text, cls) {
+    $("status").textContent = text;
+    $("status").className = cls || "";
+}
+
+/**
+ * @brief 要素を生成する
+ * @param tag タグ名
+ * @param props 設定するプロパティ
+ * @param children 子要素または文字列
+ * @return 生成した要素
+ */
+function El(tag, props, ...children) {
+    const e = Object.assign(document.createElement(tag), props || {});
+    e.append(...children);
+    return e;
+}
+
+/**
+ * @brief 編集内容を反映し、未保存状態にして再描画する
+ * @return なし
+ */
+function Changed() {
+    dirty = true;
+    Render();
+}
+
+/**
+ * @brief 数値入力欄を生成する
+ * @param obj 値を持つオブジェクト
+ * @param key 編集するキー
+ * @param step 入力の刻み幅（1なら整数）
+ * @return 入力欄要素
+ */
+function NumberInput(obj, key, step) {
+    return El("input", {
+        type: "number", step, value: obj[key],
+        onchange: (e) => {
+            const v = Number(e.target.value);
+            obj[key] = step === 1 ? Math.round(v) : v;
+            Changed();
+        }
+    });
+}
+
+/**
+ * @brief チャプターの出現タイミングをタイムラインとして描画する
+ * @param chapter 描画するチャプター
+ * @param length チャプターのフレーム数
+ * @return canvas要素
+ */
+function Timeline(chapter, length) {
+    const rowH = 12, left = 4, width = 900;
+    const canvas = El("canvas", { width: width + left * 2, height: Math.max(1, chapter.rules.length) * rowH + 14 });
+    const g = canvas.getContext("2d");
+    // 100フレームごとの目盛りを描く
+    g.fillStyle = "#555"; g.font = "10px sans-serif";
+    for (let f = 0; f <= length; f += 100) {
+        const x = left + f / length * width;
+        g.fillRect(x, 0, 1, canvas.height - 12);
+        if (f % 500 === 0) g.fillText(String(f), x + 2, canvas.height - 2);
+    }
+    // 規則ごとに出現フレームへ印を付ける
+    chapter.rules.forEach((r, i) => {
+        g.fillStyle = TypeColors[EnemyTypes.indexOf(r.type) % TypeColors.length] || "#fff";
+        for (let f = r.firstFrame; f < length; f += r.interval > 0 ? r.interval : length) {
+            g.fillRect(left + f / length * width - 1, i * rowH + 2, 3, rowH - 3);
+        }
+    });
+    return canvas;
+}
+
+/**
+ * @brief 選択中のシートの編集画面を描画する
+ * @return なし
+ */
+function Render() {
+    const root = $("editor");
+    root.replaceChildren();
+    if (!current) return;
+    const sheet = current.data;
+
+    // 生成可能か検証して状態を表示する
+    try {
+        Generate(sheet);
+        SetStatus(dirty ? "未保存の変更あり" : "保存済み", dirty ? "dirty" : "ok");
+    } catch (e) {
+        SetStatus(e.message, "error");
+    }
+
+    root.append(El("p", {}, "チャプター長(F): ", NumberInput(sheet, "chapterLength", 1)));
+
+    sheet.chapters.forEach((chapter, ci) => {
+        const table = El("table");
+        table.append(El("tr", {}, El("th", {}, "#"), El("th", {}, "敵種別"),
+            ...Fields.map(([, label]) => El("th", {}, label)), El("th", {}, "位置乱数"), El("th")));
+
+        // 出現規則の行を作る
+        chapter.rules.forEach((rule, ri) => {
+            const typeSelect = El("select", { onchange: (e) => { rule.type = e.target.value; Changed(); } },
+                ...EnemyTypes.map((t) => El("option", { value: t, selected: t === rule.type }, t)));
+            const random = El("input", { type: "checkbox", checked: !!rule.randomPosition,
+                onchange: (e) => { rule.randomPosition = e.target.checked; Changed(); } });
+            const move = (d) => {
+                const j = ri + d;
+                if (j < 0 || j >= chapter.rules.length) return;
+                [chapter.rules[ri], chapter.rules[j]] = [chapter.rules[j], chapter.rules[ri]];
+                Changed();
+            };
+            table.append(El("tr", {},
+                El("td", {}, String(ri + 1)), El("td", {}, typeSelect),
+                ...Fields.map(([key, , step]) => El("td", {}, NumberInput(rule, key, step))),
+                El("td", {}, random),
+                El("td", {},
+                    El("button", { onclick: () => move(-1) }, "↑"),
+                    El("button", { onclick: () => move(1) }, "↓"),
+                    El("button", { onclick: () => { chapter.rules.splice(ri + 1, 0, { ...rule }); Changed(); } }, "複製"),
+                    El("button", { onclick: () => { chapter.rules.splice(ri, 1); Changed(); } }, "削除"))));
+        });
+
+        // チャプター単位の操作を作る
+        const newRule = { type: "BasicEnemy", firstFrame: 25, interval: 100, sideX: 2.6, railX: 0, y: 0, railZ: 60, randomPosition: false };
+        root.append(El("fieldset", {},
+            El("legend", {}, `チャプター${ci + 1} `,
+                El("input", { className: "comment", value: chapter.comment || "", placeholder: "コメント",
+                    onchange: (e) => { chapter.comment = e.target.value; Changed(); } })),
+            Timeline(chapter, sheet.chapterLength), table,
+            El("button", { onclick: () => { chapter.rules.push({ ...newRule }); Changed(); } }, "規則を追加"), " ",
+            El("button", { onclick: () => {
+                if (sheet.chapters.length > 1 && confirm(`チャプター${ci + 1}を削除する?`)) { sheet.chapters.splice(ci, 1); Changed(); }
+            } }, "チャプターを削除")));
+    });
+    root.append(El("button", { onclick: () => { sheet.chapters.push({ comment: "", rules: [] }); Changed(); } }, "チャプターを追加"));
+}
+
+/**
+ * @brief Stagesフォルダ内の敵出現シートJSONを読み込む
+ * @return なし
+ */
+async function OpenStages() {
+    stagesDir = await window.showDirectoryPicker({ mode: "readwrite" });
+    sheets = [];
+    // StageN/StageNEnemySheetXxx.json を列挙する
+    for await (const [dirName, dir] of stagesDir.entries()) {
+        if (dir.kind !== "directory" || !/^Stage\d+$/.test(dirName)) continue;
+        for await (const [name, file] of dir.entries()) {
+            if (file.kind !== "file" || !/EnemySheet\w+\.json$/.test(name)) continue;
+            const data = JSON.parse(await (await file.getFile()).text());
+            sheets.push({ name: name.replace(/\.json$/, ""), dir, data, saved: JSON.stringify(data) });
+        }
+    }
+    sheets.sort((a, b) => a.data.stage - b.data.stage ||
+        window.StageSheetGenerator.Difficulties.indexOf(a.data.difficulty) - window.StageSheetGenerator.Difficulties.indexOf(b.data.difficulty));
+    if (sheets.length === 0) {
+        SetStatus("敵出現シートのJSONが見つからない。Stagesフォルダを選択したか確認する", "error");
+        return;
+    }
+    $("sheet").replaceChildren(...sheets.map((s, i) => El("option", { value: i }, s.name)));
+    $("sheet").disabled = false;
+    $("save").disabled = false;
+    current = sheets[0];
+    dirty = false;
+    Render();
+}
+
+/**
+ * @brief 選択中のシートをJSONとC++ヘッダへ書き出す
+ * @return なし
+ */
+async function Save() {
+    let header;
+    try {
+        header = Generate(current.data);
+    } catch (e) {
+        SetStatus("保存しなかった: " + e.message, "error");
+        return;
+    }
+    // 生成に成功した場合のみ両方のファイルを書き込む
+    const write = async (name, text) => {
+        const w = await (await current.dir.getFileHandle(name, { create: true })).createWritable();
+        await w.write(text.replace(/\r?\n/g, "\r\n"));
+        await w.close();
+    };
+    await write(current.name + ".json", JSON.stringify(current.data, null, 2) + "\n");
+    await write(current.name + ".h", header);
+    current.saved = JSON.stringify(current.data);
+    dirty = false;
+    Render();
+}
+
+$("open").onclick = () => OpenStages().catch((e) => SetStatus(e.message, "error"));
+$("save").onclick = () => Save().catch((e) => SetStatus(e.message, "error"));
+$("sheet").onchange = (e) => {
+    if (dirty && !confirm("未保存の変更を破棄する?")) {
+        e.target.value = sheets.indexOf(current);
+        return;
+    }
+    // 破棄を選んだ場合は最後に保存した内容へ戻す
+    if (dirty) current.data = JSON.parse(current.saved);
+    current = sheets[Number(e.target.value)];
+    dirty = false;
+    Render();
+};
+window.onbeforeunload = () => (dirty ? true : undefined);
+</script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+{
+  "stage": 1,
+  "difficulty": "Normal",
+  "chapterLength": 1000,
+  "chapters": [
+    {
+      "comment": "チャプター1は通常機と直進狙撃機を出現させる",
+      "rules": [
+        {
+          "type": "BasicEnemy",
+          "firstFrame": 25,
+          "interval": 70,
+          "sideX": 2.6,
+          "railX": -0.72,
+          "y": -0.54,
+          "railZ": 60.0,
+          "randomPosition": true
+        },
+        {
+          "type": "StraightShooterEnemy",
+          "firstFrame": 160,
+          "interval": 360,
+          "sideX": 2.6,
+          "railX": -0.18,
+          "y": 0.86,
+          "railZ": 48.0,
+          "randomPosition": true
+        }
+      ]
+    },
+    {
+      "comment": "チャプター2は通常機、円形弾幕砲台、重装機を出現させる",
+      "rules": [
+        {
+          "type": "BasicEnemy",
+          "firstFrame": 25,
+          "interval": 60,
+          "sideX": 2.6,
+          "railX": 0.42,
+          "y": -0.12,
+          "railZ": 60.0,
+          "randomPosition": true
+        },
+        {
+          "type": "CircleShooterEnemy",
+          "firstFrame": 80,
+          "interval": 210,
+          "sideX": 2.6,
+          "railX": 0.35,
+          "y": -0.32,
+          "railZ": 54.0,
+          "randomPosition": true
+        },
+        {
+          "type": "HeavyEnemy",
+          "firstFrame": 50,
+          "interval": 200,
+          "sideX": 2.6,
+          "railX": 0.7,
+          "y": 0.58,
+          "railZ": 60.0,
+          "randomPosition": true
+        }
+      ]
+    },
+    {
+      "comment": "チャプター3は通常機、直進狙撃機、円形弾幕砲台、重装機を出現させる",
+      "rules": [
+        {
+          "type": "BasicEnemy",
+          "firstFrame": 25,
+          "interval": 50,
+          "sideX": 2.6,
+          "railX": 0.42,
+          "y": -0.12,
+          "railZ": 60.0,
+          "randomPosition": true
+        },
+        {
+          "type": "StraightShooterEnemy",
+          "firstFrame": 20,
+          "interval": 140,
+          "sideX": 2.6,
+          "railX": -0.78,
+          "y": 0.86,
+          "railZ": 48.0,
+          "randomPosition": true
+        },
+        {
+          "type": "CircleShooterEnemy",
+          "firstFrame": 100,
+          "interval": 200,
+          "sideX": 2.6,
+          "railX": 0.78,
+          "y": -0.86,
+          "railZ": 36.0,
+          "randomPosition": true
+        },
+        {
+          "type": "HeavyEnemy",
+          "firstFrame": 50,
+          "interval": 150,
+          "sideX": 2.6,
+          "railX": 0.22,
+          "y": 0.3,
+          "railZ": 60.0,
+          "randomPosition": true
+        }
+      ]
+    }
+  ]
+}

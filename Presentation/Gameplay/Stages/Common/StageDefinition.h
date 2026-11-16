@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdint>
 
 #include "../../SideScrollingShooterEnemies.h"
 
@@ -32,7 +33,10 @@ public:
     };
 
     struct EnemySpawnRule {
-        int enemyType = BasicEnemy;
+        // 種別と乱数フラグを1バイトずつにして規則1件を28バイトに収める
+        std::uint8_t enemyType = BasicEnemy;
+        // trueの場合は出現時にYとレールXを乱数で決める
+        bool randomPosition = false;
         int firstFrame = 0;
         int interval = 0;
         float sideX = 1.10f;
@@ -40,6 +44,7 @@ public:
         float y = 0.0f;
         float railZ = SideScrollingShooter::EnemyRailFarZ;
     };
+    static_assert(sizeof(EnemySpawnRule) == 28, "EnemySpawnRuleのサイズはFloppy版の容量に影響する");
 
     struct Chapter {
         const EnemySpawnRule* spawnRules = nullptr;
@@ -216,9 +221,8 @@ protected:
         return { rules, RuleCount };
     }
 
-    bool TrySelectByChapters(const Chapter* chapters, int chapterCount, int frame, int spawnIndex,
-        EnemySpawnRule& spawn, int& chapterNumber) const {
-        const int chapterFrameLength = ChapterFrameLength();
+    bool TrySelectByChapters(const Chapter* chapters, int chapterCount, int chapterFrameLength,
+        int frame, int spawnIndex, EnemySpawnRule& spawn, int& chapterNumber) const {
         for (int chapterIndex = 0; chapterIndex < chapterCount; ++chapterIndex) {
             const int chapterFirstFrame = chapterIndex * chapterFrameLength;
             if (frame < chapterFirstFrame || frame >= chapterFirstFrame + chapterFrameLength) continue;

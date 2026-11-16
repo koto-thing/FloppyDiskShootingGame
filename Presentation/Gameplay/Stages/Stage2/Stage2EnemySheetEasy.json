@@ -1,0 +1,162 @@
+{
+  "stage": 2,
+  "difficulty": "Easy",
+  "chapterLength": 1200,
+  "chapters": [
+    {
+      "comment": "チャプター1",
+      "rules": [
+        {
+          "type": "BasicEnemy",
+          "firstFrame": 35,
+          "interval": 150,
+          "sideX": 2.6,
+          "railX": -0.72,
+          "y": -0.54,
+          "railZ": 60.0,
+          "randomPosition": true
+        },
+        {
+          "type": "StraightShooterEnemy",
+          "firstFrame": 200,
+          "interval": 400,
+          "sideX": 2.6,
+          "railX": -0.18,
+          "y": 0.86,
+          "railZ": 48.0,
+          "randomPosition": false
+        },
+        {
+          "type": "StraightShooterEnemy",
+          "firstFrame": 400,
+          "interval": 400,
+          "sideX": 2.6,
+          "railX": -0.18,
+          "y": -0.86,
+          "railZ": 48.0,
+          "randomPosition": false
+        },
+        {
+          "type": "SquareShooterEnemy",
+          "firstFrame": 500,
+          "interval": 1200,
+          "sideX": 2.6,
+          "railX": 0.0,
+          "y": 0.0,
+          "railZ": 54.0,
+          "randomPosition": false
+        }
+      ]
+    },
+    {
+      "comment": "チャプター2",
+      "rules": [
+        {
+          "type": "BasicEnemy",
+          "firstFrame": 25,
+          "interval": 150,
+          "sideX": 2.6,
+          "railX": 0.42,
+          "y": -0.12,
+          "railZ": 60.0,
+          "randomPosition": true
+        },
+        {
+          "type": "StraightShooterEnemy",
+          "firstFrame": 300,
+          "interval": 400,
+          "sideX": 2.6,
+          "railX": 0.0,
+          "y": 0.0,
+          "railZ": 48.0,
+          "randomPosition": false
+        },
+        {
+          "type": "SquareShooterEnemy",
+          "firstFrame": 600,
+          "interval": 1200,
+          "sideX": 2.6,
+          "railX": -0.6,
+          "y": 0.0,
+          "railZ": 54.0,
+          "randomPosition": false
+        },
+        {
+          "type": "SquareShooterEnemy",
+          "firstFrame": 600,
+          "interval": 1200,
+          "sideX": 2.6,
+          "railX": 0.6,
+          "y": 0.0,
+          "railZ": 54.0,
+          "randomPosition": false
+        }
+      ]
+    },
+    {
+      "comment": "チャプター3",
+      "rules": [
+        {
+          "type": "BasicEnemy",
+          "firstFrame": 25,
+          "interval": 120,
+          "sideX": 2.6,
+          "railX": 0.42,
+          "y": -0.12,
+          "railZ": 60.0,
+          "randomPosition": true
+        },
+        {
+          "type": "SquareShooterEnemy",
+          "firstFrame": 300,
+          "interval": 1000,
+          "sideX": 2.6,
+          "railX": -0.9,
+          "y": 0.5,
+          "railZ": 54.0,
+          "randomPosition": false
+        },
+        {
+          "type": "SquareShooterEnemy",
+          "firstFrame": 300,
+          "interval": 1000,
+          "sideX": 2.6,
+          "railX": 0.9,
+          "y": -0.5,
+          "railZ": 54.0,
+          "randomPosition": false
+        },
+        {
+          "type": "CircleShooterEnemy",
+          "firstFrame": 600,
+          "interval": 1000,
+          "sideX": 2.6,
+          "railX": 0.0,
+          "y": 0.0,
+          "railZ": 36.0,
+          "randomPosition": false
+        },
+        {
+          "type": "SquareShooterEnemy",
+          "firstFrame": 900,
+          "interval": 1000,
+          "sideX": 2.6,
+          "railX": 0.9,
+          "y": 0.5,
+          "railZ": 54.0,
+          "randomPosition": false
+        },
+        {
+          "type": "SquareShooterEnemy",
+          "firstFrame": 900,
+          "interval": 1000,
+          "sideX": 2.6,
+          "railX": -0.9,
+          "y": -0.5,
+          "railZ": 54.0,
+          "randomPosition": false
+        }
+      ]
+    }
+  ]
+}
