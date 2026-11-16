@@ -8,8 +8,8 @@
 /**
  * @brief NORMAL用のStage1敵出現シートを定義する
  *
- * EnemySpawnRuleは { 敵構成種別, 位置乱数化, 開始フレーム, 出現間隔,
- * 2D出現X, レール出現X, 出現Y, レール出現Z } の順で指定する
+ * EnemySpawnRuleは { 敵構成種別, 位置乱数化, スクリプト番号, 開始フレーム,
+ * 出現間隔, 2D出現X, レール出現X, 出現Y, レール出現Z } の順で指定する
  */
 class SideScrollingShooter::Stage1EnemySheetNormal final : public SideScrollingShooter::Stage1EnemySheet {
 public:
@@ -35,21 +35,22 @@ public:
         EnemySpawnRule& spawn, int& chapterNumber) const override {
         // チャプター1は通常機と直進狙撃機を出現させる
         static constexpr EnemySpawnRule Chapter1[] = {
-            {BasicEnemy, true, 25, 70, 2.6f, -0.72f, -0.54f, 60.0f},
-            {StraightShooterEnemy, true, 160, 360, 2.6f, -0.18f, 0.86f, 48.0f},
+            {BasicEnemy, true, 0, 25, 70, 2.6f, -0.72f, -0.54f, 60.0f},
+            {StraightShooterEnemy, true, 0, 160, 360, 2.6f, -0.18f, 0.86f, 48.0f},
+            {ScriptedEnemy, false, 0, 100, 600, 2.6f, 0.0f, 0.0f, 60.0f}, // SampleWave
         };
         // チャプター2は通常機、円形弾幕砲台、重装機を出現させる
         static constexpr EnemySpawnRule Chapter2[] = {
-            {BasicEnemy, true, 25, 60, 2.6f, 0.42f, -0.12f, 60.0f},
-            {CircleShooterEnemy, true, 80, 210, 2.6f, 0.35f, -0.32f, 54.0f},
-            {HeavyEnemy, true, 50, 200, 2.6f, 0.7f, 0.58f, 60.0f},
+            {BasicEnemy, true, 0, 25, 60, 2.6f, 0.42f, -0.12f, 60.0f},
+            {CircleShooterEnemy, true, 0, 80, 210, 2.6f, 0.35f, -0.32f, 54.0f},
+            {HeavyEnemy, true, 0, 50, 200, 2.6f, 0.7f, 0.58f, 60.0f},
         };
         // チャプター3は通常機、直進狙撃機、円形弾幕砲台、重装機を出現させる
         static constexpr EnemySpawnRule Chapter3[] = {
-            {BasicEnemy, true, 25, 50, 2.6f, 0.42f, -0.12f, 60.0f},
-            {StraightShooterEnemy, true, 20, 140, 2.6f, -0.78f, 0.86f, 48.0f},
-            {CircleShooterEnemy, true, 100, 200, 2.6f, 0.78f, -0.86f, 36.0f},
-            {HeavyEnemy, true, 50, 150, 2.6f, 0.22f, 0.3f, 60.0f},
+            {BasicEnemy, true, 0, 25, 50, 2.6f, 0.42f, -0.12f, 60.0f},
+            {StraightShooterEnemy, true, 0, 20, 140, 2.6f, -0.78f, 0.86f, 48.0f},
+            {CircleShooterEnemy, true, 0, 100, 200, 2.6f, 0.78f, -0.86f, 36.0f},
+            {HeavyEnemy, true, 0, 50, 150, 2.6f, 0.22f, 0.3f, 60.0f},
         };
         constexpr Chapter Chapters[] = {
             MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)

@@ -32,6 +32,7 @@ class SideScrollingShooter {
     friend struct HudLayoutTests;
     friend struct StageSelectTests;
     friend struct EnemyModelHitTests;
+    friend struct EnemyScriptTests;
 public:
     /** @brief 選択したステージの先頭から開始する @param stage 開始するステージ番号、1から5 @return なし */
     void StartFromStage(int stage);
@@ -164,6 +165,7 @@ private:
     class MissileShooterEnemyBehavior;
     class LinkedLaserEnemyBehavior;
     class WallSecurityDroneEnemyBehavior;
+    class ScriptedEnemyBehavior;
     class StageDispatch;
     class Stage1Module;
     class Stage2Module;
@@ -315,6 +317,14 @@ private:
         bool collisionEnabled = true;
         bool entersWallFromTop = false;
         float droneWallOpacity = 1.0f;
+        // 行動スクリプト敵の実行状態
+        int scriptId = 0;
+        int scriptPc = 0;
+        int scriptCommandAge = 0;
+        int scriptLoop = 0;
+        float scriptVX = 0.0f;
+        float scriptVY = 0.0f;
+        float scriptBaseY = 0.0f;
         const EnemyBehavior* behavior = nullptr;
         bool active = false;
     };
@@ -583,6 +593,7 @@ private:
     static const EnemyBehavior& MissileShooterEnemyBehaviorInstance();
     static const EnemyBehavior& LinkedLaserEnemyBehaviorInstance();
     static const EnemyBehavior& WallSecurityDroneEnemyBehaviorInstance();
+    static const EnemyBehavior& ScriptedEnemyBehaviorInstance();
     static const EnemyBehavior& EnemyBehaviorForType(int type);
     void TickViewTransition();
     /**
@@ -650,7 +661,7 @@ private:
     void ApplyDifficultyToBossHp(Enemy& boss) const;
     /** @brief Stage 5専用弱点HPへ難易度倍率を適用する */
     void ApplyDifficultyToStage5WeakpointHp();
-    void SpawnEnemy(int enemyType, float sideX, float railX, float y, float railZ);
+    void SpawnEnemy(int enemyType, float sideX, float railX, float y, float railZ, int scriptId = 0);
     /**
      * @brief 未解放の展示だけを永続データへ追加する
      * @param entry 解放する展示

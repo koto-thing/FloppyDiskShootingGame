@@ -259,6 +259,11 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::WallSecurityDro
     return behavior;
 }
 
+const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::ScriptedEnemyBehaviorInstance() {
+    static const ScriptedEnemyBehavior behavior;
+    return behavior;
+}
+
 const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorForType(int type) {
     switch (type) {
     case 1:
@@ -281,6 +286,8 @@ const SideScrollingShooter::EnemyBehavior& SideScrollingShooter::EnemyBehaviorFo
         return LinkedLaserEnemyBehaviorInstance();
     case 10:
         return WallSecurityDroneEnemyBehaviorInstance();
+    case 11:
+        return ScriptedEnemyBehaviorInstance();
     default:
         return BasicEnemyBehaviorInstance();
     }
@@ -723,7 +730,7 @@ void SideScrollingShooter::Tick() {
             if (!m_stage->TrySelectEnemySpawn(m_frame, spawnIndex, spawn, m_chapterNumber)) {
                 break;
             }
-            SpawnEnemy(spawn.enemyType, spawn.sideX, spawn.railX, spawn.y, spawn.railZ);
+            SpawnEnemy(spawn.enemyType, spawn.sideX, spawn.railX, spawn.y, spawn.railZ, spawn.scriptId);
         }
     }
 

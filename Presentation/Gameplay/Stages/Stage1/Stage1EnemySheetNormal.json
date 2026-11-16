@@ -25,6 +25,17 @@
           "y": 0.86,
           "railZ": 48.0,
           "randomPosition": true
+        },
+        {
+          "type": "ScriptedEnemy",
+          "firstFrame": 100,
+          "interval": 600,
+          "sideX": 2.6,
+          "railX": 0.0,
+          "y": 0.0,
+          "railZ": 60.0,
+          "randomPosition": false,
+          "script": "SampleWave"
         }
       ]
     },

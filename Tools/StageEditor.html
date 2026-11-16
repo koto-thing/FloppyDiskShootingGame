@@ -29,7 +29,10 @@
 <script src="StageSheetGenerator.js"></script>
 <script>
 "use strict";
-const { EnemyTypes, Generate } = window.StageSheetGenerator;
+const { EnemyTypes, GenerateSheet } = window.StageSheetGenerator;
+// ScriptedEnemyが参照できる行動スクリプト名（Common/EnemyScripts.json から読み込む）
+let scriptNames = [];
+const Generate = (sheet) => GenerateSheet(sheet, scriptNames);
 // 種別ごとのタイムライン色
 const TypeColors = ["#8cf", "#f96", "#fd6", "#c9f", "#6f9", "#9ff", "#f6c", "#fa6", "#6cf", "#cf6"];
 const Fields = [["firstFrame", "開始F", 1], ["interval", "間隔F", 1], ["sideX", "2D X", 0.01],
@@ -149,6 +152,11 @@ function Render() {
         chapter.rules.forEach((rule, ri) => {
             const typeSelect = El("select", { onchange: (e) => { rule.type = e.target.value; Changed(); } },
                 ...EnemyTypes.map((t) => El("option", { value: t, selected: t === rule.type }, t)));
+            // スクリプト敵は実行する行動スクリプトを選ぶ
+            const scriptSelect = rule.type !== "ScriptedEnemy" ? "" :
+                El("select", { onchange: (e) => { rule.script = e.target.value; Changed(); } },
+                    El("option", { value: "" }, "(スクリプト)"),
+                    ...scriptNames.map((n) => El("option", { value: n, selected: n === rule.script }, n)));
             const random = El("input", { type: "checkbox", checked: !!rule.randomPosition,
                 onchange: (e) => { rule.randomPosition = e.target.checked; Changed(); } });
             const move = (d) => {
@@ -158,7 +166,7 @@ function Render() {
                 Changed();
             };
             table.append(El("tr", {},
-                El("td", {}, String(ri + 1)), El("td", {}, typeSelect),
+                El("td", {}, String(ri + 1)), El("td", {}, typeSelect, scriptSelect),
                 ...Fields.map(([key, , step]) => El("td", {}, NumberInput(rule, key, step))),
                 El("td", {}, random),
                 El("td", {},
@@ -191,6 +199,9 @@ async function OpenStages() {
     stagesDir = await window.showDirectoryPicker({ mode: "readwrite" });
     sheets = [];
     // StageN/StageNEnemySheetXxx.json を列挙する
+    const common = await stagesDir.getDirectoryHandle("Common");
+    const scriptsFile = await (await common.getFileHandle("EnemyScripts.json")).getFile();
+    scriptNames = JSON.parse(await scriptsFile.text()).scripts.map((script) => script.name);
     for await (const [dirName, dir] of stagesDir.entries()) {
         if (dir.kind !== "directory" || !/^Stage\d+$/.test(dirName)) continue;
         for await (const [name, file] of dir.entries()) {

@@ -922,7 +922,7 @@ void SideScrollingShooter::TickItems() {
     }
 }
 
-void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, float y, float railZ) {
+void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, float y, float railZ, int scriptId) {
     constexpr float SideEnemyEntryX = 2.80f;
 
     if (enemyType == Stage::LinkedLaserEnemy) {
@@ -968,6 +968,8 @@ void SideScrollingShooter::SpawnEnemy(int enemyType, float sideX, float railX, f
     for (auto& enemy : m_enemies) {
         if (enemy.active) continue;
         enemy.active = true;
+        // 行動スクリプト敵はHPなどの初期設定でスクリプト番号を参照する
+        enemy.scriptId = scriptId;
         m_stage->ConfigureEnemy(*this, enemy, enemyType, m_frame, m_kills, IsRailGameplayActive());
         enemy.entersWallFromTop = enemy.type == Stage::WallSecurityDroneEnemy &&
             IsRailGameplayActive();

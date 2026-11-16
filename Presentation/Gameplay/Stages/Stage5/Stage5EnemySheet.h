@@ -18,6 +18,7 @@ public:
     static constexpr int MissileShooterEnemy = SideScrollingShooter::Stage::MissileShooterEnemy;
     static constexpr int LinkedLaserEnemy = SideScrollingShooter::Stage::LinkedLaserEnemy;
     static constexpr int WallSecurityDroneEnemy = SideScrollingShooter::Stage::WallSecurityDroneEnemy;
+    static constexpr int ScriptedEnemy = SideScrollingShooter::Stage::ScriptedEnemy;
 
     struct Chapter {
         const EnemySpawnRule* spawnRules = nullptr;

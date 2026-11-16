@@ -8,8 +8,8 @@
 /**
  * @brief EASY用のStage4敵出現シートを定義する
  *
- * EnemySpawnRuleは { 敵構成種別, 位置乱数化, 開始フレーム, 出現間隔,
- * 2D出現X, レール出現X, 出現Y, レール出現Z } の順で指定する
+ * EnemySpawnRuleは { 敵構成種別, 位置乱数化, スクリプト番号, 開始フレーム,
+ * 出現間隔, 2D出現X, レール出現X, 出現Y, レール出現Z } の順で指定する
  */
 class SideScrollingShooter::Stage4EnemySheetEasy final : public SideScrollingShooter::Stage4EnemySheet {
 public:
@@ -34,30 +34,30 @@ public:
     bool TrySelectEnemySpawn(int frame, int spawnIndex,
         EnemySpawnRule& spawn, int& chapterNumber) const override {
         static constexpr EnemySpawnRule Chapter1[] = {
-            {LinkedLaserEnemy, false, 10, 900, 1.12f, -0.45f, 0.0f, 60.0f},
-            {BasicEnemy, true, 200, 150, 2.6f, -0.72f, -0.54f, 60.0f},
-            {StraightShooterEnemy, false, 200, 450, 2.6f, 0.0f, 1.2f, 40.0f},
-            {MissileShooterEnemy, false, 200, 900, 1.14f, -0.4f, -0.92f, 60.0f},
-            {MissileShooterEnemy, false, 350, 900, 1.14f, 0.4f, -0.92f, 60.0f},
+            {LinkedLaserEnemy, false, 0, 10, 900, 1.12f, -0.45f, 0.0f, 60.0f},
+            {BasicEnemy, true, 0, 200, 150, 2.6f, -0.72f, -0.54f, 60.0f},
+            {StraightShooterEnemy, false, 0, 200, 450, 2.6f, 0.0f, 1.2f, 40.0f},
+            {MissileShooterEnemy, false, 0, 200, 900, 1.14f, -0.4f, -0.92f, 60.0f},
+            {MissileShooterEnemy, false, 0, 350, 900, 1.14f, 0.4f, -0.92f, 60.0f},
         };
         static constexpr EnemySpawnRule Chapter2[] = {
-            {LinkedLaserEnemy, false, 10, 900, 1.12f, -0.45f, 0.0f, 60.0f},
-            {StraightShooterEnemy, false, 50, 300, 2.6f, 0.0f, 1.1f, 40.0f},
-            {StraightShooterEnemy, false, 50, 300, 2.6f, 0.0f, -1.0f, 40.0f},
-            {SquareShooterEnemy, false, 300, 900, 2.6f, 0.0f, 0.0f, 54.0f},
+            {LinkedLaserEnemy, false, 0, 10, 900, 1.12f, -0.45f, 0.0f, 60.0f},
+            {StraightShooterEnemy, false, 0, 50, 300, 2.6f, 0.0f, 1.1f, 40.0f},
+            {StraightShooterEnemy, false, 0, 50, 300, 2.6f, 0.0f, -1.0f, 40.0f},
+            {SquareShooterEnemy, false, 0, 300, 900, 2.6f, 0.0f, 0.0f, 54.0f},
         };
         static constexpr EnemySpawnRule Chapter3[] = {
-            {LinkedLaserEnemy, false, 10, 900, 1.12f, -0.45f, 0.0f, 60.0f},
-            {BasicEnemy, true, 50, 300, 2.6f, -0.72f, -0.54f, 60.0f},
-            {DiveRusherEnemy, false, 50, 150, 1.6f, 0.0f, 1.1f, 40.0f},
-            {StraightShooterEnemy, false, 50, 150, 2.6f, 0.0f, -1.0f, 40.0f},
-            {MissileShooterEnemy, false, 300, 900, 1.14f, -0.4f, -0.92f, 60.0f},
-            {MissileShooterEnemy, false, 300, 900, 1.14f, 0.4f, -0.92f, 60.0f},
-            {MissileShooterEnemy, false, 300, 900, 1.14f, -0.8f, -0.92f, 60.0f},
-            {MissileShooterEnemy, false, 300, 900, 1.14f, 0.8f, -0.92f, 60.0f},
-            {CircleShooterEnemy, false, 400, 900, 1.6f, 0.4f, 0.6f, 54.0f},
-            {CircleShooterEnemy, false, 400, 900, 1.6f, 0.0f, 1.2f, 54.0f},
-            {CircleShooterEnemy, false, 400, 900, 1.6f, -0.4f, 0.6f, 54.0f},
+            {LinkedLaserEnemy, false, 0, 10, 900, 1.12f, -0.45f, 0.0f, 60.0f},
+            {BasicEnemy, true, 0, 50, 300, 2.6f, -0.72f, -0.54f, 60.0f},
+            {DiveRusherEnemy, false, 0, 50, 150, 1.6f, 0.0f, 1.1f, 40.0f},
+            {StraightShooterEnemy, false, 0, 50, 150, 2.6f, 0.0f, -1.0f, 40.0f},
+            {MissileShooterEnemy, false, 0, 300, 900, 1.14f, -0.4f, -0.92f, 60.0f},
+            {MissileShooterEnemy, false, 0, 300, 900, 1.14f, 0.4f, -0.92f, 60.0f},
+            {MissileShooterEnemy, false, 0, 300, 900, 1.14f, -0.8f, -0.92f, 60.0f},
+            {MissileShooterEnemy, false, 0, 300, 900, 1.14f, 0.8f, -0.92f, 60.0f},
+            {CircleShooterEnemy, false, 0, 400, 900, 1.6f, 0.4f, 0.6f, 54.0f},
+            {CircleShooterEnemy, false, 0, 400, 900, 1.6f, 0.0f, 1.2f, 54.0f},
+            {CircleShooterEnemy, false, 0, 400, 900, 1.6f, -0.4f, 0.6f, 54.0f},
         };
         constexpr Chapter Chapters[] = {
             MakeChapter(Chapter1), MakeChapter(Chapter2), MakeChapter(Chapter3)

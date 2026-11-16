@@ -22,7 +22,8 @@ public:
         DiveRusherEnemy = 7,
         MissileShooterEnemy = 8,
         LinkedLaserEnemy = 9,
-        WallSecurityDroneEnemy = 10
+        WallSecurityDroneEnemy = 10,
+        ScriptedEnemy = 11
     };
 
     struct BossBullet {
@@ -33,10 +34,12 @@ public:
     };
 
     struct EnemySpawnRule {
-        // 種別と乱数フラグを1バイトずつにして規則1件を28バイトに収める
+        // 種別・乱数フラグ・スクリプト番号を1バイトずつにして規則1件を28バイトに収める
         std::uint8_t enemyType = BasicEnemy;
         // trueの場合は出現時にYとレールXを乱数で決める
         bool randomPosition = false;
+        // ScriptedEnemyが実行する行動スクリプト番号
+        std::uint8_t scriptId = 0;
         int firstFrame = 0;
         int interval = 0;
         float sideX = 1.10f;
