@@ -1,11 +1,13 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <iterator>
 #include <memory>
 #include "../Engine/Graphics/Renderer.h"
 #include "../Presentation/Gameplay/SideScrollingShooter.h"
 #include "../Presentation/Gameplay/Stages/Common/StageDefinition.h"
 #include "../Presentation/Gameplay/Stages/Stage1/Stage1Module.h"
+#include "EnemyScriptParity.h"
 
 /** @brief 敵の行動スクリプトの実行結果を検証する */
 struct EnemyScriptTests {
@@ -160,6 +162,35 @@ struct EnemyScriptTests {
         assert(CountEnemyShots(*game) == 8);
     }
 
+    /** @brief エディターのプレビュー(JS)とC++の実行結果が一致することを検証する @return なし */
+    static void CheckParityWithEditorPreview() {
+        namespace P = EnemyScript::Parity;
+        const EnemyScript::Definition script {P::Commands, P::CommandCount, 1, 0};
+        auto game = MakeGame();
+        game->Player().m_playerX = P::PlayerX;
+        game->Player().m_playerY = P::PlayerY;
+        Game::Enemy enemy;
+        enemy.x = P::StartX;
+        enemy.y = P::StartY;
+
+        // 毎フレームの座標がJSの結果と一致する（doubleとfloatの差は許容する）
+        const auto close = [](float a, float b) { return std::abs(a - b) < 1e-3f; };
+        for (const auto& point : P::Path) {
+            Behavior::Step(*game, enemy, script);
+            assert(close(enemy.x, point[0]) && close(enemy.y, point[1]));
+        }
+
+        // 発射した弾の位置と速度が発射順に一致する
+        int index = 0;
+        for (const auto& shot : game->m_shots) {
+            if (!shot.active || !shot.enemy) continue;
+            const auto& expected = P::Shots[index++];
+            assert(close(shot.x, expected[0]) && close(shot.y, expected[1]));
+            assert(close(shot.vx, expected[2]) && close(shot.vy, expected[3]));
+        }
+        assert(index == static_cast<int>(std::size(P::Shots)));
+    }
+
     /** @brief SpawnEnemyがスクリプト番号を渡し、範囲外の番号でも0番を使うことを検証する @return なし */
     static void CheckSpawn() {
         auto game = MakeGame();
@@ -188,6 +219,7 @@ int main() {
     EnemyScriptTests::CheckSineAndExit();
     EnemyScriptTests::CheckInstantLoopGuard();
     EnemyScriptTests::CheckSpawn();
+    EnemyScriptTests::CheckParityWithEditorPreview();
     std::puts("EnemyScriptTests passed");
     return 0;
 }

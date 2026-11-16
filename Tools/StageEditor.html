@@ -29,10 +29,26 @@
 <script src="StageSheetGenerator.js"></script>
 <script>
 "use strict";
-const { EnemyTypes, GenerateSheet } = window.StageSheetGenerator;
-// ScriptedEnemyが参照できる行動スクリプト名（Common/EnemyScripts.json から読み込む）
-let scriptNames = [];
-const Generate = (sheet) => GenerateSheet(sheet, scriptNames);
+const { EnemyTypes, CommandSpecs, GenerateScripts, GenerateSheet, SimulateScript } = window.StageSheetGenerator;
+// Common/EnemyScripts.json の編集対象（シート一覧の先頭に置く）
+let scriptsEntry = null;
+// ScriptedEnemyが参照できる行動スクリプト名（番号順）
+const ScriptNames = () => scriptsEntry.data.scripts.map((script) => script.name);
+const Generate = (sheet) => GenerateSheet(sheet, ScriptNames());
+// コマンド種別を変えた時の初期値
+const CommandDefaults = {
+    Wait: { frames: 30 }, Move: { frames: 60, vx: -0.01, vy: 0 }, MoveTo: { frames: 60, x: 1.5, y: 0 },
+    Aim: { frames: 60, speed: 0.015 }, Sine: { frames: 120, vx: -0.01, amplitude: 0.3, period: 60 },
+    FireRing: { count: 8, speed: 0.012, angle: 0 }, FireFan: { count: 3, spread: 30, speed: 0.018 },
+    FireAimed: { speed: 0.02 }, Repeat: { target: 0, count: 1 }
+};
+// 整数で入力するコマンド引数
+const IntegerArgs = ["frames", "count", "target"];
+// プレビューの表示範囲（ゲームの2D座標、敵の消滅位置と出現位置を含む）
+const View = { minX: -2.6, maxX: 2.8, minY: -1.7, maxY: 1.6, scale: 110 };
+// プレビューの再生状態
+const preview = { frame: 0, playing: false, startY: 0, playerY: 0, draw: null };
+let scriptIndex = 0;
 // 種別ごとのタイムライン色
 const TypeColors = ["#8cf", "#f96", "#fd6", "#c9f", "#6f9", "#9ff", "#f6c", "#fa6", "#6cf", "#cf6"];
 const Fields = [["firstFrame", "開始F", 1], ["interval", "間隔F", 1], ["sideX", "2D X", 0.01],
@@ -91,6 +107,7 @@ function NumberInput(obj, key, step) {
         onchange: (e) => {
             const v = Number(e.target.value);
             obj[key] = step === 1 ? Math.round(v) : v;
+            if (obj === preview) { Render(); return; }
             Changed();
         }
     });
@@ -130,7 +147,12 @@ function Timeline(chapter, length) {
 function Render() {
     const root = $("editor");
     root.replaceChildren();
+    preview.draw = null;
     if (!current) return;
+    if (current === scriptsEntry) {
+        RenderScripts(root);
+        return;
+    }
     const sheet = current.data;
 
     // 生成可能か検証して状態を表示する
@@ -156,7 +178,7 @@ function Render() {
             const scriptSelect = rule.type !== "ScriptedEnemy" ? "" :
                 El("select", { onchange: (e) => { rule.script = e.target.value; Changed(); } },
                     El("option", { value: "" }, "(スクリプト)"),
-                    ...scriptNames.map((n) => El("option", { value: n, selected: n === rule.script }, n)));
+                    ...ScriptNames().map((n) => El("option", { value: n, selected: n === rule.script }, n)));
             const random = El("input", { type: "checkbox", checked: !!rule.randomPosition,
                 onchange: (e) => { rule.randomPosition = e.target.checked; Changed(); } });
             const move = (d) => {
@@ -192,6 +214,148 @@ function Render() {
 }
 
 /**
+ * @brief 行動スクリプトの2D動作をcanvasへ描画し、再生用の描画関数を登録する
+ * @param script 表示する行動スクリプト
+ * @return プレビュー要素
+ */
+function Preview(script) {
+    const width = (View.maxX - View.minX) * View.scale, height = (View.maxY - View.minY) * View.scale;
+    const canvas = El("canvas", { width, height });
+    const g = canvas.getContext("2d");
+    const sx = (x) => (x - View.minX) * View.scale, sy = (y) => (View.maxY - y) * View.scale;
+    const playerX = -0.72;
+    let result;
+    try {
+        result = SimulateScript(script, 2.8, preview.startY, playerX, preview.playerY, 3600);
+    } catch (e) {
+        return El("p", { className: "error" }, "プレビューできない: " + e.message);
+    }
+    const last = Math.max(0, result.path.length - 1);
+    preview.frame = Math.min(preview.frame, last);
+    const slider = El("input", { type: "range", min: 0, max: last, value: preview.frame, style: "width: 400px",
+        oninput: (e) => { preview.frame = Number(e.target.value); preview.draw(); } });
+    const label = El("span");
+
+    preview.draw = () => {
+        // 最後のフレームで再生を止める
+        if (preview.frame > last) { preview.frame = last; preview.playing = false; }
+        const t = preview.frame;
+        g.clearRect(0, 0, width, height);
+        // 自機の移動範囲と自機を描く
+        g.strokeStyle = "#333";
+        g.strokeRect(sx(-2.0), sy(1.53), 4.0 * View.scale, 3.15 * View.scale);
+        g.fillStyle = "#6cf";
+        g.fillRect(sx(playerX) - 4, sy(preview.playerY) - 4, 8, 8);
+        // 敵の軌跡と現在位置を描く
+        g.strokeStyle = "#666";
+        g.beginPath();
+        result.path.forEach((p, i) => (i ? g.lineTo(sx(p.x), sy(p.y)) : g.moveTo(sx(p.x), sy(p.y))));
+        g.stroke();
+        const enemy = result.path[t] || { x: 2.8, y: preview.startY };
+        g.fillStyle = "#f96";
+        g.beginPath(); g.arc(sx(enemy.x), sy(enemy.y), 6, 0, Math.PI * 2); g.fill();
+        // 発射済みの弾を等速直線で進めて描く
+        // ponytail: 弾は等速直線のみ。ゲーム側の画面外消去や自機との衝突は再現しない
+        g.fillStyle = "#fd6";
+        let visible = 0;
+        for (const s of result.shots) {
+            if (s.frame > t) continue;
+            const x = s.x + s.vx * (t - s.frame), y = s.y + s.vy * (t - s.frame);
+            if (x < View.minX || x > View.maxX || y < View.minY || y > View.maxY) continue;
+            g.fillRect(sx(x) - 2, sy(y) - 2, 4, 4);
+            ++visible;
+        }
+        slider.value = t;
+        label.textContent = ` ${t} / ${last}F  弾 ${visible}発表示中、合計 ${result.shots.length}発` +
+            (result.path.length && result.path[last].x < -2.6 ? `、${last}Fで画面外へ消える` : "");
+    };
+    preview.draw();
+
+    return El("fieldset", {}, El("legend", {}, "2Dプレビュー（出現X=2.8、自機X=-0.72。3Dは未対応）"),
+        El("div", {}, "出現Y ", NumberInput(preview, "startY", "any"), " 自機Y ", NumberInput(preview, "playerY", "any"), " ",
+            El("button", { onclick: () => { preview.playing = !preview.playing; if (preview.frame >= last) preview.frame = 0; } }, "再生/停止"), " ",
+            slider, label),
+        canvas);
+}
+
+/**
+ * @brief 行動スクリプト一覧の編集画面を描画する
+ * @param root 描画先の要素
+ * @return なし
+ */
+function RenderScripts(root) {
+    const scripts = current.data.scripts;
+    scriptIndex = Math.max(0, Math.min(scriptIndex, scripts.length - 1));
+    const script = scripts[scriptIndex];
+
+    // 生成可能か検証して状態を表示する
+    try {
+        GenerateScripts(current.data);
+        SetStatus(dirty ? "未保存の変更あり" : "保存済み", dirty ? "dirty" : "ok");
+    } catch (e) {
+        SetStatus(e.message, "error");
+    }
+
+    // スクリプトの選択と追加・削除
+    const select = El("select", { onchange: (e) => { scriptIndex = Number(e.target.value); preview.frame = 0; Render(); } },
+        ...scripts.map((s, i) => El("option", { value: i, selected: i === scriptIndex }, `${i}: ${s.name}`)));
+    const add = (copy) => {
+        scripts.push(copy ? JSON.parse(JSON.stringify({ ...script, name: script.name + "Copy" })) :
+            { name: "NewScript" + scripts.length, hp: 10, score: 100, commands: [{ op: "Move", frames: 0, vx: -0.01, vy: 0 }] });
+        scriptIndex = scripts.length - 1;
+        Changed();
+    };
+    root.append(El("p", {}, "スクリプト ", select, " ",
+        El("button", { onclick: () => add(false) }, "追加"), " ",
+        El("button", { onclick: () => add(true) }, "複製"), " ",
+        El("button", { onclick: () => {
+            if (scripts.length > 1 && confirm(`${script.name}を削除する? 後ろのスクリプトの番号が1つずつ詰まる`)) { scripts.splice(scriptIndex, 1); Changed(); }
+        } }, "削除"),
+        El("span", { style: "color: #999" }, "  番号は出現シートの.hに埋め込まれるため、保存時に全シートの.hも作り直す")));
+    root.append(El("p", {}, "名前 ",
+        El("input", { value: script.name, onchange: (e) => { script.name = e.target.value; Changed(); } }),
+        " HP ", NumberInput(script, "hp", 1), " スコア ", NumberInput(script, "score", 1)));
+
+    // コマンドの行を作る
+    const table = El("table");
+    table.append(El("tr", {}, El("th", {}, "#"), El("th", {}, "コマンド"), El("th", {}, "引数"), El("th")));
+    script.commands.forEach((command, ci) => {
+        const spec = CommandSpecs[command.op] || { frames: false, args: [] };
+        const keys = [...(spec.frames ? ["frames"] : []), ...spec.args.filter((a) => typeof a === "string")];
+        const opSelect = El("select", { onchange: (e) => {
+            script.commands[ci] = { op: e.target.value, ...CommandDefaults[e.target.value] };
+            Changed();
+        } }, ...Object.keys(CommandSpecs).map((op) => El("option", { value: op, selected: op === command.op }, op)));
+        const move = (d) => {
+            const j = ci + d;
+            if (j < 0 || j >= script.commands.length) return;
+            [script.commands[ci], script.commands[j]] = [script.commands[j], script.commands[ci]];
+            Changed();
+        };
+        table.append(El("tr", {},
+            El("td", {}, String(ci)), El("td", {}, opSelect),
+            El("td", {}, ...keys.flatMap((key) => [` ${key} `, NumberInput(command, key, IntegerArgs.includes(key) ? 1 : "any")])),
+            El("td", {},
+                El("button", { onclick: () => move(-1) }, "↑"),
+                El("button", { onclick: () => move(1) }, "↓"),
+                El("button", { onclick: () => { script.commands.splice(ci + 1, 0, { ...command }); Changed(); } }, "複製"),
+                El("button", { onclick: () => { script.commands.splice(ci, 1); Changed(); } }, "削除"))));
+    });
+    root.append(table, El("button", { onclick: () => { script.commands.push({ op: "Wait", ...CommandDefaults.Wait }); Changed(); } }, "コマンドを追加"),
+        El("p", { style: "color: #999" }, "角度は度で0度が右・90度が上。Repeatのtargetは戻り先の#、countは戻る回数（0は無限）。Moveのframes=0は速度だけ設定して次へ進む"));
+    root.append(Preview(script));
+}
+
+// 再生中はプレビューのフレームを進めて描き直す
+(function Animate() {
+    if (preview.playing && preview.draw) {
+        ++preview.frame;
+        preview.draw();
+    }
+    requestAnimationFrame(Animate);
+})();
+
+/**
  * @brief Stagesフォルダ内の敵出現シートJSONを読み込む
  * @return なし
  */
@@ -201,7 +365,8 @@ async function OpenStages() {
     // StageN/StageNEnemySheetXxx.json を列挙する
     const common = await stagesDir.getDirectoryHandle("Common");
     const scriptsFile = await (await common.getFileHandle("EnemyScripts.json")).getFile();
-    scriptNames = JSON.parse(await scriptsFile.text()).scripts.map((script) => script.name);
+    const scriptsData = JSON.parse(await scriptsFile.text());
+    scriptsEntry = { name: "EnemyScripts", dir: common, data: scriptsData, saved: JSON.stringify(scriptsData) };
     for await (const [dirName, dir] of stagesDir.entries()) {
         if (dir.kind !== "directory" || !/^Stage\d+$/.test(dirName)) continue;
         for await (const [name, file] of dir.entries()) {
@@ -216,6 +381,8 @@ async function OpenStages() {
         SetStatus("敵出現シートのJSONが見つからない。Stagesフォルダを選択したか確認する", "error");
         return;
     }
+    // 行動スクリプトは一覧の先頭で編集する
+    sheets.unshift(scriptsEntry);
     $("sheet").replaceChildren(...sheets.map((s, i) => El("option", { value: i }, s.name)));
     $("sheet").disabled = false;
     $("save").disabled = false;
@@ -230,20 +397,33 @@ async function OpenStages() {
  */
 async function Save() {
     let header;
+    // スクリプト番号が変わると出現シートの.hも変わるため、保存済みの全シートを作り直す
+    const sheetHeaders = [];
     try {
-        header = Generate(current.data);
+        if (current === scriptsEntry) {
+            header = GenerateScripts(current.data);
+            for (const sheet of sheets) {
+                if (sheet !== scriptsEntry) sheetHeaders.push([sheet, Generate(JSON.parse(sheet.saved))]);
+            }
+        } else {
+            header = Generate(current.data);
+        }
     } catch (e) {
         SetStatus("保存しなかった: " + e.message, "error");
         return;
     }
-    // 生成に成功した場合のみ両方のファイルを書き込む
-    const write = async (name, text) => {
-        const w = await (await current.dir.getFileHandle(name, { create: true })).createWritable();
-        await w.write(text.replace(/\r?\n/g, "\r\n"));
+    // 生成に成功した場合のみファイルを書き込み、内容が同じファイルは再ビルドを避けるため書かない
+    const write = async (dir, name, text) => {
+        const crlf = text.replace(/\r?\n/g, "\r\n");
+        const handle = await dir.getFileHandle(name, { create: true });
+        if (await (await handle.getFile()).text() === crlf) return;
+        const w = await handle.createWritable();
+        await w.write(crlf);
         await w.close();
     };
-    await write(current.name + ".json", JSON.stringify(current.data, null, 2) + "\n");
-    await write(current.name + ".h", header);
+    await write(current.dir, current.name + ".json", JSON.stringify(current.data, null, 2) + "\n");
+    await write(current.dir, current.name + ".h", header);
+    for (const [sheet, text] of sheetHeaders) await write(sheet.dir, sheet.name + ".h", text);
     current.saved = JSON.stringify(current.data);
     dirty = false;
     Render();
