@@ -191,6 +191,40 @@ struct EnemyScriptTests {
         assert(index == static_cast<int>(std::size(P::Shots)));
     }
 
+    /** @brief 3Dでは2Dの横移動を奥行きへ読み替え、自機狙い弾が自機を通ることを検証する @return なし */
+    static void CheckRailConversion() {
+        using namespace EnemyScript;
+        static constexpr Command Commands[] = {
+            {MoveTo, 10, 1.0f, 0.5f, 0.0f},
+            {FireFan, 0, 1.0f, 0.0f, 0.02f}
+        };
+        const Definition script {Commands, 2, 10, 100};
+        auto game = MakeGame();
+        game->m_viewMode = game->m_nextViewMode = Game::ViewMode::Rail3D;
+        game->Player().m_playerX = -0.4f;
+        game->Player().m_playerY = -0.2f;
+        Game::Enemy enemy;
+        enemy.baseX = enemy.x = 0.5f;
+        enemy.z = Game::EnemyRailFarZ;
+        const auto close = [](float a, float b) { return std::abs(a - b) < 1e-3f; };
+
+        // 出現奥行きは2Dの出現Xに対応し、MoveToの目的地Xは奥行きへ変換される
+        assert(close(Behavior::ScriptXFromRailZ(enemy.z), 2.8f));
+        for (int i = 0; i < 10; ++i) Behavior::Step(*game, enemy, script);
+        assert(close(enemy.z, Behavior::RailZFromScriptX(1.0f)) && close(enemy.y, 0.5f));
+        assert(enemy.x == 0.5f);
+
+        // 自機狙い弾は自機の奥行きに着いた時に自機の横位置と高さを通る
+        Behavior::Step(*game, enemy, script);
+        assert(CountEnemyShots(*game) == 1);
+        for (const auto& shot : game->m_shots) {
+            if (!shot.active || !shot.enemy) continue;
+            const float frames = (Game::PlayerRailZ - shot.z) / shot.vz;
+            assert(frames > 0.0f);
+            assert(close(shot.x + shot.vx * frames, -0.4f) && close(shot.y + shot.vy * frames, -0.2f));
+        }
+    }
+
     /** @brief SpawnEnemyがスクリプト番号を渡し、範囲外の番号でも0番を使うことを検証する @return なし */
     static void CheckSpawn() {
         auto game = MakeGame();
@@ -220,6 +254,7 @@ int main() {
     EnemyScriptTests::CheckInstantLoopGuard();
     EnemyScriptTests::CheckSpawn();
     EnemyScriptTests::CheckParityWithEditorPreview();
+    EnemyScriptTests::CheckRailConversion();
     std::puts("EnemyScriptTests passed");
     return 0;
 }

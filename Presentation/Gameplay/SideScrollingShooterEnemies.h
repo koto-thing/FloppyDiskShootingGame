@@ -1141,14 +1141,28 @@ public:
      * @return なし
      */
     void Tick(SideScrollingShooter& shooter, Enemy& enemy) const override {
-        if (shooter.IsRailGameplayActive()) {
-            // ponytail: 3Dでは奥から直進するだけでスクリプトを実行しない。M3で2Dスクリプトの自動変換に置き換える
-            enemy.z -= 0.42f;
-            enemy.x = enemy.baseX;
-            enemy.y = enemy.baseY;
-            return;
-        }
         Step(shooter, enemy, ScriptFor(enemy));
+    }
+
+    /** @brief 3Dで2Dの横位置1あたりに進む奥行き。2Dの出現X=2.8を奥行き60、消滅X=-2.6を消滅奥行き2へ対応させる */
+    static constexpr float RailDepthPerSideX = (EnemyRailFarZ - 2.0f) / (2.8f + 2.6f);
+
+    /**
+     * @brief スクリプト上の2D横位置を3Dの奥行きへ変換する
+     * @param x 2Dの横位置
+     * @return 3Dの奥行き
+     */
+    static float RailZFromScriptX(float x) {
+        return 2.0f + (x + 2.6f) * RailDepthPerSideX;
+    }
+
+    /**
+     * @brief 3Dの奥行きをスクリプト上の2D横位置へ変換する
+     * @param z 3Dの奥行き
+     * @return 2Dの横位置
+     */
+    static float ScriptXFromRailZ(float z) {
+        return (z - 2.0f) / RailDepthPerSideX - 2.6f;
     }
 
     int Score(const Enemy& enemy) const override {
@@ -1156,7 +1170,10 @@ public:
     }
 
     /**
-     * @brief 指定スクリプトで敵を2D上で1フレーム進める
+     * @brief 指定スクリプトで敵を1フレーム進める
+     *
+     * 3Dでは2Dの横移動を奥行きへ読み替える（2Dは同じ空間を横から見た画面のため）
+     * 横位置は出現時のレールXのまま動かさない
      * @param shooter ゲーム本体
      * @param enemy 更新する敵
      * @param script 実行するスクリプト
@@ -1164,6 +1181,10 @@ public:
      */
     static void Step(SideScrollingShooter& shooter, Enemy& enemy, const EnemyScript::Definition& script) {
         using namespace EnemyScript;
+        // 3Dでは奥行きから2Dの横位置を復元してスクリプトを進める
+        const bool rail = shooter.IsRailGameplayActive();
+        if (rail) enemy.x = ScriptXFromRailZ(enemy.z);
+
         // 発射や分岐など時間を使わないコマンドは同じフレームで続けて実行する
         // 無限ループで止まらないよう1フレームの実行数に上限を設ける
         for (int executed = 0; enemy.scriptPc < script.commandCount && executed < 16; ++executed) {
@@ -1192,7 +1213,8 @@ public:
         if (enemy.scriptPc >= script.commandCount && enemy.scriptVX == 0.0f && enemy.scriptVY == 0.0f) {
             enemy.scriptVX = -0.010f;
         }
-        enemy.z = ToRailZFromSideX(enemy.x);
+        enemy.z = rail ? RailZFromScriptX(enemy.x) : ToRailZFromSideX(enemy.x);
+        if (rail) enemy.x = enemy.baseX;
     }
 
 private:
@@ -1216,8 +1238,13 @@ private:
     static bool Begin(SideScrollingShooter& shooter, Enemy& enemy, const EnemyScript::Command& command) {
         using namespace EnemyScript;
         const float frames = static_cast<float>((std::max)(1, static_cast<int>(command.frames)));
-        // 自機方向は狙うコマンドだけで求める（標的の選択順を進めるため不要な呼び出しはしない）
-        const float aim = command.op == Aim || command.op == FireFan ? AimDegrees(shooter, enemy) : 0.0f;
+        // 標的は狙うコマンドと3Dの発射だけで選ぶ（標的の選択順を進めるため不要な呼び出しはしない）
+        const bool rail = shooter.IsRailGameplayActive();
+        const bool targeted = command.op == Aim || command.op == FireFan || (rail && command.op == FireRing);
+        const Vector3 target = targeted ? shooter.SelectEnemyShotTarget() : Vector3 {};
+        // 3Dでは自機の奥行きを2Dの横位置へ読み替えて狙う
+        const float aim = std::atan2(FromWorldY(target.y) - enemy.y,
+            (rail ? ScriptXFromRailZ(target.z) : FromWorldX(target.x)) - enemy.x) / Math::DegreesToRadians;
         switch (command.op) {
         case Move:
             enemy.scriptVX = command.a;
@@ -1238,13 +1265,13 @@ private:
             return false;
         case FireRing: {
             const int count = static_cast<int>(command.a);
-            Fire(shooter, enemy, count, command.c, 360.0f / static_cast<float>((std::max)(1, count)), command.b);
+            Fire(shooter, enemy, target, count, command.c, 360.0f / static_cast<float>((std::max)(1, count)), command.b);
             break;
         }
         case FireFan: {
             const int count = static_cast<int>(command.a);
             const float step = count > 1 ? command.b / static_cast<float>(count - 1) : 0.0f;
-            Fire(shooter, enemy, count, aim - command.b * 0.5f, step, command.c);
+            Fire(shooter, enemy, target, count, aim - command.b * 0.5f, step, command.c);
             break;
         }
         case Repeat:
@@ -1265,33 +1292,33 @@ private:
     }
 
     /**
-     * @brief 敵から自機への角度を取得する
-     * @param shooter ゲーム本体
-     * @param enemy 発射元の敵
-     * @return 自機方向の角度（度）
-     */
-    static float AimDegrees(SideScrollingShooter& shooter, const Enemy& enemy) {
-        const Vector3 target = shooter.SelectEnemyShotTarget();
-        return std::atan2(FromWorldY(target.y) - enemy.y, FromWorldX(target.x) - enemy.x) / Math::DegreesToRadians;
-    }
-
-    /**
      * @brief 等間隔の角度で弾を撃つ
      * @param shooter ゲーム本体
-     * @param enemy 発射元の敵
+     * @param enemy 発射元の敵（3Dではxがスクリプト上の2D横位置）
+     * @param target 3Dで弾の面を向ける標的のワールド座標
      * @param count 弾数
      * @param startDegrees 1発目の角度（度）
      * @param stepDegrees 弾ごとの角度差（度）
      * @param speed 弾の速さ
      * @return なし
      */
-    static void Fire(SideScrollingShooter& shooter, const Enemy& enemy,
+    static void Fire(SideScrollingShooter& shooter, const Enemy& enemy, const Vector3& target,
         int count, float startDegrees, float stepDegrees, float speed) {
-        if (count <= 0 || !shooter.CanSpawnEnemyProjectile(enemy.x, enemy.y, enemy.z)) return;
+        // 3Dでは横位置をレールX、2Dの横方向を奥行きにして発射する
+        const bool rail = shooter.IsRailGameplayActive();
+        const float x = rail ? enemy.baseX : enemy.x;
+        const float z = rail ? RailZFromScriptX(enemy.x) : ToRailZFromSideX(enemy.x);
+        if (count <= 0 || !shooter.CanSpawnEnemyProjectile(x, enemy.y, z)) return;
+        // 弾幕の面を自機の横位置へ傾け、自機の奥行きに着いた弾が自機の横位置を通るようにする
+        const float depthToTarget = target.z - z;
+        const float lateralPerDepth = rail && std::abs(depthToTarget) > 0.001f ?
+            (FromWorldX(target.x) - x) / depthToTarget : 0.0f;
         for (int i = 0; i < count; ++i) {
             const float radians = Math::ToRadians(startDegrees + stepDegrees * static_cast<float>(i));
-            shooter.SpawnShotDirect(enemy.x, enemy.y, ToRailZFromSideX(enemy.x),
-                std::cos(radians) * speed, std::sin(radians) * speed, 0.0f, true, i, count);
+            const float vx = std::cos(radians) * speed;
+            const float vz = rail ? vx * RailDepthPerSideX : 0.0f;
+            shooter.SpawnShotDirect(x, enemy.y, z, rail ? vz * lateralPerDepth : vx,
+                std::sin(radians) * speed, vz, true, i, count);
         }
         shooter.PlayBossMachineGunSound();
     }

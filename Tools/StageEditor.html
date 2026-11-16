@@ -271,7 +271,7 @@ function Preview(script) {
     };
     preview.draw();
 
-    return El("fieldset", {}, El("legend", {}, "2Dプレビュー（出現X=2.8、自機X=-0.72。3Dは未対応）"),
+    return El("fieldset", {}, El("legend", {}, "2Dプレビュー（出現X=2.8、自機X=-0.72。3Dでは同じ動きを横移動→奥行きに読み替え、横位置は規則の3D Xに固定）"),
         El("div", {}, "出現Y ", NumberInput(preview, "startY", "any"), " 自機Y ", NumberInput(preview, "playerY", "any"), " ",
             El("button", { onclick: () => { preview.playing = !preview.playing; if (preview.frame >= last) preview.frame = 0; } }, "再生/停止"), " ",
             slider, label),

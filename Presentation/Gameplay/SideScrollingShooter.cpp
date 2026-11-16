@@ -956,6 +956,13 @@ void SideScrollingShooter::InitializeRailObjects() {
             enemy.x = enemy.railAnchorX;
             continue;
         }
+        if (enemy.type == Stage::ScriptedEnemy) {
+            // 行動スクリプト敵は2D横位置をスクリプト用の奥行きへ移し、続きを3Dで実行する
+            enemy.z = ScriptedEnemyBehavior::RailZFromScriptX(enemy.transitionSideX);
+            enemy.baseX = enemy.railAnchorX;
+            enemy.x = enemy.railAnchorX;
+            continue;
+        }
         enemy.baseX = enemy.type == 2 ? 0.0f : (std::clamp)(enemy.baseX, -0.76f, 0.76f);
         enemy.x = enemy.baseX;
     }
@@ -1051,7 +1058,9 @@ void SideScrollingShooter::InitializeSideObjects() {
             m_stage->ConfigureBossSideAnchor(enemy);
             continue;
         }
-        enemy.x = ToSideXFromRailZ(enemy.z);
+        // 行動スクリプト敵はスクリプト用の対応で奥行きを2D横位置へ戻す
+        enemy.x = enemy.type == Stage::ScriptedEnemy ?
+            ScriptedEnemyBehavior::ScriptXFromRailZ(enemy.z) : ToSideXFromRailZ(enemy.z);
         enemy.baseX = enemy.x;
         enemy.z = ToRailZFromSideX(enemy.x);
     }
