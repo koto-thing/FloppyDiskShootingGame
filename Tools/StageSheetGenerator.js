@@ -75,7 +75,7 @@
      * @param playerX 自機X（狙う方向に使う）
      * @param playerY 自機Y
      * @param maxFrames 実行する最大フレーム数
-     * @return { path: 各フレーム後の{x, y}, shots: {frame, x, y, vx, vy} }
+     * @return { path: 各フレーム後の{x, y, pc}, shots: {frame, pc, x, y, vx, vy} }（pcはその時のコマンド番号）
      */
     function SimulateScript(script, startX, startY, playerX, playerY, maxFrames) {
         const commands = script.commands.map(CompileCommand);
@@ -89,7 +89,7 @@
         const fire = (count, start, step, speed) => {
             for (let i = 0; i < count; ++i) {
                 const r = toRadians(start + step * i);
-                shots.push({ frame, x: e.x, y: e.y, vx: Math.cos(r) * speed, vy: Math.sin(r) * speed });
+                shots.push({ frame, pc: e.pc, x: e.x, y: e.y, vx: Math.cos(r) * speed, vy: Math.sin(r) * speed });
             }
         };
 
@@ -134,7 +134,7 @@
             if (current && current.op === "Sine") e.y = e.baseY + Math.sin(e.age * 2 * Math.PI / current.c) * current.b;
             else e.y += e.vy;
             if (e.pc >= commands.length && e.vx === 0 && e.vy === 0) e.vx = -0.010;
-            path.push({ x: e.x, y: e.y });
+            path.push({ x: e.x, y: e.y, pc: e.pc });
             if (e.x < -2.6) break;
         }
         return { path, shots };
